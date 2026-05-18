@@ -68,7 +68,7 @@ export interface MappingEntry {
   field: string
   ontology_class: string
   ontology_property: string
-  type: string
+  field_type: string
 }
 
 export interface MappingsResponse {

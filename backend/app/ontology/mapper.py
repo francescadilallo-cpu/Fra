@@ -84,7 +84,7 @@ def get_flat_mappings() -> list[dict[str, str]]:
                 "field": field,
                 "ontology_class": meta["ontology_class"],
                 "ontology_property": meta["ontology_property"],
-                "type": meta["type"],
+                "field_type": meta["type"],
             })
     return rows
 
