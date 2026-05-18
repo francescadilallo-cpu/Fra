@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-navy-950 text-slate-100 antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-navy-900;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-navy-600 rounded-full;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-navy-800 border border-navy-700 rounded-xl p-5;
+  }
+
+  .btn-primary {
+    @apply bg-teal-500 hover:bg-teal-600 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+  }
+
+  .btn-ghost {
+    @apply text-slate-400 hover:text-slate-200 hover:bg-navy-700 px-3 py-2 rounded-lg transition-colors;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+}
+
+/* ReactFlow dark theme overrides */
+.react-flow__background {
+  background-color: #07061a !important;
+}
+
+.react-flow__controls {
+  background: #1e1b4b;
+  border-color: #4338ca;
+}
+
+.react-flow__controls-button {
+  background: #1e1b4b;
+  border-color: #4338ca;
+  color: #94a3b8;
+}
+
+.react-flow__controls-button:hover {
+  background: #4338ca;
+}
+
+.react-flow__minimap {
+  background: #0f0e2e;
+  border: 1px solid #4338ca;
+  border-radius: 8px;
+}
