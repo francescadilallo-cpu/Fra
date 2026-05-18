@@ -1,0 +1,16 @@
+{
+  "name": "SemanticIntelligence",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "forwardPorts": [8000, 5173],
+  "portsAttributes": {
+    "8000": { "label": "Backend API", "onAutoForward": "silent" },
+    "5173": { "label": "App (apri qui)", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "pip install -r backend/requirements.txt -q && cd frontend && npm install --silent",
+  "postStartCommand": "bash .devcontainer/startup.sh",
+  "customizations": {
+    "codespaces": {
+      "openFiles": []
+    }
+  }
+}
