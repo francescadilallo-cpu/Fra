@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Activity, Workflow } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Activity, Workflow, Presentation } from 'lucide-react'
 import type { NavTab } from '../types'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 }
 
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: 'overview', label: 'Overview', icon: Presentation },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'ontology', label: 'Ontology', icon: GitBranch },
   { id: 'query', label: 'Query AI', icon: MessageSquare },
@@ -52,6 +53,11 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               {label}
+              {id === 'overview' && activeTab !== 'overview' && (
+                <span className="ml-auto text-[9px] font-bold bg-teal-600 text-white rounded px-1 py-0.5 leading-none">
+                  NEW
+                </span>
+              )}
             </button>
           ))}
         </nav>
