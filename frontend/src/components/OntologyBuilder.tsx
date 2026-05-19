@@ -391,6 +391,260 @@ function uid() {
   return Math.random().toString(36).slice(2, 9)
 }
 
+// Italianize entity name to PascalCase English-ish (best effort for demo).
+function normalizeEntityName(raw: string): string {
+  // Map common Italian → English
+  const map: Record<string, string> = {
+    fornitore: 'Supplier', fornitori: 'Supplier',
+    cliente: 'Customer', clienti: 'Customer',
+    prodotto: 'Product', prodotti: 'Product',
+    ordine: 'Order', ordini: 'Order',
+    fattura: 'Invoice', fatture: 'Invoice',
+    pagamento: 'Payment', pagamenti: 'Payment',
+    spedizione: 'Shipment', spedizioni: 'Shipment',
+    magazzino: 'Warehouse', magazzini: 'Warehouse',
+    dipendente: 'Employee', dipendenti: 'Employee',
+    contratto: 'Contract', contratti: 'Contract',
+    progetto: 'Project', progetti: 'Project',
+    paziente: 'Patient', pazienti: 'Patient',
+    medico: 'Doctor', medici: 'Doctor',
+    'medico curante': 'Physician',
+    diagnosi: 'Diagnosis',
+    trattamento: 'Treatment', trattamenti: 'Treatment',
+    farmaco: 'Medication', farmaci: 'Medication',
+    appuntamento: 'Appointment', appuntamenti: 'Appointment',
+    reso: 'Return', resi: 'Return',
+    carrello: 'Cart', carrelli: 'Cart',
+    promozione: 'Promotion', promozioni: 'Promotion',
+    sconto: 'Discount', sconti: 'Discount',
+    transazione: 'Transaction', transazioni: 'Transaction',
+    conto: 'Account', conti: 'Account',
+    rischio: 'Risk',
+    audit: 'Audit',
+    lotto: 'Batch', lotti: 'Batch',
+    macchina: 'Machine', macchinario: 'Machine', macchinari: 'Machine',
+    stabilimento: 'Plant', stabilimenti: 'Plant',
+  }
+  const lower = raw.toLowerCase().trim()
+  if (map[lower]) return map[lower]
+  // Else: PascalCase the raw input
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('')
+    .replace(/[^A-Za-z0-9]/g, '')
+}
+
+// Italian → English property names (camelCase).
+function normalizeProperty(raw: string): string {
+  const map: Record<string, string> = {
+    nome: 'name',
+    'p.iva': 'vatNumber', piva: 'vatNumber', 'partita iva': 'vatNumber',
+    paese: 'country', nazione: 'country',
+    indirizzo: 'address',
+    email: 'email', telefono: 'phone',
+    prezzo: 'price', importo: 'amount', totale: 'totalAmount',
+    quantità: 'quantity', quantita: 'quantity',
+    data: 'date', stato: 'status',
+    codice: 'code', categoria: 'category',
+    descrizione: 'description', note: 'notes',
+    sku: 'sku',
+  }
+  const lower = raw.toLowerCase().trim()
+  if (map[lower]) return map[lower]
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('')
+    .replace(/[^A-Za-z0-9]/g, '')
+}
+
+interface ParsedIntent {
+  reply: string
+  changes: Omit<PendingChange, 'status'>[]
+}
+
+// Dynamic NLP-style parser for arbitrary user prompts.
+function parseUserPrompt(
+  text: string,
+  sectorId: string,
+  existing: { id: string; label: string }[],
+): ParsedIntent | null {
+  const prefix = sectorId === 'manufacturing' ? 'mfg' : sectorId === 'retail' ? 'rtl' : sectorId === 'healthcare' ? 'hc' : 'fin'
+
+  // ── Pattern 1: add property to entity ───────────────────────────────────
+  // "aggiungi proprietà X a Y" / "aggiungi X a Y" / "Y deve avere X"
+  const propPatterns = [
+    /(?:aggiungi|aggiungere|add)\s+(?:proprietà|proprieta|property|campo|attributo|attribute)\s+([a-zA-Z0-9_ ]+?)\s+(?:a|to|su|on)\s+([A-Za-z0-9_]+)/i,
+    /(?:aggiungi|add)\s+([a-zA-Z0-9_ ]+?)\s+(?:a|to|su)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+    /([A-Za-z][A-Za-z0-9_]+)\s+(?:deve avere|has|ha|with)\s+([a-zA-Z0-9_ ]+)/i,
+  ]
+  for (const re of propPatterns) {
+    const m = text.match(re)
+    if (m) {
+      const propRaw = m[1].trim()
+      const entityRaw = m[2].trim()
+      // Verify entity exists
+      const found = existing.find(
+        (e) => e.label.toLowerCase() === entityRaw.toLowerCase() || e.id.toLowerCase() === entityRaw.toLowerCase(),
+      )
+      if (found && propRaw.length < 40) {
+        const prop = normalizeProperty(propRaw)
+        return {
+          reply:
+            `Aggiungo la proprietà \`${prop}\` a **${found.label}**. ` +
+            'Modifica leggera (proprietà, non struttura): non richiede approvazione data steward.',
+          changes: [{
+            id: `c-${uid()}`,
+            kind: 'add_property',
+            summary: `Aggiungi ${prop} a ${found.label}`,
+            rationale: `Proprietà piatta su ${found.label}. Non altera relazioni esistenti, no impatto su query.`,
+            addPropertyTo: { nodeId: found.id, property: prop },
+          }],
+        }
+      }
+    }
+  }
+
+  // ── Pattern 2: link/connect two entities ────────────────────────────────
+  // "collega X a Y" / "connetti X con Y" / "X collegato a Y" / "link X to Y"
+  const relPatterns = [
+    /(?:collega|connetti|link|associa|relate)\s+([A-Za-z][A-Za-z0-9_]+)\s+(?:a|con|to|and|e)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+    /([A-Za-z][A-Za-z0-9_]+)\s+(?:collegato|connesso|linked|related)\s+(?:a|to|con)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+    /(?:relazione|relation)\s+(?:tra|between)?\s*([A-Za-z][A-Za-z0-9_]+)\s+(?:e|and|a)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+  ]
+  for (const re of relPatterns) {
+    const m = text.match(re)
+    if (m) {
+      const srcRaw = m[1].trim()
+      const dstRaw = m[2].trim()
+      const src = existing.find((e) => e.label.toLowerCase() === srcRaw.toLowerCase() || e.id.toLowerCase() === srcRaw.toLowerCase())
+      const dst = existing.find((e) => e.label.toLowerCase() === dstRaw.toLowerCase() || e.id.toLowerCase() === dstRaw.toLowerCase())
+      if (src && dst) {
+        const label = `has${dst.label}`
+        return {
+          reply:
+            `Creo una relazione **${src.label} → ${label} → ${dst.label}**. ` +
+            'Verifico l\'ontologia: nessuna relazione duplicata.',
+          changes: [{
+            id: `c-${uid()}`,
+            kind: 'add_relation',
+            summary: `Relazione: ${src.label} → ${label} → ${dst.label}`,
+            rationale: `Collega le due entità esistenti. Permette query incrociate ${src.label}/${dst.label}.`,
+            newEdge: { id: `e-${uid()}`, source: src.id, target: dst.id, label },
+          }],
+        }
+      }
+    }
+  }
+
+  // ── Pattern 3: rename ────────────────────────────────────────────────────
+  // "rinomina X in Y" / "rename X to Y"
+  const renPatterns = [
+    /(?:rinomina|rename)\s+([A-Za-z][A-Za-z0-9_]+)\s+(?:in|to|a)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+  ]
+  for (const re of renPatterns) {
+    const m = text.match(re)
+    if (m) {
+      const oldName = m[1].trim()
+      const newName = normalizeEntityName(m[2].trim())
+      const found = existing.find((e) => e.label.toLowerCase() === oldName.toLowerCase())
+      if (found) {
+        return {
+          reply:
+            `Rinomino **${found.label}** in **${newName}**. ` +
+            'Attenzione: tutti i mapping e query che referenziano la classe verranno aggiornati. Richiede data steward.',
+          changes: [{
+            id: `c-${uid()}`,
+            kind: 'rename',
+            summary: `Rinomina ${found.label} → ${newName}`,
+            rationale: 'Cambio strutturale: impatta SPARQL queries, mappings DB e MCP tools. Necessario backup.',
+            requiresSteward: true,
+            warnings: [`${existing.length} mapping potrebbero richiedere aggiornamento.`],
+          }],
+        }
+      }
+    }
+  }
+
+  // ── Pattern 4: add new entity/class ─────────────────────────────────────
+  // "aggiungi entità X" / "crea classe X" / "voglio creare X" / "voglio tracciare X" /
+  // "voglio mappare X" / "add entity X" / "new class X"
+  const entPatterns = [
+    /(?:aggiungi|aggiungere|crea|creare|add|new)\s+(?:entità|entita|classe|class|entity|tabella|table)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+con\s+([a-zA-Z0-9_, ]+))?$/i,
+    /(?:voglio|vorrei|i want to|want to|need to)\s+(?:tracciare|mappare|creare|gestire|track|map|create|manage|model)\s+(?:i\s+|le\s+|gli\s+|the\s+)?([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)$/i,
+    /(?:aggiungi|aggiungere|add|new)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+con\s+([a-zA-Z0-9_, ]+))?$/i,
+  ]
+  for (const re of entPatterns) {
+    const m = text.match(re)
+    if (m) {
+      const nameRaw = m[1].trim()
+      const propsRaw = (m[2] || '').trim()
+      if (nameRaw.length < 1 || nameRaw.length > 40) continue
+      const name = normalizeEntityName(nameRaw)
+      // Check for duplicate
+      const dup = existing.find((e) => e.label.toLowerCase() === name.toLowerCase())
+      if (dup) {
+        return {
+          reply:
+            `Stavo per creare **${name}** ma esiste già nell'ontologia ${sectorId}. ` +
+            'Suggerisco di riusare la classe esistente invece di duplicare (governance ontologica).',
+          changes: [{
+            id: `c-${uid()}`,
+            kind: 'rename',
+            summary: `Riuso ${name} esistente (no duplicato)`,
+            rationale: `La classe ${name} è già presente. Creare un duplicato genererebbe inconsistenze nei mapping.`,
+            warnings: [
+              `Classe "${name}" già esistente — duplicato evitato.`,
+              `Puoi aggiungere proprietà o relazioni alla classe esistente.`,
+            ],
+          }],
+        }
+      }
+      // Derive properties
+      const props = propsRaw
+        ? propsRaw
+            .split(/[,;]| e | and /)
+            .map((p) => normalizeProperty(p.trim()))
+            .filter((p) => p.length > 0)
+            .slice(0, 8)
+        : ['name', 'code', 'createdAt']
+
+      // Position: place to the right, below existing nodes
+      const maxX = existing.length > 0 ? 1300 : 100
+      const yOffset = 200 + (existing.length % 3) * 300
+
+      const newId = name
+      return {
+        reply:
+          `Propongo una nuova classe **${name}** con ${props.length} propriet${props.length === 1 ? 'à' : 'à'}: ` +
+          `${props.map((p) => `\`${p}\``).join(', ')}. ` +
+          `Verificato: nessun concetto duplicato nell'ontologia ${sectorId}. ` +
+          'Cambio strutturale — richiede approvazione data steward.',
+        changes: [{
+          id: `c-${uid()}`,
+          kind: 'add_class',
+          summary: `Aggiungi classe ${name}`,
+          rationale: `Nuova entità non duplicata. ${props.length} proprietà derivate dalla descrizione. URI: ${prefix}:${name}.`,
+          newNode: {
+            id: newId,
+            label: name,
+            uri: `${prefix}:${name}`,
+            properties: props,
+            position: { x: maxX, y: yOffset },
+            db_table: name.toLowerCase() + 's',
+          },
+          requiresSteward: true,
+        }],
+      }
+    }
+  }
+
+  return null
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export default function OntologyBuilder() {
   const { sector, sectorId } = useSector()
@@ -474,18 +728,24 @@ export default function OntologyBuilder() {
       setInput('')
       setThinking(true)
 
-      // Match intent (find best by substring)
-      const matched =
-        intents.find((it) => text.toLowerCase().includes(it.prompt.toLowerCase().slice(0, 20))) ??
-        intents.find((it) =>
-          it.prompt
-            .toLowerCase()
-            .split(' ')
-            .some((w) => w.length > 4 && text.toLowerCase().includes(w)),
-        )
+      // 1) Try canned intent (exact-ish match on quick prompts)
+      const cannedMatch = intents.find((it) =>
+        text.toLowerCase().trim() === it.prompt.toLowerCase().trim()
+      ) ?? intents.find((it) =>
+        text.toLowerCase().includes(it.prompt.toLowerCase().slice(0, 25))
+      )
+      // 2) Dynamic NLP parser fallback
+      const existingForParser = nodes.map((n) => ({
+        id: n.id,
+        label: (n.data as unknown as BuilderNodeData).label,
+      }))
+      const parsed = cannedMatch
+        ? { reply: cannedMatch.reply, changes: cannedMatch.changes }
+        : parseUserPrompt(text, sectorId, existingForParser)
 
       window.setTimeout(() => {
-        if (matched) {
+        if (parsed) {
+          const matched = parsed
           const changesWithStatus: PendingChange[] = matched.changes.map((c) => ({
             ...c,
             status: 'pending',
