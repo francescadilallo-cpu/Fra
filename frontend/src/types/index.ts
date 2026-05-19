@@ -114,4 +114,4 @@ export interface PaginatedData {
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-export type NavTab = 'dashboard' | 'ontology' | 'query' | 'mappings' | 'process'
+export type NavTab = 'overview' | 'dashboard' | 'ontology' | 'query' | 'mappings' | 'process'
