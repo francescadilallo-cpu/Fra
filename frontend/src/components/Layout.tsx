@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2 } from 'lucide-react'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
@@ -14,6 +14,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] =
   { id: 'overview',  label: 'Overview',       icon: Presentation },
   { id: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
   { id: 'ontology',  label: 'Ontologia',      icon: GitBranch },
+  { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
   { id: 'query',     label: 'Query AI',       icon: MessageSquare },
   { id: 'mappings',  label: 'Mappings',       icon: Table2 },
   { id: 'process',   label: 'Processo',       icon: Workflow },
@@ -107,6 +108,9 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
               )}
               {id === 'config' && activeTab !== 'config' && (
                 <span className="ml-auto text-[9px] font-bold bg-amber-500 text-white rounded px-1 py-0.5 leading-none">NEW</span>
+              )}
+              {id === 'builder' && activeTab !== 'builder' && (
+                <span className="ml-auto text-[9px] font-bold bg-violet-600 text-white rounded px-1 py-0.5 leading-none">NEW</span>
               )}
             </button>
           ))}

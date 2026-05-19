@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import OverviewScreen from './components/OverviewScreen'
 import Dashboard from './components/Dashboard'
 import OntologyGraph from './components/OntologyGraph'
+import OntologyBuilder from './components/OntologyBuilder'
 import QueryInterface from './components/QueryInterface'
 import MappingView from './components/MappingView'
 import ProcessView from './components/ProcessView'
@@ -17,6 +18,7 @@ export default function App() {
       {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
       {activeTab === 'dashboard' && <Dashboard />}
       {activeTab === 'ontology' && <OntologyGraph />}
+      {activeTab === 'builder' && <OntologyBuilder />}
       {activeTab === 'query' && <QueryInterface />}
       {activeTab === 'mappings' && <MappingView />}
       {activeTab === 'process' && <ProcessView />}
