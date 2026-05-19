@@ -98,6 +98,7 @@ export interface QueryResult {
   question: string
   interpreted_as: string
   sql_query: string
+  sparql_query?: string
   results: Record<string, unknown>[]
   summary: string
 }
@@ -114,4 +115,4 @@ export interface PaginatedData {
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-export type NavTab = 'overview' | 'dashboard' | 'ontology' | 'query' | 'mappings' | 'process'
+export type NavTab = 'overview' | 'dashboard' | 'ontology' | 'query' | 'mappings' | 'process' | 'config'
