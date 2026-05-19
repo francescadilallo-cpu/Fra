@@ -44,7 +44,7 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
           {rows.map((row, i) => (
             <tr key={i} className="border-t border-slate-200 hover:bg-slate-50 transition-colors">
               {columns.map((col) => (
-                <td key={col} className="px-3 py-2 text-slate-300 whitespace-nowrap">
+                <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
                   {row[col] === null || row[col] === undefined ? (
                     <span className="text-slate-600 italic">null</span>
                   ) : typeof row[col] === 'number' ? (
@@ -123,12 +123,12 @@ function MessageBubble({ message }: { message: Message }) {
         {/* Interpreted as */}
         <div>
           <span className="text-xs text-slate-500 uppercase tracking-wide">Interpretazione</span>
-          <p className="text-sm text-slate-300 mt-0.5 italic">{r.interpreted_as}</p>
+          <p className="text-sm text-slate-600 mt-0.5 italic">{r.interpreted_as}</p>
         </div>
 
         {/* Summary */}
-        <div className="bg-teal-500/5 border border-teal-500/10 rounded-lg px-3 py-2">
-          <p className="text-sm text-slate-200">{r.summary}</p>
+        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+          <p className="text-sm text-slate-700">{r.summary}</p>
         </div>
 
         {/* Results table */}
@@ -252,7 +252,7 @@ export default function QueryInterface() {
                   key={q}
                   onClick={() => sendMessage(q)}
                   disabled={loading}
-                  className="w-full text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-300 hover:text-slate-900 transition-all"
+                  className="w-full text-left bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-300 rounded-xl px-4 py-3 text-sm text-slate-600 hover:text-slate-900 transition-all"
                 >
                   {q}
                 </button>
@@ -292,7 +292,7 @@ export default function QueryInterface() {
                 key={q}
                 onClick={() => sendMessage(q)}
                 disabled={loading}
-                className="text-xs bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-200 rounded-full px-3 py-1 text-slate-400 hover:text-slate-200 transition-all disabled:opacity-50"
+                className="text-xs bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-300 rounded-full px-3 py-1 text-slate-500 hover:text-slate-800 transition-all disabled:opacity-50"
               >
                 {q}
               </button>

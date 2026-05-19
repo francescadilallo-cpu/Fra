@@ -101,7 +101,7 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
             {node.properties.map((p) => (
               <div key={p} className="flex items-center gap-2 bg-white rounded px-2 py-1">
                 <span className="w-1.5 h-1.5 bg-teal-500 rounded-full flex-shrink-0" />
-                <span className="text-xs text-slate-300 font-mono">{p}</span>
+                <span className="text-xs text-slate-700 font-mono">{p}</span>
               </div>
             ))}
           </div>
@@ -193,11 +193,11 @@ export default function OntologyGraph() {
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#1e1b4b" gap={24} size={1} />
+          <Background color="#CBD5E1" gap={24} size={1} />
           <Controls />
           <MiniMap
-            nodeColor={() => '#1e1b4b'}
-            maskColor="rgba(7,6,26,0.7)"
+            nodeColor={() => '#ffffff'}
+            maskColor="rgba(248,250,252,0.8)"
           />
         </ReactFlow>
 

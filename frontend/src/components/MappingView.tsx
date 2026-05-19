@@ -6,16 +6,16 @@ import type { MappingEntry } from '../types'
 // ── Type badge ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
-  integer:        'bg-blue-500/15 text-blue-300',
-  string:         'bg-green-500/15 text-green-300',
-  decimal:        'bg-amber-500/15 text-amber-300',
-  date:           'bg-purple-500/15 text-purple-300',
-  objectProperty: 'bg-teal-500/15 text-teal-600',
+  integer:        'bg-blue-50 text-blue-600',
+  string:         'bg-green-50 text-green-700',
+  decimal:        'bg-amber-50 text-amber-600',
+  date:           'bg-purple-50 text-purple-600',
+  objectProperty: 'bg-teal-50 text-teal-700',
 }
 
 function TypeBadge({ type }: { type: string }) {
   return (
-    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-700 text-slate-300'}`}>
+    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-100 text-slate-500'}`}>
       {type}
     </span>
   )
@@ -85,7 +85,7 @@ function EditableCell({ value, onSave }: EditableCellProps) {
       className="group flex items-center gap-1.5 cursor-pointer"
       onClick={() => setEditing(true)}
     >
-      <span className="text-sm text-slate-300 font-mono">{value}</span>
+      <span className="text-sm text-slate-700 font-mono">{value}</span>
       <Pencil className="w-3 h-3 text-slate-600 group-hover:text-slate-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" />
     </div>
   )
@@ -140,10 +140,10 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
               {rows.map((row) => (
                 <tr key={`${row.table}-${row.field}`} className="border-b border-slate-200/50 hover:bg-slate-100/30 transition-colors">
                   <td className="px-5 py-3">
-                    <span className="text-sm font-mono text-amber-300">{row.field}</span>
+                    <span className="text-sm font-mono text-amber-600">{row.field}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-sm text-slate-300">{row.ontology_class}</span>
+                    <span className="text-sm text-slate-600">{row.ontology_class}</span>
                   </td>
                   <td className="px-5 py-3">
                     <EditableCell
