@@ -6,7 +6,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import {
   Sparkles, Send, Bot, User, CheckCircle2, XCircle, Plus, Link2,
-  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight,
+  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { OntologyNodeData } from '../types'
@@ -21,7 +21,7 @@ interface PendingChange {
   status: ChangeStatus
   summary: string
   rationale: string
-  // Effect on the canvas
+  // Effect on the canvas — these IDs are what approve/reject act on
   newNode?: {
     id: string
     label: string
@@ -39,6 +39,38 @@ interface PendingChange {
   addPropertyTo?: { nodeId: string; property: string }
   warnings?: string[]
   requiresSteward?: boolean
+}
+
+// Persisted shape (what we save in localStorage per sector)
+interface SavedExtension {
+  nodes: { id: string; label: string; uri: string; properties: string[]; position: { x: number; y: number }; db_table?: string }[]
+  edges: { id: string; source: string; target: string; label: string }[]
+  addedProperties: { nodeId: string; property: string }[]
+}
+
+const STORAGE_KEY = (sectorId: string) => `ontology-builder-ext-${sectorId}`
+
+function loadExtension(sectorId: string): SavedExtension {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY(sectorId))
+    if (!raw) return { nodes: [], edges: [], addedProperties: [] }
+    const parsed = JSON.parse(raw) as SavedExtension
+    return {
+      nodes: parsed.nodes ?? [],
+      edges: parsed.edges ?? [],
+      addedProperties: parsed.addedProperties ?? [],
+    }
+  } catch {
+    return { nodes: [], edges: [], addedProperties: [] }
+  }
+}
+
+function saveExtension(sectorId: string, ext: SavedExtension) {
+  try {
+    localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(ext))
+  } catch {
+    // quota exceeded — silent for demo
+  }
 }
 
 interface ChatMessage {
@@ -645,55 +677,83 @@ function parseUserPrompt(
   return null
 }
 
+// Build initial canvas state by merging sector ontology + saved extensions
+function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string>; labelStyle: Record<string, string | number> }[] } }, sectorId: string): { nodes: Node[]; edges: Edge[] } {
+  const ext = loadExtension(sectorId)
+
+  // Base nodes (possibly with extra properties added via builder)
+  const baseNodes: Node[] = sector.ontology.nodes.map((n) => {
+    const extraProps = ext.addedProperties
+      .filter((p) => p.nodeId === n.id)
+      .map((p) => p.property)
+    return {
+      id: n.id,
+      type: 'builderNode',
+      position: n.position,
+      data: {
+        ...n.data,
+        properties: [...n.data.properties, ...extraProps],
+        state: 'existing',
+      },
+    }
+  })
+
+  // Saved (approved) extension nodes
+  const extNodes: Node[] = ext.nodes.map((n) => ({
+    id: n.id,
+    type: 'builderNode',
+    position: n.position,
+    data: {
+      label: n.label,
+      uri: n.uri,
+      db_table: n.db_table ?? null,
+      row_count: 0,
+      properties: n.properties,
+      state: 'existing',
+    },
+  }))
+
+  const baseEdges: Edge[] = sector.ontology.edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    label: e.label,
+    type: 'smoothstep',
+    animated: e.animated,
+    style: e.style,
+    labelStyle: e.labelStyle,
+  }))
+
+  const extEdges: Edge[] = ext.edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    label: e.label,
+    type: 'smoothstep',
+    animated: true,
+    style: { stroke: '#0D9488' },
+    labelStyle: { fill: '#0D9488', fontSize: 11 },
+  }))
+
+  return { nodes: [...baseNodes, ...extNodes], edges: [...baseEdges, ...extEdges] }
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export default function OntologyBuilder() {
   const { sector, sectorId } = useSector()
 
-  // Convert sector ontology into mutable builder state.
-  const [nodes, setNodes] = useState<Node[]>(() =>
-    sector.ontology.nodes.map((n) => ({
-      ...n,
-      type: 'builderNode',
-      data: { ...n.data, state: 'existing' as const },
-    })),
-  )
-  const [edges, setEdges] = useState<Edge[]>(() =>
-    sector.ontology.edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      type: 'smoothstep',
-      animated: e.animated,
-      style: e.style,
-      labelStyle: e.labelStyle,
-    })),
-  )
+  const initial = useMemo(() => buildInitialState(sector, sectorId), [sector, sectorId])
+  const [nodes, setNodes] = useState<Node[]>(initial.nodes)
+  const [edges, setEdges] = useState<Edge[]>(initial.edges)
 
-  // Reset when sector changes
+  // Reset (reload from storage) when sector changes
   const lastSectorRef = useRef(sectorId)
   useEffect(() => {
     if (lastSectorRef.current !== sectorId) {
       lastSectorRef.current = sectorId
-      setNodes(
-        sector.ontology.nodes.map((n) => ({
-          ...n,
-          type: 'builderNode',
-          data: { ...n.data, state: 'existing' as const },
-        })),
-      )
-      setEdges(
-        sector.ontology.edges.map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          label: e.label,
-          type: 'smoothstep',
-          animated: e.animated,
-          style: e.style,
-          labelStyle: e.labelStyle,
-        })),
-      )
+      const s = buildInitialState(sector, sectorId)
+      setNodes(s.nodes)
+      setEdges(s.edges)
       setMessages([WELCOME])
       setPending([])
     }
@@ -831,42 +891,136 @@ export default function OntologyBuilder() {
   )
 
   const approve = useCallback((changeId: string) => {
-    setPending((p) =>
-      p.map((c) => (c.id === changeId ? { ...c, status: 'approved' } : c)),
-    )
-    setNodes((nds) =>
-      nds.map((n) =>
-        (n.data as unknown as BuilderNodeData).state === 'pending'
-          ? { ...n, data: { ...(n.data as unknown as BuilderNodeData), state: 'approved' } }
-          : n,
-      ),
-    )
-    setEdges((eds) =>
-      eds.map((e) =>
-        e.style && (e.style as Record<string, string>).strokeDasharray
-          ? {
-              ...e,
-              style: { stroke: '#0D9488' },
-              labelStyle: { fill: '#0D9488', fontSize: 11 },
-            }
-          : e,
-      ),
-    )
-  }, [])
+    const change = pending.find((c) => c.id === changeId)
+    if (!change) return
+
+    // Update pending status
+    setPending((p) => p.map((c) => (c.id === changeId ? { ...c, status: 'approved' } : c)))
+
+    // Mark the specific node/edge for this change as approved (visual)
+    if (change.newNode) {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === change.newNode!.id
+            ? { ...n, data: { ...(n.data as unknown as BuilderNodeData), state: 'approved' } }
+            : n,
+        ),
+      )
+    }
+    if (change.newEdge) {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === change.newEdge!.id
+            ? { ...e, style: { stroke: '#0D9488' }, labelStyle: { fill: '#0D9488', fontSize: 11 } }
+            : e,
+        ),
+      )
+    }
+    if (change.addPropertyTo) {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === change.addPropertyTo!.nodeId
+            ? { ...n, data: { ...(n.data as unknown as BuilderNodeData), state: 'existing' } }
+            : n,
+        ),
+      )
+    }
+
+    // Persist to localStorage
+    const ext = loadExtension(sectorId)
+    if (change.newNode) {
+      const exists = ext.nodes.some((n) => n.id === change.newNode!.id)
+      if (!exists) {
+        ext.nodes.push({
+          id: change.newNode.id,
+          label: change.newNode.label,
+          uri: change.newNode.uri,
+          properties: change.newNode.properties,
+          position: change.newNode.position,
+          db_table: change.newNode.db_table,
+        })
+      }
+    }
+    if (change.newEdge) {
+      const exists = ext.edges.some((e) => e.id === change.newEdge!.id)
+      if (!exists) {
+        ext.edges.push({
+          id: change.newEdge.id,
+          source: change.newEdge.source,
+          target: change.newEdge.target,
+          label: change.newEdge.label,
+        })
+      }
+    }
+    if (change.addPropertyTo) {
+      ext.addedProperties.push({
+        nodeId: change.addPropertyTo.nodeId,
+        property: change.addPropertyTo.property,
+      })
+    }
+    saveExtension(sectorId, ext)
+  }, [pending, sectorId])
 
   const reject = useCallback((changeId: string) => {
+    const change = pending.find((c) => c.id === changeId)
+    if (!change) return
+
     setPending((p) => p.filter((c) => c.id !== changeId))
-    // Remove pending nodes/edges associated
-    setNodes((nds) => nds.filter((n) => (n.data as unknown as BuilderNodeData).state !== 'pending'))
-    setEdges((eds) => eds.filter((e) => !(e.style && (e.style as Record<string, string>).strokeDasharray)))
-  }, [])
+
+    if (change.newNode) {
+      setNodes((nds) => nds.filter((n) => n.id !== change.newNode!.id))
+      // Also remove edges that referenced this node
+      setEdges((eds) => eds.filter((e) => e.source !== change.newNode!.id && e.target !== change.newNode!.id))
+    }
+    if (change.newEdge) {
+      setEdges((eds) => eds.filter((e) => e.id !== change.newEdge!.id))
+    }
+    if (change.addPropertyTo) {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === change.addPropertyTo!.nodeId
+            ? {
+                ...n,
+                data: {
+                  ...(n.data as unknown as BuilderNodeData),
+                  properties: (n.data as unknown as BuilderNodeData).properties.filter(
+                    (p) => p !== change.addPropertyTo!.property,
+                  ),
+                  state: 'existing',
+                },
+              }
+            : n,
+        ),
+      )
+    }
+  }, [pending])
 
   const approveAll = useCallback(() => {
-    pending.forEach((c) => c.status === 'pending' && approve(c.id))
+    const toApprove = pending.filter((c) => c.status === 'pending')
+    toApprove.forEach((c) => approve(c.id))
   }, [pending, approve])
+
+  const clearExtensions = useCallback(() => {
+    if (!confirm(`Vuoi davvero rimuovere tutte le estensioni salvate per ${sector.name}? Questa azione non è reversibile.`)) return
+    saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
+    const s = buildInitialState(sector, sectorId)
+    setNodes(s.nodes)
+    setEdges(s.edges)
+    setPending([])
+  }, [sectorId, sector])
 
   const quickPrompts = intents.map((i) => i.prompt)
   const pendingCount = pending.filter((c) => c.status === 'pending').length
+
+  // Count of saved extensions for the badge
+  const [savedCount, setSavedCount] = useState(() => {
+    const ext = loadExtension(sectorId)
+    return ext.nodes.length + ext.edges.length + ext.addedProperties.length
+  })
+  useEffect(() => {
+    const ext = loadExtension(sectorId)
+    setSavedCount(ext.nodes.length + ext.edges.length + ext.addedProperties.length)
+  }, [sectorId, nodes, edges])
 
   return (
     <div className="h-full flex flex-col">
@@ -886,11 +1040,27 @@ export default function OntologyBuilder() {
           <span className="text-xs text-slate-500">
             {nodes.length} classi · {edges.length} relazioni
           </span>
+          {savedCount > 0 && (
+            <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+              <Save className="w-3 h-3" />
+              {savedCount} salvate
+            </span>
+          )}
           {pendingCount > 0 && (
             <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full font-medium flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" />
               {pendingCount} pending
             </span>
+          )}
+          {savedCount > 0 && (
+            <button
+              onClick={clearExtensions}
+              className="text-xs bg-white border border-slate-200 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 text-slate-600 px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors"
+              title="Rimuovi tutte le estensioni salvate per questo settore"
+            >
+              <Trash2 className="w-3 h-3" />
+              Reset
+            </button>
           )}
         </div>
       </div>
