@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-navy-950 text-slate-100 antialiased;
+    @apply bg-slate-50 text-slate-900 antialiased;
   }
 
   ::-webkit-scrollbar {
@@ -12,53 +12,54 @@
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-navy-900;
+    @apply bg-slate-100;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-navy-600 rounded-full;
+    @apply bg-slate-300 rounded-full;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-navy-800 border border-navy-700 rounded-xl p-5;
+    @apply bg-white border border-slate-200 rounded-xl shadow-sm p-6;
   }
 
   .btn-primary {
-    @apply bg-teal-500 hover:bg-teal-600 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2 rounded-lg transition-colors;
   }
 
   .btn-ghost {
-    @apply text-slate-400 hover:text-slate-200 hover:bg-navy-700 px-3 py-2 rounded-lg transition-colors;
+    @apply text-slate-500 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-lg transition-colors;
   }
 
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+    @apply inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full;
   }
 }
 
-/* ReactFlow dark theme overrides */
+/* ReactFlow light theme overrides */
 .react-flow__background {
-  background-color: #07061a !important;
+  background-color: #F8FAFC !important;
 }
 
 .react-flow__controls {
-  background: #1e1b4b;
-  border-color: #4338ca;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
 }
 
 .react-flow__controls-button {
-  background: #1e1b4b;
-  border-color: #4338ca;
-  color: #94a3b8;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #64748b;
 }
 
 .react-flow__controls-button:hover {
-  background: #4338ca;
+  background: #f1f5f9;
 }
 
 .react-flow__minimap {
-  background: #0f0e2e;
-  border: 1px solid #4338ca;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
 }
