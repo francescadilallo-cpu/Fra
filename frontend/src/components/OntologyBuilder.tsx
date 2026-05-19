@@ -469,31 +469,102 @@ interface ParsedIntent {
   changes: Omit<PendingChange, 'status'>[]
 }
 
+// Italian/English stopwords to ignore when extracting candidate nouns.
+const STOPWORDS = new Set([
+  'il','lo','la','i','gli','le','un','una','uno','dei','degli','delle','un\'','di','del','della','dello','dei','delle',
+  'a','al','allo','alla','ai','agli','alle','con','su','per','tra','fra','che','e','o','ma','se','non','è','sono',
+  'voglio','vorrei','puoi','puo','potresti','mi','serve','servono','bisogno','ho','hai','dobbiamo',
+  'creare','crea','aggiungi','aggiungere','aggiungere','definisci','modella','tracciare','gestire','mappare','registrare',
+  'entità','entita','classe','class','entity','tabella','table','nuova','nuovo','un\'entità','un\'entita',
+  'campo','attributo','proprietà','proprieta','property','propriet','property','attribute','field',
+  'relazione','relation','collega','connetti','collegata','collegato','collegamento','link','associa','riferimento',
+  'in','dal','dalla','dai','dalle','sulla','sullo','sul','sui','sugli','sulle',
+  'the','a','an','to','from','of','for','with','and','or','but','want','need','new','add','create','model','track','manage','map',
+  'questo','questa','questi','queste','quello','quella','quegli','quelle','chiamata','chiamato','chiamati','denominata','denominato',
+  'azienda','company','customer','user','utente','sistema','system',
+])
+
+const VERB_NEW = ['aggiungi','aggiungere','crea','creare','add','new','definisci','modella','introduci','registra','inserisci']
+const VERB_WANT = ['voglio','vorrei','want','need','serve','bisogno','dobbiamo','poter','poss','mi piacerebbe']
+const VERB_TRACK = ['tracciare','mappare','gestire','seguire','monitorare','track','map','model','manage','catturare','salvare','memorizzare']
+const VERB_LINK = ['collega','connetti','associa','link','connect','relate','riferimento','riferisci','metti in relazione']
+const NOUN_ENTITY = ['entità','entita','classe','class','entity','tabella','table','oggetto','object','concept','concetto','tipo','model']
+
+function containsAny(text: string, words: string[]) {
+  return words.some((w) => text.includes(w))
+}
+
+// Extract candidate entity names from raw text.
+// Strategy: tokenize, drop stopwords, prefer PascalCase or capitalized words, keep singular nouns.
+function extractCandidateNouns(text: string): string[] {
+  // Strip punctuation, normalize
+  const cleaned = text.replace(/[.,;:!?()\[\]"]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const tokens = cleaned.split(' ')
+  const candidates: string[] = []
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i]
+    const lower = tok.toLowerCase()
+    if (tok.length < 3) continue
+    if (STOPWORDS.has(lower)) continue
+    if (lower.endsWith('mente')) continue                 // adverbs
+    if (/^[0-9]+$/.test(tok)) continue                    // numbers
+    // Prefer capitalized or PascalCase tokens
+    candidates.push(tok)
+  }
+  return candidates
+}
+
+// Find an existing class label/id in the text (loose match).
+function findExistingMention(text: string, existing: { id: string; label: string }[]): { id: string; label: string } | null {
+  const lower = text.toLowerCase()
+  for (const e of existing) {
+    const lbl = e.label.toLowerCase()
+    if (lower.includes(lbl)) return e
+    // Italian synonyms (basic)
+    const ita: Record<string, string[]> = {
+      customer: ['cliente','clienti'],
+      product: ['prodotto','prodotti'],
+      order: ['ordine','ordini'],
+      quote: ['preventivo','preventivi'],
+      patient: ['paziente','pazienti'],
+      doctor: ['medico','medici'],
+      account: ['conto','conti'],
+      transaction: ['transazione','transazioni'],
+    }
+    const syns = ita[lbl] ?? []
+    if (syns.some((s) => lower.includes(s))) return e
+  }
+  return null
+}
+
 // Dynamic NLP-style parser for arbitrary user prompts.
 function parseUserPrompt(
   text: string,
   sectorId: string,
   existing: { id: string; label: string }[],
 ): ParsedIntent | null {
+  const lower = text.toLowerCase().trim()
   const prefix = sectorId === 'manufacturing' ? 'mfg' : sectorId === 'retail' ? 'rtl' : sectorId === 'healthcare' ? 'hc' : 'fin'
 
-  // ── Pattern 1: add property to entity ───────────────────────────────────
-  // "aggiungi proprietà X a Y" / "aggiungi X a Y" / "Y deve avere X"
+  // ── 1) Add property to entity ───────────────────────────────────────────
+  // "aggiungi proprietà X a Y" / "aggiungi X a Y" / "Y deve avere X" /
+  // "Y con campo X" / "aggiungi a Y un campo X"
   const propPatterns = [
-    /(?:aggiungi|aggiungere|add)\s+(?:proprietà|proprieta|property|campo|attributo|attribute)\s+([a-zA-Z0-9_ ]+?)\s+(?:a|to|su|on)\s+([A-Za-z0-9_]+)/i,
-    /(?:aggiungi|add)\s+([a-zA-Z0-9_ ]+?)\s+(?:a|to|su)\s+([A-Za-z][A-Za-z0-9_]+)/i,
-    /([A-Za-z][A-Za-z0-9_]+)\s+(?:deve avere|has|ha|with)\s+([a-zA-Z0-9_ ]+)/i,
+    /(?:aggiungi|aggiungere|add)\s+(?:la\s+|una\s+|il\s+|un\s+)?(?:proprietà|proprieta|property|campo|attributo|attribute|field)\s+([a-zA-Zà-ù0-9_ ]+?)\s+(?:a|to|su|on|in|al|alla|allo|sulla|sullo)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)/i,
+    /(?:aggiungi|add)\s+(?:a|to|al|alla|allo|su|sulla)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:una|un|la|il)?\s*(?:proprietà|proprieta|property|campo|attributo|attribute|field)\s+([a-zA-Zà-ù0-9_ ]+)/i,
+    /([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:deve avere|deve contenere|has|ha|with|con campo|con la proprietà|con proprietà)\s+(?:il|la|un|una|the)?\s*([a-zA-Zà-ù0-9_ ]+)/i,
   ]
   for (const re of propPatterns) {
     const m = text.match(re)
     if (m) {
-      const propRaw = m[1].trim()
-      const entityRaw = m[2].trim()
-      // Verify entity exists
+      // pattern 2 has entity in group 1, property in group 2; others have property in 1, entity in 2
+      const reverseOrder = re === propPatterns[1]
+      const propRaw = (reverseOrder ? m[2] : m[1]).trim()
+      const entityRaw = (reverseOrder ? m[1] : m[2]).trim()
       const found = existing.find(
         (e) => e.label.toLowerCase() === entityRaw.toLowerCase() || e.id.toLowerCase() === entityRaw.toLowerCase(),
       )
-      if (found && propRaw.length < 40) {
+      if (found && propRaw.length < 40 && propRaw.length > 1) {
         const prop = normalizeProperty(propRaw)
         return {
           reply:
@@ -511,12 +582,11 @@ function parseUserPrompt(
     }
   }
 
-  // ── Pattern 2: link/connect two entities ────────────────────────────────
-  // "collega X a Y" / "connetti X con Y" / "X collegato a Y" / "link X to Y"
+  // ── 2) Link/connect two entities ────────────────────────────────────────
   const relPatterns = [
-    /(?:collega|connetti|link|associa|relate)\s+([A-Za-z][A-Za-z0-9_]+)\s+(?:a|con|to|and|e)\s+([A-Za-z][A-Za-z0-9_]+)/i,
-    /([A-Za-z][A-Za-z0-9_]+)\s+(?:collegato|connesso|linked|related)\s+(?:a|to|con)\s+([A-Za-z][A-Za-z0-9_]+)/i,
-    /(?:relazione|relation)\s+(?:tra|between)?\s*([A-Za-z][A-Za-z0-9_]+)\s+(?:e|and|a)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+    /(?:collega|connetti|link|associa|relate|metti in relazione)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:a|con|to|and|e|al|alla|allo)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)/i,
+    /([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:è collegato|è collegata|collegato|collegata|connesso|connessa|linked|related|ha un|ha una|has)\s+(?:a|al|alla|allo|to|con|ad un|ad una)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)/i,
+    /(?:relazione|relation|legame|link)\s+(?:tra|between|fra)?\s*([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:e|and|a|con)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)/i,
   ]
   for (const re of relPatterns) {
     const m = text.match(re)
@@ -525,7 +595,7 @@ function parseUserPrompt(
       const dstRaw = m[2].trim()
       const src = existing.find((e) => e.label.toLowerCase() === srcRaw.toLowerCase() || e.id.toLowerCase() === srcRaw.toLowerCase())
       const dst = existing.find((e) => e.label.toLowerCase() === dstRaw.toLowerCase() || e.id.toLowerCase() === dstRaw.toLowerCase())
-      if (src && dst) {
+      if (src && dst && src.id !== dst.id) {
         const label = `has${dst.label}`
         return {
           reply:
@@ -543,10 +613,9 @@ function parseUserPrompt(
     }
   }
 
-  // ── Pattern 3: rename ────────────────────────────────────────────────────
-  // "rinomina X in Y" / "rename X to Y"
+  // ── 3) Rename ────────────────────────────────────────────────────────────
   const renPatterns = [
-    /(?:rinomina|rename)\s+([A-Za-z][A-Za-z0-9_]+)\s+(?:in|to|a)\s+([A-Za-z][A-Za-z0-9_]+)/i,
+    /(?:rinomina|rename|cambia nome|cambia il nome di)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_]+)\s+(?:in|to|a|come)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]+)/i,
   ]
   for (const re of renPatterns) {
     const m = text.match(re)
@@ -572,80 +641,154 @@ function parseUserPrompt(
     }
   }
 
-  // ── Pattern 4: add new entity/class ─────────────────────────────────────
-  // "aggiungi entità X" / "crea classe X" / "voglio creare X" / "voglio tracciare X" /
-  // "voglio mappare X" / "add entity X" / "new class X"
+  // ── 4) Add new entity/class — many phrasings ────────────────────────────
+  // High-precision: "aggiungi entità/classe/tabella X [con prop, prop]"
+  // Also: "chiamata/chiamato X", "voglio tracciare X", "modella X", just "X" (single noun)
   const entPatterns = [
-    /(?:aggiungi|aggiungere|crea|creare|add|new)\s+(?:entità|entita|classe|class|entity|tabella|table)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+con\s+([a-zA-Z0-9_, ]+))?$/i,
-    /(?:voglio|vorrei|i want to|want to|need to)\s+(?:tracciare|mappare|creare|gestire|track|map|create|manage|model)\s+(?:i\s+|le\s+|gli\s+|the\s+)?([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)$/i,
-    /(?:aggiungi|aggiungere|add|new)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+con\s+([a-zA-Z0-9_, ]+))?$/i,
+    /(?:aggiungi|aggiungere|crea|creare|definisci|modella|introduci|inserisci|registra|add|new|create|model|define|introduce)\s+(?:una\s+|un\s+|la\s+|il\s+|the\s+|new\s+)?(?:entità|entita|classe|class|entity|tabella|table|oggetto|object|tipo|concept|concetto|nodo|node)\s+(?:chiamata\s+|chiamato\s+|denominata\s+|denominato\s+|named\s+|called\s+)?([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+(?:con|with|che ha|avente|che contiene)\s+([a-zA-Zà-ù0-9_, ]+))?\s*$/i,
+    /(?:voglio|vorrei|i want|want to|need to|mi serve|mi servirebbe|mi piacerebbe|dobbiamo|posso)\s+(?:.{0,40}?)(?:tracciare|mappare|gestire|monitorare|seguire|catturare|memorizzare|salvare|registrare|model(?:lare)?|track|map|manage|monitor)\s+(?:i\s+|le\s+|gli\s+|the\s+|una\s+|un\s+)?([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)\s*$/i,
+    /(?:una|un|new)\s+(?:nuova\s+|nuovo\s+|new\s+)?(?:entità|entita|classe|class|entity|tabella|table)\s+(?:chiamata\s+|chiamato\s+|named\s+|called\s+|denominata\s+|denominato\s+|per\s+(?:i|le|gli)?\s*)?([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+(?:con|with)\s+([a-zA-Zà-ù0-9_, ]+))?\s*$/i,
+    /(?:aggiungi|aggiungere|add|crea|creare|create|new)\s+([A-Za-zà-ù][A-Za-zà-ù0-9_ ]*?)(?:\s+(?:con|with)\s+([a-zA-Zà-ù0-9_, ]+))?\s*$/i,
   ]
   for (const re of entPatterns) {
     const m = text.match(re)
     if (m) {
-      const nameRaw = m[1].trim()
-      const propsRaw = (m[2] || '').trim()
-      if (nameRaw.length < 1 || nameRaw.length > 40) continue
-      const name = normalizeEntityName(nameRaw)
-      // Check for duplicate
-      const dup = existing.find((e) => e.label.toLowerCase() === name.toLowerCase())
-      if (dup) {
-        return {
-          reply:
-            `Stavo per creare **${name}** ma esiste già nell'ontologia ${sectorId}. ` +
-            'Suggerisco di riusare la classe esistente invece di duplicare (governance ontologica).',
-          changes: [{
-            id: `c-${uid()}`,
-            kind: 'rename',
-            summary: `Riuso ${name} esistente (no duplicato)`,
-            rationale: `La classe ${name} è già presente. Creare un duplicato genererebbe inconsistenze nei mapping.`,
-            warnings: [
-              `Classe "${name}" già esistente — duplicato evitato.`,
-              `Puoi aggiungere proprietà o relazioni alla classe esistente.`,
-            ],
-          }],
-        }
-      }
-      // Derive properties
-      const props = propsRaw
-        ? propsRaw
-            .split(/[,;]| e | and /)
-            .map((p) => normalizeProperty(p.trim()))
-            .filter((p) => p.length > 0)
-            .slice(0, 8)
-        : ['name', 'code', 'createdAt']
+      const nameRaw = (m[1] || '').trim()
+      const propsRaw = ((m[2] || '')).trim()
+      if (nameRaw.length < 2 || nameRaw.length > 50) continue
+      // Reject if name is just a stopword/verb
+      const firstTok = nameRaw.split(/\s+/)[0].toLowerCase()
+      if (STOPWORDS.has(firstTok)) continue
+      // Reject if name is the name of an existing relation/property (e.g. "una relazione")
+      if (containsAny(firstTok, ['relazione','relation','property','proprietà'])) continue
+      return buildAddClassIntent(nameRaw, propsRaw, sectorId, prefix, existing)
+    }
+  }
 
-      // Position: place to the right, below existing nodes
-      const maxX = existing.length > 0 ? 1300 : 100
-      const yOffset = 200 + (existing.length % 3) * 300
-
-      const newId = name
-      return {
-        reply:
-          `Propongo una nuova classe **${name}** con ${props.length} propriet${props.length === 1 ? 'à' : 'à'}: ` +
-          `${props.map((p) => `\`${p}\``).join(', ')}. ` +
-          `Verificato: nessun concetto duplicato nell'ontologia ${sectorId}. ` +
-          'Cambio strutturale — richiede approvazione data steward.',
-        changes: [{
-          id: `c-${uid()}`,
-          kind: 'add_class',
-          summary: `Aggiungi classe ${name}`,
-          rationale: `Nuova entità non duplicata. ${props.length} proprietà derivate dalla descrizione. URI: ${prefix}:${name}.`,
-          newNode: {
-            id: newId,
-            label: name,
-            uri: `${prefix}:${name}`,
-            properties: props,
-            position: { x: maxX, y: yOffset },
-            db_table: name.toLowerCase() + 's',
-          },
-          requiresSteward: true,
-        }],
+  // ── 5) Smart fallback: extract candidate noun, propose creation ──────────
+  // If user mentions an existing class + a verb, try to interpret.
+  const mentionedExisting = findExistingMention(lower, existing)
+  if (mentionedExisting && (containsAny(lower, VERB_LINK) || lower.includes('relazione'))) {
+    // Try to find a second noun to link to
+    const candidates = extractCandidateNouns(text).filter(
+      (c) => c.toLowerCase() !== mentionedExisting.label.toLowerCase(),
+    )
+    if (candidates.length > 0) {
+      // Propose a new class + relation
+      const otherName = normalizeEntityName(candidates[0])
+      if (!existing.find((e) => e.label.toLowerCase() === otherName.toLowerCase())) {
+        return buildAddClassWithLinkIntent(otherName, mentionedExisting, sectorId, prefix, existing)
       }
     }
   }
 
+  // ── 6) Last resort: any candidate noun → propose creating it ────────────
+  if (
+    containsAny(lower, VERB_NEW) ||
+    containsAny(lower, VERB_WANT) ||
+    containsAny(lower, VERB_TRACK) ||
+    containsAny(lower, NOUN_ENTITY)
+  ) {
+    const candidates = extractCandidateNouns(text)
+    // Pick the best candidate: capitalized word, or last meaningful noun
+    const best = candidates.find((c) => /^[A-ZÀ-Ù]/.test(c)) ?? candidates[candidates.length - 1]
+    if (best && best.length > 2 && best.length < 30) {
+      return buildAddClassIntent(best, '', sectorId, prefix, existing, /*lowConfidence*/ true)
+    }
+  }
+
   return null
+}
+
+// ── Helper builders for class-creation intents ─────────────────────────────
+function buildAddClassIntent(
+  nameRaw: string,
+  propsRaw: string,
+  sectorId: string,
+  prefix: string,
+  existing: { id: string; label: string }[],
+  lowConfidence = false,
+): ParsedIntent {
+  const name = normalizeEntityName(nameRaw)
+  const dup = existing.find((e) => e.label.toLowerCase() === name.toLowerCase())
+  if (dup) {
+    return {
+      reply:
+        `Stavo per creare **${name}** ma esiste già nell'ontologia ${sectorId}. ` +
+        'Suggerisco di riusare la classe esistente invece di duplicare (governance ontologica).',
+      changes: [{
+        id: `c-${uid()}`,
+        kind: 'rename',
+        summary: `Riuso ${name} esistente (no duplicato)`,
+        rationale: `La classe ${name} è già presente. Creare un duplicato genererebbe inconsistenze nei mapping.`,
+        warnings: [
+          `Classe "${name}" già esistente — duplicato evitato.`,
+          `Puoi aggiungere proprietà o relazioni alla classe esistente.`,
+        ],
+      }],
+    }
+  }
+  const props = propsRaw
+    ? propsRaw
+        .split(/[,;]| e | and /)
+        .map((p) => normalizeProperty(p.trim()))
+        .filter((p) => p.length > 0)
+        .slice(0, 8)
+    : ['name', 'code', 'createdAt']
+
+  const maxX = existing.length > 0 ? 1300 : 100
+  const yOffset = 200 + (existing.length % 3) * 300
+
+  const replyPrefix = lowConfidence
+    ? `Ho interpretato il tuo messaggio come la richiesta di creare una nuova classe **${name}**. Se non è quello che volevi, dimmelo. `
+    : ''
+
+  return {
+    reply:
+      replyPrefix +
+      `Propongo una nuova classe **${name}** con ${props.length} proprietà: ` +
+      `${props.map((p) => `\`${p}\``).join(', ')}. ` +
+      `Verificato: nessun concetto duplicato nell'ontologia ${sectorId}. ` +
+      'Cambio strutturale — richiede approvazione data steward.',
+    changes: [{
+      id: `c-${uid()}`,
+      kind: 'add_class',
+      summary: `Aggiungi classe ${name}`,
+      rationale: `Nuova entità non duplicata. ${props.length} proprietà derivate dalla descrizione. URI: ${prefix}:${name}.`,
+      newNode: {
+        id: name,
+        label: name,
+        uri: `${prefix}:${name}`,
+        properties: props,
+        position: { x: maxX, y: yOffset },
+        db_table: name.toLowerCase() + 's',
+      },
+      requiresSteward: true,
+    }],
+  }
+}
+
+function buildAddClassWithLinkIntent(
+  name: string,
+  linkTo: { id: string; label: string },
+  sectorId: string,
+  prefix: string,
+  existing: { id: string; label: string }[],
+): ParsedIntent {
+  const base = buildAddClassIntent(name, '', sectorId, prefix, existing)
+  if (base.changes[0].kind !== 'add_class') return base
+  const relLabel = `has${name}`
+  base.changes.push({
+    id: `c-${uid()}`,
+    kind: 'add_relation',
+    summary: `Relazione: ${linkTo.label} → ${relLabel} → ${name}`,
+    rationale: `Collega la nuova classe ${name} a ${linkTo.label}.`,
+    newEdge: { id: `e-${uid()}`, source: linkTo.id, target: name, label: relLabel },
+  })
+  base.reply =
+    `Creo una nuova classe **${name}** e la collego a **${linkTo.label}** via \`${relLabel}\`. ` +
+    'Cambio strutturale — richiede approvazione data steward.'
+  return base
 }
 
 // Build initial canvas state by merging sector ontology + saved extensions
@@ -845,13 +988,24 @@ export default function OntologyBuilder() {
             }
           })
         } else {
+          // Try to extract a candidate noun for a helpful follow-up
+          const candidates = extractCandidateNouns(text).filter((c) => c.length > 2)
+          const guess = candidates[0]
+          const hint = guess
+            ? `Forse vuoi creare una nuova entità chiamata **${normalizeEntityName(guess)}**? Se sì, scrivi: "aggiungi entità ${guess}".`
+            : 'Prova con frasi tipo: "aggiungi entità Magazzino con codice, indirizzo" oppure "collega Customer a Product".'
           setMessages((m) => [
             ...m,
             {
               id: uid(),
               role: 'assistant',
               text:
-                'Mmh, non sono sicuro di aver capito. Prova con uno dei suggerimenti qui sotto, oppure descrivimi una nuova **entità**, **relazione**, o **proprietà** che vuoi aggiungere.',
+                `Non sono ancora certo di cosa vuoi fare. ${hint}\n\n` +
+                'Capisco questi pattern:\n' +
+                '· **Crea classe:** "aggiungi entità X [con prop1, prop2]"\n' +
+                '· **Aggiungi proprietà:** "aggiungi prezzo a Product"\n' +
+                '· **Collega entità:** "collega Customer a Order"\n' +
+                '· **Rinomina:** "rinomina Order in PurchaseOrder"',
             },
           ])
         }
@@ -1211,7 +1365,7 @@ function MessageBubble({
         <Bot className="w-3.5 h-3.5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="bg-slate-100 text-slate-800 rounded-2xl rounded-tl-sm px-3 py-2 text-sm">
+        <div className="bg-slate-100 text-slate-800 rounded-2xl rounded-tl-sm px-3 py-2 text-sm whitespace-pre-line">
           {renderMarkdown(msg.text)}
         </div>
         {linkedChanges.length > 0 && (
