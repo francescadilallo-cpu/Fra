@@ -7,12 +7,30 @@ export const mockDashboard: DashboardData = {
   total_orders: 13,
   quote_conversion_rate: 26.0,
   open_quotes_value: 1173063.45,
+  process_funnel: [
+    { stage: 'Preventivi Creati',    count: 50, value: 2340000 },
+    { stage: 'Preventivi Inviati',   count: 38, value: 1820000 },
+    { stage: 'Preventivi Accettati', count: 13, value: 820000  },
+    { stage: 'Ordini Confermati',    count: 13, value: 810000  },
+    { stage: 'In Produzione',        count: 6,  value: 380000  },
+    { stage: 'Consegnati',           count: 4,  value: 240000  },
+  ],
+  recent_activities: [
+    { id: 1, type: 'order', message: 'Nuovo ordine da Moccia s.r.l.',            time: '2 ore fa',    status: 'Confermato' },
+    { id: 2, type: 'quote', message: 'Preventivo accettato – Tutino e figli',    time: '5 ore fa',    status: 'Accettato'  },
+    { id: 3, type: 'order', message: 'Ordine spedito – Ferrari Metalli S.p.A.',  time: 'ieri',        status: 'Spedito'    },
+    { id: 4, type: 'quote', message: 'Nuovo preventivo – Bianchi Impianti',      time: 'ieri',        status: 'Inviato'    },
+    { id: 5, type: 'order', message: 'Consegna completata – Rossi Meccanica',    time: '2 giorni fa', status: 'Consegnato' },
+  ],
   recent_orders: [
-    { id: 5,  customer_name: 'Tutino e figli',                      total_value: 197866.48, status: 'cancelled',     date: '2026-05-03' },
-    { id: 11, customer_name: 'Lettiere-Cremonesi e figli',           total_value: 142066.66, status: 'in_production', date: '2026-04-24' },
-    { id: 3,  customer_name: 'Moccia s.r.l.',                        total_value:  98451.37, status: 'in_production', date: '2026-04-16' },
-    { id: 4,  customer_name: 'Caracciolo, Asmundo e Leone e figli',  total_value:  16383.72, status: 'delivered',     date: '2026-04-02' },
-    { id: 12, customer_name: 'Moccia s.r.l.',                        total_value:  55136.48, status: 'delivered',     date: '2026-03-30' },
+    { id: 5,  customer_name: 'Tutino e figli',                      total_value: 197866.48, status: 'Annullato',     date: '2026-05-03' },
+    { id: 11, customer_name: 'Lettiere-Cremonesi e figli',           total_value: 142066.66, status: 'In Produzione', date: '2026-04-24' },
+    { id: 3,  customer_name: 'Moccia s.r.l.',                        total_value:  98451.37, status: 'In Produzione', date: '2026-04-16' },
+    { id: 4,  customer_name: 'Caracciolo, Asmundo e Leone e figli',  total_value:  16383.72, status: 'Consegnato',    date: '2026-04-02' },
+    { id: 12, customer_name: 'Moccia s.r.l.',                        total_value:  55136.48, status: 'Consegnato',    date: '2026-03-30' },
+    { id: 7,  customer_name: 'Ferrari Metalli S.p.A.',               total_value:  82300.00, status: 'Spedito',       date: '2026-05-10' },
+    { id: 9,  customer_name: 'Rossi Meccanica S.r.l.',               total_value:  34750.50, status: 'Confermato',    date: '2026-05-12' },
+    { id: 13, customer_name: 'Bianchi Impianti S.p.A.',              total_value:  61200.00, status: 'Confermato',    date: '2026-05-14' },
   ],
   data_sources: [
     { name: 'ERP – Clienti & Prodotti',    type: 'SQLite', status: 'connected', tables: ['customers', 'products'],                              row_counts: { customers: 20, products: 30 } },
@@ -67,8 +85,8 @@ export const mockMappings: MappingsResponse = {
 
 export const mockQueryResult: QueryResult = {
   question: 'Quali clienti hanno preventivi accettati questo mese?',
-  interpreted_as: "Clienti con almeno un preventivo in stato 'accepted' nel mese corrente",
-  sql_query: "SELECT DISTINCT c.name, q.total_value, q.date\nFROM customers c\nJOIN quotes q ON q.customer_id = c.id\nWHERE q.status = 'accepted'\nAND q.date >= date('now','start of month')\nORDER BY q.total_value DESC",
+  interpreted_as: "Clienti con almeno un preventivo in stato 'Accettato' nel mese corrente",
+  sql_query: "SELECT DISTINCT c.name, q.total_value, q.date\nFROM customers c\nJOIN quotes q ON q.customer_id = c.id\nWHERE q.status = 'Accettato'\nAND q.date >= date('now','start of month')\nORDER BY q.total_value DESC",
   results: [
     { name: 'Moccia s.r.l.',          total_value: 98451.37, date: '2026-05-12' },
     { name: 'Tutino e figli',          total_value: 45200.00, date: '2026-05-08' },
