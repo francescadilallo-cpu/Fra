@@ -6,16 +6,16 @@ import type { MappingEntry } from '../types'
 // ── Type badge ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
-  integer:        'bg-blue-500/15 text-blue-300',
-  string:         'bg-green-500/15 text-green-300',
-  decimal:        'bg-amber-500/15 text-amber-300',
-  date:           'bg-purple-500/15 text-purple-300',
-  objectProperty: 'bg-teal-500/15 text-teal-300',
+  integer:        'bg-blue-50 text-blue-600',
+  string:         'bg-green-50 text-green-700',
+  decimal:        'bg-amber-50 text-amber-600',
+  date:           'bg-purple-50 text-purple-600',
+  objectProperty: 'bg-teal-50 text-teal-700',
 }
 
 function TypeBadge({ type }: { type: string }) {
   return (
-    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-700 text-slate-300'}`}>
+    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-100 text-slate-500'}`}>
       {type}
     </span>
   )
@@ -63,12 +63,12 @@ function EditableCell({ value, onSave }: EditableCellProps) {
             if (e.key === 'Enter') handleSave()
             if (e.key === 'Escape') handleCancel()
           }}
-          className="flex-1 bg-navy-700 border border-teal-500 rounded px-2 py-1 text-xs text-white outline-none min-w-0"
+          className="flex-1 bg-slate-100 border border-teal-500 rounded px-2 py-1 text-xs text-slate-900 outline-none min-w-0"
         />
         <button
           onClick={handleSave}
           disabled={saving}
-          className="text-teal-400 hover:text-teal-300 flex-shrink-0"
+          className="text-teal-400 hover:text-teal-600 flex-shrink-0"
           title="Save"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -85,7 +85,7 @@ function EditableCell({ value, onSave }: EditableCellProps) {
       className="group flex items-center gap-1.5 cursor-pointer"
       onClick={() => setEditing(true)}
     >
-      <span className="text-sm text-slate-300 font-mono">{value}</span>
+      <span className="text-sm text-slate-700 font-mono">{value}</span>
       <Pencil className="w-3 h-3 text-slate-600 group-hover:text-slate-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" />
     </div>
   )
@@ -107,12 +107,12 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
       {/* Table header */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-navy-700/50 hover:bg-navy-700 transition-colors border-b border-navy-700"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
       >
         <div className="flex items-center gap-2">
           <Table2 className="w-4 h-4 text-teal-400" />
-          <span className="font-semibold text-white font-mono">{tableName}</span>
-          <span className="badge bg-navy-600 text-slate-400 text-xs">{rows.length} fields</span>
+          <span className="font-semibold text-slate-900 font-mono">{tableName}</span>
+          <span className="badge bg-slate-200 text-slate-400 text-xs">{rows.length} fields</span>
         </div>
         <span className="text-slate-500 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
       </button>
@@ -121,7 +121,7 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-700">
+              <tr className="border-b border-slate-200">
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-40">
                   Campo ERP
                 </th>
@@ -138,12 +138,12 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${row.table}-${row.field}`} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
+                <tr key={`${row.table}-${row.field}`} className="border-b border-slate-200/50 hover:bg-slate-100/30 transition-colors">
                   <td className="px-5 py-3">
-                    <span className="text-sm font-mono text-amber-300">{row.field}</span>
+                    <span className="text-sm font-mono text-amber-600">{row.field}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-sm text-slate-300">{row.ontology_class}</span>
+                    <span className="text-sm text-slate-600">{row.ontology_class}</span>
                   </td>
                   <td className="px-5 py-3">
                     <EditableCell
@@ -235,10 +235,10 @@ export default function MappingView() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-navy-700 sticky top-0 bg-navy-950 z-10 flex-shrink-0">
+      <div className="px-8 py-5 border-b border-slate-200 sticky top-0 bg-slate-50 z-10 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Configurazione Mappature</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Configurazione Mappature</h1>
             <p className="text-slate-400 mt-1 text-sm">
               Configura come i campi ERP si mappano ai concetti dell'ontologia. Clicca su una proprietà per modificarla.
             </p>
@@ -258,7 +258,7 @@ export default function MappingView() {
       </div>
 
       {/* Legend */}
-      <div className="px-8 py-3 border-b border-navy-700 flex items-center gap-6 flex-shrink-0">
+      <div className="px-8 py-3 border-b border-slate-200 flex items-center gap-6 flex-shrink-0">
         <span className="text-xs text-slate-500">Tipi di campo:</span>
         {['integer', 'string', 'decimal', 'date', 'objectProperty'].map((t) => (
           <TypeBadge key={t} type={t} />
