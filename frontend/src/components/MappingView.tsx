@@ -6,16 +6,16 @@ import type { MappingEntry } from '../types'
 // ── Type badge ─────────────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
-  integer:        'bg-blue-500/15 text-blue-300',
-  string:         'bg-green-500/15 text-green-300',
-  decimal:        'bg-amber-500/15 text-amber-300',
-  date:           'bg-purple-500/15 text-purple-300',
-  objectProperty: 'bg-teal-500/15 text-teal-300',
+  integer:        'bg-blue-50 text-blue-600',
+  string:         'bg-green-50 text-green-600',
+  decimal:        'bg-amber-50 text-amber-600',
+  date:           'bg-purple-50 text-purple-600',
+  objectProperty: 'bg-teal-50 text-teal-700',
 }
 
 function TypeBadge({ type }: { type: string }) {
   return (
-    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-700 text-slate-300'}`}>
+    <span className={`badge text-xs ${TYPE_COLORS[type] ?? 'bg-slate-100 text-slate-500'}`}>
       {type}
     </span>
   )
@@ -63,17 +63,17 @@ function EditableCell({ value, onSave }: EditableCellProps) {
             if (e.key === 'Enter') handleSave()
             if (e.key === 'Escape') handleCancel()
           }}
-          className="flex-1 bg-navy-700 border border-teal-500 rounded px-2 py-1 text-xs text-white outline-none min-w-0"
+          className="flex-1 bg-white border border-teal-500 focus:ring-2 focus:ring-teal-100 rounded px-2 py-1 text-xs text-slate-900 outline-none min-w-0"
         />
         <button
           onClick={handleSave}
           disabled={saving}
-          className="text-teal-400 hover:text-teal-300 flex-shrink-0"
+          className="text-teal-600 hover:text-teal-700 flex-shrink-0"
           title="Save"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
         </button>
-        <button onClick={handleCancel} className="text-slate-500 hover:text-slate-300 flex-shrink-0" title="Cancel">
+        <button onClick={handleCancel} className="text-slate-400 hover:text-slate-600 flex-shrink-0" title="Cancel">
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -85,8 +85,8 @@ function EditableCell({ value, onSave }: EditableCellProps) {
       className="group flex items-center gap-1.5 cursor-pointer"
       onClick={() => setEditing(true)}
     >
-      <span className="text-sm text-slate-300 font-mono">{value}</span>
-      <Pencil className="w-3 h-3 text-slate-600 group-hover:text-slate-400 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" />
+      <span className="text-sm text-slate-700 font-mono">{value}</span>
+      <Pencil className="w-3 h-3 text-slate-400 group-hover:text-slate-600 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all" />
     </div>
   )
 }
@@ -107,43 +107,43 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
       {/* Table header */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-navy-700/50 hover:bg-navy-700 transition-colors border-b border-navy-700"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
       >
         <div className="flex items-center gap-2">
-          <Table2 className="w-4 h-4 text-teal-400" />
-          <span className="font-semibold text-white font-mono">{tableName}</span>
-          <span className="badge bg-navy-600 text-slate-400 text-xs">{rows.length} fields</span>
+          <Table2 className="w-4 h-4 text-teal-600" />
+          <span className="font-semibold text-slate-900 font-mono">{tableName}</span>
+          <span className="badge bg-slate-100 text-slate-500 text-xs">{rows.length} fields</span>
         </div>
-        <span className="text-slate-500 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
+        <span className="text-slate-400 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
       </button>
 
       {!collapsed && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-700">
-                <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-40">
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="px-5 py-2.5 text-left text-xs text-slate-400 font-medium uppercase tracking-wide w-40">
                   Campo ERP
                 </th>
-                <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-44">
+                <th className="px-5 py-2.5 text-left text-xs text-slate-400 font-medium uppercase tracking-wide w-44">
                   Classe Ontologica
                 </th>
-                <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide">
+                <th className="px-5 py-2.5 text-left text-xs text-slate-400 font-medium uppercase tracking-wide">
                   Proprietà Ontologica
                 </th>
-                <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-36">
+                <th className="px-5 py-2.5 text-left text-xs text-slate-400 font-medium uppercase tracking-wide w-36">
                   Tipo
                 </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${row.table}-${row.field}`} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
+                <tr key={`${row.table}-${row.field}`} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   <td className="px-5 py-3">
-                    <span className="text-sm font-mono text-amber-300">{row.field}</span>
+                    <span className="text-sm font-mono text-amber-600">{row.field}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-sm text-slate-300">{row.ontology_class}</span>
+                    <span className="text-sm text-slate-600">{row.ontology_class}</span>
                   </td>
                   <td className="px-5 py-3">
                     <EditableCell
@@ -216,7 +216,7 @@ export default function MappingView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-teal-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
       </div>
     )
   }
@@ -224,7 +224,7 @@ export default function MappingView() {
   if (error) {
     return (
       <div className="p-8">
-        <div className="card flex items-center gap-3 text-red-400">
+        <div className="card flex items-center gap-3 text-red-600">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>Errore: {error}</span>
         </div>
@@ -235,17 +235,17 @@ export default function MappingView() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-navy-700 sticky top-0 bg-navy-950 z-10 flex-shrink-0">
+      <div className="px-8 py-5 border-b border-slate-200 sticky top-0 bg-white z-10 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Configurazione Mappature</h1>
-            <p className="text-slate-400 mt-1 text-sm">
+            <h1 className="text-2xl font-semibold text-slate-900">Configurazione Mappature</h1>
+            <p className="text-slate-500 mt-1 text-sm">
               Configura come i campi ERP si mappano ai concetti dell'ontologia. Clicca su una proprietà per modificarla.
             </p>
           </div>
           <div className="flex items-center gap-3">
             {savedCount > 0 && (
-              <span className="badge bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs">
+              <span className="badge bg-teal-50 text-teal-700 border border-teal-200 text-xs">
                 {savedCount} modifiche salvate
               </span>
             )}
@@ -258,8 +258,8 @@ export default function MappingView() {
       </div>
 
       {/* Legend */}
-      <div className="px-8 py-3 border-b border-navy-700 flex items-center gap-6 flex-shrink-0">
-        <span className="text-xs text-slate-500">Tipi di campo:</span>
+      <div className="px-8 py-3 border-b border-slate-200 flex items-center gap-6 flex-shrink-0 bg-white">
+        <span className="text-xs text-slate-400">Tipi di campo:</span>
         {['integer', 'string', 'decimal', 'date', 'objectProperty'].map((t) => (
           <TypeBadge key={t} type={t} />
         ))}

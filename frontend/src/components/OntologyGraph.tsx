@@ -21,21 +21,21 @@ function OntologyClassNode({ data, selected }: NodeProps) {
   const d = data as unknown as OntologyNodeData
   return (
     <div
-      className={`min-w-[160px] rounded-xl border transition-all ${
+      className={`min-w-[160px] rounded-xl border transition-all bg-white ${
         selected
           ? 'border-teal-400 shadow-lg shadow-teal-500/20'
-          : 'border-navy-600 hover:border-navy-500'
-      } bg-navy-800`}
+          : 'border-slate-200 hover:border-slate-300'
+      }`}
     >
       <Handle type="target" position={Position.Top} className="!bg-teal-500 !border-0 !w-2.5 !h-2.5" />
 
       {/* Header */}
-      <div className="px-3 py-2 bg-navy-700 rounded-t-xl border-b border-navy-600">
-        <p className="text-sm font-bold text-white">{d.label}</p>
+      <div className="px-3 py-2 bg-slate-50 rounded-t-xl border-b border-slate-200">
+        <p className="text-sm font-bold text-slate-900">{d.label}</p>
         {d.db_table && (
           <div className="flex items-center gap-1 mt-0.5">
-            <Database className="w-3 h-3 text-teal-400" />
-            <span className="text-xs text-teal-400">{d.db_table}</span>
+            <Database className="w-3 h-3 text-teal-600" />
+            <span className="text-xs text-teal-600">{d.db_table}</span>
           </div>
         )}
       </div>
@@ -43,16 +43,16 @@ function OntologyClassNode({ data, selected }: NodeProps) {
       {/* Properties */}
       <div className="px-3 py-2 space-y-0.5">
         {d.properties.slice(0, 5).map((p) => (
-          <div key={p} className="text-xs text-slate-400">
-            <span className="text-slate-500">·</span> {p}
+          <div key={p} className="text-xs text-slate-500">
+            <span className="text-slate-400">·</span> {p}
           </div>
         ))}
         {d.properties.length > 5 && (
-          <div className="text-xs text-slate-600">+{d.properties.length - 5} more</div>
+          <div className="text-xs text-slate-400">+{d.properties.length - 5} more</div>
         )}
         {d.row_count > 0 && (
-          <div className="mt-1.5 pt-1.5 border-t border-navy-700">
-            <span className="badge bg-teal-500/10 text-teal-400 text-xs">
+          <div className="mt-1.5 pt-1.5 border-t border-slate-100">
+            <span className="badge bg-teal-50 text-teal-700 border border-teal-200 text-xs">
               {d.row_count} records
             </span>
           </div>
@@ -70,38 +70,38 @@ const nodeTypes = { ontologyNode: OntologyClassNode }
 
 function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () => void }) {
   return (
-    <div className="absolute top-4 right-4 w-72 card z-10 shadow-2xl">
+    <div className="absolute top-4 right-4 w-72 card z-10 shadow-xl">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-white">{node.label}</h3>
-        <button onClick={onClose} className="text-slate-400 hover:text-white">
+        <h3 className="font-semibold text-slate-900">{node.label}</h3>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
           <X className="w-4 h-4" />
         </button>
       </div>
 
       <div className="space-y-2 text-sm">
         <div>
-          <span className="text-slate-500 text-xs uppercase tracking-wide">URI</span>
-          <p className="text-teal-400 text-xs mt-0.5 font-mono break-all">{node.uri}</p>
+          <span className="text-slate-400 text-xs uppercase tracking-wide">URI</span>
+          <p className="text-teal-600 text-xs mt-0.5 font-mono break-all">{node.uri}</p>
         </div>
         {node.db_table && (
           <div>
-            <span className="text-slate-500 text-xs uppercase tracking-wide">DB Table</span>
-            <p className="text-white mt-0.5">{node.db_table}</p>
+            <span className="text-slate-400 text-xs uppercase tracking-wide">DB Table</span>
+            <p className="text-slate-900 mt-0.5">{node.db_table}</p>
           </div>
         )}
         {node.row_count > 0 && (
           <div>
-            <span className="text-slate-500 text-xs uppercase tracking-wide">Records</span>
-            <p className="text-white mt-0.5">{node.row_count.toLocaleString('it-IT')}</p>
+            <span className="text-slate-400 text-xs uppercase tracking-wide">Records</span>
+            <p className="text-slate-900 mt-0.5">{node.row_count.toLocaleString('it-IT')}</p>
           </div>
         )}
         <div>
-          <span className="text-slate-500 text-xs uppercase tracking-wide">Properties</span>
+          <span className="text-slate-400 text-xs uppercase tracking-wide">Properties</span>
           <div className="mt-1 space-y-1">
             {node.properties.map((p) => (
-              <div key={p} className="flex items-center gap-2 bg-navy-900 rounded px-2 py-1">
+              <div key={p} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1 border border-slate-100">
                 <span className="w-1.5 h-1.5 bg-teal-500 rounded-full flex-shrink-0" />
-                <span className="text-xs text-slate-300 font-mono">{p}</span>
+                <span className="text-xs text-slate-600 font-mono">{p}</span>
               </div>
             ))}
           </div>
@@ -137,7 +137,7 @@ export default function OntologyGraph() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-teal-400 animate-spin" />
+        <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
       </div>
     )
   }
@@ -145,7 +145,7 @@ export default function OntologyGraph() {
   if (error || !graphData) {
     return (
       <div className="p-8">
-        <div className="card flex items-center gap-3 text-red-400">
+        <div className="card flex items-center gap-3 text-red-600">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <span>Errore: {error}</span>
         </div>
@@ -156,17 +156,17 @@ export default function OntologyGraph() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-navy-700 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-white">Ontologia</h1>
-        <p className="text-slate-400 mt-1 text-sm">
+      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 bg-white">
+        <h1 className="text-2xl font-semibold text-slate-900">Ontologia</h1>
+        <p className="text-slate-500 mt-1 text-sm">
           Manufacturing Order Management Ontology · {graphData.nodes.length} classi · {graphData.edges.length} proprietà
         </p>
       </div>
 
       {/* Legend */}
-      <div className="px-8 py-3 border-b border-navy-700 flex items-center gap-6 text-xs text-slate-400 flex-shrink-0">
+      <div className="px-8 py-3 border-b border-slate-200 flex items-center gap-6 text-xs text-slate-500 flex-shrink-0 bg-white">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-4 bg-navy-700 border border-navy-600 rounded" />
+          <div className="w-8 h-4 bg-white border border-slate-200 rounded" />
           <span>Classe OWL</span>
         </div>
         <div className="flex items-center gap-2">
@@ -193,11 +193,11 @@ export default function OntologyGraph() {
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
-          <Background color="#1e1b4b" gap={24} size={1} />
+          <Background color="#E2E8F0" gap={24} size={1} />
           <Controls />
           <MiniMap
-            nodeColor={() => '#1e1b4b'}
-            maskColor="rgba(7,6,26,0.7)"
+            nodeColor={() => '#ffffff'}
+            maskColor="rgba(241,245,249,0.7)"
           />
         </ReactFlow>
 
