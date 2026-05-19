@@ -80,7 +80,7 @@ export default function ProcessView() {
             return (
               <div key={item.stage} className="flex items-center gap-4">
                 <span className="text-sm text-slate-400 w-44 flex-shrink-0">{item.stage}</span>
-                <div className="flex-1 bg-navy-900 rounded-full h-6 overflow-hidden">
+                <div className="flex-1 bg-white rounded-full h-6 overflow-hidden">
                   <div
                     className="h-full rounded-full flex items-center px-3"
                     style={{ width: `${pct}%`, backgroundColor: `rgba(20,184,166,${opacity})` }}
@@ -94,7 +94,7 @@ export default function ProcessView() {
             )
           })}
         </div>
-        <div className="mt-4 pt-4 border-t border-navy-700 text-xs text-slate-500">
+        <div className="mt-4 pt-4 border-t border-slate-200 text-xs text-slate-500">
           Tasso di conversione preventivo→ordine: <strong className="text-teal-400">26%</strong> · Tempo medio ciclo: <strong className="text-teal-400">17.6 gg</strong>
         </div>
       </div>
@@ -105,7 +105,7 @@ export default function ProcessView() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-slate-500 border-b border-navy-700">
+              <tr className="text-xs text-slate-500 border-b border-slate-200">
                 <th className="text-left pb-2 font-medium">#</th>
                 <th className="text-left pb-2 font-medium">Cliente</th>
                 <th className="text-left pb-2 font-medium">Fase</th>
@@ -113,9 +113,9 @@ export default function ProcessView() {
                 <th className="text-right pb-2 font-medium">Giorni in fase</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-navy-700">
+            <tbody className="divide-y divide-slate-100">
               {ACTIVE_CASES.map(c => (
-                <tr key={c.id} className="hover:bg-navy-800/50 transition-colors">
+                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 text-slate-500">#{c.id}</td>
                   <td className="py-3 text-white font-medium">{c.customer}</td>
                   <td className="py-3">

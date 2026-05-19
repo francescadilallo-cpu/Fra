@@ -10,7 +10,7 @@ const TYPE_COLORS: Record<string, string> = {
   string:         'bg-green-500/15 text-green-300',
   decimal:        'bg-amber-500/15 text-amber-300',
   date:           'bg-purple-500/15 text-purple-300',
-  objectProperty: 'bg-teal-500/15 text-teal-300',
+  objectProperty: 'bg-teal-500/15 text-teal-600',
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -63,12 +63,12 @@ function EditableCell({ value, onSave }: EditableCellProps) {
             if (e.key === 'Enter') handleSave()
             if (e.key === 'Escape') handleCancel()
           }}
-          className="flex-1 bg-navy-700 border border-teal-500 rounded px-2 py-1 text-xs text-white outline-none min-w-0"
+          className="flex-1 bg-slate-100 border border-teal-500 rounded px-2 py-1 text-xs text-white outline-none min-w-0"
         />
         <button
           onClick={handleSave}
           disabled={saving}
-          className="text-teal-400 hover:text-teal-300 flex-shrink-0"
+          className="text-teal-400 hover:text-teal-600 flex-shrink-0"
           title="Save"
         >
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -107,12 +107,12 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
       {/* Table header */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-navy-700/50 hover:bg-navy-700 transition-colors border-b border-navy-700"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
       >
         <div className="flex items-center gap-2">
           <Table2 className="w-4 h-4 text-teal-400" />
           <span className="font-semibold text-white font-mono">{tableName}</span>
-          <span className="badge bg-navy-600 text-slate-400 text-xs">{rows.length} fields</span>
+          <span className="badge bg-slate-200 text-slate-400 text-xs">{rows.length} fields</span>
         </div>
         <span className="text-slate-500 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
       </button>
@@ -121,7 +121,7 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-700">
+              <tr className="border-b border-slate-200">
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-40">
                   Campo ERP
                 </th>
@@ -138,7 +138,7 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${row.table}-${row.field}`} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
+                <tr key={`${row.table}-${row.field}`} className="border-b border-slate-200/50 hover:bg-slate-100/30 transition-colors">
                   <td className="px-5 py-3">
                     <span className="text-sm font-mono text-amber-300">{row.field}</span>
                   </td>
@@ -235,7 +235,7 @@ export default function MappingView() {
   return (
     <div className="flex flex-col h-full overflow-auto">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-navy-700 sticky top-0 bg-navy-950 z-10 flex-shrink-0">
+      <div className="px-8 py-5 border-b border-slate-200 sticky top-0 bg-slate-50 z-10 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Configurazione Mappature</h1>
@@ -258,7 +258,7 @@ export default function MappingView() {
       </div>
 
       {/* Legend */}
-      <div className="px-8 py-3 border-b border-navy-700 flex items-center gap-6 flex-shrink-0">
+      <div className="px-8 py-3 border-b border-slate-200 flex items-center gap-6 flex-shrink-0">
         <span className="text-xs text-slate-500">Tipi di campo:</span>
         {['integer', 'string', 'decimal', 'date', 'objectProperty'].map((t) => (
           <TypeBadge key={t} type={t} />
