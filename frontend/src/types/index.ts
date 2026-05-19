@@ -16,6 +16,20 @@ export interface DataSource {
   row_counts: Record<string, number>
 }
 
+export interface ProcessFunnelStage {
+  stage: string
+  count: number
+  value: number
+}
+
+export interface RecentActivity {
+  id: number
+  type: 'order' | 'quote'
+  message: string
+  time: string
+  status: string
+}
+
 export interface DashboardData {
   total_customers: number
   total_products: number
@@ -25,6 +39,8 @@ export interface DashboardData {
   open_quotes_value: number
   recent_orders: RecentOrder[]
   data_sources: DataSource[]
+  process_funnel: ProcessFunnelStage[]
+  recent_activities: RecentActivity[]
 }
 
 // ── Ontology graph ─────────────────────────────────────────────────────────────
@@ -98,4 +114,4 @@ export interface PaginatedData {
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-export type NavTab = 'dashboard' | 'ontology' | 'query' | 'mappings'
+export type NavTab = 'dashboard' | 'ontology' | 'query' | 'mappings' | 'process'

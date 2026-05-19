@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Activity } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Activity, Workflow } from 'lucide-react'
 import type { NavTab } from '../types'
 
 interface Props {
@@ -13,6 +13,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] =
   { id: 'ontology', label: 'Ontology', icon: GitBranch },
   { id: 'query', label: 'Query AI', icon: MessageSquare },
   { id: 'mappings', label: 'Mappings', icon: Table2 },
+  { id: 'process', label: 'Processo', icon: Workflow },
 ]
 
 export default function Layout({ activeTab, onTabChange, children }: Props) {
@@ -27,7 +28,10 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
               <Activity className="w-4 h-4 text-white" />
             </div>
             <div>
-              <div className="text-sm font-bold text-white leading-tight">Semantic</div>
+              <div className="text-sm font-bold text-white leading-tight flex items-center gap-2">
+                Semantic
+                <span className="text-xs font-normal text-slate-500">v0.1 MVP</span>
+              </div>
               <div className="text-xs text-teal-400 leading-tight">Intelligence</div>
             </div>
           </div>
@@ -55,8 +59,8 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-navy-700">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-500">ERP Connected</span>
+            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+            <span className="text-xs text-slate-500">Demo · Dati Mock</span>
           </div>
           <p className="mt-1 text-xs text-slate-600">Manufacturing Ontology v1.0</p>
         </div>
