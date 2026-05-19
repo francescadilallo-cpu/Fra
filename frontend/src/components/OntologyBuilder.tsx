@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { OntologyNodeData } from '../types'
+import { loadExtension, saveExtension } from '../data/ontologyExtensions'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type ChangeKind = 'add_class' | 'add_property' | 'add_relation' | 'rename'
@@ -41,37 +42,7 @@ interface PendingChange {
   requiresSteward?: boolean
 }
 
-// Persisted shape (what we save in localStorage per sector)
-interface SavedExtension {
-  nodes: { id: string; label: string; uri: string; properties: string[]; position: { x: number; y: number }; db_table?: string }[]
-  edges: { id: string; source: string; target: string; label: string }[]
-  addedProperties: { nodeId: string; property: string }[]
-}
-
-const STORAGE_KEY = (sectorId: string) => `ontology-builder-ext-${sectorId}`
-
-function loadExtension(sectorId: string): SavedExtension {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY(sectorId))
-    if (!raw) return { nodes: [], edges: [], addedProperties: [] }
-    const parsed = JSON.parse(raw) as SavedExtension
-    return {
-      nodes: parsed.nodes ?? [],
-      edges: parsed.edges ?? [],
-      addedProperties: parsed.addedProperties ?? [],
-    }
-  } catch {
-    return { nodes: [], edges: [], addedProperties: [] }
-  }
-}
-
-function saveExtension(sectorId: string, ext: SavedExtension) {
-  try {
-    localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(ext))
-  } catch {
-    // quota exceeded — silent for demo
-  }
-}
+// (SavedExtension + loadExtension + saveExtension are imported from ../data/ontologyExtensions)
 
 interface ChatMessage {
   id: string

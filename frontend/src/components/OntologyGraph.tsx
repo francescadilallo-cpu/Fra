@@ -3,6 +3,7 @@ import { ReactFlow, Background, Controls, MiniMap, Handle, Position, type NodePr
 import '@xyflow/react/dist/style.css'
 import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
+import { useExtendedOntology } from '../data/ontologyExtensions'
 import type { OntologyNodeData } from '../types'
 
 // ── Custom node ─────────────────────────────────────────────────────────────
@@ -154,7 +155,8 @@ function ArchitectureDiagram() {
 
 // ── Code view (OWL/RDF + SPARQL + MCP) ──────────────────────────────────────
 function CodeView() {
-  const { sector } = useSector()
+  const { sector, sectorId } = useSector()
+  const extendedOntology = useExtendedOntology(sectorId)
   const prefix = sector.id === 'manufacturing' ? 'mfg' : sector.id === 'retail' ? 'rtl' : sector.id === 'healthcare' ? 'hc' : 'fin'
   const baseUri = `https://semanticintelligence.io/ontology/${sector.id}#`
 
@@ -163,21 +165,21 @@ function CodeView() {
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 @prefix ${prefix}:  <${baseUri}> .
 
-${sector.ontology.nodes.map(n => `${prefix}:${n.data.label} a owl:Class ;
+${extendedOntology.nodes.map(n => `${prefix}:${n.data.label} a owl:Class ;
     rdfs:label "${n.data.label}"@en${n.data.db_table ? ` ;\n    rdfs:comment "Maps to DB table ${n.data.db_table}"` : ''} .`).join('\n\n')}
 
-${sector.ontology.edges.map(e => `${prefix}:${e.label} a owl:ObjectProperty ;
+${extendedOntology.edges.map(e => `${prefix}:${e.label} a owl:ObjectProperty ;
     rdfs:domain ${prefix}:${e.source} ;
     rdfs:range ${prefix}:${e.target} .`).join('\n\n')}`
 
   const sparqlExamples = [
     {
-      title: `Query ${sector.ontology.nodes[0].data.label} con relazione`,
+      title: `Query ${extendedOntology.nodes[0].data.label} con relazione`,
       code: `PREFIX ${prefix}: <${baseUri}>
 
 SELECT ?entity ?related WHERE {
-  ?entity a ${prefix}:${sector.ontology.nodes[0].data.label} ;
-          ${prefix}:${sector.ontology.edges[0]?.label ?? 'hasRelation'} ?related .
+  ?entity a ${prefix}:${extendedOntology.nodes[0].data.label} ;
+          ${prefix}:${extendedOntology.edges[0]?.label ?? 'hasRelation'} ?related .
 }
 LIMIT 100`,
     },
@@ -186,7 +188,7 @@ LIMIT 100`,
       code: `PREFIX ${prefix}: <${baseUri}>
 
 SELECT (COUNT(?x) AS ?total) WHERE {
-  ?x a ${prefix}:${sector.ontology.nodes[1]?.data.label ?? 'Entity'} ;
+  ?x a ${prefix}:${extendedOntology.nodes[1]?.data.label ?? 'Entity'} ;
      ${prefix}:status "active" .
 }`,
     },
@@ -278,7 +280,8 @@ SELECT (COUNT(?x) AS ?total) WHERE {
 type SubTab = 'graph' | 'architecture' | 'code'
 
 export default function OntologyGraph() {
-  const { sector } = useSector()
+  const { sector, sectorId } = useSector()
+  const extendedOntology = useExtendedOntology(sectorId)
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('graph')
   const [selectedNode, setSelectedNode] = useState<OntologyNodeData | null>(null)
 
@@ -297,7 +300,12 @@ export default function OntologyGraph() {
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Ontologia</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.ontologyTitle} · {sector.ontology.nodes.length} classi · {sector.ontology.edges.length} object properties
+          {sector.ontologyTitle} · {extendedOntology.nodes.length} classi · {extendedOntology.edges.length} object properties
+          {extendedOntology.nodes.length > sector.ontology.nodes.length && (
+            <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
+              +{extendedOntology.nodes.length - sector.ontology.nodes.length} dal Builder
+            </span>
+          )}
         </p>
       </div>
 
@@ -324,8 +332,8 @@ export default function OntologyGraph() {
         {activeSubTab === 'graph' && (
           <div className="h-full relative">
             <ReactFlow
-              nodes={sector.ontology.nodes as unknown as Node[]}
-              edges={sector.ontology.edges as unknown as Edge[]}
+              nodes={extendedOntology.nodes as unknown as Node[]}
+              edges={extendedOntology.edges as unknown as Edge[]}
               nodeTypes={nodeTypes}
               onNodeClick={onNodeClick}
               onPaneClick={() => setSelectedNode(null)}
