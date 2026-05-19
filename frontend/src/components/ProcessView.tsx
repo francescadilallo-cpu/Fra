@@ -36,13 +36,13 @@ export default function ProcessView() {
   return (
     <div className="p-8 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">Processo</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Processo</h1>
         <p className="text-slate-400 mt-1 text-sm">Ciclo di vita ordine manifatturiero — Preventivo → Consegna</p>
       </div>
 
       {/* Timeline stages */}
       <div className="card">
-        <h2 className="font-semibold text-white mb-6">Ciclo di Vita dell'Ordine</h2>
+        <h2 className="font-semibold text-slate-900 mb-6">Ciclo di Vita dell'Ordine</h2>
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
           {LIFECYCLE_STAGES.map((stage, i) => {
             const funnelItem = funnel.find(f => f.stage === stage.key)
@@ -54,7 +54,7 @@ export default function ProcessView() {
                     <Icon className={`w-6 h-6 ${stage.color}`} />
                   </div>
                   <p className={`text-sm font-bold ${stage.color}`}>{stage.label}</p>
-                  <p className="text-2xl font-bold text-white mt-1">{funnelItem?.count ?? 0}</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count ?? 0}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{fmt(funnelItem?.value ?? 0)}</p>
                   <div className="mt-2 flex items-center justify-center gap-1 text-xs text-slate-500">
                     <Clock className="w-3 h-3" />
@@ -72,7 +72,7 @@ export default function ProcessView() {
 
       {/* Funnel bars */}
       <div className="card">
-        <h2 className="font-semibold text-white mb-5">Funnel di Conversione</h2>
+        <h2 className="font-semibold text-slate-900 mb-5">Funnel di Conversione</h2>
         <div className="space-y-3">
           {funnel.map((item, i) => {
             const pct = Math.round((item.count / maxCount) * 100)
@@ -85,7 +85,7 @@ export default function ProcessView() {
                     className="h-full rounded-full flex items-center px-3"
                     style={{ width: `${pct}%`, backgroundColor: `rgba(20,184,166,${opacity})` }}
                   >
-                    <span className="text-xs font-semibold text-white">{item.count}</span>
+                    <span className="text-xs font-semibold text-slate-900">{item.count}</span>
                   </div>
                 </div>
                 <span className="text-sm text-slate-400 w-28 text-right flex-shrink-0">{fmt(item.value)}</span>
@@ -101,7 +101,7 @@ export default function ProcessView() {
 
       {/* Active cases */}
       <div className="card">
-        <h2 className="font-semibold text-white mb-4">Casi Attivi</h2>
+        <h2 className="font-semibold text-slate-900 mb-4">Casi Attivi</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -117,13 +117,13 @@ export default function ProcessView() {
               {ACTIVE_CASES.map(c => (
                 <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 text-slate-500">#{c.id}</td>
-                  <td className="py-3 text-white font-medium">{c.customer}</td>
+                  <td className="py-3 text-slate-900 font-medium">{c.customer}</td>
                   <td className="py-3">
                     <span className={`badge text-xs ${STAGE_COLORS[c.stage] ?? 'bg-slate-700 text-slate-300'}`}>
                       {c.stage}
                     </span>
                   </td>
-                  <td className="py-3 text-right text-white">{fmt(c.value)}</td>
+                  <td className="py-3 text-right text-slate-900">{fmt(c.value)}</td>
                   <td className={`py-3 text-right font-semibold ${c.daysInStage > 8 ? 'text-amber-400' : 'text-slate-300'}`}>
                     {c.daysInStage} gg
                   </td>

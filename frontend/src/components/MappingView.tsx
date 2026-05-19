@@ -63,7 +63,7 @@ function EditableCell({ value, onSave }: EditableCellProps) {
             if (e.key === 'Enter') handleSave()
             if (e.key === 'Escape') handleCancel()
           }}
-          className="flex-1 bg-slate-100 border border-teal-500 rounded px-2 py-1 text-xs text-white outline-none min-w-0"
+          className="flex-1 bg-slate-100 border border-teal-500 rounded px-2 py-1 text-xs text-slate-900 outline-none min-w-0"
         />
         <button
           onClick={handleSave}
@@ -111,7 +111,7 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
       >
         <div className="flex items-center gap-2">
           <Table2 className="w-4 h-4 text-teal-400" />
-          <span className="font-semibold text-white font-mono">{tableName}</span>
+          <span className="font-semibold text-slate-900 font-mono">{tableName}</span>
           <span className="badge bg-slate-200 text-slate-400 text-xs">{rows.length} fields</span>
         </div>
         <span className="text-slate-500 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
@@ -238,7 +238,7 @@ export default function MappingView() {
       <div className="px-8 py-5 border-b border-slate-200 sticky top-0 bg-slate-50 z-10 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Configurazione Mappature</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Configurazione Mappature</h1>
             <p className="text-slate-400 mt-1 text-sm">
               Configura come i campi ERP si mappano ai concetti dell'ontologia. Clicca su una proprietà per modificarla.
             </p>

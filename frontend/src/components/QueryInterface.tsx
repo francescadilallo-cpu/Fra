@@ -90,7 +90,7 @@ function MessageBubble({ message }: { message: Message }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end gap-3 items-start">
-        <div className="max-w-[70%] bg-teal-500/20 border border-teal-500/30 rounded-2xl rounded-tr-sm px-4 py-3">
+        <div className="max-w-[70%] bg-teal-600 rounded-2xl rounded-tr-sm px-4 py-3">
           <p className="text-sm text-white">{message.content}</p>
         </div>
         <div className="w-8 h-8 bg-teal-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -221,7 +221,7 @@ export default function QueryInterface() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-white">Query AI</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
         <p className="text-slate-400 mt-1 text-sm">
           Fai domande in linguaggio naturale sui tuoi dati ERP
         </p>
@@ -235,7 +235,7 @@ export default function QueryInterface() {
               <Bot className="w-8 h-8 text-teal-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-white">Assistente Dati AI</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Assistente Dati AI</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
                 Fai domande sui tuoi dati in italiano o inglese. L'AI genererà le query SQL e risponderà in modo chiaro.
               </p>
@@ -252,7 +252,7 @@ export default function QueryInterface() {
                   key={q}
                   onClick={() => sendMessage(q)}
                   disabled={loading}
-                  className="w-full text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-300 hover:text-white transition-all"
+                  className="w-full text-left bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-300 hover:text-slate-900 transition-all"
                 >
                   {q}
                 </button>
@@ -309,7 +309,7 @@ export default function QueryInterface() {
             placeholder="Chiedi qualcosa sui tuoi dati... es: 'Quali clienti hanno quote accettate questo mese?'"
             rows={2}
             disabled={loading}
-            className="flex-1 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 resize-none outline-none transition-colors disabled:opacity-50"
+            className="flex-1 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 resize-none outline-none transition-colors disabled:opacity-50"
           />
           <button
             onClick={() => sendMessage(input)}
