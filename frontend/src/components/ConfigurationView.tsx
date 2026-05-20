@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Loader2, CheckCircle2, XCircle, Plus, AlertTriangle } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
+import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection } from './AdminSections'
 
 // ── Connectors ────────────────────────────────────────────────────────────────
 
@@ -497,6 +498,18 @@ export default function ConfigurationView() {
           <span>Want a template for your sector? Contact us — we develop new templates in 2-3 weeks.</span>
         </div>
       </section>
+
+      {/* Section 5: Users & Roles */}
+      <UsersSection />
+
+      {/* Section 6: API Tokens */}
+      <ApiTokensSection />
+
+      {/* Section 7: Notification Channels */}
+      <NotificationsSection />
+
+      {/* Section 8: Audit Log */}
+      <AuditLogSection />
     </div>
   )
 }
