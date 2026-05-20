@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Play, Zap, Bot,
+  Play, Zap, Bot, Workflow as WorkflowIcon,
   TrendingUp, ShieldCheck, Package, Truck, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
+import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 
 // ── Toast system ─────────────────────────────────────────────────────────────
 interface Toast { id: string; message: string }
@@ -817,6 +818,7 @@ export default function AgentsView() {
     setStates(Object.fromEntries(newAgents.map(a => [a.id, { status: 'idle' as AgentStatus, progress: 0, logLines: [] }])))
     setLog([])
     setExpanded({})
+    setRunningWorkflows(new Set())
   }, [sectorId])
 
   // Auto-scroll log
@@ -828,7 +830,7 @@ export default function AgentsView() {
     setLog(prev => [...prev.slice(-200), { ts: nowTs(), agentId, agentName, text, kind }])
   }, [])
 
-  const simulateAgent = useCallback((def: AgentDef) => {
+  const simulateAgent = useCallback((def: AgentDef, onComplete?: () => void) => {
     const stepCount = def.logSteps.length
     const stepInterval = def.durationMs / (stepCount + 2)
     let step = 0
@@ -868,13 +870,75 @@ export default function AgentsView() {
           metrics: def.metrics.map(m => ({ label: m.label, value: m.value })),
           findings: def.findings,
         })
+        onComplete?.()
       }
     }, stepInterval)
-  }, [appendLog])
+  }, [appendLog, sectorId])
 
   const runAgent = useCallback((def: AgentDef) => {
     simulateAgent(def)
   }, [simulateAgent])
+
+  const [runningWorkflows, setRunningWorkflows] = useState<Set<string>>(new Set())
+  const workflows = WORKFLOWS[sectorId] ?? []
+
+  const runWorkflow = useCallback((wf: WorkflowDef) => {
+    const currentAgents = AGENTS[sectorId]
+    const stepDefs = wf.steps
+      .map(s => ({ step: s, def: currentAgents.find(a => a.id === s.agentId) }))
+      .filter((x): x is { step: typeof wf.steps[number]; def: AgentDef } => !!x.def)
+
+    if (stepDefs.length === 0) return
+
+    setRunningWorkflows(prev => new Set(prev).add(wf.id))
+
+    // Mark all as queued upfront for visual feedback
+    setStates(prev => {
+      const next = { ...prev }
+      stepDefs.forEach(({ def }) => {
+        next[def.id] = { status: 'queued', progress: 0, logLines: [] }
+      })
+      return next
+    })
+    setLog([])
+    appendLog('workflow', wf.name, `▶ Workflow "${wf.name}" started — ${stepDefs.length} agents`, 'start')
+
+    const completed = new Set<string>()
+    const inProgress = new Set<string>()
+
+    const finalize = () => {
+      setRunningWorkflows(prev => {
+        const next = new Set(prev)
+        next.delete(wf.id)
+        return next
+      })
+      appendLog('workflow', wf.name, `✓ Workflow "${wf.name}" completed`, 'done')
+      addToast(`Workflow "${wf.name}" completed · ${stepDefs.length} agents ran`)
+    }
+
+    const tryAdvance = () => {
+      stepDefs.forEach(({ step, def }) => {
+        if (completed.has(step.agentId) || inProgress.has(step.agentId)) return
+        const ready = step.dependsOn.every(d => completed.has(d))
+        if (ready) {
+          inProgress.add(step.agentId)
+          simulateAgent(def, () => {
+            inProgress.delete(step.agentId)
+            completed.add(step.agentId)
+            if (completed.size === stepDefs.length) finalize()
+            else tryAdvance()
+          })
+        }
+      })
+    }
+    tryAdvance()
+  }, [sectorId, simulateAgent, appendLog, addToast])
+
+  const agentLookup = Object.fromEntries(
+    agents.map(a => [a.id, { id: a.id, name: a.name, icon: a.icon }])
+  )
+  const getStatus = (agentId: string): StepStatus =>
+    (states[agentId]?.status ?? 'idle') as StepStatus
 
   const runAll = useCallback(() => {
     const currentAgents = AGENTS[sectorId]
@@ -953,23 +1017,53 @@ export default function AgentsView() {
         </button>
       </div>
 
-      {/* Body: grid + log */}
+      {/* Body: workflows + grid + log */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {/* Agent grid */}
-        <div className="flex-1 overflow-auto px-8 py-6">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {agents.map(def => (
-              <AgentCard
-                key={def.id}
-                def={def}
-                state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
-                onRun={() => runAgent(def)}
-                expanded={!!expanded[def.id]}
-                onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
-                onAction={handleAction}
-              />
-            ))}
-          </div>
+        <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+          {/* Workflows section */}
+          {workflows.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <WorkflowIcon className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Workflows</h2>
+                <span className="text-xs text-slate-400">· orchestrated agent chains</span>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {workflows.map(wf => (
+                  <WorkflowCard
+                    key={wf.id}
+                    wf={wf}
+                    agentLookup={agentLookup}
+                    getStatus={getStatus}
+                    onRun={() => runWorkflow(wf)}
+                    running={runningWorkflows.has(wf.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Agent grid */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Bot className="w-4 h-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Agents</h2>
+              <span className="text-xs text-slate-400">· {agents.length} available · run individually or via workflow</span>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {agents.map(def => (
+                <AgentCard
+                  key={def.id}
+                  def={def}
+                  state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
+                  onRun={() => runAgent(def)}
+                  expanded={!!expanded[def.id]}
+                  onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
+                  onAction={handleAction}
+                />
+              ))}
+            </div>
+          </section>
         </div>
 
         <ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
