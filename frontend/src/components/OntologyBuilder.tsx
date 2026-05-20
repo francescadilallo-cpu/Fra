@@ -6,7 +6,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import {
   Sparkles, Send, Bot, User, CheckCircle2, XCircle, Plus, Link2,
-  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2,
+  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2, Pencil, X,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { OntologyNodeData } from '../types'
@@ -1134,6 +1134,92 @@ export default function OntologyBuilder() {
     setPending([])
   }, [sectorId, sector])
 
+  // ── Editing a pending change ───────────────────────────────────────────-
+  const [editingChange, setEditingChange] = useState<PendingChange | null>(null)
+
+  const updateChange = useCallback((updated: PendingChange) => {
+    const previous = pending.find((c) => c.id === updated.id)
+    if (!previous) return
+
+    // Update the pending change itself
+    setPending((p) => p.map((c) => (c.id === updated.id ? updated : c)))
+
+    // Sync canvas: replace previous node/edge with updated values.
+    if (previous.newNode && updated.newNode) {
+      const prevId = previous.newNode.id
+      const newId = updated.newNode.id
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === prevId
+            ? {
+                id: newId,
+                type: 'builderNode',
+                position: updated.newNode!.position,
+                data: {
+                  label: updated.newNode!.label,
+                  uri: updated.newNode!.uri,
+                  db_table: updated.newNode!.db_table ?? null,
+                  row_count: 0,
+                  properties: updated.newNode!.properties,
+                  state: 'pending',
+                },
+              }
+            : n,
+        ),
+      )
+      // Update any edges referencing the renamed node
+      if (prevId !== newId) {
+        setEdges((eds) =>
+          eds.map((e) => ({
+            ...e,
+            source: e.source === prevId ? newId : e.source,
+            target: e.target === prevId ? newId : e.target,
+          })),
+        )
+      }
+    }
+    if (previous.newEdge && updated.newEdge) {
+      const prevId = previous.newEdge.id
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === prevId
+            ? {
+                id: updated.newEdge!.id,
+                source: updated.newEdge!.source,
+                target: updated.newEdge!.target,
+                label: updated.newEdge!.label,
+                type: 'smoothstep',
+                animated: true,
+                style: { stroke: '#F59E0B', strokeDasharray: '5 5' },
+                labelStyle: { fill: '#B45309', fontSize: 11 },
+              }
+            : e,
+        ),
+      )
+    }
+    if (previous.addPropertyTo && updated.addPropertyTo) {
+      // Replace old property with new one on the target node
+      const prev = previous.addPropertyTo
+      const next = updated.addPropertyTo
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === prev.nodeId) {
+            const data = n.data as unknown as BuilderNodeData
+            const filtered = data.properties.filter((p) => p !== prev.property)
+            return n.id === next.nodeId
+              ? { ...n, data: { ...data, properties: [...filtered, next.property], state: 'pending' } }
+              : { ...n, data: { ...data, properties: filtered, state: 'existing' } }
+          }
+          if (n.id === next.nodeId) {
+            const data = n.data as unknown as BuilderNodeData
+            return { ...n, data: { ...data, properties: [...data.properties, next.property], state: 'pending' } }
+          }
+          return n
+        }),
+      )
+    }
+  }, [pending])
+
   const quickPrompts = intents.map((i) => i.prompt)
   const pendingCount = pending.filter((c) => c.status === 'pending').length
 
@@ -1205,7 +1291,7 @@ export default function OntologyBuilder() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.map((m) => (
-              <MessageBubble key={m.id} msg={m} pending={pending} onApprove={approve} onReject={reject} />
+              <MessageBubble key={m.id} msg={m} pending={pending} onApprove={approve} onReject={reject} onEdit={setEditingChange} />
             ))}
             {thinking && (
               <div className="flex items-center gap-2 text-xs text-slate-400 px-2">
@@ -1314,7 +1400,7 @@ export default function OntologyBuilder() {
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {pending.map((c) => (
-                <ChangeCard key={c.id} change={c} onApprove={approve} onReject={reject} />
+                <ChangeCard key={c.id} change={c} onApprove={approve} onReject={reject} onEdit={setEditingChange} />
               ))}
             </div>
             <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 leading-snug">
@@ -1326,6 +1412,19 @@ export default function OntologyBuilder() {
           </div>
         )}
       </div>
+
+      {/* Edit modal */}
+      {editingChange && (
+        <EditChangeModal
+          change={editingChange}
+          existing={nodes.map((n) => ({ id: n.id, label: (n.data as unknown as BuilderNodeData).label }))}
+          onSave={(updated) => {
+            updateChange(updated)
+            setEditingChange(null)
+          }}
+          onClose={() => setEditingChange(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1336,11 +1435,13 @@ function MessageBubble({
   pending,
   onApprove,
   onReject,
+  onEdit,
 }: {
   msg: ChatMessage
   pending: PendingChange[]
   onApprove: (id: string) => void
   onReject: (id: string) => void
+  onEdit: (c: PendingChange) => void
 }) {
   if (msg.role === 'user') {
     return (
@@ -1371,7 +1472,7 @@ function MessageBubble({
         {linkedChanges.length > 0 && (
           <div className="mt-2 space-y-1.5">
             {linkedChanges.map((c) => (
-              <InlineChangeChip key={c.id} change={c} onApprove={onApprove} onReject={onReject} />
+              <InlineChangeChip key={c.id} change={c} onApprove={onApprove} onReject={onReject} onEdit={onEdit} />
             ))}
           </div>
         )}
@@ -1414,10 +1515,12 @@ function InlineChangeChip({
   change,
   onApprove,
   onReject,
+  onEdit,
 }: {
   change: PendingChange
   onApprove: (id: string) => void
   onReject: (id: string) => void
+  onEdit: (c: PendingChange) => void
 }) {
   const icon =
     change.kind === 'add_class' ? <Plus className="w-3 h-3" /> :
@@ -1447,6 +1550,13 @@ function InlineChangeChip({
         ) : (
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
+              onClick={() => onEdit(change)}
+              className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
+              title="Modifica"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+            <button
               onClick={() => onReject(change.id)}
               className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
               title="Rifiuta"
@@ -1471,10 +1581,12 @@ function ChangeCard({
   change,
   onApprove,
   onReject,
+  onEdit,
 }: {
   change: PendingChange
   onApprove: (id: string) => void
   onReject: (id: string) => void
+  onEdit: (c: PendingChange) => void
 }) {
   const isApproved = change.status === 'approved'
   const Icon =
@@ -1530,10 +1642,17 @@ function ChangeCard({
         <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-100">
           <button
             onClick={() => onReject(change.id)}
-            className="flex-1 text-xs font-medium bg-white border border-slate-200 hover:border-slate-300 text-slate-600 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
+            className="text-xs font-medium bg-white border border-slate-200 hover:border-slate-300 text-slate-600 rounded-md py-1.5 px-2 transition-colors flex items-center justify-center gap-1"
+            title="Rifiuta"
           >
             <XCircle className="w-3 h-3" />
-            Rifiuta
+          </button>
+          <button
+            onClick={() => onEdit(change)}
+            className="flex-1 text-xs font-medium bg-white border border-slate-200 hover:border-teal-300 hover:text-teal-700 text-slate-600 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
+          >
+            <Pencil className="w-3 h-3" />
+            Modifica
           </button>
           <button
             onClick={() => onApprove(change.id)}
@@ -1544,6 +1663,292 @@ function ChangeCard({
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Edit modal ──────────────────────────────────────────────────────────────
+function EditChangeModal({
+  change,
+  existing,
+  onSave,
+  onClose,
+}: {
+  change: PendingChange
+  existing: { id: string; label: string }[]
+  onSave: (updated: PendingChange) => void
+  onClose: () => void
+}) {
+  // Local form state — initialized from the change.
+  const [name, setName] = useState(change.newNode?.label ?? '')
+  const [dbTable, setDbTable] = useState(change.newNode?.db_table ?? '')
+  const [properties, setProperties] = useState<string[]>(change.newNode?.properties ?? [])
+  const [newProp, setNewProp] = useState('')
+
+  const [relSource, setRelSource] = useState(change.newEdge?.source ?? '')
+  const [relTarget, setRelTarget] = useState(change.newEdge?.target ?? '')
+  const [relLabel, setRelLabel] = useState(change.newEdge?.label ?? '')
+
+  const [propNodeId, setPropNodeId] = useState(change.addPropertyTo?.nodeId ?? '')
+  const [propName, setPropName] = useState(change.addPropertyTo?.property ?? '')
+
+  function addProperty() {
+    const p = normalizeProperty(newProp.trim())
+    if (!p || properties.includes(p)) return
+    setProperties([...properties, p])
+    setNewProp('')
+  }
+  function removeProperty(p: string) {
+    setProperties(properties.filter((x) => x !== p))
+  }
+
+  function handleSave() {
+    if (change.kind === 'add_class' && change.newNode) {
+      const normalizedName = normalizeEntityName(name) || change.newNode.label
+      const updated: PendingChange = {
+        ...change,
+        summary: `Aggiungi classe ${normalizedName}`,
+        newNode: {
+          ...change.newNode,
+          id: normalizedName,
+          label: normalizedName,
+          uri: change.newNode.uri.replace(/[^:]+$/, normalizedName),
+          db_table: dbTable.trim() || undefined,
+          properties: properties.length > 0 ? properties : ['name'],
+        },
+      }
+      onSave(updated)
+      return
+    }
+    if (change.kind === 'add_relation' && change.newEdge) {
+      const label = relLabel.trim() || `has${existing.find((e) => e.id === relTarget)?.label ?? 'Target'}`
+      const srcLabel = existing.find((e) => e.id === relSource)?.label ?? relSource
+      const dstLabel = existing.find((e) => e.id === relTarget)?.label ?? relTarget
+      const updated: PendingChange = {
+        ...change,
+        summary: `Relazione: ${srcLabel} → ${label} → ${dstLabel}`,
+        newEdge: {
+          ...change.newEdge,
+          source: relSource,
+          target: relTarget,
+          label,
+        },
+      }
+      onSave(updated)
+      return
+    }
+    if (change.kind === 'add_property' && change.addPropertyTo) {
+      const prop = normalizeProperty(propName.trim()) || change.addPropertyTo.property
+      const node = existing.find((e) => e.id === propNodeId)
+      const updated: PendingChange = {
+        ...change,
+        summary: `Aggiungi ${prop} a ${node?.label ?? propNodeId}`,
+        addPropertyTo: { nodeId: propNodeId, property: prop },
+      }
+      onSave(updated)
+      return
+    }
+    // rename / fallback: nothing structural to edit, just save unchanged
+    onSave(change)
+  }
+
+  const title =
+    change.kind === 'add_class' ? 'Modifica classe' :
+    change.kind === 'add_relation' ? 'Modifica relazione' :
+    change.kind === 'add_property' ? 'Modifica proprietà' :
+    'Modifica'
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Pencil className="w-4 h-4 text-teal-600" />
+            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {change.kind === 'add_class' && (
+            <>
+              <Field label="Nome classe">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
+                  placeholder="es. Supplier"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Sarà normalizzato in PascalCase.</p>
+              </Field>
+
+              <Field label="Tabella DB (opzionale)">
+                <input
+                  type="text"
+                  value={dbTable}
+                  onChange={(e) => setDbTable(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
+                  placeholder="es. suppliers"
+                />
+              </Field>
+
+              <Field label={`Proprietà (${properties.length})`}>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {properties.length === 0 && (
+                    <span className="text-xs text-slate-400 italic">Nessuna proprietà — aggiungine almeno una.</span>
+                  )}
+                  {properties.map((p) => (
+                    <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
+                      {p}
+                      <button
+                        onClick={() => removeProperty(p)}
+                        className="text-teal-600 hover:text-teal-900"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newProp}
+                    onChange={(e) => setNewProp(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addProperty())}
+                    className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
+                    placeholder="es. email, prezzo, paese..."
+                  />
+                  <button
+                    onClick={addProperty}
+                    disabled={!newProp.trim()}
+                    className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Aggiungi
+                  </button>
+                </div>
+              </Field>
+            </>
+          )}
+
+          {change.kind === 'add_relation' && (
+            <>
+              <Field label="Sorgente">
+                <select
+                  value={relSource}
+                  onChange={(e) => setRelSource(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none bg-white"
+                >
+                  {existing.map((e) => (
+                    <option key={e.id} value={e.id}>{e.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Etichetta relazione">
+                <input
+                  type="text"
+                  value={relLabel}
+                  onChange={(e) => setRelLabel(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
+                  placeholder="es. hasCustomer, suppliedBy"
+                />
+              </Field>
+              <Field label="Destinazione">
+                <select
+                  value={relTarget}
+                  onChange={(e) => setRelTarget(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none bg-white"
+                >
+                  {existing.map((e) => (
+                    <option key={e.id} value={e.id}>{e.label}</option>
+                  ))}
+                </select>
+              </Field>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 flex items-center gap-2">
+                <Link2 className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+                <span>
+                  <strong>{existing.find((e) => e.id === relSource)?.label ?? '?'}</strong>
+                  {' → '}
+                  <code className="bg-white px-1 py-0.5 rounded text-teal-700">{relLabel || 'has...'}</code>
+                  {' → '}
+                  <strong>{existing.find((e) => e.id === relTarget)?.label ?? '?'}</strong>
+                </span>
+              </div>
+            </>
+          )}
+
+          {change.kind === 'add_property' && (
+            <>
+              <Field label="Entità di destinazione">
+                <select
+                  value={propNodeId}
+                  onChange={(e) => setPropNodeId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none bg-white"
+                >
+                  {existing.map((e) => (
+                    <option key={e.id} value={e.id}>{e.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Nome proprietà">
+                <input
+                  type="text"
+                  value={propName}
+                  onChange={(e) => setPropName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
+                  placeholder="es. email, sustainabilityScore"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Sarà normalizzata in camelCase.</p>
+              </Field>
+            </>
+          )}
+
+          {change.kind === 'rename' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>I cambi di tipo rename non sono modificabili da questa schermata — usa la chat per rinominare di nuovo o rifiutare.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-4 py-2 font-medium transition-colors"
+          >
+            Annulla
+          </button>
+          <button
+            onClick={handleSave}
+            className="text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Salva modifiche
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">{label}</label>
+      {children}
     </div>
   )
 }
