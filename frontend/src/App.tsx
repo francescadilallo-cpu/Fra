@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import AccessGate, { SESSION_KEY } from './components/AccessGate'
 import OverviewScreen from './components/OverviewScreen'
@@ -17,6 +17,17 @@ import type { NavTab } from './types'
 export default function App() {
   const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
+
+  // Navigate to agents tab when OntologyBuilder triggers "Create Agent"
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const entity = (e as CustomEvent<{ entity: string }>).detail?.entity
+      if (entity) sessionStorage.setItem('agent-builder-prefill', entity)
+      setActiveTab('agents')
+    }
+    window.addEventListener('create-agent-from-entity', handler)
+    return () => window.removeEventListener('create-agent-from-entity', handler)
+  }, [])
 
   if (!granted) {
     return (

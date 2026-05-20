@@ -1,13 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Play, Zap, Bot, Workflow as WorkflowIcon,
   TrendingUp, ShieldCheck, Package, Truck, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
+  Bell, Sparkles, Plus, Trash2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
+import { SECTORS } from '../data/sectors'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
+import { loadExtension } from '../data/ontologyExtensions'
+import { useCustomAgents, addCustomAgent, removeCustomAgent, type CustomAgentDef, type AgentTemplate } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
+import AgentBuilder from './AgentBuilder'
 
 // ── Toast system ─────────────────────────────────────────────────────────────
 interface Toast { id: string; message: string }
@@ -98,6 +103,49 @@ const ACTION_RESULTS: Record<string, string> = {
   'Notify compliance officer':   'Compliance officer Marco Bianchi notified — case #AML-2024-0291',
 }
 
+// ── Custom agent → AgentDef conversion ───────────────────────────────────────
+
+const TEMPLATE_ICONS: Record<AgentTemplate, typeof Bot> = {
+  monitor:    Eye,
+  alert:      Bell,
+  reconciler: RefreshCw,
+  validator:  ShieldCheck,
+  enricher:   Sparkles,
+}
+
+const TEMPLATE_LOG_STEPS: Record<AgentTemplate, (entities: string[]) => string[]> = {
+  monitor: (entities) => [
+    ...entities.map((e, i) => `READ ${e} → ${200 + i * 140} records loaded`),
+    'Computing statistical baselines and z-scores…',
+    'Detecting anomalies and outliers…',
+    'WRITE anomaly report → semantic layer',
+  ],
+  alert: (entities) => [
+    ...entities.map((e, i) => `READ ${e} → ${150 + i * 90} records loaded`),
+    'Evaluating alert threshold conditions…',
+    'Preparing notifications for triggered rules…',
+    'WRITE alert log → semantic layer',
+  ],
+  reconciler: (entities) => [
+    ...entities.map((e, i) => `READ ${e} → ${280 + i * 120} records loaded`),
+    'Cross-referencing keys across entity sets…',
+    'Identifying mismatches and orphan records…',
+    'WRITE reconciliation report → semantic layer',
+  ],
+  validator: (entities) => [
+    ...entities.map((e, i) => `READ ${e} → ${310 + i * 100} records loaded`),
+    'Checking completeness and required fields…',
+    'Validating data types and constraint rules…',
+    'WRITE validation summary → semantic layer',
+  ],
+  enricher: (entities) => [
+    ...entities.map((e, i) => `READ ${e} → ${190 + i * 110} records loaded`),
+    'Fetching external enrichment data…',
+    'Augmenting records with derived attributes…',
+    'WRITE enriched records → semantic layer',
+  ],
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 type AgentStatus = 'idle' | 'queued' | 'running' | 'completed' | 'error'
 
@@ -129,6 +177,31 @@ interface LogEntry {
   agentName: string
   text: string
   kind: 'read' | 'process' | 'write' | 'done' | 'start'
+}
+
+function customToAgentDef(c: CustomAgentDef): AgentDef {
+  const entities = c.entities.length > 0 ? c.entities : ['Records']
+  const primary = entities[0]
+  const logSteps = TEMPLATE_LOG_STEPS[c.template](entities)
+  const metrics: AgentMetric[] = ({
+    monitor:    () => [{ label: `${primary} analyzed`, value: '1,240' }, { label: 'Anomalies detected', value: '8', delta: 'needs review', up: true }, { label: 'Healthy records', value: '99.4%', up: false }],
+    alert:      () => [{ label: 'Records checked', value: '840' }, { label: 'Alerts triggered', value: '5', delta: 'above threshold', up: true }, { label: 'Notifications sent', value: '5' }],
+    reconciler: () => [{ label: `${primary} records`, value: '620' }, { label: 'Discrepancies', value: '12', delta: '1.9% rate', up: true }, { label: 'Match rate', value: '98.1%' }],
+    validator:  () => [{ label: `${primary} validated`, value: '3,200' }, { label: 'Invalid records', value: '34', delta: '1.1% fail', up: true }, { label: 'Missing fields', value: '18' }],
+    enricher:   () => [{ label: `${primary} processed`, value: '560' }, { label: 'Enriched', value: '543', delta: '97% match', up: false }, { label: 'API calls', value: '543' }],
+  } as Record<string, () => AgentMetric[]>)[c.template]?.() ?? []
+  return {
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    icon: TEMPLATE_ICONS[c.template] ?? Bot,
+    accessedEntities: entities,
+    durationMs: 2400 + entities.length * 350,
+    logSteps,
+    metrics,
+    findings: c.findings,
+    actions: c.actions,
+  }
 }
 
 // ── Agent definitions per sector ─────────────────────────────────────────────
@@ -671,6 +744,7 @@ function AgentCard({
   expanded,
   onToggle,
   onAction,
+  onDelete,
 }: {
   def: AgentDef
   state: AgentRunState
@@ -678,6 +752,7 @@ function AgentCard({
   expanded: boolean
   onToggle: () => void
   onAction: (label: string) => void
+  onDelete?: () => void
 }) {
   const Icon = def.icon
   const isRunning = state.status === 'running'
@@ -722,6 +797,15 @@ function AgentCard({
               className="text-xs text-slate-400 hover:text-slate-700 transition-colors px-2 py-1 rounded hover:bg-slate-50"
             >
               {expanded ? 'Hide' : 'Results'}
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="w-7 h-7 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-400 flex items-center justify-center transition-colors"
+              title="Remove agent"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           )}
           <button
@@ -793,6 +877,23 @@ export default function AgentsView() {
   const { sectorId } = useSector()
   const agents = AGENTS[sectorId]
 
+  // ── Custom agents ──────────────────────────────────────────────────────────
+  const customAgentsDefs = useCustomAgents(sectorId)
+  const customAgents = useMemo(() => customAgentsDefs.map(customToAgentDef), [customAgentsDefs])
+
+  const availableEntities = useMemo(() => {
+    const base = SECTORS[sectorId].ontology.nodes.map(n => n.data.label)
+    try {
+      const ext = loadExtension(sectorId)
+      return [...new Set([...base, ...ext.nodes.map(n => n.label)])]
+    } catch { return base }
+  }, [sectorId])
+
+  // ── Builder modal ──────────────────────────────────────────────────────────
+  const [showBuilder, setShowBuilder] = useState(false)
+  const [builderPrefill, setBuilderPrefill] = useState<string | undefined>()
+
+  // ── Core state ─────────────────────────────────────────────────────────────
   const [states, setStates] = useState<Record<string, AgentRunState>>(() =>
     Object.fromEntries(agents.map(a => [a.id, { status: 'idle' as AgentStatus, progress: 0, logLines: [] }]))
   )
@@ -806,6 +907,43 @@ export default function AgentsView() {
     setToasts(prev => [...prev, { id, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000)
   }, [])
+
+  // Init states for newly-added custom agents
+  useEffect(() => {
+    setStates(prev => {
+      const next = { ...prev }
+      customAgents.forEach(a => {
+        if (!next[a.id]) next[a.id] = { status: 'idle', progress: 0, logLines: [] }
+      })
+      return next
+    })
+  }, [customAgents])
+
+  // Listen for "Create Agent from entity" (from OntologyBuilder)
+  useEffect(() => {
+    const storedPrefill = sessionStorage.getItem('agent-builder-prefill')
+    if (storedPrefill) {
+      sessionStorage.removeItem('agent-builder-prefill')
+      setBuilderPrefill(storedPrefill)
+      setShowBuilder(true)
+    }
+    const handler = (e: Event) => {
+      const entity = (e as CustomEvent<{ entity: string }>).detail?.entity
+      sessionStorage.removeItem('agent-builder-prefill')
+      setBuilderPrefill(entity)
+      setShowBuilder(true)
+    }
+    window.addEventListener('create-agent-from-entity', handler)
+    return () => window.removeEventListener('create-agent-from-entity', handler)
+  }, [])
+
+  const handleSaveCustomAgent = useCallback((agent: CustomAgentDef) => {
+    const withSector = { ...agent, sectorId }
+    addCustomAgent(sectorId, withSector)
+    setShowBuilder(false)
+    setBuilderPrefill(undefined)
+    addToast(`Agent "${agent.name}" created — see My Agents below`)
+  }, [sectorId, addToast])
 
   const handleAction = useCallback((label: string) => {
     const result = ACTION_RESULTS[label] ?? 'Action completed successfully'
@@ -1003,18 +1141,27 @@ export default function AgentsView() {
             )}
           </p>
         </div>
-        <button
-          onClick={runAll}
-          disabled={runningCount > 0}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex-shrink-0 ${
-            runningCount > 0
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
-          }`}
-        >
-          <Zap className="w-4 h-4" />
-          Run All Agents
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => { setBuilderPrefill(undefined); setShowBuilder(true) }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-teal-200 text-teal-700 hover:bg-teal-50 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Agent
+          </button>
+          <button
+            onClick={runAll}
+            disabled={runningCount > 0}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+              runningCount > 0
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            Run All Agents
+          </button>
+        </div>
       </div>
 
       {/* Body: workflows + grid + log */}
@@ -1064,9 +1211,67 @@ export default function AgentsView() {
               ))}
             </div>
           </section>
+
+          {/* Custom agents (user-defined) */}
+          {customAgents.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-violet-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">My Agents</h2>
+                <span className="text-xs text-slate-400">· built on your ontology · {customAgents.length} defined</span>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {customAgents.map(def => (
+                  <AgentCard
+                    key={def.id}
+                    def={def}
+                    state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
+                    onRun={() => runAgent(def)}
+                    expanded={!!expanded[def.id]}
+                    onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
+                    onAction={handleAction}
+                    onDelete={() => {
+                      const cd = customAgentsDefs.find(c => c.id === def.id)
+                      if (cd && confirm(`Remove agent "${cd.name}"?`)) {
+                        removeCustomAgent(sectorId, def.id)
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Empty state for custom agents */}
+          {customAgents.length === 0 && (
+            <section>
+              <button
+                onClick={() => { setBuilderPrefill(undefined); setShowBuilder(true) }}
+                className="w-full border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50/30 rounded-xl py-8 flex flex-col items-center gap-3 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-teal-100 flex items-center justify-center transition-colors">
+                  <Plus className="w-5 h-5 text-slate-400 group-hover:text-teal-600" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-600 group-hover:text-teal-700">Create your first agent</p>
+                  <p className="text-xs text-slate-400 mt-1">Build executive agents on your ontology entities</p>
+                </div>
+              </button>
+            </section>
+          )}
         </div>
 
         <ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
+
+        {/* Agent builder modal */}
+        {showBuilder && (
+          <AgentBuilder
+            onClose={() => { setShowBuilder(false); setBuilderPrefill(undefined) }}
+            onSave={handleSaveCustomAgent}
+            availableEntities={availableEntities}
+            prefillEntity={builderPrefill}
+          />
+        )}
 
         {/* Activity log (always visible at bottom) */}
         <div className="flex-shrink-0 border-t border-slate-200 bg-slate-950 h-44">

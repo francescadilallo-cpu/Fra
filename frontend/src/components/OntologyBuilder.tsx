@@ -6,7 +6,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import {
   Sparkles, Send, Bot, User, CheckCircle2, XCircle, Plus, Link2,
-  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2, Pencil, X,
+  AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2, Pencil, X, Zap,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { OntologyNodeData, OntologyProperty, PropertyType } from '../types'
@@ -2188,6 +2188,17 @@ function EditEntityModal({
             Delete
           </button>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('create-agent-from-entity', { detail: { entity: entity.label } }))
+                onClose()
+              }}
+              className="text-sm bg-violet-50 border border-violet-200 hover:bg-violet-100 text-violet-700 rounded-lg px-3 py-2 font-medium transition-colors flex items-center gap-1.5"
+              title="Create an agent that operates on this entity"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Create Agent
+            </button>
             <button
               onClick={onClose}
               className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-4 py-2 font-medium transition-colors"
