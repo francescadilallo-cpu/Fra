@@ -11,24 +11,24 @@ const STAGE_STYLES = [
   { icon: Package,     color: 'text-green-700', bg: 'bg-green-50',  border: 'border-green-200' },
 ]
 
-const AVG_DAYS = ['1.2 gg', '3.5 gg', '8.3 gg', '1.5 gg']
+const AVG_DAYS = ['1.2 d', '3.5 d', '8.3 d', '1.5 d']
 
 const ACTIVE_CASES = [
-  { id: 9,  name: 'Caso #9',  value: 34750,  stage: 'Stadio 2', daysInStage: 2  },
-  { id: 13, name: 'Caso #13', value: 61200,  stage: 'Stadio 2', daysInStage: 1  },
-  { id: 11, name: 'Caso #11', value: 142067, stage: 'Stadio 3', daysInStage: 6  },
-  { id: 3,  name: 'Caso #3',  value: 98451,  stage: 'Stadio 3', daysInStage: 11 },
-  { id: 7,  name: 'Caso #7',  value: 82300,  stage: 'Stadio 4', daysInStage: 2  },
+  { id: 9,  name: 'Case #9',  value: 34750,  stage: 'Stage 2', daysInStage: 2  },
+  { id: 13, name: 'Case #13', value: 61200,  stage: 'Stage 2', daysInStage: 1  },
+  { id: 11, name: 'Case #11', value: 142067, stage: 'Stage 3', daysInStage: 6  },
+  { id: 3,  name: 'Case #3',  value: 98451,  stage: 'Stage 3', daysInStage: 11 },
+  { id: 7,  name: 'Case #7',  value: 82300,  stage: 'Stage 4', daysInStage: 2  },
 ]
 
 const STAGE_COLORS: Record<string, string> = {
-  'Stadio 2': 'bg-blue-50 text-blue-700 border border-blue-200',
-  'Stadio 3': 'bg-amber-50 text-amber-700 border border-amber-200',
-  'Stadio 4': 'bg-teal-50 text-teal-700 border border-teal-200',
+  'Stage 2': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Stage 3': 'bg-amber-50 text-amber-700 border border-amber-200',
+  'Stage 4': 'bg-teal-50 text-teal-700 border border-teal-200',
 }
 
 function fmt(v: number) {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 }
 
 export default function ProcessView() {
@@ -40,7 +40,7 @@ export default function ProcessView() {
   return (
     <div className="p-8 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Processo</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Process</h1>
         <p className="text-slate-500 mt-1 text-sm">
           {sector.name} · {sector.domain}
         </p>
@@ -48,7 +48,7 @@ export default function ProcessView() {
 
       {/* Timeline stages (4-stage lifecycle from sector) */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-6">Ciclo di Vita</h2>
+        <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
           {sector.processStages.map((stage, i) => {
             const style = STAGE_STYLES[i % STAGE_STYLES.length]
@@ -62,7 +62,7 @@ export default function ProcessView() {
                     <Icon className={`w-6 h-6 ${style.color}`} />
                   </div>
                   <p className={`text-sm font-bold ${style.color}`}>{stage.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('it-IT') ?? 0}</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('en-US') ?? 0}</p>
                   {hasMonetary && funnelItem?.value ? (
                     <p className="text-xs text-slate-500 mt-0.5">{fmt(funnelItem.value)}</p>
                   ) : (
@@ -84,7 +84,7 @@ export default function ProcessView() {
 
       {/* Funnel bars (full funnel) */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-5">Funnel di Conversione</h2>
+        <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
         <div className="space-y-3">
           {funnel.map((item, i) => {
             const pct = Math.round((item.count / maxCount) * 100)
@@ -97,7 +97,7 @@ export default function ProcessView() {
                     className="h-full rounded-full flex items-center px-3 transition-all duration-700"
                     style={{ width: `${pct}%`, backgroundColor: `rgba(13,148,136,${opacity})` }}
                   >
-                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('it-IT')}</span>
+                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('en-US')}</span>
                   </div>
                 </div>
                 <span className="text-sm text-slate-500 w-28 text-right flex-shrink-0">
@@ -109,23 +109,23 @@ export default function ProcessView() {
           })}
         </div>
         <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
-          Tasso di conversione: <strong className="text-teal-600">{Math.round((funnel[funnel.length - 1]?.count / Math.max(1, funnel[0]?.count)) * 100)}%</strong>
-          {' · '}Stadi: <strong className="text-teal-600">{funnel.length}</strong>
+          Conversion rate: <strong className="text-teal-600">{Math.round((funnel[funnel.length - 1]?.count / Math.max(1, funnel[0]?.count)) * 100)}%</strong>
+          {' · '}Stages: <strong className="text-teal-600">{funnel.length}</strong>
         </div>
       </div>
 
       {/* Active cases */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-4">Casi Attivi</h2>
+        <h2 className="font-semibold text-slate-900 mb-4">Active Cases</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-200">
                 <th className="text-left pb-2 font-medium">#</th>
-                <th className="text-left pb-2 font-medium">Nome</th>
-                <th className="text-left pb-2 font-medium">Fase</th>
-                <th className="text-right pb-2 font-medium">Valore</th>
-                <th className="text-right pb-2 font-medium">Giorni in fase</th>
+                <th className="text-left pb-2 font-medium">Name</th>
+                <th className="text-left pb-2 font-medium">Stage</th>
+                <th className="text-right pb-2 font-medium">Value</th>
+                <th className="text-right pb-2 font-medium">Days in stage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -140,7 +140,7 @@ export default function ProcessView() {
                   </td>
                   <td className="py-3 text-right text-slate-900">{fmt(c.value)}</td>
                   <td className={`py-3 text-right font-semibold ${c.daysInStage > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
-                    {c.daysInStage} gg
+                    {c.daysInStage} d
                   </td>
                 </tr>
               ))}

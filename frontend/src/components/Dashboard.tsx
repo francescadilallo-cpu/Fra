@@ -18,22 +18,22 @@ import { fetchDashboard } from '../api/client'
 import type { DashboardData, ProcessFunnelStage, RecentActivity } from '../types'
 import { useSector } from '../contexts/SectorContext'
 
-// Italian status → Tailwind badge colours (light theme)
+// Status → Tailwind badge colours (light theme)
 const STATUS_COLORS: Record<string, string> = {
-  Confermato:     'bg-blue-50 text-blue-700 border border-blue-200',
-  'In Produzione':'bg-amber-50 text-amber-700 border border-amber-200',
-  Spedito:        'bg-purple-50 text-purple-700 border border-purple-200',
-  Consegnato:     'bg-teal-50 text-teal-700 border border-teal-200',
-  Annullato:      'bg-red-50 text-red-700 border border-red-200',
-  Bozza:          'bg-slate-100 text-slate-600 border border-slate-200',
-  Inviato:        'bg-sky-50 text-sky-700 border border-sky-200',
-  Accettato:      'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  Rifiutato:      'bg-rose-50 text-rose-700 border border-rose-200',
-  Scaduto:        'bg-orange-50 text-orange-700 border border-orange-200',
+  Confirmed:       'bg-blue-50 text-blue-700 border border-blue-200',
+  'In Production': 'bg-amber-50 text-amber-700 border border-amber-200',
+  Shipped:         'bg-purple-50 text-purple-700 border border-purple-200',
+  Delivered:       'bg-teal-50 text-teal-700 border border-teal-200',
+  Cancelled:       'bg-red-50 text-red-700 border border-red-200',
+  Draft:           'bg-slate-100 text-slate-600 border border-slate-200',
+  Sent:            'bg-sky-50 text-sky-700 border border-sky-200',
+  Accepted:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  Rejected:        'bg-rose-50 text-rose-700 border border-rose-200',
+  Expired:         'bg-orange-50 text-orange-700 border border-orange-200',
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
 }
 
 // ── Funnel component (inline) ────────────────────────────────────────────────
@@ -44,9 +44,9 @@ function ProcessFunnel({ stages }: { stages: ProcessFunnelStage[] }) {
       <div className="flex items-center justify-between mb-5">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-teal-600" />
-          Funnel Processo
+          Process Funnel
         </h2>
-        <span className="text-xs text-slate-500">{stages[0]?.count.toLocaleString('it-IT') ?? 0} totali</span>
+        <span className="text-xs text-slate-500">{stages[0]?.count.toLocaleString('en-US') ?? 0} total</span>
       </div>
       <div className="space-y-3">
         {stages.map((s, i) => {
@@ -61,7 +61,7 @@ function ProcessFunnel({ stages }: { stages: ProcessFunnelStage[] }) {
                   style={{ width: `${pct}%`, opacity: opacity / 100 }}
                 />
               </div>
-              <span className="w-14 text-center text-xs font-bold text-slate-900 flex-shrink-0">{s.count.toLocaleString('it-IT')}</span>
+              <span className="w-14 text-center text-xs font-bold text-slate-900 flex-shrink-0">{s.count.toLocaleString('en-US')}</span>
               <span className="w-28 text-right text-xs text-slate-500 flex-shrink-0">
                 {s.value > 0 ? formatCurrency(s.value) : '—'}
               </span>
@@ -105,7 +105,7 @@ export default function Dashboard() {
       <div className="p-8">
         <div className="bg-white border border-red-200 rounded-xl p-5 flex items-center gap-3 text-red-600">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>Errore nel caricamento: {error}</span>
+          <span>Loading error: {error}</span>
         </div>
       </div>
     )
@@ -123,7 +123,7 @@ export default function Dashboard() {
   const kpis = [
     {
       label: sector.kpiLabels.quotes,
-      value: totalQuotes.toLocaleString('it-IT'),
+      value: totalQuotes.toLocaleString('en-US'),
       icon: FileText,
       color: 'text-blue-600',
       bg: 'bg-blue-50',
@@ -132,7 +132,7 @@ export default function Dashboard() {
     },
     {
       label: sector.kpiLabels.orders,
-      value: totalOrders.toLocaleString('it-IT'),
+      value: totalOrders.toLocaleString('en-US'),
       icon: ShoppingCart,
       color: 'text-purple-600',
       bg: 'bg-purple-50',
@@ -150,7 +150,7 @@ export default function Dashboard() {
     },
     {
       label: sector.kpiLabels.openValue,
-      value: hasMonetary ? formatCurrency(openValue) : totalQuotes.toLocaleString('it-IT'),
+      value: hasMonetary ? formatCurrency(openValue) : totalQuotes.toLocaleString('en-US'),
       icon: Users,
       color: 'text-amber-600',
       bg: 'bg-amber-50',
@@ -187,7 +187,7 @@ export default function Dashboard() {
                 </p>
                 <div className={`flex items-center gap-1 mt-1.5 text-xs ${trendColor}`}>
                   <TrendIcon className="w-3 h-3" />
-                  <span>{Math.abs(kpi.trend)}% vs mese prec.</span>
+                  <span>{Math.abs(kpi.trend)}% vs prev. month</span>
                 </div>
               </div>
             </div>
@@ -206,7 +206,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
               <Activity className="w-4 h-4 text-teal-600" />
-              Attività Recenti
+              Recent Activities
             </h2>
           </div>
           <div className="space-y-3">
@@ -232,7 +232,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-purple-600" />
-              Ordini Recenti
+              Recent Orders
             </h2>
             <ArrowUpRight className="w-4 h-4 text-slate-400" />
           </div>
@@ -264,10 +264,10 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
               <Database className="w-4 h-4 text-teal-600" />
-              Sorgenti Dati
+              Data Sources
             </h2>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-teal-50 text-teal-700 border border-teal-200">
-              {data.data_sources.length} Connesse
+              {data.data_sources.length} Connected
             </span>
           </div>
 
@@ -294,7 +294,7 @@ export default function Dashboard() {
                   {Object.entries(ds.row_counts).map(([tbl, cnt]) => (
                     <div key={tbl} className="flex items-center justify-between bg-white rounded px-2.5 py-1.5 border border-slate-200">
                       <span className="text-xs text-slate-500">{tbl}</span>
-                      <span className="text-xs font-semibold text-slate-900">{cnt.toLocaleString('it-IT')}</span>
+                      <span className="text-xs font-semibold text-slate-900">{cnt.toLocaleString('en-US')}</span>
                     </div>
                   ))}
                 </div>
@@ -303,13 +303,13 @@ export default function Dashboard() {
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Clienti: <strong className="text-slate-700">{data.total_customers}</strong></span>
-            <span>Prodotti: <strong className="text-slate-700">{data.total_products}</strong></span>
+            <span>Customers: <strong className="text-slate-700">{data.total_customers}</strong></span>
+            <span>Products: <strong className="text-slate-700">{data.total_products}</strong></span>
           </div>
 
           <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
             <Package className="w-3.5 h-3.5" />
-            <span>Ultima sincronizzazione: <strong className="text-slate-600">oggi, 09:14</strong></span>
+            <span>Last sync: <strong className="text-slate-600">today, 09:14</strong></span>
           </div>
         </div>
       </div>

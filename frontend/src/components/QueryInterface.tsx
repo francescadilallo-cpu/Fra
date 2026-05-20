@@ -16,15 +16,15 @@ interface Message {
 // ── Suggested questions ────────────────────────────────────────────────────────
 
 const SUGGESTED_QUESTIONS = [
-  'Quali clienti hanno preventivi accettati?',
-  "Mostra i 5 prodotti con il prezzo unitario più alto",
-  'Qual è il valore totale degli ordini in produzione?',
+  'Which customers have accepted quotes?',
+  'Show the 5 products with the highest unit price',
+  'What is the total value of orders in production?',
 ]
 
 // ── Result table ───────────────────────────────────────────────────────────────
 
 function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (!rows.length) return <p className="text-sm text-slate-500 italic">Nessun risultato trovato.</p>
+  if (!rows.length) return <p className="text-sm text-slate-500 italic">No results found.</p>
 
   const columns = Object.keys(rows[0])
 
@@ -48,7 +48,7 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
                   {row[col] === null || row[col] === undefined ? (
                     <span className="text-slate-600 italic">null</span>
                   ) : typeof row[col] === 'number' ? (
-                    (row[col] as number).toLocaleString('it-IT')
+                    (row[col] as number).toLocaleString('en-US')
                   ) : (
                     String(row[col])
                   )}
@@ -73,7 +73,7 @@ function SqlBlock({ sql }: { sql: string }) {
         className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-        <span>SQL generato</span>
+        <span>Generated SQL</span>
       </button>
       {open && (
         <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 text-teal-600 overflow-x-auto">
@@ -122,7 +122,7 @@ function MessageBubble({ message }: { message: Message }) {
       <div className="flex-1 max-w-[85%] bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 space-y-3">
         {/* Interpreted as */}
         <div>
-          <span className="text-xs text-slate-500 uppercase tracking-wide">Interpretazione</span>
+          <span className="text-xs text-slate-500 uppercase tracking-wide">Interpretation</span>
           <p className="text-sm text-slate-600 mt-0.5 italic">{r.interpreted_as}</p>
         </div>
 
@@ -135,7 +135,7 @@ function MessageBubble({ message }: { message: Message }) {
         {r.results.length > 0 && (
           <div>
             <span className="text-xs text-slate-500 uppercase tracking-wide">
-              Risultati ({r.results.length})
+              Results ({r.results.length})
             </span>
             <div className="mt-1.5">
               <ResultTable rows={r.results} />
@@ -147,7 +147,7 @@ function MessageBubble({ message }: { message: Message }) {
         <SqlBlock sql={r.sql_query} />
 
         <p className="text-xs text-slate-600">
-          {message.timestamp.toLocaleTimeString('it-IT')}
+          {message.timestamp.toLocaleTimeString('en-US')}
         </p>
       </div>
     </div>
@@ -191,7 +191,7 @@ export default function QueryInterface() {
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : 'Errore sconosciuto'
+      const errMsg = e instanceof Error ? e.message : 'Unknown error'
       // Try to extract FastAPI error detail
       const axiosErr = e as { response?: { data?: { detail?: string } } }
       const detail = axiosErr?.response?.data?.detail ?? errMsg
@@ -200,7 +200,7 @@ export default function QueryInterface() {
         {
           id: crypto.randomUUID(),
           role: 'error',
-          content: `Errore: ${detail}`,
+          content: `Error: ${detail}`,
           timestamp: new Date(),
         },
       ])
@@ -223,7 +223,7 @@ export default function QueryInterface() {
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
         <p className="text-slate-400 mt-1 text-sm">
-          Fai domande in linguaggio naturale sui tuoi dati ERP
+          Ask questions in natural language about your ERP data
         </p>
       </div>
 
@@ -235,9 +235,9 @@ export default function QueryInterface() {
               <Bot className="w-8 h-8 text-teal-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Assistente Dati AI</h3>
+              <h3 className="text-lg font-semibold text-slate-900">AI Data Assistant</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
-                Fai domande sui tuoi dati in italiano o inglese. L'AI genererà le query SQL e risponderà in modo chiaro.
+                Ask questions about your data in English. The AI will generate SQL queries and respond clearly.
               </p>
             </div>
 
@@ -245,7 +245,7 @@ export default function QueryInterface() {
             <div className="space-y-2 w-full max-w-lg">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Lightbulb className="w-3.5 h-3.5" />
-                <span>Domande suggerite</span>
+                <span>Suggested questions</span>
               </div>
               {SUGGESTED_QUESTIONS.map((q) => (
                 <button
@@ -273,7 +273,7 @@ export default function QueryInterface() {
             <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Elaborazione in corso...</span>
+                <span>Processing...</span>
               </div>
             </div>
           </div>
@@ -306,7 +306,7 @@ export default function QueryInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Chiedi qualcosa sui tuoi dati... es: 'Quali clienti hanno quote accettate questo mese?'"
+            placeholder="Ask something about your data... e.g.: 'Which customers have accepted quotes this month?'"
             rows={2}
             disabled={loading}
             className="flex-1 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 resize-none outline-none transition-colors disabled:opacity-50"
@@ -323,7 +323,7 @@ export default function QueryInterface() {
             )}
           </button>
         </div>
-        <p className="text-xs text-slate-600 mt-2">Invio per inviare · Shift+Invio per nuova riga</p>
+        <p className="text-xs text-slate-600 mt-2">Enter to send · Shift+Enter for new line</p>
       </div>
     </div>
   )

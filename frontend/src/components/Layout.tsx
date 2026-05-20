@@ -13,12 +13,12 @@ interface Props {
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview',  label: 'Overview',       icon: Presentation },
   { id: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
-  { id: 'ontology',  label: 'Ontologia',      icon: GitBranch },
+  { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
   { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
   { id: 'query',     label: 'Query AI',       icon: MessageSquare },
   { id: 'mappings',  label: 'Mappings',       icon: Table2 },
-  { id: 'process',   label: 'Processo',       icon: Workflow },
-  { id: 'config',    label: 'Configurazione', icon: Settings },
+  { id: 'process',   label: 'Process',        icon: Workflow },
+  { id: 'config',    label: 'Configuration',  icon: Settings },
 ]
 
 function SectorSwitcher() {
@@ -47,7 +47,7 @@ function SectorSwitcher() {
       {open && (
         <div className="absolute right-0 mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
           <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Seleziona settore</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Select sector</p>
           </div>
           {(Object.keys(SECTORS) as SectorId[]).map((id) => {
             const s = SECTORS[id]
@@ -65,7 +65,7 @@ function SectorSwitcher() {
                   <p className={`text-sm font-semibold ${isActive ? 'text-teal-700' : 'text-slate-900'}`}>{s.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{s.domain}</p>
                 </div>
-                {isActive && <span className="text-[10px] font-bold bg-teal-600 text-white rounded px-1.5 py-0.5 leading-none mt-1">ATTIVO</span>}
+                {isActive && <span className="text-[10px] font-bold bg-teal-600 text-white rounded px-1.5 py-0.5 leading-none mt-1">ACTIVE</span>}
               </button>
             )
           })}
@@ -119,7 +119,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         <div className="px-4 py-4 border-t border-slate-100">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-400">Demo · Dati Mock</span>
+            <span className="text-xs text-slate-400">Demo · Mock Data</span>
           </div>
           <p className="mt-1 text-xs text-slate-300">v0.2 MVP · Multi-Sector</p>
         </div>
@@ -127,7 +127,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="h-14 border-b border-slate-200 bg-white flex items-center justify-end px-6 flex-shrink-0 gap-3">
-          <span className="text-xs text-slate-400">Settore attivo:</span>
+          <span className="text-xs text-slate-400">Active sector:</span>
           <SectorSwitcher />
         </div>
         <div className="flex-1 overflow-auto bg-slate-50">

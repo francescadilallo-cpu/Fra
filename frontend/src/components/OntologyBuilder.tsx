@@ -72,16 +72,16 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
   if (sectorId === 'manufacturing') {
     return [
       {
-        prompt: 'Aggiungi entità Fornitore con campi nome, P.IVA, paese',
+        prompt: 'Add Supplier entity with name, VAT number, country fields',
         reply:
-          'Propongo una nuova classe **Supplier** collegata a **Product** tramite la relazione `suppliedBy`. ' +
-          'Ho verificato l\'ontologia esistente: nessun concetto duplicato. La classe sarà mappata sulla tabella `suppliers` (da creare).',
+          'I propose a new **Supplier** class connected to **Product** via the `suppliedBy` relation. ' +
+          'I checked the existing ontology: no duplicate concepts. The class will be mapped to the `suppliers` table (to be created).',
         changes: [
           {
             id: 'c-supplier',
             kind: 'add_class',
-            summary: 'Aggiungi classe Supplier',
-            rationale: 'Nessuna entità "Fornitore/Supplier/Vendor" esistente. Classe nuova, non duplica concetti.',
+            summary: 'Add Supplier class',
+            rationale: 'No existing "Supplier/Vendor" entity. New class, does not duplicate concepts.',
             newNode: {
               id: 'Supplier',
               label: 'Supplier',
@@ -95,23 +95,23 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
           {
             id: 'c-supplier-rel',
             kind: 'add_relation',
-            summary: 'Relazione: Product → suppliedBy → Supplier',
-            rationale: 'Permette di tracciare la fornitura per prodotto e abilita query "fornitori critici".',
+            summary: 'Relation: Product → suppliedBy → Supplier',
+            rationale: 'Allows tracking supply per product and enables "critical suppliers" queries.',
             newEdge: { id: 'e-supplier', source: 'Product', target: 'Supplier', label: 'suppliedBy' },
           },
         ],
       },
       {
-        prompt: 'Voglio tracciare i lotti di produzione',
+        prompt: 'I want to track production batches',
         reply:
-          'Suggerisco una classe **ProductionBatch** con relazione `producesBatch` da **Order**. ' +
-          'Attenzione: "Batch" e "Lotto" sono concetti correlati ma distinti — ti propongo Batch (terminologia inglese standard nel manufacturing).',
+          'I suggest a **ProductionBatch** class with `producesBatch` relation from **Order**. ' +
+          'Note: Batch is the standard English manufacturing terminology.',
         changes: [
           {
             id: 'c-batch',
             kind: 'add_class',
-            summary: 'Aggiungi classe ProductionBatch',
-            rationale: 'Concetto centrale per traceability lotti, richiesto da norme EU 178/2002 (food) e MDR (medical).',
+            summary: 'Add ProductionBatch class',
+            rationale: 'Central concept for batch traceability, required by EU 178/2002 (food) and MDR (medical) regulations.',
             newNode: {
               id: 'ProductionBatch',
               label: 'ProductionBatch',
@@ -125,48 +125,48 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
           {
             id: 'c-batch-rel',
             kind: 'add_relation',
-            summary: 'Relazione: Order → producesBatch → ProductionBatch',
-            rationale: 'Collega ogni lotto all\'ordine che lo ha generato.',
+            summary: 'Relation: Order → producesBatch → ProductionBatch',
+            rationale: 'Links each batch to the order that generated it.',
             newEdge: { id: 'e-batch', source: 'Order', target: 'ProductionBatch', label: 'producesBatch' },
           },
         ],
       },
       {
-        prompt: 'Aggiungi proprietà sustainabilityScore a Product',
+        prompt: 'Add sustainabilityScore property to Product',
         reply:
-          'OK, aggiungo `sustainabilityScore` (decimale 0-100) come proprietà di **Product**. ' +
-          'Non richiede approvazione data steward (proprietà semplice, non struttura nuova).',
+          'OK, I am adding `sustainabilityScore` (decimal 0-100) as a property of **Product**. ' +
+          'Does not require data steward approval (simple property, no new structure).',
         changes: [
           {
             id: 'c-sust',
             kind: 'add_property',
-            summary: 'Aggiungi sustainabilityScore a Product',
-            rationale: 'Proprietà numerica, non altera la struttura dell\'ontologia.',
+            summary: 'Add sustainabilityScore to Product',
+            rationale: 'Numeric property, does not alter the ontology structure.',
             addPropertyTo: { nodeId: 'Product', property: 'sustainabilityScore' },
           },
         ],
       },
       {
-        prompt: 'Importa schema da Salesforce',
+        prompt: 'Import schema from Salesforce',
         reply:
-          'Ho analizzato lo schema Salesforce. Ho trovato 3 oggetti rilevanti, ma **Account** corrisponde al tuo **Customer** esistente. ' +
-          'Suggerisco di NON creare un duplicato — mappa Account→Customer.',
+          'I analyzed the Salesforce schema. I found 3 relevant objects, but **Account** corresponds to your existing **Customer**. ' +
+          'I suggest NOT creating a duplicate — map Account→Customer.',
         changes: [
           {
             id: 'c-sf-warn',
             kind: 'rename',
-            summary: 'Mappa Salesforce.Account → Customer (no duplicato)',
-            rationale: 'Account e Customer condividono >80% degli attributi (name, country, vatNumber). Riuso > creazione.',
+            summary: 'Map Salesforce.Account → Customer (no duplicate)',
+            rationale: 'Account and Customer share >80% of attributes (name, country, vatNumber). Reuse > creation.',
             warnings: [
-              'Stavo per creare entità "Account" — duplica Customer esistente.',
-              'Salvato 1 entità ridondante. Mapping aggiunto invece di nuova classe.',
+              'I was about to create entity "Account" — duplicates existing Customer.',
+              'Saved 1 redundant entity. Mapping added instead of new class.',
             ],
           },
           {
             id: 'c-opportunity',
             kind: 'add_class',
-            summary: 'Aggiungi classe Opportunity (CRM)',
-            rationale: 'Opportunity non ha un equivalente nell\'ontologia mfg corrente. Classe nuova legittima.',
+            summary: 'Add Opportunity class (CRM)',
+            rationale: 'Opportunity has no equivalent in the current mfg ontology. Legitimate new class.',
             newNode: {
               id: 'Opportunity',
               label: 'Opportunity',
@@ -185,14 +185,14 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
   if (sectorId === 'retail') {
     return [
       {
-        prompt: 'Aggiungi entità Loyalty Program',
-        reply: 'Creo **LoyaltyProgram** collegato a **Customer** via `enrolledIn`. Pattern standard nel retail.',
+        prompt: 'Add Loyalty Program entity',
+        reply: 'I am creating **LoyaltyProgram** connected to **Customer** via `enrolledIn`. Standard pattern in retail.',
         changes: [
           {
             id: 'c-loy',
             kind: 'add_class',
-            summary: 'Aggiungi classe LoyaltyProgram',
-            rationale: 'Concetto distinto da Customer; supporta multi-tier (Silver, Gold...).',
+            summary: 'Add LoyaltyProgram class',
+            rationale: 'Concept distinct from Customer; supports multi-tier (Silver, Gold...).',
             newNode: {
               id: 'LoyaltyProgram',
               label: 'LoyaltyProgram',
@@ -206,22 +206,22 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
           {
             id: 'c-loy-rel',
             kind: 'add_relation',
-            summary: 'Relazione: Customer → enrolledIn → LoyaltyProgram',
-            rationale: 'Permette query "clienti Gold con carrelli abbandonati > €100".',
+            summary: 'Relation: Customer → enrolledIn → LoyaltyProgram',
+            rationale: 'Enables queries like "Gold customers with abandoned carts > €100".',
             newEdge: { id: 'e-loy', source: 'Customer', target: 'LoyaltyProgram', label: 'enrolledIn' },
           },
         ],
       },
       {
-        prompt: 'Voglio mappare i resi prodotto',
+        prompt: 'I want to map product returns',
         reply:
-          'Suggerisco **Return** collegato a **Order** via `hasReturn`. Verifico se esiste già qualcosa di simile... nessun duplicato.',
+          'I suggest **Return** connected to **Order** via `hasReturn`. Checking if something similar already exists... no duplicates.',
         changes: [
           {
             id: 'c-return',
             kind: 'add_class',
-            summary: 'Aggiungi classe Return',
-            rationale: 'Concetto core retail mancante. Necessario per analytics reverse-logistics.',
+            summary: 'Add Return class',
+            rationale: 'Missing core retail concept. Necessary for reverse-logistics analytics.',
             newNode: {
               id: 'Return',
               label: 'Return',
@@ -235,14 +235,14 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
         ],
       },
       {
-        prompt: 'Aggiungi proprietà ESG rating a Product',
-        reply: 'OK. `esgRating` come stringa (A+, A, B...) su Product. Modifica non strutturale, no steward.',
+        prompt: 'Add ESG rating property to Product',
+        reply: 'OK. `esgRating` as a string (A+, A, B...) on Product. Non-structural change, no steward.',
         changes: [
           {
             id: 'c-esg',
             kind: 'add_property',
-            summary: 'Aggiungi esgRating a Product',
-            rationale: 'Proprietà piatta, no impatto su query esistenti.',
+            summary: 'Add esgRating to Product',
+            rationale: 'Flat property, no impact on existing queries.',
             addPropertyTo: { nodeId: 'Product', property: 'esgRating' },
           },
         ],
@@ -253,15 +253,15 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
   if (sectorId === 'healthcare') {
     return [
       {
-        prompt: 'Aggiungi entità Insurance Plan',
+        prompt: 'Add Insurance Plan entity',
         reply:
-          'Creo **InsurancePlan** collegato a **Patient** via `coveredBy`. Allineato a HL7 FHIR `Coverage` resource.',
+          'I am creating **InsurancePlan** connected to **Patient** via `coveredBy`. Aligned with HL7 FHIR `Coverage` resource.',
         changes: [
           {
             id: 'c-ins',
             kind: 'add_class',
-            summary: 'Aggiungi classe InsurancePlan',
-            rationale: 'Mappabile su FHIR Coverage. Distinto da Patient, no duplicati.',
+            summary: 'Add InsurancePlan class',
+            rationale: 'Maps to FHIR Coverage. Distinct from Patient, no duplicates.',
             newNode: {
               id: 'InsurancePlan',
               label: 'InsurancePlan',
@@ -275,21 +275,21 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
           {
             id: 'c-ins-rel',
             kind: 'add_relation',
-            summary: 'Relazione: Patient → coveredBy → InsurancePlan',
-            rationale: 'Permette query billing e routing trattamenti.',
+            summary: 'Relation: Patient → coveredBy → InsurancePlan',
+            rationale: 'Enables billing queries and treatment routing.',
             newEdge: { id: 'e-ins', source: 'Patient', target: 'InsurancePlan', label: 'coveredBy' },
           },
         ],
       },
       {
-        prompt: 'Voglio tracciare allergie del paziente',
-        reply: 'Suggerisco proprietà strutturata `allergies` su Patient (JSON array). FHIR-compatible.',
+        prompt: 'I want to track patient allergies',
+        reply: 'I suggest a structured property `allergies` on Patient (JSON array). FHIR-compatible.',
         changes: [
           {
             id: 'c-allergy',
             kind: 'add_property',
-            summary: 'Aggiungi allergies a Patient',
-            rationale: 'Proprietà strutturata, allineata a FHIR AllergyIntolerance.',
+            summary: 'Add allergies to Patient',
+            rationale: 'Structured property, aligned with FHIR AllergyIntolerance.',
             addPropertyTo: { nodeId: 'Patient', property: 'allergies' },
           },
         ],
@@ -300,14 +300,14 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
   // Finance
   return [
     {
-      prompt: 'Aggiungi entità Compliance Officer',
-      reply: 'Creo **ComplianceOfficer** collegato a **Transaction** via `reviewedBy` (per audit AML/KYC).',
+      prompt: 'Add Compliance Officer entity',
+      reply: 'I am creating **ComplianceOfficer** connected to **Transaction** via `reviewedBy` (for AML/KYC audit).',
       changes: [
         {
           id: 'c-co',
           kind: 'add_class',
-          summary: 'Aggiungi classe ComplianceOfficer',
-          rationale: 'Ruolo distinto, richiesto per audit AML. Non duplica Account.',
+          summary: 'Add ComplianceOfficer class',
+          rationale: 'Distinct role, required for AML audit. Does not duplicate Account.',
           newNode: {
             id: 'ComplianceOfficer',
             label: 'ComplianceOfficer',
@@ -321,14 +321,14 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
       ],
     },
     {
-      prompt: 'Aggiungi proprietà riskScore a Account',
-      reply: 'OK. `riskScore` decimale 0-100. Modifica leggera, no steward.',
+      prompt: 'Add riskScore property to Account',
+      reply: 'OK. `riskScore` decimal 0-100. Light change, no steward.',
       changes: [
         {
           id: 'c-risk',
           kind: 'add_property',
-          summary: 'Aggiungi riskScore a Account',
-          rationale: 'Proprietà calcolata da AI model esistente.',
+          summary: 'Add riskScore to Account',
+          rationale: 'Property computed by existing AI model.',
           addPropertyTo: { nodeId: 'Account', property: 'riskScore' },
         },
       ],
@@ -375,7 +375,7 @@ function BuilderNode({ data, selected }: NodeProps) {
         )}
         {state === 'approved' && (
           <span className="text-[9px] font-bold bg-teal-100 text-teal-700 rounded px-1.5 py-0.5 leading-none flex-shrink-0">
-            NUOVO
+            NEW
           </span>
         )}
       </div>
@@ -574,13 +574,13 @@ function parseUserPrompt(
         const prop = normalizeProperty(propRaw)
         return {
           reply:
-            `Aggiungo la proprietà \`${prop}\` a **${found.label}**. ` +
-            'Modifica leggera (proprietà, non struttura): non richiede approvazione data steward.',
+            `I am adding the property \`${prop}\` to **${found.label}**. ` +
+            'Light change (property, not structure): does not require data steward approval.',
           changes: [{
             id: `c-${uid()}`,
             kind: 'add_property',
-            summary: `Aggiungi ${prop} a ${found.label}`,
-            rationale: `Proprietà piatta su ${found.label}. Non altera relazioni esistenti, no impatto su query.`,
+            summary: `Add ${prop} to ${found.label}`,
+            rationale: `Flat property on ${found.label}. Does not alter existing relations, no impact on queries.`,
             addPropertyTo: { nodeId: found.id, property: prop },
           }],
         }
@@ -605,13 +605,13 @@ function parseUserPrompt(
         const label = `has${dst.label}`
         return {
           reply:
-            `Creo una relazione **${src.label} → ${label} → ${dst.label}**. ` +
-            'Verifico l\'ontologia: nessuna relazione duplicata.',
+            `I am creating a relation **${src.label} → ${label} → ${dst.label}**. ` +
+            'Checking the ontology: no duplicate relations.',
           changes: [{
             id: `c-${uid()}`,
             kind: 'add_relation',
-            summary: `Relazione: ${src.label} → ${label} → ${dst.label}`,
-            rationale: `Collega le due entità esistenti. Permette query incrociate ${src.label}/${dst.label}.`,
+            summary: `Relation: ${src.label} → ${label} → ${dst.label}`,
+            rationale: `Connects the two existing entities. Enables cross queries ${src.label}/${dst.label}.`,
             newEdge: { id: `e-${uid()}`, source: src.id, target: dst.id, label },
           }],
         }
@@ -632,15 +632,15 @@ function parseUserPrompt(
       if (found) {
         return {
           reply:
-            `Rinomino **${found.label}** in **${newName}**. ` +
-            'Attenzione: tutti i mapping e query che referenziano la classe verranno aggiornati. Richiede data steward.',
+            `I am renaming **${found.label}** to **${newName}**. ` +
+            'Note: all mappings and queries referencing the class will be updated. Requires data steward.',
           changes: [{
             id: `c-${uid()}`,
             kind: 'rename',
-            summary: `Rinomina ${found.label} → ${newName}`,
-            rationale: 'Cambio strutturale: impatta SPARQL queries, mappings DB e MCP tools. Necessario backup.',
+            summary: `Rename ${found.label} → ${newName}`,
+            rationale: 'Structural change: impacts SPARQL queries, DB mappings and MCP tools. Backup required.',
             requiresSteward: true,
-            warnings: [`${existing.length} mapping potrebbero richiedere aggiornamento.`],
+            warnings: [`${existing.length} mappings may require updating.`],
           }],
         }
       }
@@ -720,16 +720,16 @@ function buildAddClassIntent(
   if (dup) {
     return {
       reply:
-        `Stavo per creare **${name}** ma esiste già nell'ontologia ${sectorId}. ` +
-        'Suggerisco di riusare la classe esistente invece di duplicare (governance ontologica).',
+        `I was about to create **${name}** but it already exists in the ${sectorId} ontology. ` +
+        'I suggest reusing the existing class instead of duplicating (ontology governance).',
       changes: [{
         id: `c-${uid()}`,
         kind: 'rename',
-        summary: `Riuso ${name} esistente (no duplicato)`,
-        rationale: `La classe ${name} è già presente. Creare un duplicato genererebbe inconsistenze nei mapping.`,
+        summary: `Reuse existing ${name} (no duplicate)`,
+        rationale: `The class ${name} is already present. Creating a duplicate would generate inconsistencies in mappings.`,
         warnings: [
-          `Classe "${name}" già esistente — duplicato evitato.`,
-          `Puoi aggiungere proprietà o relazioni alla classe esistente.`,
+          `Class "${name}" already exists — duplicate avoided.`,
+          `You can add properties or relations to the existing class.`,
         ],
       }],
     }
@@ -746,21 +746,21 @@ function buildAddClassIntent(
   const yOffset = 200 + (existing.length % 3) * 300
 
   const replyPrefix = lowConfidence
-    ? `Ho interpretato il tuo messaggio come la richiesta di creare una nuova classe **${name}**. Se non è quello che volevi, dimmelo. `
+    ? `I interpreted your message as a request to create a new class **${name}**. If that's not what you wanted, let me know. `
     : ''
 
   return {
     reply:
       replyPrefix +
-      `Propongo una nuova classe **${name}** con ${props.length} proprietà: ` +
+      `I propose a new class **${name}** with ${props.length} properties: ` +
       `${props.map((p) => `\`${p}\``).join(', ')}. ` +
-      `Verificato: nessun concetto duplicato nell'ontologia ${sectorId}. ` +
-      'Cambio strutturale — richiede approvazione data steward.',
+      `Verified: no duplicate concept in the ${sectorId} ontology. ` +
+      'Structural change — requires data steward approval.',
     changes: [{
       id: `c-${uid()}`,
       kind: 'add_class',
-      summary: `Aggiungi classe ${name}`,
-      rationale: `Nuova entità non duplicata. ${props.length} proprietà derivate dalla descrizione. URI: ${prefix}:${name}.`,
+      summary: `Add ${name} class`,
+      rationale: `New non-duplicate entity. ${props.length} properties derived from the description. URI: ${prefix}:${name}.`,
       newNode: {
         id: name,
         label: name,
@@ -787,13 +787,13 @@ function buildAddClassWithLinkIntent(
   base.changes.push({
     id: `c-${uid()}`,
     kind: 'add_relation',
-    summary: `Relazione: ${linkTo.label} → ${relLabel} → ${name}`,
-    rationale: `Collega la nuova classe ${name} a ${linkTo.label}.`,
+    summary: `Relation: ${linkTo.label} → ${relLabel} → ${name}`,
+    rationale: `Connects the new class ${name} to ${linkTo.label}.`,
     newEdge: { id: `e-${uid()}`, source: linkTo.id, target: name, label: relLabel },
   })
   base.reply =
-    `Creo una nuova classe **${name}** e la collego a **${linkTo.label}** via \`${relLabel}\`. ` +
-    'Cambio strutturale — richiede approvazione data steward.'
+    `I am creating a new class **${name}** and connecting it to **${linkTo.label}** via \`${relLabel}\`. ` +
+    'Structural change — requires data steward approval.'
   return base
 }
 
@@ -884,8 +884,8 @@ export default function OntologyBuilder() {
       id: 'm-welcome',
       role: 'assistant',
       text:
-        `Ciao! Sono l'Ontology Builder AI. Posso aiutarti a modificare l'ontologia **${sector.name}** in linguaggio naturale. ` +
-        'Descrivimi una nuova entità, una relazione, o una proprietà — propongo i cambi e tu approvi.',
+        `Hi! I am the Ontology Builder AI. I can help you modify the **${sector.name}** ontology in natural language. ` +
+        'Describe a new entity, relation, or property — I propose changes and you approve.',
     }),
     [sector.name],
   )
@@ -998,20 +998,20 @@ export default function OntologyBuilder() {
           const candidates = extractCandidateNouns(text).filter((c) => c.length > 2)
           const guess = candidates[0]
           const hint = guess
-            ? `Forse vuoi creare una nuova entità chiamata **${normalizeEntityName(guess)}**? Se sì, scrivi: "aggiungi entità ${guess}".`
-            : 'Prova con frasi tipo: "aggiungi entità Magazzino con codice, indirizzo" oppure "collega Customer a Product".'
+            ? `Maybe you want to create a new entity called **${normalizeEntityName(guess)}**? If so, type: "add entity ${guess}".`
+            : 'Try phrases like: "add Warehouse entity with code, address" or "link Customer to Product".'
           setMessages((m) => [
             ...m,
             {
               id: uid(),
               role: 'assistant',
               text:
-                `Non sono ancora certo di cosa vuoi fare. ${hint}\n\n` +
-                'Capisco questi pattern:\n' +
-                '· **Crea classe:** "aggiungi entità X [con prop1, prop2]"\n' +
-                '· **Aggiungi proprietà:** "aggiungi prezzo a Product"\n' +
-                '· **Collega entità:** "collega Customer a Order"\n' +
-                '· **Rinomina:** "rinomina Order in PurchaseOrder"',
+                `I am not sure yet what you want to do. ${hint}\n\n` +
+                'I understand these patterns:\n' +
+                '· **Create class:** "add entity X [with prop1, prop2]"\n' +
+                '· **Add property:** "add price to Product"\n' +
+                '· **Link entities:** "link Customer to Order"\n' +
+                '· **Rename:** "rename Order to PurchaseOrder"',
             },
           ])
         }
@@ -1132,7 +1132,7 @@ export default function OntologyBuilder() {
   }, [pending, approve])
 
   const clearExtensions = useCallback(() => {
-    if (!confirm(`Vuoi davvero rimuovere tutte le estensioni salvate per ${sector.name}? Questa azione non è reversibile.`)) return
+    if (!confirm(`Do you really want to remove all saved extensions for ${sector.name}? This action is not reversible.`)) return
     saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
     const s = buildInitialState(sector, sectorId)
     setNodes(s.nodes)
@@ -1181,7 +1181,7 @@ export default function OntologyBuilder() {
 
   const deleteEntity = useCallback(() => {
     if (!editingEntity) return
-    if (!confirm(`Eliminare la classe "${editingEntity.label}"? Verranno rimosse anche le relazioni che la coinvolgono.`)) return
+    if (!confirm(`Delete the class "${editingEntity.label}"? Relations involving it will also be removed.`)) return
     removeNode(sectorId, editingEntity.nodeId, editingEntity.isBaseNode)
     const s = buildInitialState(sector, sectorId)
     setNodes(s.nodes)
@@ -1298,18 +1298,18 @@ export default function OntologyBuilder() {
             Ontology Builder AI
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Modifica l'ontologia <strong className="text-teal-700">{sector.name}</strong> in linguaggio naturale.
-            Il bot propone i cambi, tu approvi.
+            Modify the <strong className="text-teal-700">{sector.name}</strong> ontology in natural language.
+            The bot proposes changes, you approve.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">
-            {nodes.length} classi · {edges.length} relazioni
+            {nodes.length} classes · {edges.length} relations
           </span>
           {savedCount > 0 && (
             <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-full font-medium flex items-center gap-1">
               <Save className="w-3 h-3" />
-              {savedCount} salvate
+              {savedCount} saved
             </span>
           )}
           {pendingCount > 0 && (
@@ -1322,7 +1322,7 @@ export default function OntologyBuilder() {
             <button
               onClick={clearExtensions}
               className="text-xs bg-white border border-slate-200 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 text-slate-600 px-2 py-1 rounded-md font-medium flex items-center gap-1 transition-colors"
-              title="Rimuovi tutte le estensioni salvate per questo settore"
+              title="Remove all saved extensions for this sector"
             >
               <Trash2 className="w-3 h-3" />
               Reset
@@ -1356,7 +1356,7 @@ export default function OntologyBuilder() {
                   <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-pulse [animation-delay:200ms]" />
                   <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-pulse [animation-delay:400ms]" />
                 </span>
-                <span>analizza ontologia...</span>
+                <span>analyzing ontology...</span>
               </div>
             )}
           </div>
@@ -1364,7 +1364,7 @@ export default function OntologyBuilder() {
           {/* Quick prompts */}
           <div className="px-4 py-2 border-t border-slate-100">
             <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">
-              Suggerimenti
+              Suggestions
             </p>
             <div className="flex flex-wrap gap-1.5">
               {quickPrompts.map((p) => (
@@ -1386,7 +1386,7 @@ export default function OntologyBuilder() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send(input)}
-                placeholder="Descrivi un'entità, relazione o proprietà..."
+                placeholder="Describe an entity, relation or property..."
                 className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400"
               />
               <button
@@ -1418,14 +1418,14 @@ export default function OntologyBuilder() {
           {/* Hint top */}
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-white border border-slate-200 rounded-full shadow-sm px-3 py-1 text-xs text-slate-600 flex items-center gap-1.5 z-10">
             <Pencil className="w-3 h-3 text-teal-600" />
-            <span>Clicca su un nodo per modificarlo</span>
+            <span>Click a node to edit it</span>
           </div>
 
           {/* Legend */}
           <div className="absolute bottom-4 left-4 bg-white border border-slate-200 rounded-lg shadow-sm p-2.5 text-xs flex items-center gap-4">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 bg-white border border-slate-300 rounded" />
-              <span className="text-slate-600">Esistente</span>
+              <span className="text-slate-600">Existing</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 bg-amber-50 border border-amber-400 border-dashed rounded" />
@@ -1433,7 +1433,7 @@ export default function OntologyBuilder() {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 bg-teal-50 border border-teal-400 rounded" />
-              <span className="text-slate-600">Approvato</span>
+              <span className="text-slate-600">Approved</span>
             </div>
           </div>
         </div>
@@ -1445,10 +1445,10 @@ export default function OntologyBuilder() {
               <div>
                 <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                  Cambi proposti
+                  Proposed changes
                 </p>
                 <p className="text-[10px] text-slate-400 mt-0.5">
-                  {pendingCount} in attesa · {pending.length - pendingCount} approvati
+                  {pendingCount} pending · {pending.length - pendingCount} approved
                 </p>
               </div>
               {pendingCount > 0 && (
@@ -1456,7 +1456,7 @@ export default function OntologyBuilder() {
                   onClick={approveAll}
                   className="text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-md px-2.5 py-1.5 transition-colors"
                 >
-                  Approva tutti
+                  Approve all
                 </button>
               )}
             </div>
@@ -1468,7 +1468,7 @@ export default function OntologyBuilder() {
             <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 leading-snug">
               <p className="flex items-start gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-teal-600 flex-shrink-0 mt-0.5" />
-                Cambi strutturali richiedono approvazione data steward (governance EU AI Act).
+                Structural changes require data steward approval (EU AI Act governance).
               </p>
             </div>
           </div>
@@ -1624,21 +1624,21 @@ function InlineChangeChip({
             <button
               onClick={() => onEdit(change)}
               className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
-              title="Modifica"
+              title="Edit"
             >
               <Pencil className="w-3 h-3" />
             </button>
             <button
               onClick={() => onReject(change.id)}
               className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
-              title="Rifiuta"
+              title="Reject"
             >
               <XCircle className="w-3 h-3" />
             </button>
             <button
               onClick={() => onApprove(change.id)}
               className="w-5 h-5 rounded bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center"
-              title="Approva"
+              title="Approve"
             >
               <CheckCircle2 className="w-3 h-3" />
             </button>
@@ -1704,7 +1704,7 @@ function ChangeCard({
           {change.requiresSteward && (
             <span className="inline-flex items-center gap-1 mt-2 text-[10px] bg-violet-50 text-violet-700 border border-violet-200 rounded px-1.5 py-0.5 font-medium">
               <ShieldCheck className="w-2.5 h-2.5" />
-              Richiede data steward
+              Requires data steward
             </span>
           )}
         </div>
@@ -1715,7 +1715,7 @@ function ChangeCard({
           <button
             onClick={() => onReject(change.id)}
             className="text-xs font-medium bg-white border border-slate-200 hover:border-slate-300 text-slate-600 rounded-md py-1.5 px-2 transition-colors flex items-center justify-center gap-1"
-            title="Rifiuta"
+            title="Reject"
           >
             <XCircle className="w-3 h-3" />
           </button>
@@ -1724,14 +1724,14 @@ function ChangeCard({
             className="flex-1 text-xs font-medium bg-white border border-slate-200 hover:border-teal-300 hover:text-teal-700 text-slate-600 rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
           >
             <Pencil className="w-3 h-3" />
-            Modifica
+            Edit
           </button>
           <button
             onClick={() => onApprove(change.id)}
             className="flex-1 text-xs font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
           >
             <CheckCircle2 className="w-3 h-3" />
-            Approva
+            Approve
           </button>
         </div>
       )}
@@ -1779,7 +1779,7 @@ function EditChangeModal({
       const normalizedName = normalizeEntityName(name) || change.newNode.label
       const updated: PendingChange = {
         ...change,
-        summary: `Aggiungi classe ${normalizedName}`,
+        summary: `Add ${normalizedName} class`,
         newNode: {
           ...change.newNode,
           id: normalizedName,
@@ -1798,7 +1798,7 @@ function EditChangeModal({
       const dstLabel = existing.find((e) => e.id === relTarget)?.label ?? relTarget
       const updated: PendingChange = {
         ...change,
-        summary: `Relazione: ${srcLabel} → ${label} → ${dstLabel}`,
+        summary: `Relation: ${srcLabel} → ${label} → ${dstLabel}`,
         newEdge: {
           ...change.newEdge,
           source: relSource,
@@ -1814,7 +1814,7 @@ function EditChangeModal({
       const node = existing.find((e) => e.id === propNodeId)
       const updated: PendingChange = {
         ...change,
-        summary: `Aggiungi ${prop} a ${node?.label ?? propNodeId}`,
+        summary: `Add ${prop} to ${node?.label ?? propNodeId}`,
         addPropertyTo: { nodeId: propNodeId, property: prop },
       }
       onSave(updated)
@@ -1825,10 +1825,10 @@ function EditChangeModal({
   }
 
   const title =
-    change.kind === 'add_class' ? 'Modifica classe' :
-    change.kind === 'add_relation' ? 'Modifica relazione' :
-    change.kind === 'add_property' ? 'Modifica proprietà' :
-    'Modifica'
+    change.kind === 'add_class' ? 'Edit class' :
+    change.kind === 'add_relation' ? 'Edit relation' :
+    change.kind === 'add_property' ? 'Edit property' :
+    'Edit'
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -1854,31 +1854,31 @@ function EditChangeModal({
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {change.kind === 'add_class' && (
             <>
-              <Field label="Nome classe">
+              <Field label="Class name">
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
-                  placeholder="es. Supplier"
+                  placeholder="e.g. Supplier"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">Sarà normalizzato in PascalCase.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Will be normalized to PascalCase.</p>
               </Field>
 
-              <Field label="Tabella DB (opzionale)">
+              <Field label="DB table (optional)">
                 <input
                   type="text"
                   value={dbTable}
                   onChange={(e) => setDbTable(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
-                  placeholder="es. suppliers"
+                  placeholder="e.g. suppliers"
                 />
               </Field>
 
-              <Field label={`Proprietà (${properties.length})`}>
+              <Field label={`Properties (${properties.length})`}>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {properties.length === 0 && (
-                    <span className="text-xs text-slate-400 italic">Nessuna proprietà — aggiungine almeno una.</span>
+                    <span className="text-xs text-slate-400 italic">No properties — add at least one.</span>
                   )}
                   {properties.map((p) => (
                     <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
@@ -1899,7 +1899,7 @@ function EditChangeModal({
                     onChange={(e) => setNewProp(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addProperty())}
                     className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
-                    placeholder="es. email, prezzo, paese..."
+                    placeholder="e.g. email, price, country..."
                   />
                   <button
                     onClick={addProperty}
@@ -1907,7 +1907,7 @@ function EditChangeModal({
                     className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Aggiungi
+                    Add
                   </button>
                 </div>
               </Field>
@@ -1916,7 +1916,7 @@ function EditChangeModal({
 
           {change.kind === 'add_relation' && (
             <>
-              <Field label="Sorgente">
+              <Field label="Source">
                 <select
                   value={relSource}
                   onChange={(e) => setRelSource(e.target.value)}
@@ -1927,16 +1927,16 @@ function EditChangeModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Etichetta relazione">
+              <Field label="Relation label">
                 <input
                   type="text"
                   value={relLabel}
                   onChange={(e) => setRelLabel(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
-                  placeholder="es. hasCustomer, suppliedBy"
+                  placeholder="e.g. hasCustomer, suppliedBy"
                 />
               </Field>
-              <Field label="Destinazione">
+              <Field label="Target">
                 <select
                   value={relTarget}
                   onChange={(e) => setRelTarget(e.target.value)}
@@ -1963,7 +1963,7 @@ function EditChangeModal({
 
           {change.kind === 'add_property' && (
             <>
-              <Field label="Entità di destinazione">
+              <Field label="Target entity">
                 <select
                   value={propNodeId}
                   onChange={(e) => setPropNodeId(e.target.value)}
@@ -1974,15 +1974,15 @@ function EditChangeModal({
                   ))}
                 </select>
               </Field>
-              <Field label="Nome proprietà">
+              <Field label="Property name">
                 <input
                   type="text"
                   value={propName}
                   onChange={(e) => setPropName(e.target.value)}
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
-                  placeholder="es. email, sustainabilityScore"
+                  placeholder="e.g. email, sustainabilityScore"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">Sarà normalizzata in camelCase.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Will be normalized to camelCase.</p>
               </Field>
             </>
           )}
@@ -1990,7 +1990,7 @@ function EditChangeModal({
           {change.kind === 'rename' && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>I cambi di tipo rename non sono modificabili da questa schermata — usa la chat per rinominare di nuovo o rifiutare.</span>
+              <span>Rename-type changes cannot be edited from this screen — use the chat to rename again or reject.</span>
             </div>
           )}
         </div>
@@ -2001,14 +2001,14 @@ function EditChangeModal({
             onClick={onClose}
             className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-4 py-2 font-medium transition-colors"
           >
-            Annulla
+            Cancel
           </button>
           <button
             onClick={handleSave}
             className="text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
-            Salva modifiche
+            Save changes
           </button>
         </div>
       </div>
@@ -2076,9 +2076,9 @@ function EditEntityModal({
           <div className="flex items-center gap-2">
             <Pencil className="w-4 h-4 text-teal-600" />
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Modifica entità</h3>
+              <h3 className="text-base font-semibold text-slate-900">Edit entity</h3>
               <p className="text-[11px] text-slate-400">
-                {entity.isBaseNode ? 'Classe base — le modifiche sono salvate come override' : 'Classe utente'}
+                {entity.isBaseNode ? 'Base class — changes are saved as override' : 'User class'}
               </p>
             </div>
           </div>
@@ -2092,30 +2092,30 @@ function EditEntityModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <Field label="Nome classe">
+          <Field label="Class name">
             <input
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
             />
-            <p className="text-[11px] text-slate-400 mt-1">URI e tabella DB verranno aggiornati di conseguenza.</p>
+            <p className="text-[11px] text-slate-400 mt-1">URI and DB table will be updated accordingly.</p>
           </Field>
 
-          <Field label="Tabella DB">
+          <Field label="DB table">
             <input
               type="text"
               value={dbTable}
               onChange={(e) => setDbTable(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
-              placeholder="(nessun mapping)"
+              placeholder="(no mapping)"
             />
           </Field>
 
-          <Field label={`Proprietà (${properties.length})`}>
+          <Field label={`Properties (${properties.length})`}>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {properties.length === 0 && (
-                <span className="text-xs text-slate-400 italic">Nessuna proprietà.</span>
+                <span className="text-xs text-slate-400 italic">No properties.</span>
               )}
               {properties.map((p) => (
                 <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
@@ -2133,7 +2133,7 @@ function EditEntityModal({
                 onChange={(e) => setNewProp(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addProperty())}
                 className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
-                placeholder="aggiungi proprietà..."
+                placeholder="add property..."
               />
               <button
                 onClick={addProperty}
@@ -2141,7 +2141,7 @@ function EditEntityModal({
                 className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Aggiungi
+                Add
               </button>
             </div>
           </Field>
@@ -2154,14 +2154,14 @@ function EditEntityModal({
             className="text-sm bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-rose-700 rounded-lg px-3 py-2 font-medium transition-colors flex items-center gap-1.5"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            Elimina
+            Delete
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-4 py-2 font-medium transition-colors"
             >
-              Annulla
+              Cancel
             </button>
             <button
               onClick={handleSave}
@@ -2169,7 +2169,7 @@ function EditEntityModal({
               className="text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-500 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
-              Salva
+              Save
             </button>
           </div>
         </div>

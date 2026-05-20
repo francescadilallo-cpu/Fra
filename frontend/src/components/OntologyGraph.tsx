@@ -32,7 +32,7 @@ function OntologyClassNode({ data, selected }: NodeProps) {
         )}
         {d.row_count > 0 && (
           <div className="mt-1.5 pt-1.5 border-t border-slate-100">
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-50 text-teal-700">{d.row_count.toLocaleString('it-IT')} records</span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-50 text-teal-700">{d.row_count.toLocaleString('en-US')} records</span>
           </div>
         )}
       </div>
@@ -64,7 +64,7 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
         {node.row_count > 0 && (
           <div>
             <span className="text-slate-400 text-xs uppercase tracking-wide">Records</span>
-            <p className="text-slate-700 mt-0.5">{node.row_count.toLocaleString('it-IT')}</p>
+            <p className="text-slate-700 mt-0.5">{node.row_count.toLocaleString('en-US')}</p>
           </div>
         )}
         <div>
@@ -86,10 +86,10 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
 // ── Architecture diagram ────────────────────────────────────────────────────
 function ArchitectureDiagram() {
   const layers = [
-    { name: 'CONSUMPTION LAYER', sub: 'Canali Fisici · Canali Digitali · App Business', bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-700' },
+    { name: 'CONSUMPTION LAYER', sub: 'Physical Channels · Digital Channels · Business Apps', bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-700' },
     { name: 'AGENTIC LAYER',     sub: 'Interface · Operational · Specialized Agent',     bg: 'bg-slate-100',   border: 'border-slate-300', text: 'text-slate-700' },
-    { name: 'SEMANTIC LAYER',    sub: 'Entità · Relazioni · Regole · MCP Server',         bg: 'bg-teal-50',     border: 'border-teal-400',  text: 'text-teal-800', highlight: true },
-    { name: 'LEGACY SYSTEM LAYER', sub: 'ERP · CRM · MES · PDM · Altri sistemi',          bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-600' },
+    { name: 'SEMANTIC LAYER',    sub: 'Entities · Relations · Rules · MCP Server',         bg: 'bg-teal-50',     border: 'border-teal-400',  text: 'text-teal-800', highlight: true },
+    { name: 'LEGACY SYSTEM LAYER', sub: 'ERP · CRM · MES · PDM · Other systems',          bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-600' },
   ]
   const benefits = [
     'Company Knowledge Sovereignty',
@@ -112,7 +112,7 @@ function ArchitectureDiagram() {
                   </div>
                   {l.highlight && (
                     <span className="text-[10px] font-bold bg-teal-600 text-white rounded px-2 py-1 leading-none flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" /> CIÒ CHE COSTRUIAMO
+                      <Sparkles className="w-3 h-3" /> WHAT WE BUILD
                     </span>
                   )}
                 </div>
@@ -122,7 +122,7 @@ function ArchitectureDiagram() {
           ))}
         </div>
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-900">Benefici Architetturali</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Architectural Benefits</h3>
           {benefits.map((b) => (
             <div key={b} className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
               <span className="w-1.5 h-1.5 bg-teal-500 rounded-full flex-shrink-0" />
@@ -132,20 +132,20 @@ function ArchitectureDiagram() {
         </div>
       </div>
       <div className="bg-white border border-slate-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-slate-900 mb-3">Componenti del Semantic Layer</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-3">Semantic Layer Components</h3>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-slate-400 uppercase tracking-wide border-b border-slate-200">
-              <th className="text-left pb-2 font-medium">Componente</th>
-              <th className="text-left pb-2 font-medium">Tecnologia</th>
-              <th className="text-left pb-2 font-medium">Descrizione</th>
+              <th className="text-left pb-2 font-medium">Component</th>
+              <th className="text-left pb-2 font-medium">Technology</th>
+              <th className="text-left pb-2 font-medium">Description</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            <tr><td className="py-2.5 font-medium text-slate-800">Ontologia</td><td className="py-2.5 font-mono text-teal-700">OWL/RDF</td><td className="py-2.5 text-slate-600">Template di settore per Manufacturing, Retail, Healthcare, Finance</td></tr>
-            <tr><td className="py-2.5 font-medium text-slate-800">MCP Server</td><td className="py-2.5 font-mono text-teal-700">Model Context Protocol</td><td className="py-2.5 text-slate-600">API compatibile con qualsiasi AI agent (Anthropic, OpenAI...)</td></tr>
-            <tr><td className="py-2.5 font-medium text-slate-800">Mapping Engine</td><td className="py-2.5 font-mono text-teal-700">Custom + AI-assisted</td><td className="py-2.5 text-slate-600">Connette ERP/CRM/MES all'ontologia tramite mappings configurabili</td></tr>
-            <tr><td className="py-2.5 font-medium text-slate-800">Governance</td><td className="py-2.5 font-mono text-teal-700">Rule-based</td><td className="py-2.5 text-slate-600">Compliance EU AI Act integrata · Audit trail completo</td></tr>
+            <tr><td className="py-2.5 font-medium text-slate-800">Ontology</td><td className="py-2.5 font-mono text-teal-700">OWL/RDF</td><td className="py-2.5 text-slate-600">Sector templates for Manufacturing, Retail, Healthcare, Finance</td></tr>
+            <tr><td className="py-2.5 font-medium text-slate-800">MCP Server</td><td className="py-2.5 font-mono text-teal-700">Model Context Protocol</td><td className="py-2.5 text-slate-600">API compatible with any AI agent (Anthropic, OpenAI...)</td></tr>
+            <tr><td className="py-2.5 font-medium text-slate-800">Mapping Engine</td><td className="py-2.5 font-mono text-teal-700">Custom + AI-assisted</td><td className="py-2.5 text-slate-600">Connects ERP/CRM/MES to the ontology via configurable mappings</td></tr>
+            <tr><td className="py-2.5 font-medium text-slate-800">Governance</td><td className="py-2.5 font-mono text-teal-700">Rule-based</td><td className="py-2.5 text-slate-600">Integrated EU AI Act compliance · Complete audit trail</td></tr>
           </tbody>
         </table>
       </div>
@@ -174,7 +174,7 @@ ${extendedOntology.edges.map(e => `${prefix}:${e.label} a owl:ObjectProperty ;
 
   const sparqlExamples = [
     {
-      title: `Query ${extendedOntology.nodes[0].data.label} con relazione`,
+      title: `Query ${extendedOntology.nodes[0].data.label} with relation`,
       code: `PREFIX ${prefix}: <${baseUri}>
 
 SELECT ?entity ?related WHERE {
@@ -184,7 +184,7 @@ SELECT ?entity ?related WHERE {
 LIMIT 100`,
     },
     {
-      title: 'Aggregazione con filtro',
+      title: 'Aggregation with filter',
       code: `PREFIX ${prefix}: <${baseUri}>
 
 SELECT (COUNT(?x) AS ?total) WHERE {
@@ -202,7 +202,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
     "properties": {
       "question": {
         "type": "string",
-        "description": "Natural language question in Italian or English"
+        "description": "Natural language question in English"
       },
       "sector": {
         "type": "string",
@@ -236,9 +236,9 @@ SELECT (COUNT(?x) AS ?total) WHERE {
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <div className="flex items-center gap-2 mb-1">
           <FileCode className="w-4 h-4 text-teal-600" />
-          <h2 className="font-semibold text-slate-900">Ontologia OWL · Turtle Syntax</h2>
+          <h2 className="font-semibold text-slate-900">OWL Ontology · Turtle Syntax</h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4">Codice generato automaticamente dall'ontologia attiva ({sector.name}). Compatibile con Protégé, RDFLib, Jena.</p>
+        <p className="text-xs text-slate-500 mb-4">Code generated automatically from the active ontology ({sector.name}). Compatible with Protégé, RDFLib, Jena.</p>
         <pre className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs font-mono text-slate-700 overflow-x-auto leading-relaxed">{turtle}</pre>
       </section>
 
@@ -246,9 +246,9 @@ SELECT (COUNT(?x) AS ?total) WHERE {
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <div className="flex items-center gap-2 mb-1">
           <Code2 className="w-4 h-4 text-teal-600" />
-          <h2 className="font-semibold text-slate-900">Query SPARQL · Esempi</h2>
+          <h2 className="font-semibold text-slate-900">SPARQL Query · Examples</h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4">Query semantiche eseguibili direttamente sul triplestore. Più espressive di SQL per dati relazionali complessi.</p>
+        <p className="text-xs text-slate-500 mb-4">Semantic queries executable directly on the triplestore. More expressive than SQL for complex relational data.</p>
         <div className="space-y-3">
           {sparqlExamples.map((ex, i) => (
             <div key={i}>
@@ -265,12 +265,12 @@ SELECT (COUNT(?x) AS ?total) WHERE {
           <Server className="w-4 h-4 text-teal-600" />
           <h2 className="font-semibold text-slate-900">MCP Server · Tool Schema (JSON)</h2>
         </div>
-        <p className="text-xs text-slate-500 mb-4">Schema dei tool esposti via Model Context Protocol. Compatibile con Claude, GPT, Gemini e qualsiasi agent MCP-aware.</p>
+        <p className="text-xs text-slate-500 mb-4">Schema of tools exposed via Model Context Protocol. Compatible with Claude, GPT, Gemini and any MCP-aware agent.</p>
         <div className="space-y-3">
           <pre className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs font-mono text-slate-700 overflow-x-auto leading-relaxed">{mcpTool1}</pre>
           <pre className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs font-mono text-slate-700 overflow-x-auto leading-relaxed">{mcpTool2}</pre>
         </div>
-        <p className="text-xs text-slate-400 mt-4 italic">Compatibile con Anthropic MCP Protocol v1.0 · Esposto via HTTP+SSE su `https://api.semanticintelligence.io/mcp`</p>
+        <p className="text-xs text-slate-400 mt-4 italic">Compatible with Anthropic MCP Protocol v1.0 · Exposed via HTTP+SSE at `https://api.semanticintelligence.io/mcp`</p>
       </section>
     </div>
   )
@@ -290,20 +290,20 @@ export default function OntologyGraph() {
   }, [])
 
   const tabs: { id: SubTab; label: string; icon: typeof GitBranch }[] = [
-    { id: 'graph',        label: 'Grafo Ontologia',     icon: GitBranch },
-    { id: 'architecture', label: 'Architettura Sistema',icon: Layers },
-    { id: 'code',         label: 'Codice OWL/RDF',      icon: Code2 },
+    { id: 'graph',        label: 'Ontology Graph',      icon: GitBranch },
+    { id: 'architecture', label: 'System Architecture', icon: Layers },
+    { id: 'code',         label: 'OWL/RDF Code',        icon: Code2 },
   ]
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-slate-900">Ontologia</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Ontology</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.ontologyTitle} · {extendedOntology.nodes.length} classi · {extendedOntology.edges.length} object properties
+          {sector.ontologyTitle} · {extendedOntology.nodes.length} classes · {extendedOntology.edges.length} object properties
           {extendedOntology.nodes.length > sector.ontology.nodes.length && (
             <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
-              +{extendedOntology.nodes.length - sector.ontology.nodes.length} dal Builder
+              +{extendedOntology.nodes.length - sector.ontology.nodes.length} from Builder
             </span>
           )}
         </p>

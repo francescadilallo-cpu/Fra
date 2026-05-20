@@ -114,7 +114,7 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
           <span className="font-semibold text-slate-900 font-mono">{tableName}</span>
           <span className="badge bg-slate-200 text-slate-400 text-xs">{rows.length} fields</span>
         </div>
-        <span className="text-slate-500 text-xs">{collapsed ? 'Espandi' : 'Comprimi'}</span>
+        <span className="text-slate-500 text-xs">{collapsed ? 'Expand' : 'Collapse'}</span>
       </button>
 
       {!collapsed && (
@@ -123,16 +123,16 @@ function TableGroup({ tableName, rows, onUpdate }: TableGroupProps) {
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-40">
-                  Campo ERP
+                  ERP Field
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-44">
-                  Classe Ontologica
+                  Ontology Class
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide">
-                  Proprietà Ontologica
+                  Ontology Property
                 </th>
                 <th className="px-5 py-2.5 text-left text-xs text-slate-500 font-medium uppercase tracking-wide w-36">
-                  Tipo
+                  Type
                 </th>
               </tr>
             </thead>
@@ -226,7 +226,7 @@ export default function MappingView() {
       <div className="p-8">
         <div className="card flex items-center gap-3 text-red-400">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>Errore: {error}</span>
+          <span>Error: {error}</span>
         </div>
       </div>
     )
@@ -238,20 +238,20 @@ export default function MappingView() {
       <div className="px-8 py-5 border-b border-slate-200 sticky top-0 bg-slate-50 z-10 flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Configurazione Mappature</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Mappings Configuration</h1>
             <p className="text-slate-400 mt-1 text-sm">
-              Configura come i campi ERP si mappano ai concetti dell'ontologia. Clicca su una proprietà per modificarla.
+              Configure how ERP fields map to ontology concepts. Click a property to edit it.
             </p>
           </div>
           <div className="flex items-center gap-3">
             {savedCount > 0 && (
               <span className="badge bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs">
-                {savedCount} modifiche salvate
+                {savedCount} changes saved
               </span>
             )}
             <button onClick={loadMappings} className="btn-ghost flex items-center gap-2 text-sm">
               <RefreshCw className="w-3.5 h-3.5" />
-              Ricarica
+              Reload
             </button>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function MappingView() {
 
       {/* Legend */}
       <div className="px-8 py-3 border-b border-slate-200 flex items-center gap-6 flex-shrink-0">
-        <span className="text-xs text-slate-500">Tipi di campo:</span>
+        <span className="text-xs text-slate-500">Field types:</span>
         {['integer', 'string', 'decimal', 'date', 'objectProperty'].map((t) => (
           <TypeBadge key={t} type={t} />
         ))}
