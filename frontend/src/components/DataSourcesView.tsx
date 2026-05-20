@@ -1,0 +1,656 @@
+import { useState, useRef, useMemo, useCallback } from 'react'
+import {
+  Plug, Upload, Check, X, FileText, Search, ChevronRight, Star,
+  Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw, Database,
+} from 'lucide-react'
+import { useSector } from '../contexts/SectorContext'
+import { useExtendedOntology } from '../data/ontologyExtensions'
+import {
+  CONNECTORS, CATEGORY_LABELS,
+  useConnectedSources,
+  type ConnectorDef, type ConnectorCategory, type ConnectedSource,
+} from '../data/connectors'
+import {
+  parseCSV, suggestMappings, SAMPLE_CSV_BY_SECTOR,
+  type MappingSuggestion,
+} from '../data/csvImport'
+
+// ── Workflow progress strip ──────────────────────────────────────────────────
+type Step = 'connect' | 'map' | 'validate' | 'ingest'
+const STEPS: { id: Step; label: string; description: string }[] = [
+  { id: 'connect',  label: 'Connect',  description: 'Choose a source' },
+  { id: 'map',      label: 'Map',      description: 'Align fields to ontology' },
+  { id: 'validate', label: 'Validate', description: 'Check data quality' },
+  { id: 'ingest',   label: 'Ingest',   description: 'Sync to semantic layer' },
+]
+
+function WorkflowProgress({ active, complete }: { active: Step; complete: Set<Step> }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="flex items-center gap-1">
+        {STEPS.map((step, i) => {
+          const isActive = step.id === active
+          const isDone = complete.has(step.id)
+          return (
+            <div key={step.id} className="flex items-center flex-1">
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${
+                  isDone   ? 'bg-teal-500 text-white' :
+                  isActive ? 'bg-teal-600 text-white ring-4 ring-teal-100' :
+                  'bg-slate-100 text-slate-400'
+                }`}>
+                  {isDone ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                </div>
+                <div className="min-w-0">
+                  <p className={`text-xs font-semibold ${isActive || isDone ? 'text-slate-900' : 'text-slate-400'}`}>
+                    {step.label}
+                  </p>
+                  <p className="text-[10px] text-slate-400 truncate">{step.description}</p>
+                </div>
+              </div>
+              {i < STEPS.length - 1 && (
+                <ChevronRight className={`w-4 h-4 mx-2 flex-shrink-0 ${isDone ? 'text-teal-400' : 'text-slate-300'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Connector logo (avatar) ──────────────────────────────────────────────────
+function ConnectorLogo({ c, size = 'md' }: { c: ConnectorDef; size?: 'sm' | 'md' }) {
+  const sizes = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-sm'
+  return (
+    <div className={`${sizes} ${c.bg} ${c.fg} rounded-lg flex items-center justify-center font-bold flex-shrink-0 ring-1 ring-black/5`}>
+      {c.logo}
+    </div>
+  )
+}
+
+// ── Connector card ───────────────────────────────────────────────────────────
+function ConnectorCard({
+  c, connected, connecting, onConnect, onDisconnect,
+}: {
+  c: ConnectorDef
+  connected: boolean
+  connecting: boolean
+  onConnect: () => void
+  onDisconnect: () => void
+}) {
+  const disabled = c.status === 'coming-soon'
+  return (
+    <div className={`bg-white border rounded-xl p-3 transition-all ${
+      connected   ? 'border-teal-300 shadow-sm shadow-teal-50' :
+      connecting  ? 'border-blue-300' :
+      'border-slate-200 hover:border-slate-300'
+    }`}>
+      <div className="flex items-start gap-2.5">
+        <ConnectorLogo c={c} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
+            {c.popular && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
+            {c.italian && <span className="text-[8px] font-bold bg-green-100 text-green-700 rounded px-1 py-0.5 leading-none">IT</span>}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2">{c.description}</p>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className={`text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+          c.status === 'available' ? 'bg-slate-100 text-slate-500' :
+          c.status === 'beta'      ? 'bg-amber-100 text-amber-700' :
+          'bg-slate-100 text-slate-400'
+        }`}>
+          {c.status === 'coming-soon' ? 'Soon' : c.status === 'beta' ? 'Beta' : CATEGORY_LABELS[c.category]}
+        </span>
+        {connected ? (
+          <button
+            onClick={onDisconnect}
+            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50"
+          >
+            <CheckCircle2 className="w-3 h-3 text-teal-500" />
+            Connected
+          </button>
+        ) : (
+          <button
+            onClick={onConnect}
+            disabled={disabled || connecting}
+            className={`flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors ${
+              disabled    ? 'bg-slate-50 text-slate-300 cursor-not-allowed' :
+              connecting  ? 'bg-blue-50 text-blue-600 cursor-wait' :
+              'bg-slate-900 text-white hover:bg-slate-800'
+            }`}
+          >
+            {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
+            {connecting ? 'Connecting…' : 'Connect'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Connected sources panel ──────────────────────────────────────────────────
+function connectorById(id: string): ConnectorDef | undefined {
+  return CONNECTORS.find(c => c.id === id)
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1)  return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function ConnectedSourcesPanel({
+  sources, onDisconnect, onSync,
+}: {
+  sources: ConnectedSource[]
+  onDisconnect: (id: string) => void
+  onSync: (id: string) => void
+}) {
+  if (sources.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 border-dashed rounded-xl p-8 text-center">
+        <Database className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+        <p className="text-sm text-slate-500 font-medium">No sources connected yet</p>
+        <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file to start ingesting data.</p>
+      </div>
+    )
+  }
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {sources.map((s, i) => {
+        const c = connectorById(s.connectorId)
+        if (!c) return null
+        return (
+          <div key={s.connectorId} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
+            <ConnectorLogo c={c} size="sm" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
+                <span className="flex items-center gap-1 text-[10px] font-medium bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">
+                  <span className="w-1 h-1 bg-teal-500 rounded-full" />
+                  Connected
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {s.rowCount.toLocaleString('en-US')} records · synced {relativeTime(s.lastSyncAt)}
+              </p>
+            </div>
+            <button
+              onClick={() => onSync(s.connectorId)}
+              className="text-slate-400 hover:text-teal-600 transition-colors p-1.5 rounded hover:bg-slate-50"
+              title="Sync now"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onDisconnect(s.connectorId)}
+              className="text-slate-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50"
+              title="Disconnect"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Upload + auto-mapping preview ────────────────────────────────────────────
+interface UploadState {
+  filename: string
+  headers: string[]
+  rows: string[][]
+  suggestions: MappingSuggestion[]
+  accepted: Record<string, boolean>  // column -> accepted
+}
+
+const CONFIDENCE_COLORS: Record<MappingSuggestion['confidence'], string> = {
+  high:   'bg-teal-100 text-teal-700',
+  medium: 'bg-amber-100 text-amber-700',
+  low:    'bg-orange-100 text-orange-700',
+  none:   'bg-slate-100 text-slate-500',
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  uuid: 'bg-orange-50 text-orange-600',
+  string: 'bg-slate-100 text-slate-600',
+  integer: 'bg-blue-50 text-blue-600',
+  decimal: 'bg-purple-50 text-purple-600',
+  boolean: 'bg-amber-50 text-amber-600',
+  date: 'bg-green-50 text-green-700',
+  datetime: 'bg-teal-50 text-teal-700',
+  text: 'bg-slate-100 text-slate-500',
+}
+
+function UploadPanel({
+  upload, onUpload, onToggle, onClear, onIngest, onLoadSample,
+}: {
+  upload: UploadState | null
+  onUpload: (file: File) => void
+  onToggle: (col: string) => void
+  onClear: () => void
+  onIngest: () => void
+  onLoadSample: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  function handleFiles(files: FileList | null) {
+    const file = files?.[0]
+    if (file) onUpload(file)
+  }
+
+  if (!upload) {
+    return (
+      <div>
+        <div
+          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={e => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files) }}
+          onClick={() => inputRef.current?.click()}
+          className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all ${
+            dragOver ? 'border-teal-400 bg-teal-50/50' : 'border-slate-200 bg-white hover:border-slate-300'
+          }`}
+        >
+          <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-teal-500' : 'text-slate-400'}`} />
+          <p className="text-sm font-medium text-slate-700">
+            Drop a CSV here or <span className="text-teal-600">browse</span>
+          </p>
+          <p className="text-xs text-slate-400 mt-1">Supports .csv (commas or semicolons), up to 10 MB</p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={e => handleFiles(e.target.files)}
+            className="hidden"
+          />
+        </div>
+        <button
+          onClick={onLoadSample}
+          className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-600 transition-colors mx-auto"
+        >
+          <Download className="w-3 h-3" />
+          Or load a sample dataset for this sector
+        </button>
+      </div>
+    )
+  }
+
+  const acceptedCount = Object.values(upload.accepted).filter(Boolean).length
+  const ingestable = acceptedCount > 0
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {/* File header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+        <FileText className="w-4 h-4 text-teal-600 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-900 truncate">{upload.filename}</p>
+          <p className="text-[11px] text-slate-500">
+            {upload.rows.length.toLocaleString('en-US')} rows · {upload.headers.length} columns detected
+            · <span className="text-teal-600 font-medium">{acceptedCount}/{upload.headers.length} mapped</span>
+          </p>
+        </div>
+        <button
+          onClick={onClear}
+          className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100"
+          title="Clear"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Mapping table */}
+      <div className="max-h-[380px] overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-white border-b border-slate-200 z-10">
+            <tr>
+              <th className="text-left px-4 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">CSV Column</th>
+              <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Detected</th>
+              <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Sample</th>
+              <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">→ Maps to</th>
+              <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Confidence</th>
+              <th className="w-12 px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {upload.suggestions.map(s => {
+              const accepted = upload.accepted[s.column]
+              return (
+                <tr key={s.column} className={`border-t border-slate-100 ${accepted ? 'bg-teal-50/30' : ''}`}>
+                  <td className="px-4 py-2 font-mono text-slate-700">{s.column}</td>
+                  <td className="px-3 py-2">
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${TYPE_COLORS[s.detectedType] ?? 'bg-slate-100 text-slate-500'}`}>
+                      {s.detectedType}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-400 font-mono truncate max-w-[140px]">
+                    {s.sampleValues.slice(0, 2).join(', ') || '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    {s.suggestedEntity ? (
+                      <span className="text-slate-700">
+                        <span className="font-medium">{s.suggestedEntity}</span>
+                        <span className="text-slate-400">.{s.suggestedProperty}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 italic">— no match —</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${CONFIDENCE_COLORS[s.confidence]}`}>
+                      {s.confidence}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => onToggle(s.column)}
+                      disabled={s.confidence === 'none'}
+                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                        accepted
+                          ? 'bg-teal-600 text-white'
+                          : s.confidence === 'none'
+                            ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                            : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {accepted ? <Check className="w-3.5 h-3.5" /> : null}
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer with ingest CTA */}
+      <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+          Toggle mappings to include/exclude columns
+        </div>
+        <button
+          onClick={onIngest}
+          disabled={!ingestable}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            ingestable
+              ? 'bg-teal-600 hover:bg-teal-700 text-white'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          Ingest {upload.rows.length.toLocaleString('en-US')} rows
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main view ────────────────────────────────────────────────────────────────
+export default function DataSourcesView() {
+  const { sectorId, sector } = useSector()
+  const ontology = useExtendedOntology(sectorId)
+  const [connectedSources, setConnectedSources] = useConnectedSources(sectorId)
+
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<ConnectorCategory | 'all' | 'italian'>('all')
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [upload, setUpload] = useState<UploadState | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [ingesting, setIngesting] = useState(false)
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }, [])
+
+  // Determine active workflow step
+  const activeStep: Step = useMemo(() => {
+    if (ingesting) return 'ingest'
+    if (upload && Object.values(upload.accepted).some(Boolean)) return 'validate'
+    if (upload) return 'map'
+    return 'connect'
+  }, [upload, ingesting])
+
+  const completeSteps = useMemo(() => {
+    const done = new Set<Step>()
+    if (connectedSources.length > 0 || upload) done.add('connect')
+    if (upload && Object.values(upload.accepted).some(Boolean)) done.add('map')
+    if (ingesting) { done.add('map'); done.add('validate') }
+    return done
+  }, [connectedSources, upload, ingesting])
+
+  // ── Filters
+  const filteredConnectors = useMemo(() => {
+    return CONNECTORS.filter(c => {
+      if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false
+      if (categoryFilter === 'italian') return c.italian
+      if (categoryFilter !== 'all') return c.category === categoryFilter
+      return true
+    })
+  }, [search, categoryFilter])
+
+  const connectedIds = new Set(connectedSources.map(s => s.connectorId))
+
+  // ── Connect / disconnect
+  const connectConnector = (c: ConnectorDef) => {
+    if (c.status === 'coming-soon' || connecting) return
+    setConnecting(c.id)
+    setTimeout(() => {
+      const now = new Date().toISOString()
+      const next: ConnectedSource[] = [
+        ...connectedSources,
+        { connectorId: c.id, connectedAt: now, lastSyncAt: now, rowCount: Math.floor(800 + Math.random() * 4200) },
+      ]
+      setConnectedSources(next)
+      setConnecting(null)
+      showToast(`Connected to ${c.name} · initial sync complete`)
+    }, 1200)
+  }
+
+  const disconnectConnector = (id: string) => {
+    setConnectedSources(connectedSources.filter(s => s.connectorId !== id))
+    const c = connectorById(id)
+    if (c) showToast(`${c.name} disconnected`)
+  }
+
+  const syncConnector = (id: string) => {
+    const now = new Date().toISOString()
+    setConnectedSources(connectedSources.map(s => s.connectorId === id ? { ...s, lastSyncAt: now } : s))
+    const c = connectorById(id)
+    if (c) showToast(`${c.name} synced just now`)
+  }
+
+  // ── Upload handlers
+  const handleFile = async (file: File) => {
+    const text = await file.text()
+    const { headers, rows } = parseCSV(text)
+    if (headers.length === 0) {
+      showToast('Could not parse CSV — check the file format')
+      return
+    }
+    const suggestions = suggestMappings(headers, rows, ontology.nodes)
+    const accepted: Record<string, boolean> = {}
+    suggestions.forEach(s => { accepted[s.column] = s.confidence === 'high' || s.confidence === 'medium' })
+    setUpload({ filename: file.name, headers, rows, suggestions, accepted })
+  }
+
+  const loadSample = () => {
+    const sample = SAMPLE_CSV_BY_SECTOR[sectorId]
+    if (!sample) return
+    const { headers, rows } = parseCSV(sample.content)
+    const suggestions = suggestMappings(headers, rows, ontology.nodes)
+    const accepted: Record<string, boolean> = {}
+    suggestions.forEach(s => { accepted[s.column] = s.confidence !== 'none' })
+    setUpload({ filename: sample.filename, headers, rows, suggestions, accepted })
+  }
+
+  const toggleMapping = (col: string) => {
+    if (!upload) return
+    setUpload({ ...upload, accepted: { ...upload.accepted, [col]: !upload.accepted[col] } })
+  }
+
+  const ingestData = () => {
+    if (!upload) return
+    setIngesting(true)
+    setTimeout(() => {
+      // Persist as a "file" connector entry
+      const now = new Date().toISOString()
+      const fakeId = `file-${Date.now()}`
+      setConnectedSources([
+        ...connectedSources,
+        { connectorId: 'google-sheets', connectedAt: now, lastSyncAt: now, rowCount: upload.rows.length },
+      ].filter((s, i, arr) => arr.findIndex(x => x.connectorId === s.connectorId) === i))
+      showToast(`Ingested ${upload.rows.length.toLocaleString('en-US')} rows from ${upload.filename}`)
+      setUpload(null)
+      setIngesting(false)
+      void fakeId
+    }, 1500)
+  }
+
+  // ── Categories list for filter chips
+  const allCategories: ('all' | 'italian' | ConnectorCategory)[] = [
+    'all', 'italian',
+    'erp', 'accounting', 'ecommerce', 'crm', 'payments', 'database', 'cloud', 'logistics',
+  ]
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
+        <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
+        <p className="text-slate-500 mt-1 text-sm">
+          {sector.name} · Connect business systems or upload files to ingest into the semantic layer
+        </p>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+        {/* Workflow */}
+        <WorkflowProgress active={activeStep} complete={completeSteps} />
+
+        {/* Connected sources */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connected Sources</h2>
+              <span className="text-xs text-slate-400">· {connectedSources.length} active</span>
+            </div>
+          </div>
+          <ConnectedSourcesPanel
+            sources={connectedSources}
+            onDisconnect={disconnectConnector}
+            onSync={syncConnector}
+          />
+        </section>
+
+        {/* Connector hub */}
+        <section>
+          <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Plug className="w-4 h-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connect a New Source</h2>
+              <span className="text-xs text-slate-400">· {CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search connectors…"
+                className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-teal-400 w-52"
+              />
+            </div>
+          </div>
+
+          {/* Category chips */}
+          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
+            {allCategories.map(cat => {
+              const isActive = categoryFilter === cat
+              const label = cat === 'all' ? 'All' : cat === 'italian' ? '🇮🇹 Italian' : CATEGORY_LABELS[cat]
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`text-xs px-3 py-1 rounded-full transition-colors flex-shrink-0 ${
+                    isActive
+                      ? 'bg-slate-900 text-white font-medium'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {filteredConnectors.map(c => (
+              <ConnectorCard
+                key={c.id}
+                c={c}
+                connected={connectedIds.has(c.id)}
+                connecting={connecting === c.id}
+                onConnect={() => connectConnector(c)}
+                onDisconnect={() => disconnectConnector(c.id)}
+              />
+            ))}
+          </div>
+          {filteredConnectors.length === 0 && (
+            <p className="text-center text-sm text-slate-400 py-8">No connectors match your search.</p>
+          )}
+        </section>
+
+        {/* Upload */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Upload className="w-4 h-4 text-slate-500" />
+            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Upload File</h2>
+            <span className="text-xs text-slate-400">· auto-mapping to your ontology</span>
+          </div>
+          <UploadPanel
+            upload={upload}
+            onUpload={handleFile}
+            onToggle={toggleMapping}
+            onClear={() => setUpload(null)}
+            onIngest={ingestData}
+            onLoadSample={loadSample}
+          />
+        </section>
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-sm rounded-xl px-4 py-3 shadow-xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-teal-400" />
+          {toast}
+        </div>
+      )}
+
+      {/* Ingest overlay */}
+      {ingesting && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl px-6 py-5 flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-teal-500 animate-spin" />
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Ingesting to semantic layer…</p>
+              <p className="text-xs text-slate-500 mt-0.5">Mapping fields · validating · indexing</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

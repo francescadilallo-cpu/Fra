@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Search, LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation,
   Settings, Wand2, BotMessageSquare, Download, Play, Factory, ShoppingCart, Heart,
-  Banknote, type LucideIcon,
+  Banknote, Plug, type LucideIcon,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { NavTab } from '../types'
@@ -97,6 +97,7 @@ export default function CommandPalette({ onNavigate }: Props) {
       { tab: 'ontology',  label: 'Ontology',        icon: GitBranch,         kw: 'graph schema entities' },
       { tab: 'builder',   label: 'Builder AI',      icon: Wand2,             kw: 'ai generate ontology editor' },
       { tab: 'agents',    label: 'Agents',          icon: BotMessageSquare,  kw: 'ai automation findings' },
+      { tab: 'sources',   label: 'Data Sources',    icon: Plug,              kw: 'connect csv upload teamsystem shopify integrations' },
       { tab: 'data',      label: 'Data Explorer',   icon: Table2,            kw: 'browse table records' },
       { tab: 'query',     label: 'Query AI',        icon: MessageSquare,     kw: 'ask question nlp sql chat' },
       { tab: 'mappings',  label: 'Mappings',        icon: Table2,            kw: 'erp field mapping' },
