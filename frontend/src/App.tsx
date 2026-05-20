@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Layout from './components/Layout'
+import AccessGate, { SESSION_KEY } from './components/AccessGate'
 import OverviewScreen from './components/OverviewScreen'
 import Dashboard from './components/Dashboard'
 import OntologyGraph from './components/OntologyGraph'
@@ -13,7 +14,17 @@ import DataExplorer from './components/DataExplorer'
 import type { NavTab } from './types'
 
 export default function App() {
+  const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
+
+  if (!granted) {
+    return (
+      <AccessGate onGrant={() => {
+        sessionStorage.setItem(SESSION_KEY, '1')
+        setGranted(true)
+      }} />
+    )
+  }
 
   return (
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
