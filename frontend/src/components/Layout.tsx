@@ -13,9 +13,9 @@ interface Props {
 }
 
 const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
-  overview: 'bg-teal-600',
-  builder: 'bg-violet-600',
-  agents: 'bg-blue-600',
+  overview: 'bg-teal-500',
+  builder: 'bg-violet-500',
+  agents: 'bg-blue-500',
   config: 'bg-amber-500',
 }
 
@@ -49,16 +49,16 @@ function SectorSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-teal-300 text-sm transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-sm transition-all shadow-sm"
       >
         <span className="text-base leading-none">{sector.icon}</span>
-        <span className="font-medium text-slate-900">{sector.name}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="font-medium text-slate-800">{sector.name}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-          <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Select sector</p>
+        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+          <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80">
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Switch sector</p>
           </div>
           {(Object.keys(SECTORS) as SectorId[]).map((id) => {
             const s = SECTORS[id]
@@ -73,10 +73,14 @@ function SectorSwitcher() {
               >
                 <span className="text-xl leading-none mt-0.5">{s.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${isActive ? 'text-teal-700' : 'text-slate-900'}`}>{s.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{s.domain}</p>
+                  <p className={`text-sm font-semibold ${isActive ? 'text-teal-700' : 'text-slate-800'}`}>{s.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.domain}</p>
                 </div>
-                {isActive && <span className="text-[10px] font-bold bg-teal-600 text-white rounded px-1.5 py-0.5 leading-none mt-1">ACTIVE</span>}
+                {isActive && (
+                  <span className="text-[10px] font-bold bg-teal-600 text-white rounded-md px-1.5 py-0.5 leading-none mt-1 tracking-wide">
+                    ACTIVE
+                  </span>
+                )}
               </button>
             )
           })}
@@ -92,34 +96,34 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
   const counts = countFindings(runs)
 
   return (
-    <div className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6 flex-shrink-0">
+    <div className="h-14 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
       <div className="flex items-center gap-3">
         {counts.critical > 0 && (
           <button
             onClick={() => onTabChange('agents')}
-            className="flex items-center gap-1.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded-full px-3 py-1 hover:bg-red-100 transition-colors"
+            className="flex items-center gap-2 text-xs bg-red-50 border border-red-200 text-red-600 rounded-full px-3 py-1.5 hover:bg-red-100 transition-colors font-medium"
           >
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-            {counts.critical} critical finding{counts.critical !== 1 ? 's' : ''} · View agents
+            {counts.critical} critical · View agents
           </button>
         )}
         {counts.critical === 0 && runs.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5">
             <span className="w-1.5 h-1.5 bg-teal-400 rounded-full" />
-            {runs.length} agent{runs.length !== 1 ? 's' : ''} completed · all clear
+            {runs.length} agent{runs.length !== 1 ? 's' : ''} · all clear
           </div>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-teal-300 text-xs text-slate-400 transition-colors"
-          title="Open command palette"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 hover:shadow-sm text-[11px] font-mono text-slate-400 hover:text-slate-600 transition-all"
+          title="Open command palette (⌘K)"
         >
           <Command className="w-3 h-3" />
-          <span>K</span>
+          <span className="font-sans font-medium">K</span>
         </button>
-        <span className="text-xs text-slate-400">Active sector:</span>
+        <div className="w-px h-5 bg-slate-200" />
         <SectorSwitcher />
       </div>
     </div>
@@ -135,56 +139,64 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-100">
       <CommandPalette onNavigate={handleTabChange} />
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-teal-600" />
-            <span className="text-sm font-bold text-slate-900">
-              Semantic<span className="text-teal-600">Intelligence</span>
+
+      {/* Sidebar — dark */}
+      <aside className="w-56 flex-shrink-0 bg-slate-900 flex flex-col">
+        {/* Logo */}
+        <div className="px-4 py-5 border-b border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-teal-500/15 flex items-center justify-center ring-1 ring-teal-500/25">
+              <Brain className="w-4 h-4 text-teal-400" />
+            </div>
+            <span className="text-sm font-bold text-white tracking-tight">
+              Semantic<span className="text-teal-400">Intelligence</span>
             </span>
           </div>
-          <p className="mt-2 text-xs text-slate-400 leading-tight">Semantic Data Layer Platform</p>
+          <p className="mt-2.5 text-[11px] text-slate-500 leading-tight">Semantic Data Layer Platform</p>
         </div>
 
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
+        {/* Nav */}
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto sidebar-scrollbar">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
             const badgeColor = NEW_BADGE_TABS[id]
             const showNew = badgeColor !== undefined && !visitedTabs.has(id)
+            const isActive = activeTab === id
             return (
               <button
                 key={id}
                 onClick={() => handleTabChange(id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  activeTab === id
-                    ? 'bg-teal-50 text-teal-700 font-medium'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+                  isActive
+                    ? 'bg-teal-500/10 text-teal-300 font-medium ring-1 ring-teal-500/20'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
                 }`}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
+                <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-teal-400' : ''}`} />
                 {label}
                 {showNew && (
-                  <span className={`ml-auto text-[9px] font-bold ${badgeColor} text-white rounded px-1 py-0.5 leading-none`}>NEW</span>
+                  <span className={`ml-auto text-[9px] font-bold ${badgeColor} text-white rounded-md px-1.5 py-0.5 leading-none`}>
+                    NEW
+                  </span>
                 )}
               </button>
             )
           })}
         </nav>
 
-        <div className="px-4 py-4 border-t border-slate-100">
+        {/* Footer */}
+        <div className="px-4 py-4 border-t border-white/5">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-400">Demo · Mock Data</span>
+            <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+            <span className="text-xs text-slate-500">Demo · Mock Data</span>
           </div>
-          <p className="mt-1 text-xs text-slate-300">v0.2 MVP · Multi-Sector</p>
+          <p className="mt-1 text-[11px] text-slate-600">v0.2 MVP · Multi-Sector</p>
         </div>
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar activeTab={activeTab} onTabChange={onTabChange} />
-
         <div className="flex-1 overflow-auto bg-slate-50">
           {children}
         </div>
