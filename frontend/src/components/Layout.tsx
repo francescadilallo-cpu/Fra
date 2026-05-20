@@ -10,6 +10,12 @@ interface Props {
   children: ReactNode
 }
 
+const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
+  overview: 'bg-teal-600',
+  builder: 'bg-violet-600',
+  config: 'bg-amber-500',
+}
+
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview',  label: 'Overview',       icon: Presentation },
   { id: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
@@ -76,6 +82,13 @@ function SectorSwitcher() {
 }
 
 export default function Layout({ activeTab, onTabChange, children }: Props) {
+  const [visitedTabs, setVisitedTabs] = useState<Set<NavTab>>(() => new Set([activeTab]))
+
+  function handleTabChange(tab: NavTab) {
+    setVisitedTabs(prev => new Set([...prev, tab]))
+    onTabChange(tab)
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Sidebar */}
@@ -91,29 +104,27 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         </div>
 
         <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => onTabChange(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                activeTab === id
-                  ? 'bg-teal-50 text-teal-700 font-medium'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-              {id === 'overview' && activeTab !== 'overview' && (
-                <span className="ml-auto text-[9px] font-bold bg-teal-600 text-white rounded px-1 py-0.5 leading-none">NEW</span>
-              )}
-              {id === 'config' && activeTab !== 'config' && (
-                <span className="ml-auto text-[9px] font-bold bg-amber-500 text-white rounded px-1 py-0.5 leading-none">NEW</span>
-              )}
-              {id === 'builder' && activeTab !== 'builder' && (
-                <span className="ml-auto text-[9px] font-bold bg-violet-600 text-white rounded px-1 py-0.5 leading-none">NEW</span>
-              )}
-            </button>
-          ))}
+          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+            const badgeColor = NEW_BADGE_TABS[id]
+            const showNew = badgeColor !== undefined && !visitedTabs.has(id)
+            return (
+              <button
+                key={id}
+                onClick={() => handleTabChange(id)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                  activeTab === id
+                    ? 'bg-teal-50 text-teal-700 font-medium'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {label}
+                {showNew && (
+                  <span className={`ml-auto text-[9px] font-bold ${badgeColor} text-white rounded px-1 py-0.5 leading-none`}>NEW</span>
+                )}
+              </button>
+            )
+          })}
         </nav>
 
         <div className="px-4 py-4 border-t border-slate-100">
