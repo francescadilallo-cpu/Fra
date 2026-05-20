@@ -17,7 +17,7 @@ export default function App() {
   return (
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
-      {activeTab === 'dashboard' && <Dashboard />}
+      {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
       {activeTab === 'ontology' && <OntologyGraph />}
       {activeTab === 'builder' && <OntologyBuilder />}
       {activeTab === 'agents' && <AgentsView />}

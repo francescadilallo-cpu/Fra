@@ -13,10 +13,16 @@ import {
   ArrowDown,
   Activity,
   Package,
+  BotMessageSquare,
+  GitBranch,
+  Zap,
 } from 'lucide-react'
 import { fetchDashboard } from '../api/client'
 import type { DashboardData, ProcessFunnelStage, RecentActivity } from '../types'
 import { useSector } from '../contexts/SectorContext'
+import { useAgentStore, countFindings } from '../data/agentStore'
+import { useExtendedOntology } from '../data/ontologyExtensions'
+import type { NavTab } from '../types'
 
 // Status → Tailwind badge colours (light theme)
 const STATUS_COLORS: Record<string, string> = {
@@ -79,8 +85,145 @@ function activityDot(type: RecentActivity['type']) {
 }
 
 // ── Main Dashboard ───────────────────────────────────────────────────────────
-export default function Dashboard() {
-  const { sector } = useSector()
+// ── Agent Intelligence widget ────────────────────────────────────────────────
+function AgentIntelligence({ sectorId, onNavigate }: { sectorId: string; onNavigate?: (tab: NavTab) => void }) {
+  const runs = useAgentStore(sectorId as Parameters<typeof useAgentStore>[0])
+  const counts = countFindings(runs)
+
+  const allFindings = runs.flatMap(r => r.findings)
+  const criticalFindings = allFindings.filter(f => f.severity === 'critical')
+  const warningFindings  = allFindings.filter(f => f.severity === 'warning')
+
+  const lastRan = runs.length > 0
+    ? new Date(Math.max(...runs.map(r => new Date(r.ranAt).getTime())))
+    : null
+
+  const relativeTime = (d: Date) => {
+    const diff = Math.round((Date.now() - d.getTime()) / 1000)
+    if (diff < 60) return `${diff}s ago`
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
+    return `${Math.round(diff / 3600)}h ago`
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+          <BotMessageSquare className="w-4 h-4 text-blue-600" />
+          Agent Intelligence
+        </h2>
+        <button
+          onClick={() => onNavigate?.('agents')}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+        >
+          <Zap className="w-3.5 h-3.5" />
+          {runs.length === 0 ? 'Run agents' : 'View agents'}
+        </button>
+      </div>
+
+      {runs.length === 0 ? (
+        <div className="text-center py-6 space-y-2">
+          <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center mx-auto">
+            <BotMessageSquare className="w-5 h-5 text-slate-400" />
+          </div>
+          <p className="text-sm text-slate-500">No agents run yet for this sector.</p>
+          <button
+            onClick={() => onNavigate?.('agents')}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Go to Agents tab →
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Summary row */}
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            <span>Last run: <strong className="text-slate-700">{lastRan ? relativeTime(lastRan) : '—'}</strong></span>
+            <span>·</span>
+            <span>{runs.length} agent{runs.length !== 1 ? 's' : ''}</span>
+            <span>·</span>
+            {counts.critical > 0 && <span className="font-semibold text-red-600">{counts.critical} critical</span>}
+            {counts.warning > 0  && <span className="font-semibold text-amber-600">{counts.warning} warning</span>}
+            {counts.info > 0     && <span className="text-slate-400">{counts.info} info</span>}
+          </div>
+
+          {/* Critical findings */}
+          {criticalFindings.length > 0 && (
+            <div className="space-y-1.5">
+              {criticalFindings.slice(0, 2).map((f, i) => (
+                <div key={i} className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800">
+                  <span className="flex-shrink-0 mt-px">🔴</span>
+                  <span className="leading-snug">{f.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Warning findings */}
+          {warningFindings.length > 0 && criticalFindings.length === 0 && (
+            <div className="space-y-1.5">
+              {warningFindings.slice(0, 2).map((f, i) => (
+                <div key={i} className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                  <span className="flex-shrink-0 mt-px">⚠</span>
+                  <span className="leading-snug">{f.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* All green */}
+          {criticalFindings.length === 0 && warningFindings.length === 0 && (
+            <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2 text-xs text-teal-700">
+              <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              All agents completed — no critical issues found
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Semantic Layer stats widget ───────────────────────────────────────────────
+function SemanticLayerStats({ sectorId, onNavigate }: { sectorId: Parameters<typeof useExtendedOntology>[0]; onNavigate?: (tab: NavTab) => void }) {
+  const ontology = useExtendedOntology(sectorId)
+  const base = ontology.nodes.length
+  const props = ontology.nodes.reduce((s, n) => s + n.data.properties.length, 0)
+  const relations = ontology.edges.length
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-teal-600" />
+          Semantic Layer
+        </h2>
+        <button
+          onClick={() => onNavigate?.('ontology')}
+          className="text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors"
+        >
+          View ontology →
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Entities', value: base, color: 'text-teal-600' },
+          { label: 'Relations', value: relations, color: 'text-blue-600' },
+          { label: 'Properties', value: props, color: 'text-purple-600' },
+        ].map(stat => (
+          <div key={stat.label} className="bg-slate-50 rounded-lg p-3 text-center border border-slate-100">
+            <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{stat.label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate-400 mt-3 text-center">Active sector ontology · mapped to DB</p>
+    </div>
+  )
+}
+
+export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) => void }) {
+  const { sector, sectorId } = useSector()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -195,10 +338,15 @@ export default function Dashboard() {
         })}
       </div>
 
+      {/* Agent Intelligence + Semantic Layer */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <AgentIntelligence sectorId={sectorId} onNavigate={onNavigate} />
+        <SemanticLayerStats sectorId={sectorId} onNavigate={onNavigate} />
+      </div>
+
       {/* Process Funnel (sector-aware) */}
       <ProcessFunnel stages={sector.funnel} />
 
-      {/* TODO: sector-specific data for recent_orders and recent_activities */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
         {/* Column 1: Recent Activities */}

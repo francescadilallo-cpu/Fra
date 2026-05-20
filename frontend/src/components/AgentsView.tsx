@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
+import { saveAgentRun } from '../data/agentStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type AgentStatus = 'idle' | 'queued' | 'running' | 'completed' | 'error'
@@ -720,6 +721,14 @@ export default function AgentsView() {
         }))
         appendLog(def.id, def.name, `✓ Completed — ${def.metrics[0].value} ${def.metrics[0].label}`, 'done')
         setExpanded(prev => ({ ...prev, [def.id]: true }))
+        // Persist findings to shared store for Dashboard
+        saveAgentRun(sectorId, {
+          agentId: def.id,
+          agentName: def.name,
+          ranAt: new Date().toISOString(),
+          metrics: def.metrics.map(m => ({ label: m.label, value: m.value })),
+          findings: def.findings,
+        })
       }
     }, stepInterval)
   }, [appendLog])

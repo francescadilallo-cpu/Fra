@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch } from 'lucide-react'
 import { runQuery } from '../api/client'
 import type { QueryResult } from '../types'
+import { useSector } from '../contexts/SectorContext'
+import { useExtendedOntology } from '../data/ontologyExtensions'
+import type { OntologyNode } from '../types'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -10,16 +13,45 @@ interface Message {
   role: 'user' | 'assistant' | 'error'
   content: string
   result?: QueryResult
+  entities?: string[]   // ontology entities referenced
   timestamp: Date
 }
 
-// ── Suggested questions ────────────────────────────────────────────────────────
+// ── Sector-aware suggested questions ─────────────────────────────────────────
 
-const SUGGESTED_QUESTIONS = [
-  'Which customers have accepted quotes?',
-  'Show the 5 products with the highest unit price',
-  'What is the total value of orders in production?',
-]
+const SECTOR_QUESTIONS: Record<string, string[]> = {
+  manufacturing: [
+    'Which customers have open quotes expiring this week?',
+    'Show the 5 products with the highest unit price',
+    'What is the total value of orders currently in production?',
+    'Which suppliers have a reliability rating below 4.0?',
+  ],
+  retail: [
+    'Which customers abandoned carts with value over €100?',
+    'Show the top 10 products by stock level',
+    'What is the conversion rate from cart to paid order?',
+    'Which promotions are active and expiring in 7 days?',
+  ],
+  healthcare: [
+    'Which patients have no follow-up scheduled after discharge?',
+    'Show prescriptions issued in the last 7 days',
+    'How many encounters were conducted per doctor this month?',
+    'Which treatments have no outcome recorded?',
+  ],
+  finance: [
+    'Which loan applications are pending KYC for over 5 days?',
+    'Show the top 10 loans by amount disbursed',
+    'What is the average risk score by employment status?',
+    'Which payments are overdue by more than 30 days?',
+  ],
+}
+
+// ── Extract ontology entities from SQL ────────────────────────────────────────
+function extractEntities(sql: string, nodes: OntologyNode[]): string[] {
+  return nodes
+    .filter(n => n.data.db_table && sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
+    .map(n => n.data.label)
+}
 
 // ── Result table ───────────────────────────────────────────────────────────────
 
@@ -143,10 +175,23 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
+        {/* Ontology entities used */}
+        {message.entities && message.entities.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <GitBranch className="w-3 h-3 text-teal-500 flex-shrink-0" />
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Via semantic layer:</span>
+            {message.entities.map(e => (
+              <span key={e} className="text-[10px] font-mono bg-teal-50 border border-teal-200 text-teal-700 px-1.5 py-0.5 rounded">
+                {e}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* SQL */}
         <SqlBlock sql={r.sql_query} />
 
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-slate-400">
           {message.timestamp.toLocaleTimeString('en-US')}
         </p>
       </div>
@@ -157,6 +202,10 @@ function MessageBubble({ message }: { message: Message }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function QueryInterface() {
+  const { sectorId, sector } = useSector()
+  const ontology = useExtendedOntology(sectorId)
+  const suggestedQuestions = SECTOR_QUESTIONS[sectorId] ?? SECTOR_QUESTIONS.manufacturing
+
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -182,11 +231,13 @@ export default function QueryInterface() {
 
     try {
       const result = await runQuery(question)
+      const entities = extractEntities(result.sql_query, ontology.nodes)
       const assistantMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: result.summary,
         result,
+        entities,
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, assistantMsg])
@@ -223,7 +274,7 @@ export default function QueryInterface() {
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
         <p className="text-slate-400 mt-1 text-sm">
-          Ask questions in natural language about your ERP data
+          {sector.name} · Ask questions in natural language — powered by the semantic layer
         </p>
       </div>
 
@@ -247,7 +298,7 @@ export default function QueryInterface() {
                 <Lightbulb className="w-3.5 h-3.5" />
                 <span>Suggested questions</span>
               </div>
-              {SUGGESTED_QUESTIONS.map((q) => (
+              {suggestedQuestions.map((q) => (
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
@@ -287,7 +338,7 @@ export default function QueryInterface() {
         {/* Suggested chips when messages exist */}
         {messages.length > 0 && (
           <div className="flex gap-2 mb-3 flex-wrap">
-            {SUGGESTED_QUESTIONS.map((q) => (
+            {suggestedQuestions.map((q) => (
               <button
                 key={q}
                 onClick={() => sendMessage(q)}
