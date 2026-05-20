@@ -1,7 +1,237 @@
-import { FileText, Send, CheckCircle, ShoppingCart, Factory, Package, Clock } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
+import type { SectorId } from '../data/sectors'
 
-// Generic stage style palette used to colour the 4 sector-driven processStages
+// ── Pipeline types ────────────────────────────────────────────────────────────
+
+type StepId = 'connect' | 'extract' | 'map' | 'enrich' | 'index'
+type StepStatus = 'idle' | 'running' | 'done'
+type RunState = 'idle' | 'running' | 'done'
+
+interface LogEntry { id: number; time: string; text: string; type: 'info' | 'ok' | 'warn' }
+interface StepDef { id: StepId; label: string; icon: typeof Plug; durationMs: number }
+
+const PIPELINE_STEPS: StepDef[] = [
+  { id: 'connect', label: 'Connect',  icon: Plug,      durationMs: 1400 },
+  { id: 'extract', label: 'Extract',  icon: Download,  durationMs: 2600 },
+  { id: 'map',     label: 'Map',      icon: GitBranch, durationMs: 1600 },
+  { id: 'enrich',  label: 'Enrich',   icon: Sparkles,  durationMs: 2000 },
+  { id: 'index',   label: 'Index',    icon: Database,  durationMs: 900  },
+]
+const TOTAL_MS = PIPELINE_STEPS.reduce((a, s) => a + s.durationMs, 0)
+const IDLE_STATUSES: Record<StepId, StepStatus> = { connect:'idle', extract:'idle', map:'idle', enrich:'idle', index:'idle' }
+
+// ── Sector-specific pipeline logs ─────────────────────────────────────────────
+
+type StepLog = { text: string; type: 'info' | 'ok' | 'warn' }
+
+const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
+  manufacturing: {
+    connect: [
+      { text: 'Initializing connection pool...', type: 'info' },
+      { text: '✓ PostgreSQL 15.2 on :5432 — 18ms', type: 'ok' },
+      { text: '✓ SAP S/4HANA REST API — token acquired (142ms)', type: 'ok' },
+      { text: '✓ Siemens MES WebAPI — handshake OK (67ms)', type: 'ok' },
+      { text: '3 sources ready', type: 'ok' },
+    ],
+    extract: [
+      { text: 'Starting extraction job EXT-20260520-001', type: 'info' },
+      { text: '→ customers: 2,847 rows (+34 delta)', type: 'info' },
+      { text: '→ products: 1,204 rows (+7 delta)', type: 'info' },
+      { text: '→ orders: 8,391 rows (+156 delta)', type: 'info' },
+      { text: '→ suppliers: 312 rows (no change)', type: 'info' },
+      { text: '→ work_orders: 589 rows (+23 delta)', type: 'info' },
+      { text: '✓ 13,343 rows extracted in 2.4s', type: 'ok' },
+    ],
+    map: [
+      { text: 'Loading semantic mappings v2.3 (manufacturing)', type: 'info' },
+      { text: 'Applying 47 field-level mappings...', type: 'info' },
+      { text: 'customers.vat_number → schema:taxID', type: 'info' },
+      { text: 'orders.total_value → schema:price', type: 'info' },
+      { text: '✓ 13,343 rows mapped — 0 conflicts', type: 'ok' },
+    ],
+    enrich: [
+      { text: 'Running AI enrichment (claude-haiku-4)...', type: 'info' },
+      { text: '→ Entity resolution: deduplicating customers...', type: 'info' },
+      { text: '✓ 23 duplicate records merged', type: 'ok' },
+      { text: '⚠ 4 orders with anomalous values flagged', type: 'warn' },
+      { text: '✓ 2,105 enrichments applied', type: 'ok' },
+    ],
+    index: [
+      { text: 'Writing to semantic layer index...', type: 'info' },
+      { text: '✓ 48,721 RDF triples written', type: 'ok' },
+      { text: '✓ Query cache invalidated', type: 'ok' },
+      { text: '✓ Semantic layer v20260520-001 ready', type: 'ok' },
+    ],
+  },
+  retail: {
+    connect: [
+      { text: 'Initializing connection pool...', type: 'info' },
+      { text: '✓ PostgreSQL 15.2 on :5432 — 21ms', type: 'ok' },
+      { text: '✓ Shopify GraphQL API — token OK (89ms)', type: 'ok' },
+      { text: '✓ Snowflake DWH — warehouse XS ready (3.1s)', type: 'ok' },
+      { text: '3 sources ready', type: 'ok' },
+    ],
+    extract: [
+      { text: 'Starting extraction job EXT-20260520-001', type: 'info' },
+      { text: '→ customers: 4,291 rows (+67 delta)', type: 'info' },
+      { text: '→ products: 2,104 rows (+12 delta)', type: 'info' },
+      { text: '→ orders: 11,842 rows (+234 delta)', type: 'info' },
+      { text: '→ inventory: 2,104 rows (+18 delta)', type: 'info' },
+      { text: '→ promotions: 47 rows (+3 delta)', type: 'info' },
+      { text: '✓ 20,388 rows extracted in 2.1s', type: 'ok' },
+    ],
+    map: [
+      { text: 'Loading semantic mappings v1.9 (retail)', type: 'info' },
+      { text: 'Applying 38 field-level mappings...', type: 'info' },
+      { text: 'products.sku → schema:productID', type: 'info' },
+      { text: 'orders.total_amount → schema:price', type: 'info' },
+      { text: '✓ 20,388 rows mapped — 0 conflicts', type: 'ok' },
+    ],
+    enrich: [
+      { text: 'Running AI enrichment (claude-haiku-4)...', type: 'info' },
+      { text: '→ Basket analysis: detecting cross-sell patterns...', type: 'info' },
+      { text: '✓ 847 product affinity pairs found', type: 'ok' },
+      { text: '⚠ 12 inventory items below reorder threshold', type: 'warn' },
+      { text: '✓ 3,912 enrichments applied', type: 'ok' },
+    ],
+    index: [
+      { text: 'Writing to semantic layer index...', type: 'info' },
+      { text: '✓ 67,204 RDF triples written', type: 'ok' },
+      { text: '✓ Query cache invalidated', type: 'ok' },
+      { text: '✓ Semantic layer v20260520-001 ready', type: 'ok' },
+    ],
+  },
+  healthcare: {
+    connect: [
+      { text: 'Initializing connection pool...', type: 'info' },
+      { text: '✓ PostgreSQL 15.2 on :5432 — 16ms', type: 'ok' },
+      { text: '✓ Epic FHIR R4 endpoint — OAuth2 OK (201ms)', type: 'ok' },
+      { text: '✓ HL7 FHIR message broker — connected (44ms)', type: 'ok' },
+      { text: '3 sources ready', type: 'ok' },
+    ],
+    extract: [
+      { text: 'Starting extraction job EXT-20260520-001', type: 'info' },
+      { text: '→ patients: 1,204 rows (+8 delta)', type: 'info' },
+      { text: '→ encounters: 3,812 rows (+45 delta)', type: 'info' },
+      { text: '→ diagnoses: 5,107 rows (+32 delta)', type: 'info' },
+      { text: '→ prescriptions: 2,891 rows (+67 delta)', type: 'info' },
+      { text: '→ treatments: 1,634 rows (+19 delta)', type: 'info' },
+      { text: '✓ 14,648 rows extracted in 2.7s', type: 'ok' },
+    ],
+    map: [
+      { text: 'Loading semantic mappings v3.1 (healthcare / FHIR R4)', type: 'info' },
+      { text: 'Applying 62 field-level mappings...', type: 'info' },
+      { text: 'diagnoses.icd10 → fhir:Condition.code', type: 'info' },
+      { text: 'prescriptions.dosage → fhir:Dosage', type: 'info' },
+      { text: '✓ 14,648 rows mapped — 2 unmapped fields logged', type: 'ok' },
+    ],
+    enrich: [
+      { text: 'Running AI enrichment (claude-haiku-4)...', type: 'info' },
+      { text: '→ Care gap detection: patients without follow-up...', type: 'info' },
+      { text: '✓ 34 care gaps identified and flagged', type: 'ok' },
+      { text: '⚠ 7 patients with conflicting diagnoses — review', type: 'warn' },
+      { text: '✓ 1,847 enrichments applied', type: 'ok' },
+    ],
+    index: [
+      { text: 'Writing to semantic layer index...', type: 'info' },
+      { text: '✓ 59,312 RDF triples written', type: 'ok' },
+      { text: '✓ Query cache invalidated', type: 'ok' },
+      { text: '✓ Semantic layer v20260520-001 ready', type: 'ok' },
+    ],
+  },
+  finance: {
+    connect: [
+      { text: 'Initializing connection pool...', type: 'info' },
+      { text: '✓ PostgreSQL 15.2 on :5432 — 22ms', type: 'ok' },
+      { text: '✓ Temenos T24 REST API — auth OK (178ms)', type: 'ok' },
+      { text: '✓ Credit Bureau API — rate limit: 500 req/min', type: 'ok' },
+      { text: '3 sources ready', type: 'ok' },
+    ],
+    extract: [
+      { text: 'Starting extraction job EXT-20260520-001', type: 'info' },
+      { text: '→ applicants: 892 rows (+14 delta)', type: 'info' },
+      { text: '→ loans: 2,341 rows (+28 delta)', type: 'info' },
+      { text: '→ transactions: 18,204 rows (+1,247 delta)', type: 'info' },
+      { text: '→ kyc_records: 892 rows (+14 delta)', type: 'info' },
+      { text: '→ risk_profiles: 892 rows (+14 delta)', type: 'info' },
+      { text: '✓ 23,221 rows extracted in 3.1s', type: 'ok' },
+    ],
+    map: [
+      { text: 'Loading semantic mappings v2.7 (finance / FIBO)', type: 'info' },
+      { text: 'Applying 53 field-level mappings...', type: 'info' },
+      { text: 'loans.amount → fibo:PrincipalAmount', type: 'info' },
+      { text: 'applicants.iban → fibo:BankAccountIdentifier', type: 'info' },
+      { text: '✓ 23,221 rows mapped — 0 conflicts', type: 'ok' },
+    ],
+    enrich: [
+      { text: 'Running AI enrichment (claude-haiku-4)...', type: 'info' },
+      { text: '→ Risk scoring: recomputing profiles...', type: 'info' },
+      { text: '✓ 892 risk scores updated', type: 'ok' },
+      { text: '⚠ 6 applicants with incomplete KYC flagged', type: 'warn' },
+      { text: '✓ 3,204 enrichments applied', type: 'ok' },
+    ],
+    index: [
+      { text: 'Writing to semantic layer index...', type: 'info' },
+      { text: '✓ 84,107 RDF triples written', type: 'ok' },
+      { text: '✓ Query cache invalidated', type: 'ok' },
+      { text: '✓ Semantic layer v20260520-001 ready', type: 'ok' },
+    ],
+  },
+}
+
+const SECTOR_SUMMARY: Record<SectorId, { rows: string; entities: number; enrichments: string; triples: string }> = {
+  manufacturing: { rows: '13,343', entities: 8, enrichments: '2,105', triples: '48,721' },
+  retail:        { rows: '20,388', entities: 8, enrichments: '3,912', triples: '67,204' },
+  healthcare:    { rows: '14,648', entities: 8, enrichments: '1,847', triples: '59,312' },
+  finance:       { rows: '23,221', entities: 8, enrichments: '3,204', triples: '84,107' },
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StepIndicator({ step, status, active }: { step: StepDef; status: StepStatus; active: boolean }) {
+  const Icon = step.icon
+  const base = 'flex flex-col items-center gap-1.5 flex-1'
+  return (
+    <div className={base}>
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+        status === 'done'    ? 'bg-teal-500 text-white shadow-sm shadow-teal-200' :
+        status === 'running' ? 'bg-teal-50 border-2 border-teal-500 text-teal-600' :
+                              'bg-slate-100 border border-slate-200 text-slate-400'
+      }`}>
+        {status === 'done' ? (
+          <CheckCircle2 className="w-5 h-5" />
+        ) : status === 'running' ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Icon className="w-4 h-4" />
+        )}
+      </div>
+      <span className={`text-[11px] font-medium transition-colors ${
+        status === 'done' ? 'text-teal-600' :
+        status === 'running' ? 'text-teal-700' :
+        'text-slate-400'
+      } ${active ? 'font-semibold' : ''}`}>{step.label}</span>
+    </div>
+  )
+}
+
+function LogLine({ entry }: { entry: LogEntry }) {
+  return (
+    <div className="flex gap-2 font-mono text-[11px] leading-relaxed">
+      <span className="text-slate-500 flex-shrink-0">{entry.time}</span>
+      <span className={
+        entry.type === 'ok'   ? 'text-teal-400' :
+        entry.type === 'warn' ? 'text-amber-400' :
+                                'text-slate-300'
+      }>{entry.text}</span>
+    </div>
+  )
+}
+
+// ── Stage style palette ───────────────────────────────────────────────────────
+
 const STAGE_STYLES = [
   { icon: FileText,    color: 'text-slate-700', bg: 'bg-slate-50',  border: 'border-slate-200' },
   { icon: Send,        color: 'text-blue-700',  bg: 'bg-blue-50',   border: 'border-blue-200' },
@@ -11,8 +241,13 @@ const STAGE_STYLES = [
   { icon: Package,     color: 'text-green-700', bg: 'bg-green-50',  border: 'border-green-200' },
 ]
 
-const AVG_DAYS = ['1.2 d', '3.5 d', '8.3 d', '1.5 d']
+const STAGE_COLORS: Record<string, string> = {
+  'Stage 2': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Stage 3': 'bg-amber-50 text-amber-700 border border-amber-200',
+  'Stage 4': 'bg-teal-50 text-teal-700 border border-teal-200',
+}
 
+const AVG_DAYS = ['1.2 d', '3.5 d', '8.3 d', '1.5 d']
 const ACTIVE_CASES = [
   { id: 9,  name: 'Case #9',  value: 34750,  stage: 'Stage 2', daysInStage: 2  },
   { id: 13, name: 'Case #13', value: 61200,  stage: 'Stage 2', daysInStage: 1  },
@@ -21,32 +256,226 @@ const ACTIVE_CASES = [
   { id: 7,  name: 'Case #7',  value: 82300,  stage: 'Stage 4', daysInStage: 2  },
 ]
 
-const STAGE_COLORS: Record<string, string> = {
-  'Stage 2': 'bg-blue-50 text-blue-700 border border-blue-200',
-  'Stage 3': 'bg-amber-50 text-amber-700 border border-amber-200',
-  'Stage 4': 'bg-teal-50 text-teal-700 border border-teal-200',
+function fmt(v: number) {
+  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 }
 
-function fmt(v: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-}
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function ProcessView() {
-  const { sector } = useSector()
+  const { sectorId, sector } = useSector()
+
+  // Pipeline state
+  const [runState, setRunState] = useState<RunState>('idle')
+  const [statuses, setStatuses] = useState<Record<StepId, StepStatus>>(IDLE_STATUSES)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [elapsed, setElapsed] = useState(0)
+  const [lastRunDuration, setLastRunDuration] = useState<number | null>(null)
+  const [lastRunAt, setLastRunAt] = useState<string | null>(null)
+
+  const timeoutsRef = useRef<number[]>([])
+  const intervalRef = useRef<number | null>(null)
+  const startTimeRef = useRef<number>(0)
+  const logsEndRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [logs])
+
+  // Stop pipeline when sector changes
+  useEffect(() => {
+    stopPipeline()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectorId])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach(clearTimeout)
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [])
+
+  function stopPipeline() {
+    timeoutsRef.current.forEach(clearTimeout)
+    timeoutsRef.current = []
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    setRunState('idle')
+    setStatuses(IDLE_STATUSES)
+    setElapsed(0)
+  }
+
+  function runPipeline() {
+    stopPipeline()
+    setLogs([])
+    setRunState('running')
+    startTimeRef.current = Date.now()
+
+    // Progress ticker
+    intervalRef.current = window.setInterval(() => {
+      setElapsed(Date.now() - startTimeRef.current)
+    }, 80)
+
+    const sectorLogs = SECTOR_LOGS[sectorId]
+    let offset = 0
+
+    for (const step of PIPELINE_STEPS) {
+      const stepOffset = offset
+      const stepLogs = sectorLogs[step.id]
+      const logInterval = step.durationMs / (stepLogs.length + 1)
+
+      // Start step
+      timeoutsRef.current.push(window.setTimeout(() => {
+        setStatuses(prev => ({ ...prev, [step.id]: 'running' }))
+      }, stepOffset))
+
+      // Emit log lines
+      stepLogs.forEach((log, i) => {
+        timeoutsRef.current.push(window.setTimeout(() => {
+          const time = new Date().toLocaleTimeString('it-IT', { hour12: false })
+          setLogs(prev => [...prev, { id: Date.now() + i, time, text: log.text, type: log.type }])
+        }, stepOffset + Math.floor((i + 1) * logInterval)))
+      })
+
+      // End step
+      timeoutsRef.current.push(window.setTimeout(() => {
+        setStatuses(prev => ({ ...prev, [step.id]: 'done' }))
+      }, stepOffset + step.durationMs - 60))
+
+      offset += step.durationMs
+    }
+
+    // Pipeline done
+    timeoutsRef.current.push(window.setTimeout(() => {
+      const duration = Date.now() - startTimeRef.current
+      setLastRunDuration(duration)
+      setLastRunAt(new Date().toLocaleTimeString('it-IT', { hour12: false }))
+      setRunState('done')
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+      setElapsed(TOTAL_MS)
+    }, offset))
+  }
+
+  const progressPct = Math.min(100, Math.round((elapsed / TOTAL_MS) * 100))
+  const activeStepIdx = PIPELINE_STEPS.findIndex(s => statuses[s.id] === 'running')
+  const summary = SECTOR_SUMMARY[sectorId]
   const funnel = sector.funnel
   const maxCount = funnel[0]?.count ?? 1
-  const hasMonetary = funnel.some((s) => s.value > 0)
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Process</h1>
-        <p className="text-slate-500 mt-1 text-sm">
-          {sector.name} · {sector.domain}
-        </p>
+        <p className="text-slate-500 mt-1 text-sm">{sector.name} · {sector.domain}</p>
       </div>
 
-      {/* Timeline stages (4-stage lifecycle from sector) */}
+      {/* ── Pipeline executor ─────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <Activity className={`w-4 h-4 ${runState === 'running' ? 'text-teal-500 animate-pulse' : 'text-slate-400'}`} />
+            <h2 className="font-semibold text-slate-900">Semantic Layer Pipeline</h2>
+            {lastRunAt && runState !== 'running' && (
+              <span className="text-[11px] text-slate-400">· Last run at {lastRunAt} ({((lastRunDuration ?? 0) / 1000).toFixed(1)}s)</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {runState === 'running' ? (
+              <button
+                onClick={stopPipeline}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Square className="w-3.5 h-3.5" />
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={runPipeline}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {runState === 'done' ? 'Re-run Pipeline' : 'Run Pipeline'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Step indicators + progress */}
+        <div className="px-6 py-5">
+          <div className="flex items-start gap-0">
+            {PIPELINE_STEPS.map((step, i) => (
+              <div key={step.id} className="flex items-center flex-1">
+                <StepIndicator step={step} status={statuses[step.id]} active={i === activeStepIdx} />
+                {i < PIPELINE_STEPS.length - 1 && (
+                  <div className={`h-px flex-shrink-0 w-4 mb-5 transition-colors ${
+                    statuses[PIPELINE_STEPS[i + 1].id] !== 'idle' || statuses[step.id] === 'done'
+                      ? 'bg-teal-300'
+                      : 'bg-slate-200'
+                  }`} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          {runState !== 'idle' && (
+            <div className="mt-4">
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-teal-500 rounded-full transition-all duration-100"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[11px] text-slate-400">
+                  {runState === 'running'
+                    ? activeStepIdx >= 0 ? `Step ${activeStepIdx + 1}/5: ${PIPELINE_STEPS[activeStepIdx].label}…` : 'Finishing…'
+                    : '✓ Pipeline complete'}
+                </span>
+                <span className="text-[11px] text-slate-400">{progressPct}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Live log panel */}
+        {(runState !== 'idle' || logs.length > 0) && (
+          <div className="mx-6 mb-5 bg-slate-900 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700">
+              <div className={`w-2 h-2 rounded-full ${runState === 'running' ? 'bg-teal-400 animate-pulse' : 'bg-slate-500'}`} />
+              <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Live logs</span>
+            </div>
+            <div className="p-3 h-44 overflow-y-auto space-y-0.5">
+              {logs.map(entry => <LogLine key={entry.id} entry={entry} />)}
+              {runState === 'running' && logs.length === 0 && (
+                <span className="text-slate-500 text-[11px] font-mono">Waiting for first output…</span>
+              )}
+              <div ref={logsEndRef} />
+            </div>
+          </div>
+        )}
+
+        {/* Completion summary */}
+        {runState === 'done' && (
+          <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
+            {[
+              { label: 'Rows Extracted', value: summary.rows },
+              { label: 'Entities Mapped', value: String(summary.entities) },
+              { label: 'AI Enrichments', value: summary.enrichments },
+              { label: 'RDF Triples', value: summary.triples },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 text-center">
+                <p className="text-lg font-bold text-teal-700">{value}</p>
+                <p className="text-[10px] text-teal-600 uppercase tracking-wide mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Lifecycle stages ──────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
@@ -54,7 +483,6 @@ export default function ProcessView() {
             const style = STAGE_STYLES[i % STAGE_STYLES.length]
             const Icon = style.icon
             const funnelItem = funnel[Math.min(i, funnel.length - 1)]
-            const avgDays = AVG_DAYS[i % AVG_DAYS.length]
             return (
               <div key={stage.key} className="flex items-start gap-2 flex-shrink-0">
                 <div className={`rounded-xl border ${style.border} ${style.bg} p-4 w-40 text-center`}>
@@ -62,15 +490,15 @@ export default function ProcessView() {
                     <Icon className={`w-6 h-6 ${style.color}`} />
                   </div>
                   <p className={`text-sm font-bold ${style.color}`}>{stage.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('en-US') ?? 0}</p>
-                  {hasMonetary && funnelItem?.value ? (
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('it-IT') ?? 0}</p>
+                  {funnelItem?.value ? (
                     <p className="text-xs text-slate-500 mt-0.5">{fmt(funnelItem.value)}</p>
                   ) : (
                     <p className="text-xs text-slate-400 mt-0.5">—</p>
                   )}
                   <div className="mt-2 flex items-center justify-center gap-1 text-xs text-slate-500">
                     <Clock className="w-3 h-3" />
-                    <span>{avgDays}</span>
+                    <span>{AVG_DAYS[i % AVG_DAYS.length]}</span>
                   </div>
                 </div>
                 {i < sector.processStages.length - 1 && (
@@ -82,7 +510,7 @@ export default function ProcessView() {
         </div>
       </div>
 
-      {/* Funnel bars (full funnel) */}
+      {/* ── Conversion funnel ─────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
         <div className="space-y-3">
@@ -97,7 +525,7 @@ export default function ProcessView() {
                     className="h-full rounded-full flex items-center px-3 transition-all duration-700"
                     style={{ width: `${pct}%`, backgroundColor: `rgba(13,148,136,${opacity})` }}
                   >
-                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('en-US')}</span>
+                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('it-IT')}</span>
                   </div>
                 </div>
                 <span className="text-sm text-slate-500 w-28 text-right flex-shrink-0">
@@ -108,13 +536,19 @@ export default function ProcessView() {
             )
           })}
         </div>
-        <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500">
-          Conversion rate: <strong className="text-teal-600">{Math.round((funnel[funnel.length - 1]?.count / Math.max(1, funnel[0]?.count)) * 100)}%</strong>
-          {' · '}Stages: <strong className="text-teal-600">{funnel.length}</strong>
+        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
+          <span>Conversion rate: <strong className="text-teal-600">{Math.round((funnel[funnel.length - 1]?.count / Math.max(1, funnel[0]?.count)) * 100)}%</strong></span>
+          <span>Stages: <strong className="text-teal-600">{funnel.length}</strong></span>
+          {runState === 'done' && (
+            <span className="flex items-center gap-1 text-teal-600">
+              <CheckCircle2 className="w-3 h-3" />
+              Synced from semantic layer
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Active cases */}
+      {/* ── Active cases ──────────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-4">Active Cases</h2>
         <div className="overflow-x-auto">
@@ -141,6 +575,7 @@ export default function ProcessView() {
                   <td className="py-3 text-right text-slate-900">{fmt(c.value)}</td>
                   <td className={`py-3 text-right font-semibold ${c.daysInStage > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
                     {c.daysInStage} d
+                    {c.daysInStage > 8 && <AlertTriangle className="w-3 h-3 inline ml-1 text-amber-500" />}
                   </td>
                 </tr>
               ))}
