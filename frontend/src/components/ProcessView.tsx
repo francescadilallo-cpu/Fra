@@ -354,6 +354,8 @@ export default function ProcessView() {
       setRunState('done')
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
       setElapsed(TOTAL_MS)
+      localStorage.setItem(`pipeline-last-run-${sectorId}`, new Date().toISOString())
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     }, offset))
   }
 

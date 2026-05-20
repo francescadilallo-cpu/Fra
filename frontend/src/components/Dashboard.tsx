@@ -1,11 +1,13 @@
+import { useState, useEffect } from 'react'
 import {
   TrendingUp, ShoppingCart, FileText, Users, Database,
   CheckCircle, Activity, Package, BotMessageSquare,
-  GitBranch, Zap, ArrowUp, ArrowDown,
+  GitBranch, Zap, ArrowUp, ArrowDown, Download,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { useExtendedOntology } from '../data/ontologyExtensions'
+import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
 
@@ -337,8 +339,50 @@ function fmt(v: number) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 }
 
+function relativeTime(d: Date): string {
+  const s = Math.round((Date.now() - d.getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.round(s / 60)}m ago`
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`
+  return d.toLocaleDateString('it-IT')
+}
+
 export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) => void }) {
   const { sector, sectorId } = useSector()
+  const ontology = useExtendedOntology(sectorId)
+  const agentRuns = useAgentStore(sectorId)
+
+  const [reporting, setReporting] = useState(false)
+
+  const [pipelineLastRun, setPipelineLastRun] = useState<Date | null>(() => {
+    const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
+    return raw ? new Date(raw) : null
+  })
+
+  useEffect(() => {
+    const refresh = () => {
+      const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
+      setPipelineLastRun(raw ? new Date(raw) : null)
+    }
+    refresh()
+    window.addEventListener('pipeline-run-updated', refresh)
+    return () => window.removeEventListener('pipeline-run-updated', refresh)
+  }, [sectorId])
+
+  async function handleGenerateReport() {
+    setReporting(true)
+    await new Promise(r => setTimeout(r, 1200))
+    const now = new Date()
+    const html = generateHtmlReport({
+      sectorId, sector,
+      nodes: ontology.nodes,
+      edges: ontology.edges,
+      agentRuns,
+      generatedAt: now,
+    })
+    downloadReport(html, sectorId, now)
+    setReporting(false)
+  }
 
   const funnel = sector.funnel
   const totalQuotes = funnel[0]?.count ?? 0
@@ -399,9 +443,23 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 mt-1 text-sm">{sector.name} · {sector.domain}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <p className="text-slate-500 mt-1 text-sm">{sector.name} · {sector.domain}</p>
+        </div>
+        <button
+          onClick={handleGenerateReport}
+          disabled={reporting}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors flex-shrink-0 ${
+            reporting
+              ? 'bg-slate-100 text-slate-400 cursor-wait'
+              : 'bg-slate-900 text-white hover:bg-slate-800'
+          }`}
+        >
+          <Download className="w-4 h-4" />
+          {reporting ? 'Generating…' : 'Export Report'}
+        </button>
       </div>
 
       {/* KPI cards */}
@@ -538,8 +596,18 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
             ))}
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-400">
-            <Package className="w-3.5 h-3.5" />
-            <span>Last sync: <strong className="text-slate-600">{`today, 0${trendPct > 0 ? '9' : '8'}:14`}</strong></span>
+            <Package className={`w-3.5 h-3.5 ${pipelineLastRun ? 'text-teal-500' : ''}`} />
+            <span>
+              Last sync:{' '}
+              <strong className={pipelineLastRun ? 'text-teal-600' : 'text-slate-600'}>
+                {pipelineLastRun ? relativeTime(pipelineLastRun) : `today, 0${trendPct > 0 ? '9' : '8'}:14`}
+              </strong>
+            </span>
+            {pipelineLastRun && (
+              <span className="ml-auto text-[10px] bg-teal-50 text-teal-600 border border-teal-100 rounded-full px-2 py-0.5">
+                ✓ Pipeline synced
+              </span>
+            )}
           </div>
         </div>
       </div>
