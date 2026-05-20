@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch } from 'lucide-react'
-import { runQuery } from '../api/client'
-import type { QueryResult } from '../types'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2 } from 'lucide-react'
+import { executeQuery } from '../data/queryEngine'
+import type { EngineResult, ChartData } from '../data/queryEngine'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import type { OntologyNode } from '../types'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -12,8 +11,8 @@ interface Message {
   id: string
   role: 'user' | 'assistant' | 'error'
   content: string
-  result?: QueryResult
-  entities?: string[]   // ontology entities referenced
+  engineResult?: EngineResult
+  entities?: string[]
   timestamp: Date
 }
 
@@ -21,36 +20,103 @@ interface Message {
 
 const SECTOR_QUESTIONS: Record<string, string[]> = {
   manufacturing: [
-    'Which customers have open quotes expiring this week?',
     'Show the 5 products with the highest unit price',
-    'What is the total value of orders currently in production?',
     'Which suppliers have a reliability rating below 4.0?',
+    'What is the total value of confirmed orders?',
+    'Show active work orders',
   ],
   retail: [
-    'Which customers abandoned carts with value over €100?',
     'Show the top 10 products by stock level',
-    'What is the conversion rate from cart to paid order?',
-    'Which promotions are active and expiring in 7 days?',
+    'Which promotions are active?',
+    'What is the total amount of paid orders?',
+    'Show gold loyalty customers',
   ],
   healthcare: [
-    'Which patients have no follow-up scheduled after discharge?',
-    'Show prescriptions issued in the last 7 days',
-    'How many encounters were conducted per doctor this month?',
+    'Show prescriptions issued recently',
+    'How many encounters per doctor?',
     'Which treatments have no outcome recorded?',
+    'Show active patients',
   ],
   finance: [
-    'Which loan applications are pending KYC for over 5 days?',
-    'Show the top 10 loans by amount disbursed',
-    'What is the average risk score by employment status?',
-    'Which payments are overdue by more than 30 days?',
+    'Show the top 10 loans by amount',
+    'What is the average risk score?',
+    'Which payments are overdue?',
+    'Show pending loan applications',
   ],
 }
 
-// ── Extract ontology entities from SQL ────────────────────────────────────────
-function extractEntities(sql: string, nodes: OntologyNode[]): string[] {
-  return nodes
-    .filter(n => n.data.db_table && sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
-    .map(n => n.data.label)
+// ── Inline SVG bar chart ───────────────────────────────────────────────────────
+
+function InlineBarChart({ chart }: { chart: ChartData }) {
+  const W = 480
+  const H = 180
+  const pad = { top: 16, right: 12, bottom: 48, left: 52 }
+  const innerW = W - pad.left - pad.right
+  const innerH = H - pad.top - pad.bottom
+
+  const max = Math.max(...chart.values, 1)
+  const barW = Math.max(12, Math.floor(innerW / chart.labels.length) - 6)
+
+  return (
+    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto">
+      <div className="flex items-center gap-1.5 mb-2">
+        <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
+        <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+        {/* Y gridlines + labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const y = pad.top + innerH * (1 - frac)
+          const val = max * frac
+          const label = chart.unit === '€'
+            ? `${chart.unit}${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0)}`
+            : `${val.toFixed(0)}${chart.unit ?? ''}`
+          return (
+            <g key={frac}>
+              <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="#e2e8f0" strokeWidth={1} />
+              <text x={pad.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#94a3b8">{label}</text>
+            </g>
+          )
+        })}
+
+        {/* Bars */}
+        {chart.labels.map((lbl, i) => {
+          const bH = (chart.values[i] / max) * innerH
+          const x = pad.left + i * (innerW / chart.labels.length) + (innerW / chart.labels.length - barW) / 2
+          const y = pad.top + innerH - bH
+          const isTop = i === 0
+
+          return (
+            <g key={i}>
+              <rect
+                x={x} y={y} width={barW} height={bH}
+                rx={3}
+                fill={isTop ? '#0d9488' : '#99f6e4'}
+              />
+              {/* X label */}
+              <text
+                x={x + barW / 2}
+                y={pad.top + innerH + 14}
+                textAnchor="middle"
+                fontSize={9}
+                fill="#64748b"
+              >
+                {lbl.length > 10 ? lbl.slice(0, 10) + '…' : lbl}
+              </text>
+              {/* Value on top */}
+              {bH > 14 && (
+                <text x={x + barW / 2} y={y - 3} textAnchor="middle" fontSize={8} fill="#0f766e" fontWeight={600}>
+                  {chart.unit === '€' && chart.values[i] >= 1000
+                    ? `€${(chart.values[i] / 1000).toFixed(0)}k`
+                    : `${chart.values[i].toFixed(0)}${chart.unit ?? ''}`}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
 }
 
 // ── Result table ───────────────────────────────────────────────────────────────
@@ -78,9 +144,9 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
               {columns.map((col) => (
                 <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
                   {row[col] === null || row[col] === undefined ? (
-                    <span className="text-slate-600 italic">null</span>
+                    <span className="text-slate-400 italic">null</span>
                   ) : typeof row[col] === 'number' ? (
-                    (row[col] as number).toLocaleString('en-US')
+                    (row[col] as number).toLocaleString('it-IT')
                   ) : (
                     String(row[col])
                   )}
@@ -102,13 +168,13 @@ function SqlBlock({ sql }: { sql: string }) {
     <div className="mt-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <span>Generated SQL</span>
       </button>
       {open && (
-        <pre className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 text-teal-600 overflow-x-auto">
+        <pre className="mt-2 text-xs bg-slate-900 border border-slate-700 rounded-lg p-3 text-teal-400 overflow-x-auto">
           {sql}
         </pre>
       )}
@@ -145,32 +211,37 @@ function MessageBubble({ message }: { message: Message }) {
     )
   }
 
-  const r = message.result!
+  const r = message.engineResult!
   return (
     <div className="flex gap-3 items-start">
       <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 border border-slate-200">
         <Bot className="w-4 h-4 text-teal-400" />
       </div>
-      <div className="flex-1 max-w-[85%] bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 space-y-3">
+      <div className="flex-1 max-w-[85%] bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 space-y-3 shadow-sm">
         {/* Interpreted as */}
         <div>
-          <span className="text-xs text-slate-500 uppercase tracking-wide">Interpretation</span>
-          <p className="text-sm text-slate-600 mt-0.5 italic">{r.interpreted_as}</p>
+          <span className="text-[10px] text-slate-400 uppercase tracking-wide">Interpretation</span>
+          <p className="text-xs text-slate-500 mt-0.5 italic font-mono">{r.interpreted_as}</p>
         </div>
 
         {/* Summary */}
         <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
-          <p className="text-sm text-slate-700">{r.summary}</p>
+          <p className="text-sm text-slate-700" dangerouslySetInnerHTML={{
+            __html: r.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          }} />
         </div>
 
+        {/* Inline chart */}
+        {r.chartData && <InlineBarChart chart={r.chartData} />}
+
         {/* Results table */}
-        {r.results.length > 0 && (
+        {r.rows.length > 0 && (
           <div>
-            <span className="text-xs text-slate-500 uppercase tracking-wide">
-              Results ({r.results.length})
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">
+              Results ({r.rows.length} rows)
             </span>
             <div className="mt-1.5">
-              <ResultTable rows={r.results} />
+              <ResultTable rows={r.rows} />
             </div>
           </div>
         )}
@@ -189,10 +260,10 @@ function MessageBubble({ message }: { message: Message }) {
         )}
 
         {/* SQL */}
-        <SqlBlock sql={r.sql_query} />
+        <SqlBlock sql={r.sql} />
 
-        <p className="text-xs text-slate-400">
-          {message.timestamp.toLocaleTimeString('en-US')}
+        <p className="text-[10px] text-slate-300">
+          {message.timestamp.toLocaleTimeString('it-IT')}
         </p>
       </div>
     </div>
@@ -216,7 +287,7 @@ export default function QueryInterface() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = async (question: string) => {
+  const sendMessage = (question: string) => {
     if (!question.trim() || loading) return
 
     const userMsg: Message = {
@@ -229,36 +300,39 @@ export default function QueryInterface() {
     setInput('')
     setLoading(true)
 
-    try {
-      const result = await runQuery(question)
-      const entities = extractEntities(result.sql_query, ontology.nodes)
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: result.summary,
-        result,
-        entities,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, assistantMsg])
-    } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : 'Unknown error'
-      // Try to extract FastAPI error detail
-      const axiosErr = e as { response?: { data?: { detail?: string } } }
-      const detail = axiosErr?.response?.data?.detail ?? errMsg
-      setMessages((prev) => [
-        ...prev,
-        {
+    // Brief timeout for UX — engine is synchronous
+    setTimeout(() => {
+      try {
+        const result = executeQuery(question, ontology.nodes)
+        const entities = ontology.nodes
+          .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
+          .map(n => n.data.label)
+
+        const assistantMsg: Message = {
           id: crypto.randomUUID(),
-          role: 'error',
-          content: `Error: ${detail}`,
+          role: 'assistant',
+          content: result.summary,
+          engineResult: result,
+          entities,
           timestamp: new Date(),
-        },
-      ])
-    } finally {
-      setLoading(false)
-      inputRef.current?.focus()
-    }
+        }
+        setMessages((prev) => [...prev, assistantMsg])
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : 'Unknown error'
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'error',
+            content: `Error: ${errMsg}`,
+            timestamp: new Date(),
+          },
+        ])
+      } finally {
+        setLoading(false)
+        inputRef.current?.focus()
+      }
+    }, 420)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -271,7 +345,7 @@ export default function QueryInterface() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
+      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 bg-white">
         <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
         <p className="text-slate-400 mt-1 text-sm">
           {sector.name} · Ask questions in natural language — powered by the semantic layer
@@ -288,7 +362,7 @@ export default function QueryInterface() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900">AI Data Assistant</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
-                Ask questions about your data in English. The AI will generate SQL queries and respond clearly.
+                Ask questions about your data in natural language. The engine queries the semantic layer and returns real results with charts.
               </p>
             </div>
 
@@ -296,7 +370,7 @@ export default function QueryInterface() {
             <div className="space-y-2 w-full max-w-lg">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <Lightbulb className="w-3.5 h-3.5" />
-                <span>Suggested questions</span>
+                <span>Suggested questions for {sector.name}</span>
               </div>
               {suggestedQuestions.map((q) => (
                 <button
@@ -321,10 +395,10 @@ export default function QueryInterface() {
             <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0 border border-slate-200">
               <Bot className="w-4 h-4 text-teal-400" />
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
+            <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processing...</span>
+                <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
+                <span>Querying semantic layer…</span>
               </div>
             </div>
           </div>
@@ -334,7 +408,7 @@ export default function QueryInterface() {
       </div>
 
       {/* Input */}
-      <div className="px-8 py-4 border-t border-slate-200 flex-shrink-0">
+      <div className="px-8 py-4 border-t border-slate-200 flex-shrink-0 bg-white">
         {/* Suggested chips when messages exist */}
         {messages.length > 0 && (
           <div className="flex gap-2 mb-3 flex-wrap">
@@ -357,7 +431,7 @@ export default function QueryInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something about your data... e.g.: 'Which customers have accepted quotes this month?'"
+            placeholder={`Ask something about ${sector.name} data…`}
             rows={2}
             disabled={loading}
             className="flex-1 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 resize-none outline-none transition-colors disabled:opacity-50"
@@ -374,7 +448,7 @@ export default function QueryInterface() {
             )}
           </button>
         </div>
-        <p className="text-xs text-slate-600 mt-2">Enter to send · Shift+Enter for new line</p>
+        <p className="text-xs text-slate-400 mt-2">Enter to send · Shift+Enter for new line</p>
       </div>
     </div>
   )
