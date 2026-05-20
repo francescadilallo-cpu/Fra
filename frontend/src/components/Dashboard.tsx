@@ -369,6 +369,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     return () => window.removeEventListener('pipeline-run-updated', refresh)
   }, [sectorId])
 
+  useEffect(() => {
+    function onTrigger() { handleGenerateReport() }
+    window.addEventListener('trigger-export-report', onTrigger)
+    return () => window.removeEventListener('trigger-export-report', onTrigger)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectorId])
+
   async function handleGenerateReport() {
     setReporting(true)
     await new Promise(r => setTimeout(r, 1200))

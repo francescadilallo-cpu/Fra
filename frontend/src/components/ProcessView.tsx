@@ -297,6 +297,13 @@ export default function ProcessView() {
     }
   }, [])
 
+  useEffect(() => {
+    function onTrigger() { runPipeline() }
+    window.addEventListener('trigger-pipeline-run', onTrigger)
+    return () => window.removeEventListener('trigger-pipeline-run', onTrigger)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function stopPipeline() {
     timeoutsRef.current.forEach(clearTimeout)
     timeoutsRef.current = []

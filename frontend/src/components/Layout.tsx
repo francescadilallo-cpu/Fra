@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command } from 'lucide-react'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { useAgentStore, countFindings } from '../data/agentStore'
+import CommandPalette from './CommandPalette'
 
 interface Props {
   activeTab: NavTab
@@ -110,6 +111,14 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
         )}
       </div>
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-teal-300 text-xs text-slate-400 transition-colors"
+          title="Open command palette"
+        >
+          <Command className="w-3 h-3" />
+          <span>K</span>
+        </button>
         <span className="text-xs text-slate-400">Active sector:</span>
         <SectorSwitcher />
       </div>
@@ -127,6 +136,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
+      <CommandPalette onNavigate={handleTabChange} />
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
         <div className="px-4 py-5 border-b border-slate-100">
