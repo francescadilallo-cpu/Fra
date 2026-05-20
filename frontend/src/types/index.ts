@@ -45,12 +45,22 @@ export interface DashboardData {
 
 // ── Ontology graph ─────────────────────────────────────────────────────────────
 
+export type PropertyType = 'string' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'text' | 'uuid' | 'fk'
+
+export interface OntologyProperty {
+  name: string
+  type: PropertyType
+  required?: boolean
+  unique?: boolean
+  fkTarget?: string   // nodeId — only when type === 'fk'
+}
+
 export interface OntologyNodeData {
   label: string
   uri: string
   db_table: string | null
   row_count: number
-  properties: string[]
+  properties: OntologyProperty[]
 }
 
 export interface OntologyNode {
@@ -70,6 +80,7 @@ export interface OntologyEdge {
   style: Record<string, string>
   labelStyle: Record<string, string | number>
   markerEnd: Record<string, string>
+  cardinality?: '1:1' | '1:N' | 'N:1' | 'N:M'
 }
 
 export interface OntologyGraphData {

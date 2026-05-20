@@ -1,4 +1,6 @@
-import type { DashboardData, MappingsResponse, OntologyGraphData, QueryResult } from '../types'
+import type { DashboardData, MappingsResponse, OntologyGraphData, OntologyProperty, QueryResult } from '../types'
+
+function sp(name: string): OntologyProperty { return { name, type: 'string' } }
 
 export const mockDashboard: DashboardData = {
   total_customers: 20,
@@ -40,13 +42,13 @@ export const mockDashboard: DashboardData = {
 
 export const mockOntologyGraph: OntologyGraphData = {
   nodes: [
-    { id: 'Organization',    type: 'ontologyClass', position: { x: 400, y: 50  }, data: { label: 'Organization',    uri: 'mfg:Organization',    db_table: null,          row_count: 0,   properties: ['name'] } },
-    { id: 'Customer',        type: 'ontologyClass', position: { x: 100, y: 200 }, data: { label: 'Customer',        uri: 'mfg:Customer',        db_table: 'customers',   row_count: 20,  properties: ['name', 'sector', 'country', 'vatNumber', 'creditLimit'] } },
-    { id: 'Product',         type: 'ontologyClass', position: { x: 700, y: 200 }, data: { label: 'Product',         uri: 'mfg:Product',         db_table: 'products',    row_count: 30,  properties: ['sku', 'name', 'category', 'unitPrice', 'unitOfMeasure'] } },
-    { id: 'Quote',           type: 'ontologyClass', position: { x: 100, y: 400 }, data: { label: 'Quote',           uri: 'mfg:Quote',           db_table: 'quotes',      row_count: 50,  properties: ['date', 'status', 'totalValue', 'validUntil'] } },
-    { id: 'Order',           type: 'ontologyClass', position: { x: 700, y: 400 }, data: { label: 'Order',           uri: 'mfg:Order',           db_table: 'orders',      row_count: 13,  properties: ['date', 'status', 'totalValue', 'deliveryDate'] } },
-    { id: 'QuoteLineItem',   type: 'ontologyClass', position: { x: 400, y: 550 }, data: { label: 'QuoteLineItem',   uri: 'mfg:QuoteLineItem',   db_table: 'quote_lines', row_count: 155, properties: ['quantity', 'unitPrice', 'discountPct', 'lineTotal'] } },
-    { id: 'OrderLineItem',   type: 'ontologyClass', position: { x: 700, y: 550 }, data: { label: 'OrderLineItem',   uri: 'mfg:OrderLineItem',   db_table: 'order_lines', row_count: 37,  properties: ['quantity', 'unitPrice', 'lineTotal'] } },
+    { id: 'Organization',    type: 'ontologyClass', position: { x: 400, y: 50  }, data: { label: 'Organization',    uri: 'mfg:Organization',    db_table: null,          row_count: 0,   properties: [sp('name')] } },
+    { id: 'Customer',        type: 'ontologyClass', position: { x: 100, y: 200 }, data: { label: 'Customer',        uri: 'mfg:Customer',        db_table: 'customers',   row_count: 20,  properties: [sp('name'), sp('sector'), sp('country'), sp('vatNumber'), sp('creditLimit')] } },
+    { id: 'Product',         type: 'ontologyClass', position: { x: 700, y: 200 }, data: { label: 'Product',         uri: 'mfg:Product',         db_table: 'products',    row_count: 30,  properties: [sp('sku'), sp('name'), sp('category'), sp('unitPrice'), sp('unitOfMeasure')] } },
+    { id: 'Quote',           type: 'ontologyClass', position: { x: 100, y: 400 }, data: { label: 'Quote',           uri: 'mfg:Quote',           db_table: 'quotes',      row_count: 50,  properties: [sp('date'), sp('status'), sp('totalValue'), sp('validUntil')] } },
+    { id: 'Order',           type: 'ontologyClass', position: { x: 700, y: 400 }, data: { label: 'Order',           uri: 'mfg:Order',           db_table: 'orders',      row_count: 13,  properties: [sp('date'), sp('status'), sp('totalValue'), sp('deliveryDate')] } },
+    { id: 'QuoteLineItem',   type: 'ontologyClass', position: { x: 400, y: 550 }, data: { label: 'QuoteLineItem',   uri: 'mfg:QuoteLineItem',   db_table: 'quote_lines', row_count: 155, properties: [sp('quantity'), sp('unitPrice'), sp('discountPct'), sp('lineTotal')] } },
+    { id: 'OrderLineItem',   type: 'ontologyClass', position: { x: 700, y: 550 }, data: { label: 'OrderLineItem',   uri: 'mfg:OrderLineItem',   db_table: 'order_lines', row_count: 37,  properties: [sp('quantity'), sp('unitPrice'), sp('lineTotal')] } },
   ],
   edges: [
     { id: 'e1', source: 'Customer',      target: 'Organization',  label: 'subClassOf',       type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },

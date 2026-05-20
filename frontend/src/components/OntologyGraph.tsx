@@ -4,7 +4,32 @@ import '@xyflow/react/dist/style.css'
 import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import type { OntologyNodeData } from '../types'
+import type { OntologyNodeData, PropertyType } from '../types'
+
+// ── Type color map ───────────────────────────────────────────────────────────
+const TYPE_COLORS: Record<PropertyType, string> = {
+  uuid:     'bg-orange-100 text-orange-700',
+  string:   'bg-slate-100 text-slate-600',
+  integer:  'bg-blue-100 text-blue-700',
+  decimal:  'bg-purple-100 text-purple-700',
+  boolean:  'bg-amber-100 text-amber-700',
+  date:     'bg-green-100 text-green-700',
+  datetime: 'bg-green-100 text-green-700',
+  text:     'bg-slate-100 text-slate-500',
+  fk:       'bg-teal-100 text-teal-700',
+}
+
+// XSD type mapping for OWL turtle generation
+function toXsd(type: PropertyType): string {
+  switch (type) {
+    case 'integer': return 'xsd:integer'
+    case 'decimal': return 'xsd:decimal'
+    case 'boolean': return 'xsd:boolean'
+    case 'date':    return 'xsd:date'
+    case 'datetime': return 'xsd:dateTime'
+    default:        return 'xsd:string'
+  }
+}
 
 // ── Custom node ─────────────────────────────────────────────────────────────
 function OntologyClassNode({ data, selected }: NodeProps) {
@@ -23,8 +48,10 @@ function OntologyClassNode({ data, selected }: NodeProps) {
       </div>
       <div className="px-3 py-2 space-y-0.5">
         {d.properties.slice(0, 5).map((p) => (
-          <div key={p} className="text-xs text-slate-500">
-            <span className="text-slate-400">·</span> {p}
+          <div key={p.name} className="text-xs text-slate-500 flex items-center gap-1">
+            <span className="text-slate-400">·</span>
+            <span>{p.name}{p.required ? <span className="text-rose-500 ml-0.5">*</span> : null}</span>
+            <span className={`text-[9px] font-mono px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
           </div>
         ))}
         {d.properties.length > 5 && (
@@ -71,9 +98,13 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
           <span className="text-slate-400 text-xs uppercase tracking-wide">Properties</span>
           <div className="mt-1 space-y-1">
             {node.properties.map((p) => (
-              <div key={p} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1">
+              <div key={p.name} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1 flex-wrap">
                 <span className="w-1.5 h-1.5 bg-teal-500 rounded-full flex-shrink-0" />
-                <span className="text-xs text-slate-700 font-mono">{p}</span>
+                <span className="text-xs text-slate-700 font-mono">{p.name}</span>
+                <span className={`text-[9px] font-mono px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
+                {p.required && <span className="text-[9px] font-medium px-1 rounded bg-red-50 text-red-600">required</span>}
+                {p.unique && <span className="text-[9px] font-medium px-1 rounded bg-orange-50 text-orange-600">unique</span>}
+                {p.type === 'fk' && p.fkTarget && <span className="text-[9px] font-mono text-teal-600">→ {p.fkTarget}</span>}
               </div>
             ))}
           </div>
@@ -166,11 +197,18 @@ function CodeView() {
 @prefix ${prefix}:  <${baseUri}> .
 
 ${extendedOntology.nodes.map(n => `${prefix}:${n.data.label} a owl:Class ;
-    rdfs:label "${n.data.label}"@en${n.data.db_table ? ` ;\n    rdfs:comment "Maps to DB table ${n.data.db_table}"` : ''} .`).join('\n\n')}
+    rdfs:label "${n.data.label}"@en${n.data.db_table ? ` ;\n    rdfs:comment "Maps to DB table ${n.data.db_table}"` : ''} .
+
+${n.data.properties.filter(p => p.type !== 'fk').map(p =>
+  `${prefix}:${n.data.label}_${p.name} a owl:DatatypeProperty ;\n    rdfs:domain ${prefix}:${n.data.label} ;\n    rdfs:range ${toXsd(p.type)} .`
+).join('\n')}
+${n.data.properties.filter(p => p.type === 'fk').map(p =>
+  `${prefix}:${n.data.label}_${p.name} a owl:ObjectProperty ;\n    rdfs:domain ${prefix}:${n.data.label}${p.fkTarget ? ` ;\n    rdfs:range ${prefix}:${p.fkTarget}` : ''} .`
+).join('\n')}`).join('\n\n')}
 
 ${extendedOntology.edges.map(e => `${prefix}:${e.label} a owl:ObjectProperty ;
     rdfs:domain ${prefix}:${e.source} ;
-    rdfs:range ${prefix}:${e.target} .`).join('\n\n')}`
+    rdfs:range ${prefix}:${e.target}${e.cardinality ? ` ;\n    rdfs:comment "cardinality ${e.cardinality}"` : ''} .`).join('\n\n')}`
 
   const sparqlExamples = [
     {
@@ -333,7 +371,10 @@ export default function OntologyGraph() {
           <div className="h-full relative">
             <ReactFlow
               nodes={extendedOntology.nodes as unknown as Node[]}
-              edges={extendedOntology.edges as unknown as Edge[]}
+              edges={extendedOntology.edges.map(e => ({
+                ...e,
+                label: e.cardinality ? `${e.label} · ${e.cardinality}` : e.label,
+              })) as unknown as Edge[]}
               nodeTypes={nodeTypes}
               onNodeClick={onNodeClick}
               onPaneClick={() => setSelectedNode(null)}

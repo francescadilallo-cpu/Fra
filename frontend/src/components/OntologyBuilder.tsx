@@ -9,7 +9,7 @@ import {
   AlertTriangle, ShieldCheck, Wand2, Database, ChevronRight, Save, Trash2, Pencil, X,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
-import type { OntologyNodeData } from '../types'
+import type { OntologyNodeData, OntologyProperty, PropertyType } from '../types'
 import {
   loadExtension,
   saveExtension,
@@ -17,6 +17,30 @@ import {
   removeNode,
 } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
+
+// ── Type color map (same as OntologyGraph) ───────────────────────────────────
+const TYPE_COLORS: Record<PropertyType, string> = {
+  uuid:     'bg-orange-100 text-orange-700',
+  string:   'bg-slate-100 text-slate-600',
+  integer:  'bg-blue-100 text-blue-700',
+  decimal:  'bg-purple-100 text-purple-700',
+  boolean:  'bg-amber-100 text-amber-700',
+  date:     'bg-green-100 text-green-700',
+  datetime: 'bg-green-100 text-green-700',
+  text:     'bg-slate-100 text-slate-500',
+  fk:       'bg-teal-100 text-teal-700',
+}
+
+function inferType(name: string): PropertyType {
+  const lower = name.toLowerCase()
+  if (/id$|uuid/.test(lower)) return 'uuid'
+  if (/date|at$|time/.test(lower)) return (lower.includes('time') || lower.endsWith('at')) ? 'datetime' : 'date'
+  if (/amount|price|value|rate|score|pct|percent|decimal|weight|cost|fee|limit/.test(lower)) return 'decimal'
+  if (/count|qty|quantity|number|num|level|age|days|min|max|total/.test(lower)) return 'integer'
+  if (/active|enabled|flag|^is|^has/.test(lower)) return 'boolean'
+  if (/notes|description|text|comment|content|body|address/.test(lower)) return 'text'
+  return 'string'
+}
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type ChangeKind = 'add_class' | 'add_property' | 'add_relation' | 'rename'
@@ -33,7 +57,7 @@ interface PendingChange {
     id: string
     label: string
     uri: string
-    properties: string[]
+    properties: OntologyProperty[]
     position: { x: number; y: number }
     db_table?: string
   }
@@ -43,7 +67,7 @@ interface PendingChange {
     target: string
     label: string
   }
-  addPropertyTo?: { nodeId: string; property: string }
+  addPropertyTo?: { nodeId: string; property: OntologyProperty }
   warnings?: string[]
   requiresSteward?: boolean
 }
@@ -86,7 +110,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'Supplier',
               label: 'Supplier',
               uri: 'mfg:Supplier',
-              properties: ['name', 'vatNumber', 'country', 'reliabilityScore'],
+              properties: [{ name: 'name', type: 'string', required: true }, { name: 'vatNumber', type: 'string', unique: true }, { name: 'country', type: 'string' }, { name: 'reliabilityScore', type: 'decimal' }],
               position: { x: 1300, y: 200 },
               db_table: 'suppliers',
             },
@@ -116,7 +140,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'ProductionBatch',
               label: 'ProductionBatch',
               uri: 'mfg:ProductionBatch',
-              properties: ['batchNumber', 'producedAt', 'quantity', 'qualityCheck'],
+              properties: [{ name: 'batchNumber', type: 'string', required: true }, { name: 'producedAt', type: 'datetime' }, { name: 'quantity', type: 'integer' }, { name: 'qualityCheck', type: 'string' }],
               position: { x: 1300, y: 500 },
               db_table: 'production_batches',
             },
@@ -142,7 +166,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
             kind: 'add_property',
             summary: 'Add sustainabilityScore to Product',
             rationale: 'Numeric property, does not alter the ontology structure.',
-            addPropertyTo: { nodeId: 'Product', property: 'sustainabilityScore' },
+            addPropertyTo: { nodeId: 'Product', property: { name: 'sustainabilityScore', type: 'decimal' } },
           },
         ],
       },
@@ -171,7 +195,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'Opportunity',
               label: 'Opportunity',
               uri: 'mfg:Opportunity',
-              properties: ['stage', 'amount', 'closeDate', 'probability'],
+              properties: [{ name: 'stage', type: 'string' }, { name: 'amount', type: 'decimal' }, { name: 'closeDate', type: 'date' }, { name: 'probability', type: 'decimal' }],
               position: { x: 100, y: 600 },
               db_table: 'sf_opportunities',
             },
@@ -197,7 +221,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'LoyaltyProgram',
               label: 'LoyaltyProgram',
               uri: 'rtl:LoyaltyProgram',
-              properties: ['programName', 'tier', 'pointsBalance', 'joinDate'],
+              properties: [{ name: 'programName', type: 'string', required: true }, { name: 'tier', type: 'string' }, { name: 'pointsBalance', type: 'decimal' }, { name: 'joinDate', type: 'date' }],
               position: { x: 1300, y: 200 },
               db_table: 'loyalty_programs',
             },
@@ -226,7 +250,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'Return',
               label: 'Return',
               uri: 'rtl:Return',
-              properties: ['reason', 'refundAmount', 'returnDate', 'condition'],
+              properties: [{ name: 'reason', type: 'string' }, { name: 'refundAmount', type: 'decimal' }, { name: 'returnDate', type: 'date' }, { name: 'condition', type: 'string' }],
               position: { x: 1300, y: 500 },
               db_table: 'returns',
             },
@@ -243,7 +267,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
             kind: 'add_property',
             summary: 'Add esgRating to Product',
             rationale: 'Flat property, no impact on existing queries.',
-            addPropertyTo: { nodeId: 'Product', property: 'esgRating' },
+            addPropertyTo: { nodeId: 'Product', property: { name: 'esgRating', type: 'string' } },
           },
         ],
       },
@@ -266,7 +290,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
               id: 'InsurancePlan',
               label: 'InsurancePlan',
               uri: 'hc:InsurancePlan',
-              properties: ['payer', 'policyNumber', 'coverageType', 'copay'],
+              properties: [{ name: 'payer', type: 'string', required: true }, { name: 'policyNumber', type: 'string', unique: true }, { name: 'coverageType', type: 'string' }, { name: 'copay', type: 'decimal' }],
               position: { x: 1300, y: 200 },
               db_table: 'insurance_plans',
             },
@@ -290,7 +314,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
             kind: 'add_property',
             summary: 'Add allergies to Patient',
             rationale: 'Structured property, aligned with FHIR AllergyIntolerance.',
-            addPropertyTo: { nodeId: 'Patient', property: 'allergies' },
+            addPropertyTo: { nodeId: 'Patient', property: { name: 'allergies', type: 'text' } },
           },
         ],
       },
@@ -312,7 +336,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
             id: 'ComplianceOfficer',
             label: 'ComplianceOfficer',
             uri: 'fin:ComplianceOfficer',
-            properties: ['name', 'certifications', 'jurisdiction', 'licensesValid'],
+            properties: [{ name: 'name', type: 'string', required: true }, { name: 'certifications', type: 'text' }, { name: 'jurisdiction', type: 'string' }, { name: 'licensesValid', type: 'boolean' }],
             position: { x: 1300, y: 200 },
             db_table: 'compliance_officers',
           },
@@ -329,7 +353,7 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
           kind: 'add_property',
           summary: 'Add riskScore to Account',
           rationale: 'Property computed by existing AI model.',
-          addPropertyTo: { nodeId: 'Account', property: 'riskScore' },
+          addPropertyTo: { nodeId: 'Account', property: { name: 'riskScore', type: 'decimal' as PropertyType } },
         },
       ],
     },
@@ -381,8 +405,10 @@ function BuilderNode({ data, selected }: NodeProps) {
       </div>
       <div className="px-3 py-2 space-y-0.5">
         {d.properties.slice(0, 5).map((p) => (
-          <div key={p} className="text-xs text-slate-500">
-            <span className="text-slate-400">·</span> {p}
+          <div key={p.name} className="text-xs text-slate-500 flex items-center gap-1">
+            <span className="text-slate-400">·</span>
+            <span>{p.name}</span>
+            <span className={`text-[9px] font-mono px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
           </div>
         ))}
         {d.properties.length > 5 && (
@@ -571,15 +597,16 @@ function parseUserPrompt(
         (e) => e.label.toLowerCase() === entityRaw.toLowerCase() || e.id.toLowerCase() === entityRaw.toLowerCase(),
       )
       if (found && propRaw.length < 40 && propRaw.length > 1) {
-        const prop = normalizeProperty(propRaw)
+        const propName = normalizeProperty(propRaw)
+        const prop: OntologyProperty = { name: propName, type: inferType(propName) }
         return {
           reply:
-            `I am adding the property \`${prop}\` to **${found.label}**. ` +
+            `I am adding the property \`${propName}\` to **${found.label}**. ` +
             'Light change (property, not structure): does not require data steward approval.',
           changes: [{
             id: `c-${uid()}`,
             kind: 'add_property',
-            summary: `Add ${prop} to ${found.label}`,
+            summary: `Add ${propName} to ${found.label}`,
             rationale: `Flat property on ${found.label}. Does not alter existing relations, no impact on queries.`,
             addPropertyTo: { nodeId: found.id, property: prop },
           }],
@@ -734,13 +761,14 @@ function buildAddClassIntent(
       }],
     }
   }
-  const props = propsRaw
+  const propNames: string[] = propsRaw
     ? propsRaw
         .split(/[,;]| e | and /)
         .map((p) => normalizeProperty(p.trim()))
         .filter((p) => p.length > 0)
         .slice(0, 8)
     : ['name', 'code', 'createdAt']
+  const props: OntologyProperty[] = propNames.map((n) => ({ name: n, type: inferType(n) }))
 
   const maxX = existing.length > 0 ? 1300 : 100
   const yOffset = 200 + (existing.length % 3) * 300
@@ -753,7 +781,7 @@ function buildAddClassIntent(
     reply:
       replyPrefix +
       `I propose a new class **${name}** with ${props.length} properties: ` +
-      `${props.map((p) => `\`${p}\``).join(', ')}. ` +
+      `${props.map((p) => `\`${p.name}\``).join(', ')}. ` +
       `Verified: no duplicate concept in the ${sectorId} ontology. ` +
       'Structural change — requires data steward approval.',
     changes: [{
@@ -803,9 +831,9 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
 
   // Base nodes (possibly with extra properties added via builder)
   const baseNodes: Node[] = sector.ontology.nodes.map((n) => {
-    const extraProps = ext.addedProperties
+    const extraProps: OntologyProperty[] = ext.addedProperties
       .filter((p) => p.nodeId === n.id)
-      .map((p) => p.property)
+      .map((p) => typeof p.property === 'string' ? { name: p.property, type: 'string' as PropertyType } : p.property)
     return {
       id: n.id,
       type: 'builderNode',
@@ -828,7 +856,7 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
       uri: n.uri,
       db_table: n.db_table ?? null,
       row_count: 0,
-      properties: n.properties,
+      properties: n.properties.map((p): OntologyProperty => typeof p === 'string' ? { name: p, type: 'string' } : p),
       state: 'existing',
     },
   }))
@@ -1115,7 +1143,7 @@ export default function OntologyBuilder() {
                 data: {
                   ...(n.data as unknown as BuilderNodeData),
                   properties: (n.data as unknown as BuilderNodeData).properties.filter(
-                    (p) => p !== change.addPropertyTo!.property,
+                    (p) => p.name !== change.addPropertyTo!.property.name,
                   ),
                   state: 'existing',
                 },
@@ -1145,7 +1173,7 @@ export default function OntologyBuilder() {
     nodeId: string
     label: string
     db_table: string | null
-    properties: string[]
+    properties: OntologyProperty[]
     isBaseNode: boolean
   } | null>(null)
 
@@ -1167,7 +1195,7 @@ export default function OntologyBuilder() {
   )
 
   const saveEntity = useCallback(
-    (patch: { label: string; db_table: string | null; properties: string[] }) => {
+    (patch: { label: string; db_table: string | null; properties: OntologyProperty[] }) => {
       if (!editingEntity) return
       applyNodeChange(sectorId, editingEntity.nodeId, patch, editingEntity.isBaseNode)
       // Reload canvas from storage to reflect the change
@@ -1260,7 +1288,7 @@ export default function OntologyBuilder() {
         nds.map((n) => {
           if (n.id === prev.nodeId) {
             const data = n.data as unknown as BuilderNodeData
-            const filtered = data.properties.filter((p) => p !== prev.property)
+            const filtered = data.properties.filter((p) => p.name !== prev.property.name)
             return n.id === next.nodeId
               ? { ...n, data: { ...data, properties: [...filtered, next.property], state: 'pending' } }
               : { ...n, data: { ...data, properties: filtered, state: 'existing' } }
@@ -1754,7 +1782,7 @@ function EditChangeModal({
   // Local form state — initialized from the change.
   const [name, setName] = useState(change.newNode?.label ?? '')
   const [dbTable, setDbTable] = useState(change.newNode?.db_table ?? '')
-  const [properties, setProperties] = useState<string[]>(change.newNode?.properties ?? [])
+  const [properties, setProperties] = useState<OntologyProperty[]>(change.newNode?.properties ?? [])
   const [newProp, setNewProp] = useState('')
 
   const [relSource, setRelSource] = useState(change.newEdge?.source ?? '')
@@ -1762,16 +1790,16 @@ function EditChangeModal({
   const [relLabel, setRelLabel] = useState(change.newEdge?.label ?? '')
 
   const [propNodeId, setPropNodeId] = useState(change.addPropertyTo?.nodeId ?? '')
-  const [propName, setPropName] = useState(change.addPropertyTo?.property ?? '')
+  const [propName, setPropName] = useState(change.addPropertyTo?.property.name ?? '')
 
   function addProperty() {
-    const p = normalizeProperty(newProp.trim())
-    if (!p || properties.includes(p)) return
-    setProperties([...properties, p])
+    const n = normalizeProperty(newProp.trim())
+    if (!n || properties.some((p) => p.name === n)) return
+    setProperties([...properties, { name: n, type: inferType(n) }])
     setNewProp('')
   }
-  function removeProperty(p: string) {
-    setProperties(properties.filter((x) => x !== p))
+  function removeProperty(propName: string) {
+    setProperties(properties.filter((x) => x.name !== propName))
   }
 
   function handleSave() {
@@ -1786,7 +1814,7 @@ function EditChangeModal({
           label: normalizedName,
           uri: change.newNode.uri.replace(/[^:]+$/, normalizedName),
           db_table: dbTable.trim() || undefined,
-          properties: properties.length > 0 ? properties : ['name'],
+          properties: properties.length > 0 ? properties : [{ name: 'name', type: 'string' }],
         },
       }
       onSave(updated)
@@ -1810,11 +1838,12 @@ function EditChangeModal({
       return
     }
     if (change.kind === 'add_property' && change.addPropertyTo) {
-      const prop = normalizeProperty(propName.trim()) || change.addPropertyTo.property
+      const pName = normalizeProperty(propName.trim()) || change.addPropertyTo.property.name
+      const prop: OntologyProperty = { name: pName, type: inferType(pName) }
       const node = existing.find((e) => e.id === propNodeId)
       const updated: PendingChange = {
         ...change,
-        summary: `Add ${prop} to ${node?.label ?? propNodeId}`,
+        summary: `Add ${pName} to ${node?.label ?? propNodeId}`,
         addPropertyTo: { nodeId: propNodeId, property: prop },
       }
       onSave(updated)
@@ -1881,10 +1910,11 @@ function EditChangeModal({
                     <span className="text-xs text-slate-400 italic">No properties — add at least one.</span>
                   )}
                   {properties.map((p) => (
-                    <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
-                      {p}
+                    <span key={p.name} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
+                      {p.name}
+                      <span className={`text-[9px] px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
                       <button
-                        onClick={() => removeProperty(p)}
+                        onClick={() => removeProperty(p.name)}
                         className="text-teal-600 hover:text-teal-900"
                       >
                         <X className="w-3 h-3" />
@@ -2032,24 +2062,24 @@ function EditEntityModal({
   onDelete,
   onClose,
 }: {
-  entity: { nodeId: string; label: string; db_table: string | null; properties: string[]; isBaseNode: boolean }
-  onSave: (patch: { label: string; db_table: string | null; properties: string[] }) => void
+  entity: { nodeId: string; label: string; db_table: string | null; properties: OntologyProperty[]; isBaseNode: boolean }
+  onSave: (patch: { label: string; db_table: string | null; properties: OntologyProperty[] }) => void
   onDelete: () => void
   onClose: () => void
 }) {
   const [label, setLabel] = useState(entity.label)
   const [dbTable, setDbTable] = useState(entity.db_table ?? '')
-  const [properties, setProperties] = useState<string[]>(entity.properties)
+  const [properties, setProperties] = useState<OntologyProperty[]>(entity.properties)
   const [newProp, setNewProp] = useState('')
 
   function addProperty() {
-    const p = normalizeProperty(newProp.trim())
-    if (!p || properties.includes(p)) return
-    setProperties([...properties, p])
+    const name = normalizeProperty(newProp.trim())
+    if (!name || properties.some((x) => x.name === name)) return
+    setProperties([...properties, { name, type: inferType(name) }])
     setNewProp('')
   }
-  function removeProperty(p: string) {
-    setProperties(properties.filter((x) => x !== p))
+  function removeProperty(name: string) {
+    setProperties(properties.filter((x) => x.name !== name))
   }
 
   function handleSave() {
@@ -2118,9 +2148,10 @@ function EditEntityModal({
                 <span className="text-xs text-slate-400 italic">No properties.</span>
               )}
               {properties.map((p) => (
-                <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
-                  {p}
-                  <button onClick={() => removeProperty(p)} className="text-teal-600 hover:text-teal-900">
+                <span key={p.name} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
+                  {p.name}
+                  <span className={`text-[9px] px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
+                  <button onClick={() => removeProperty(p.name)} className="text-teal-600 hover:text-teal-900">
                     <X className="w-3 h-3" />
                   </button>
                 </span>

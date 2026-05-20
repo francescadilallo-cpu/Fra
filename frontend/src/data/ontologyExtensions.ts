@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { OntologyEdge, OntologyGraphData, OntologyNode } from '../types'
+import type { OntologyEdge, OntologyGraphData, OntologyNode, OntologyProperty } from '../types'
 import { SECTORS, type SectorId } from './sectors'
+
+// Migration helper: converts old string format to OntologyProperty
+export function toOntologyProperty(p: OntologyProperty | string): OntologyProperty {
+  return typeof p === 'string' ? { name: p, type: 'string' } : p
+}
 
 // ── Persisted shape ─────────────────────────────────────────────────────────
 export interface NodeOverride {
@@ -14,12 +19,12 @@ export interface SavedExtension {
     id: string
     label: string
     uri: string
-    properties: string[]
+    properties: Array<OntologyProperty | string>  // string for backward compat
     position: { x: number; y: number }
     db_table?: string
   }[]
   edges: { id: string; source: string; target: string; label: string }[]
-  addedProperties: { nodeId: string; property: string }[]
+  addedProperties: { nodeId: string; property: OntologyProperty | string }[]  // string for backward compat
   // Modifications to existing base entities (keyed by node ID)
   baseOverrides?: Record<string, NodeOverride>
   // IDs of base nodes/edges that have been deleted by the user
@@ -84,14 +89,14 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
     .filter((n) => !removedNodes.has(n.id))
     .map((n) => {
       const ov = overrides[n.id]
-      const extra = ext.addedProperties
+      const extra: OntologyProperty[] = ext.addedProperties
         .filter((p) => p.nodeId === n.id)
-        .map((p) => p.property)
+        .map((p) => toOntologyProperty(p.property))
       const removedProps = new Set(ov?.removedProperties ?? [])
       const newLabel = ov?.label ?? n.data.label
       const newUri = ov?.label ? `${prefix}:${ov.label}` : n.data.uri
       const newDbTable = ov && 'db_table' in ov ? (ov.db_table ?? null) : n.data.db_table
-      const newProps = [...n.data.properties.filter((p) => !removedProps.has(p)), ...extra]
+      const newProps = [...n.data.properties.filter((p) => !removedProps.has(p.name)), ...extra]
       return {
         ...n,
         data: {
@@ -104,7 +109,7 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
       }
     })
 
-  // Add extension nodes
+  // Add extension nodes (migrate old string properties to OntologyProperty)
   const extNodes: OntologyNode[] = ext.nodes.map((n) => ({
     id: n.id,
     type: 'ontologyNode',
@@ -114,7 +119,7 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
       uri: n.uri,
       db_table: n.db_table ?? null,
       row_count: 0,
-      properties: n.properties,
+      properties: n.properties.map(toOntologyProperty),
     },
   }))
 
@@ -146,7 +151,7 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
 export function applyNodeChange(
   sectorId: string,
   nodeId: string,
-  patch: { label?: string; db_table?: string | null; properties?: string[] },
+  patch: { label?: string; db_table?: string | null; properties?: OntologyProperty[] },
   isBaseNode: boolean,
 ) {
   const ext = loadExtension(sectorId)
@@ -172,11 +177,12 @@ export function applyNodeChange(
     }
 
     if (patch.properties !== undefined) {
-      const baseProps = new Set(base.data.properties)
+      const baseNames = new Set(base.data.properties.map((p) => p.name))
       const targetProps = patch.properties
-      const removedProps = base.data.properties.filter((p) => !targetProps.includes(p))
+      const targetNames = new Set(targetProps.map((p) => p.name))
+      const removedProps = base.data.properties.filter((p) => !targetNames.has(p.name)).map((p) => p.name)
       // New properties not in base → become addedProperties
-      const newAdded = targetProps.filter((p) => !baseProps.has(p))
+      const newAdded = targetProps.filter((p) => !baseNames.has(p.name))
 
       // Update addedProperties: remove old entries for this node, add new
       ext.addedProperties = (ext.addedProperties || []).filter((p) => p.nodeId !== nodeId)
