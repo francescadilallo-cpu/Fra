@@ -2,11 +2,100 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Play, Zap, Bot,
   TrendingUp, ShieldCheck, Package, Truck, Users, BarChart3,
-  Activity, RefreshCw, Eye, FileText, Heart, CreditCard,
+  Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
+
+// ── Toast system ─────────────────────────────────────────────────────────────
+interface Toast { id: string; message: string }
+
+function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className="flex items-start gap-3 bg-slate-900 text-white text-sm rounded-xl px-4 py-3 shadow-xl max-w-sm pointer-events-auto"
+          style={{ animation: 'slideInRight 0.2s ease-out' }}
+        >
+          <CheckCircle2 className="w-4 h-4 text-teal-400 flex-shrink-0 mt-0.5" />
+          <span className="leading-snug">{t.message}</span>
+          <button onClick={() => onDismiss(t.id)} className="ml-1 text-slate-500 hover:text-white flex-shrink-0">×</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Action results map ────────────────────────────────────────────────────────
+const ACTION_RESULTS: Record<string, string> = {
+  // Manufacturing — Quote Review
+  'Send expiry reminders':       '3 reminder emails sent — Acciaierie Lombarde, TechFab SRL, Metalwork SpA',
+  'Flag for sales review':       '2 quotes added to sales review queue',
+  'Update pricing rules':        'Pricing rule updated: SKU-091 margin floor raised +3%',
+  // Manufacturing — Production Scheduler
+  'Apply optimized schedule':    'Schedule applied to 28 work orders — ERP updated via SAP connector',
+  'Notify production floor':     'Notifications sent to 6 operators via WhatsApp Business',
+  'Update ERP':                  'SAP S/4HANA synchronised — 28 work orders updated',
+  // Manufacturing — Supplier Monitor
+  'Qualify backup supplier':     'RFQ sent to 3 alternative suppliers for component C-88',
+  'Increase safety stock C-88':  'Safety stock C-88 raised to 500 units — reorder triggered',
+  'Schedule supplier review':    'Supplier review scheduled with Metalfer SRL — next Tuesday 10:00',
+  // Manufacturing — Delivery Alert
+  'Send proactive update to customers': '2 customer notifications sent — ORD-0094, ORD-0101',
+  'Escalate ORD-0094':           'ORD-0094 escalated to sales manager — priority flag set',
+  'Update delivery dates in ERP':'2 delivery dates updated in SAP S/4HANA',
+  // Retail — Cart Recovery
+  'Send email campaign':         '187 recovery emails queued — estimated delivery in 2 min',
+  'Push SMS for Gold tier':      '34 SMS sent to Gold-tier customers — avg response rate 24%',
+  'Flag OOS items for buyer':    '12 out-of-stock items flagged in buyer queue',
+  // Retail — Stock Replenishment
+  'Confirm POs with buyers':     '3 purchase orders confirmed — total value €18,400',
+  'Alert store managers':        '12 store manager alerts sent via Slack',
+  'Update forecast model':       'Forecast model updated with winter seasonal uplift +20%',
+  // Retail — Churn Detector
+  'Activate email re-engagement':'Re-engagement sequence activated for 34 customers — 7-day drip',
+  'Assign VIP to account manager':'8 Gold-tier customers assigned to account managers',
+  'Export list to CRM':          '34 contacts exported to Salesforce — tag: churn-risk-Q4',
+  // Retail — Promo Optimizer
+  'Scale PROMO-20':              'PROMO-20 expanded to all Gold customers — 1,204 recipients',
+  'Pause 3 underperformers':     '3 promotions paused — PROMO-07, PROMO-12, PROMO-19',
+  'Test new threshold at €50':   'A/B test created: free-shipping €50 vs €30 — 2,000 sample size',
+  // Healthcare — Follow-up Scheduler
+  'Confirm with clinicians':     '28 appointment requests sent to 6 clinicians',
+  'Send patient SMS reminders':  '28 SMS reminders sent — opt-out rate 0%',
+  'Update EMR':                  '28 appointments recorded in Epic EMR',
+  // Healthcare — Drug Interaction
+  'Notify pharmacists':          '2 pharmacist alerts sent — response expected within 1h',
+  'Alert prescribers for 2 cases':'2 prescribers notified via secure messaging',
+  'Log to EMR audit trail':      '47 prescription scans logged to Epic audit trail',
+  // Healthcare — Insurance Pre-auth
+  'Follow up Generali on 3 pending':'Follow-up submitted to Generali — reference #GEN-2024-891',
+  'Notify patients of approvals':'12 patient notifications sent — appointments confirmed',
+  'Escalate if no response by 5pm':'Escalation rule set — Generali deadline: today 17:00',
+  // Healthcare — No-show Predictor
+  'Confirm waitlist bookings':   '5 waitlist patients confirmed for early slots',
+  'Send day-before reminders for high-risk': '8 high-risk reminder SMS scheduled for tomorrow 08:00',
+  'Update scheduling policy':    'Overbooking policy proposal sent to scheduling committee',
+  // Finance — KYC
+  'Escalate 3 to compliance officer': '3 cases escalated to Marco Bianchi (Compliance) — priority: HIGH',
+  'Send reminder batch':         '15 KYC reminders sent — email + SMS',
+  'Flag expired docs to ops':    '8 expired document alerts sent to operations team',
+  // Finance — Risk Scoring
+  'Notify relationship managers':'19 relationship managers notified of score changes',
+  'Trigger covenant review for 3 critical': 'Covenant review triggered for 3 loans — legal notified',
+  'Update loan pricing':         '12 loan pricing updates queued for credit committee approval',
+  // Finance — Overdue Payment
+  'Legal handoff for 3 NPLs':    '3 NPL files transferred to legal — Studio Legale Ferretti',
+  'Confirm soft reminders sent': '9 soft reminder SMS/emails confirmed delivered',
+  'Process 2 payment plan requests': '2 payment plan proposals generated — pending borrower signature',
+  // Finance — AML
+  'Submit STR to UIF':           'Suspicious Transaction Report submitted to UIF — protocol #STR-2024-0847',
+  'Freeze account BA-0291 pending review': 'Account BA-0291 frozen — customer notification sent per AMLD6',
+  'Notify compliance officer':   'Compliance officer Marco Bianchi notified — case #AML-2024-0291',
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type AgentStatus = 'idle' | 'queued' | 'running' | 'completed' | 'error'
@@ -528,6 +617,51 @@ function nowTs() {
   return new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+// ── Action buttons (with per-button loading + done state) ────────────────────
+function ActionButtons({ actions, onAction }: { actions: string[]; onAction: (label: string) => void }) {
+  const [done, setDone] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState<string | null>(null)
+
+  const handleClick = (a: string) => {
+    if (done.has(a) || loading) return
+    setLoading(a)
+    setTimeout(() => {
+      setLoading(null)
+      setDone(prev => new Set([...prev, a]))
+      onAction(a)
+    }, 600)
+  }
+
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">Suggested actions</p>
+      <div className="flex flex-wrap gap-1.5">
+        {actions.map((a) => {
+          const isDone = done.has(a)
+          const isLoading = loading === a
+          return (
+            <button
+              key={a}
+              onClick={() => handleClick(a)}
+              disabled={!!loading || isDone}
+              className={`flex items-center gap-1 text-xs rounded-lg px-2.5 py-1 transition-all border ${
+                isDone
+                  ? 'bg-teal-50 border-teal-300 text-teal-700 cursor-default'
+                  : isLoading
+                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-wait'
+                    : 'bg-white border-slate-200 hover:border-teal-300 hover:text-teal-700 text-slate-600'
+              }`}
+            >
+              {isDone && <CheckCircle2 className="w-3 h-3" />}
+              {isLoading ? '…' : a}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Agent Card ────────────────────────────────────────────────────────────────
 function AgentCard({
   def,
@@ -535,12 +669,14 @@ function AgentCard({
   onRun,
   expanded,
   onToggle,
+  onAction,
 }: {
   def: AgentDef
   state: AgentRunState
   onRun: () => void
   expanded: boolean
   onToggle: () => void
+  onAction: (label: string) => void
 }) {
   const Icon = def.icon
   const isRunning = state.status === 'running'
@@ -644,16 +780,7 @@ function AgentCard({
             ))}
           </div>
           {/* Suggested actions */}
-          <div>
-            <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-1.5">Suggested actions</p>
-            <div className="flex flex-wrap gap-1.5">
-              {def.actions.map((a, i) => (
-                <button key={i} className="text-xs bg-white border border-slate-200 hover:border-teal-300 hover:text-teal-700 text-slate-600 rounded-lg px-2.5 py-1 transition-colors">
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ActionButtons actions={def.actions} onAction={onAction} />
         </div>
       )}
     </div>
@@ -670,7 +797,19 @@ export default function AgentsView() {
   )
   const [log, setLog] = useState<LogEntry[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [toasts, setToasts] = useState<Toast[]>([])
   const logRef = useRef<HTMLDivElement>(null)
+
+  const addToast = useCallback((message: string) => {
+    const id = Math.random().toString(36).slice(2)
+    setToasts(prev => [...prev, { id, message }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000)
+  }, [])
+
+  const handleAction = useCallback((label: string) => {
+    const result = ACTION_RESULTS[label] ?? 'Action completed successfully'
+    addToast(result)
+  }, [addToast])
 
   // Reset when sector changes
   useEffect(() => {
@@ -827,10 +966,13 @@ export default function AgentsView() {
                 onRun={() => runAgent(def)}
                 expanded={!!expanded[def.id]}
                 onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
+                onAction={handleAction}
               />
             ))}
           </div>
         </div>
+
+        <ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
         {/* Activity log (always visible at bottom) */}
         <div className="flex-shrink-0 border-t border-slate-200 bg-slate-950 h-44">

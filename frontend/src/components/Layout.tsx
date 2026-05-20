@@ -24,6 +24,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] =
   { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
   { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
   { id: 'agents',    label: 'Agents',         icon: BotMessageSquare },
+  { id: 'data',      label: 'Data Explorer',  icon: Table2 },
   { id: 'query',     label: 'Query AI',       icon: MessageSquare },
   { id: 'mappings',  label: 'Mappings',       icon: Table2 },
   { id: 'process',   label: 'Process',        icon: Workflow },

@@ -9,6 +9,7 @@ import MappingView from './components/MappingView'
 import ProcessView from './components/ProcessView'
 import ConfigurationView from './components/ConfigurationView'
 import AgentsView from './components/AgentsView'
+import DataExplorer from './components/DataExplorer'
 import type { NavTab } from './types'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
       {activeTab === 'ontology' && <OntologyGraph />}
       {activeTab === 'builder' && <OntologyBuilder />}
       {activeTab === 'agents' && <AgentsView />}
+      {activeTab === 'data' && <DataExplorer />}
       {activeTab === 'query' && <QueryInterface />}
       {activeTab === 'mappings' && <MappingView />}
       {activeTab === 'process' && <ProcessView />}
