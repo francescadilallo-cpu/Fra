@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2 } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare } from 'lucide-react'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
@@ -13,6 +13,7 @@ interface Props {
 const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
   overview: 'bg-teal-600',
   builder: 'bg-violet-600',
+  agents: 'bg-blue-600',
   config: 'bg-amber-500',
 }
 
@@ -21,6 +22,7 @@ const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] =
   { id: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
   { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
   { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
+  { id: 'agents',    label: 'Agents',         icon: BotMessageSquare },
   { id: 'query',     label: 'Query AI',       icon: MessageSquare },
   { id: 'mappings',  label: 'Mappings',       icon: Table2 },
   { id: 'process',   label: 'Process',        icon: Workflow },
