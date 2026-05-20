@@ -3,6 +3,12 @@ import type { OntologyEdge, OntologyGraphData, OntologyNode } from '../types'
 import { SECTORS, type SectorId } from './sectors'
 
 // ── Persisted shape ─────────────────────────────────────────────────────────
+export interface NodeOverride {
+  label?: string             // rename
+  db_table?: string | null   // change DB mapping (null = remove)
+  removedProperties?: string[]
+}
+
 export interface SavedExtension {
   nodes: {
     id: string
@@ -14,24 +20,39 @@ export interface SavedExtension {
   }[]
   edges: { id: string; source: string; target: string; label: string }[]
   addedProperties: { nodeId: string; property: string }[]
+  // Modifications to existing base entities (keyed by node ID)
+  baseOverrides?: Record<string, NodeOverride>
+  // IDs of base nodes/edges that have been deleted by the user
+  removedBaseNodes?: string[]
+  removedBaseEdges?: string[]
 }
 
-const EMPTY: SavedExtension = { nodes: [], edges: [], addedProperties: [] }
+const EMPTY: SavedExtension = {
+  nodes: [],
+  edges: [],
+  addedProperties: [],
+  baseOverrides: {},
+  removedBaseNodes: [],
+  removedBaseEdges: [],
+}
 const STORAGE_KEY = (sectorId: string) => `ontology-builder-ext-${sectorId}`
 const STORAGE_EVENT = 'ontology-builder-changed'
 
 export function loadExtension(sectorId: string): SavedExtension {
   try {
     const raw = localStorage.getItem(STORAGE_KEY(sectorId))
-    if (!raw) return { ...EMPTY }
+    if (!raw) return { ...EMPTY, baseOverrides: {}, removedBaseNodes: [], removedBaseEdges: [] }
     const parsed = JSON.parse(raw) as SavedExtension
     return {
       nodes: parsed.nodes ?? [],
       edges: parsed.edges ?? [],
       addedProperties: parsed.addedProperties ?? [],
+      baseOverrides: parsed.baseOverrides ?? {},
+      removedBaseNodes: parsed.removedBaseNodes ?? [],
+      removedBaseEdges: parsed.removedBaseEdges ?? [],
     }
   } catch {
-    return { ...EMPTY }
+    return { ...EMPTY, baseOverrides: {}, removedBaseNodes: [], removedBaseEdges: [] }
   }
 }
 
@@ -50,16 +71,38 @@ export function saveExtension(sectorId: string, ext: SavedExtension) {
 export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
   const base = SECTORS[sectorId].ontology
   const ext = loadExtension(sectorId)
+  const removedNodes = new Set(ext.removedBaseNodes ?? [])
+  const removedEdges = new Set(ext.removedBaseEdges ?? [])
+  const overrides = ext.baseOverrides ?? {}
+  const prefix =
+    sectorId === 'manufacturing' ? 'mfg' :
+    sectorId === 'retail' ? 'rtl' :
+    sectorId === 'healthcare' ? 'hc' : 'fin'
 
-  // Apply added properties to base nodes
-  const baseNodes: OntologyNode[] = base.nodes.map((n) => {
-    const extra = ext.addedProperties
-      .filter((p) => p.nodeId === n.id)
-      .map((p) => p.property)
-    return extra.length > 0
-      ? { ...n, data: { ...n.data, properties: [...n.data.properties, ...extra] } }
-      : n
-  })
+  // Apply overrides + added properties on base nodes (filter out removed ones)
+  const baseNodes: OntologyNode[] = base.nodes
+    .filter((n) => !removedNodes.has(n.id))
+    .map((n) => {
+      const ov = overrides[n.id]
+      const extra = ext.addedProperties
+        .filter((p) => p.nodeId === n.id)
+        .map((p) => p.property)
+      const removedProps = new Set(ov?.removedProperties ?? [])
+      const newLabel = ov?.label ?? n.data.label
+      const newUri = ov?.label ? `${prefix}:${ov.label}` : n.data.uri
+      const newDbTable = ov && 'db_table' in ov ? (ov.db_table ?? null) : n.data.db_table
+      const newProps = [...n.data.properties.filter((p) => !removedProps.has(p)), ...extra]
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          label: newLabel,
+          uri: newUri,
+          db_table: newDbTable,
+          properties: newProps,
+        },
+      }
+    })
 
   // Add extension nodes
   const extNodes: OntologyNode[] = ext.nodes.map((n) => ({
@@ -75,7 +118,12 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
     },
   }))
 
-  // Add extension edges (styled to look the same as base, but with a hint they're user-added)
+  // Base edges with removed ones filtered out + any referencing removed nodes
+  const baseEdges = base.edges.filter(
+    (e) => !removedEdges.has(e.id) && !removedNodes.has(e.source) && !removedNodes.has(e.target),
+  )
+
+  // Add extension edges (styled with violet hint)
   const extEdges: OntologyEdge[] = ext.edges.map((e) => ({
     id: e.id,
     source: e.source,
@@ -83,15 +131,96 @@ export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
     label: e.label,
     type: 'smoothstep',
     animated: true,
-    style: { stroke: '#7C3AED' },          // violet to indicate user-added
+    style: { stroke: '#7C3AED' },
     labelStyle: { fill: '#7C3AED', fontSize: 11 },
     markerEnd: { type: 'ArrowClosed' },
   }))
 
   return {
     nodes: [...baseNodes, ...extNodes],
-    edges: [...base.edges, ...extEdges],
+    edges: [...baseEdges, ...extEdges],
   }
+}
+
+// ── Mutation helpers ────────────────────────────────────────────────────────
+export function applyNodeChange(
+  sectorId: string,
+  nodeId: string,
+  patch: { label?: string; db_table?: string | null; properties?: string[] },
+  isBaseNode: boolean,
+) {
+  const ext = loadExtension(sectorId)
+
+  if (isBaseNode) {
+    // Compare against base values to compute override
+    const sector = SECTORS[sectorId as SectorId]
+    const base = sector?.ontology.nodes.find((n) => n.id === nodeId)
+    if (!base) return
+
+    const ov: NodeOverride = { ...(ext.baseOverrides?.[nodeId] ?? {}) }
+
+    if (patch.label !== undefined && patch.label !== base.data.label) {
+      ov.label = patch.label
+    } else if (patch.label !== undefined) {
+      delete ov.label
+    }
+
+    if (patch.db_table !== undefined && patch.db_table !== base.data.db_table) {
+      ov.db_table = patch.db_table
+    } else if (patch.db_table !== undefined) {
+      delete ov.db_table
+    }
+
+    if (patch.properties !== undefined) {
+      const baseProps = new Set(base.data.properties)
+      const targetProps = patch.properties
+      const removedProps = base.data.properties.filter((p) => !targetProps.includes(p))
+      // New properties not in base → become addedProperties
+      const newAdded = targetProps.filter((p) => !baseProps.has(p))
+
+      // Update addedProperties: remove old entries for this node, add new
+      ext.addedProperties = (ext.addedProperties || []).filter((p) => p.nodeId !== nodeId)
+      newAdded.forEach((p) => ext.addedProperties.push({ nodeId, property: p }))
+
+      ov.removedProperties = removedProps.length > 0 ? removedProps : undefined
+    }
+
+    ext.baseOverrides = { ...(ext.baseOverrides ?? {}), [nodeId]: ov }
+  } else {
+    // Extension node: mutate in place
+    ext.nodes = ext.nodes.map((n) =>
+      n.id === nodeId
+        ? {
+            ...n,
+            label: patch.label ?? n.label,
+            uri: patch.label ? n.uri.replace(/[^:]+$/, patch.label) : n.uri,
+            db_table: patch.db_table === null ? undefined : (patch.db_table ?? n.db_table),
+            properties: patch.properties ?? n.properties,
+          }
+        : n,
+    )
+  }
+
+  saveExtension(sectorId, ext)
+}
+
+export function removeNode(sectorId: string, nodeId: string, isBaseNode: boolean) {
+  const ext = loadExtension(sectorId)
+  if (isBaseNode) {
+    const removed = new Set(ext.removedBaseNodes ?? [])
+    removed.add(nodeId)
+    ext.removedBaseNodes = Array.from(removed)
+    // Also clean up baseOverrides for this node
+    if (ext.baseOverrides) delete ext.baseOverrides[nodeId]
+    // Clean addedProperties on this node
+    ext.addedProperties = (ext.addedProperties || []).filter((p) => p.nodeId !== nodeId)
+  } else {
+    ext.nodes = ext.nodes.filter((n) => n.id !== nodeId)
+    // Remove edges referencing this node
+    ext.edges = ext.edges.filter((e) => e.source !== nodeId && e.target !== nodeId)
+    ext.addedProperties = (ext.addedProperties || []).filter((p) => p.nodeId !== nodeId)
+  }
+  saveExtension(sectorId, ext)
 }
 
 // ── Hook: reactive merged ontology ─────────────────────────────────────────-

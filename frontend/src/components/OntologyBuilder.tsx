@@ -10,7 +10,13 @@ import {
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { OntologyNodeData } from '../types'
-import { loadExtension, saveExtension } from '../data/ontologyExtensions'
+import {
+  loadExtension,
+  saveExtension,
+  applyNodeChange,
+  removeNode,
+} from '../data/ontologyExtensions'
+import { SECTORS } from '../data/sectors'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type ChangeKind = 'add_class' | 'add_property' | 'add_relation' | 'rename'
@@ -1134,6 +1140,55 @@ export default function OntologyBuilder() {
     setPending([])
   }, [sectorId, sector])
 
+  // ── Editing an existing entity (canvas node click) ─────────────────────
+  const [editingEntity, setEditingEntity] = useState<{
+    nodeId: string
+    label: string
+    db_table: string | null
+    properties: string[]
+    isBaseNode: boolean
+  } | null>(null)
+
+  const onNodeClickCanvas = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const data = node.data as unknown as BuilderNodeData
+      // Don't open editor for pending nodes — those go through the change card flow
+      if (data.state === 'pending') return
+      const isBaseNode = SECTORS[sectorId].ontology.nodes.some((n) => n.id === node.id)
+      setEditingEntity({
+        nodeId: node.id,
+        label: data.label,
+        db_table: data.db_table ?? null,
+        properties: data.properties,
+        isBaseNode,
+      })
+    },
+    [sectorId],
+  )
+
+  const saveEntity = useCallback(
+    (patch: { label: string; db_table: string | null; properties: string[] }) => {
+      if (!editingEntity) return
+      applyNodeChange(sectorId, editingEntity.nodeId, patch, editingEntity.isBaseNode)
+      // Reload canvas from storage to reflect the change
+      const s = buildInitialState(sector, sectorId)
+      setNodes(s.nodes)
+      setEdges(s.edges)
+      setEditingEntity(null)
+    },
+    [editingEntity, sector, sectorId],
+  )
+
+  const deleteEntity = useCallback(() => {
+    if (!editingEntity) return
+    if (!confirm(`Eliminare la classe "${editingEntity.label}"? Verranno rimosse anche le relazioni che la coinvolgono.`)) return
+    removeNode(sectorId, editingEntity.nodeId, editingEntity.isBaseNode)
+    const s = buildInitialState(sector, sectorId)
+    setNodes(s.nodes)
+    setEdges(s.edges)
+    setEditingEntity(null)
+  }, [editingEntity, sector, sectorId])
+
   // ── Editing a pending change ───────────────────────────────────────────-
   const [editingChange, setEditingChange] = useState<PendingChange | null>(null)
 
@@ -1351,6 +1406,7 @@ export default function OntologyBuilder() {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            onNodeClick={onNodeClickCanvas}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             proOptions={{ hideAttribution: true }}
@@ -1358,6 +1414,12 @@ export default function OntologyBuilder() {
             <Background color="#cbd5e1" gap={20} />
             <Controls className="!bg-white !border !border-slate-200 !shadow-sm" />
           </ReactFlow>
+
+          {/* Hint top */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-white border border-slate-200 rounded-full shadow-sm px-3 py-1 text-xs text-slate-600 flex items-center gap-1.5 z-10">
+            <Pencil className="w-3 h-3 text-teal-600" />
+            <span>Clicca su un nodo per modificarlo</span>
+          </div>
 
           {/* Legend */}
           <div className="absolute bottom-4 left-4 bg-white border border-slate-200 rounded-lg shadow-sm p-2.5 text-xs flex items-center gap-4">
@@ -1413,7 +1475,7 @@ export default function OntologyBuilder() {
         )}
       </div>
 
-      {/* Edit modal */}
+      {/* Edit pending change modal */}
       {editingChange && (
         <EditChangeModal
           change={editingChange}
@@ -1423,6 +1485,16 @@ export default function OntologyBuilder() {
             setEditingChange(null)
           }}
           onClose={() => setEditingChange(null)}
+        />
+      )}
+
+      {/* Edit existing entity modal */}
+      {editingEntity && (
+        <EditEntityModal
+          entity={editingEntity}
+          onSave={saveEntity}
+          onDelete={deleteEntity}
+          onClose={() => setEditingEntity(null)}
         />
       )}
     </div>
@@ -1949,6 +2021,159 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">{label}</label>
       {children}
+    </div>
+  )
+}
+
+// ── Edit existing entity modal ──────────────────────────────────────────────
+function EditEntityModal({
+  entity,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  entity: { nodeId: string; label: string; db_table: string | null; properties: string[]; isBaseNode: boolean }
+  onSave: (patch: { label: string; db_table: string | null; properties: string[] }) => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const [label, setLabel] = useState(entity.label)
+  const [dbTable, setDbTable] = useState(entity.db_table ?? '')
+  const [properties, setProperties] = useState<string[]>(entity.properties)
+  const [newProp, setNewProp] = useState('')
+
+  function addProperty() {
+    const p = normalizeProperty(newProp.trim())
+    if (!p || properties.includes(p)) return
+    setProperties([...properties, p])
+    setNewProp('')
+  }
+  function removeProperty(p: string) {
+    setProperties(properties.filter((x) => x !== p))
+  }
+
+  function handleSave() {
+    onSave({
+      label: normalizeEntityName(label) || entity.label,
+      db_table: dbTable.trim() || null,
+      properties,
+    })
+  }
+
+  const dirty =
+    label !== entity.label ||
+    (dbTable || null) !== (entity.db_table || null) ||
+    JSON.stringify(properties) !== JSON.stringify(entity.properties)
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Pencil className="w-4 h-4 text-teal-600" />
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Modifica entità</h3>
+              <p className="text-[11px] text-slate-400">
+                {entity.isBaseNode ? 'Classe base — le modifiche sono salvate come override' : 'Classe utente'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <Field label="Nome classe">
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">URI e tabella DB verranno aggiornati di conseguenza.</p>
+          </Field>
+
+          <Field label="Tabella DB">
+            <input
+              type="text"
+              value={dbTable}
+              onChange={(e) => setDbTable(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
+              placeholder="(nessun mapping)"
+            />
+          </Field>
+
+          <Field label={`Proprietà (${properties.length})`}>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {properties.length === 0 && (
+                <span className="text-xs text-slate-400 italic">Nessuna proprietà.</span>
+              )}
+              {properties.map((p) => (
+                <span key={p} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
+                  {p}
+                  <button onClick={() => removeProperty(p)} className="text-teal-600 hover:text-teal-900">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newProp}
+                onChange={(e) => setNewProp(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addProperty())}
+                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
+                placeholder="aggiungi proprietà..."
+              />
+              <button
+                onClick={addProperty}
+                disabled={!newProp.trim()}
+                className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Aggiungi
+              </button>
+            </div>
+          </Field>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+          <button
+            onClick={onDelete}
+            className="text-sm bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-rose-700 rounded-lg px-3 py-2 font-medium transition-colors flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Elimina
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="text-sm bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-4 py-2 font-medium transition-colors"
+            >
+              Annulla
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!dirty}
+              className="text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-500 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              Salva
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
