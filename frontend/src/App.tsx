@@ -17,8 +17,54 @@ import OnboardingWizard from './components/OnboardingWizard'
 import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
 import type { SectorId } from './data/sectors'
+import { loadExtension, saveExtension } from './data/ontologyExtensions'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
+
+function normalizeEntityName(raw: string): string {
+  const map: Record<string, string> = {
+    stabilimento: 'Plant', stabilimenti: 'Plant',
+    reparto: 'Department', reparti: 'Department',
+    filiale: 'Branch', filiali: 'Branch',
+    negozio: 'Shop', negozi: 'Shop',
+    magazzino: 'Warehouse', magazzini: 'Warehouse',
+    cliente: 'Customer', clienti: 'Customer',
+    fornitore: 'Supplier', fornitori: 'Supplier',
+    dipendente: 'Employee', dipendenti: 'Employee',
+    progetto: 'Project', progetti: 'Project',
+    contratto: 'Contract', contratti: 'Contract',
+  }
+  const lower = raw.toLowerCase().trim()
+  if (map[lower]) return map[lower]
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join('')
+    .replace(/[^A-Za-z0-9]/g, '')
+}
+
+function addCustomEntityToOntology(sectorId: SectorId, rawName: string) {
+  const name = normalizeEntityName(rawName)
+  if (!name || name.length < 2) return
+  const ext = loadExtension(sectorId)
+  if (ext.nodes.some(n => n.id === name)) return
+  const prefix = sectorId === 'manufacturing' ? 'mfg' : sectorId === 'retail' ? 'rtl' : sectorId === 'healthcare' ? 'hc' : 'fin'
+  ext.nodes.push({
+    id: name,
+    label: name,
+    uri: `${prefix}:${name}`,
+    properties: [
+      { name: 'id', type: 'uuid', required: true, unique: true },
+      { name: 'name', type: 'string', required: true },
+      { name: 'code', type: 'string' },
+      { name: 'createdAt', type: 'datetime' },
+    ],
+    position: { x: 1300, y: 350 },
+    db_table: name.toLowerCase() + 's',
+  })
+  saveExtension(sectorId, ext)
+}
 
 export default function App() {
   const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
@@ -26,14 +72,12 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { setSector } = useSector()
 
-  // Show onboarding on first login (after access gate, before main UI)
   useEffect(() => {
     if (granted && !localStorage.getItem(ONBOARDING_KEY)) {
       setShowOnboarding(true)
     }
   }, [granted])
 
-  // Navigate to agents tab when OntologyBuilder triggers "Create Agent"
   useEffect(() => {
     const handler = (e: Event) => {
       const entity = (e as CustomEvent<{ entity: string }>).detail?.entity
@@ -57,13 +101,15 @@ export default function App() {
     <>
       {showOnboarding && (
         <OnboardingWizard
-          onComplete={(companyName: string, sectorId: SectorId) => {
+          onComplete={(companyName: string, sectorId: SectorId, customEntity: string) => {
             localStorage.setItem(ONBOARDING_KEY, '1')
+            localStorage.setItem('si-company-name', companyName)
+            localStorage.removeItem('si-welcome-banner-dismissed')
+            if (customEntity) addCustomEntityToOntology(sectorId, customEntity)
             setSector(sectorId)
             setShowOnboarding(false)
-            // Store company name for later use
-            localStorage.setItem('si-company-name', companyName)
-            setActiveTab('overview')
+            window.dispatchEvent(new CustomEvent('company-name-changed'))
+            setActiveTab('dashboard')
           }}
           onSkip={() => {
             localStorage.setItem(ONBOARDING_KEY, '1')

@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Brain, ChevronRight, ChevronLeft, X, Check, Building2, Zap, Package } from 'lucide-react'
-import type { SectorId } from '../data/sectors'
+import { Brain, ChevronRight, ChevronLeft, X, Check, Building2, Zap, Package, GitBranch } from 'lucide-react'
+import { SECTORS, type SectorId } from '../data/sectors'
 
 interface Props {
-  onComplete: (companyName: string, sectorId: SectorId) => void
+  onComplete: (companyName: string, sectorId: SectorId, customEntity: string) => void
   onSkip: () => void
 }
 
-const SECTORS = [
+const SECTOR_CARDS = [
   { id: 'manufacturing' as SectorId, emoji: '🏭', label: 'Manifattura', desc: 'Produzione, qualità, supply chain' },
   { id: 'retail' as SectorId, emoji: '🛍', label: 'Retail', desc: 'Vendite, magazzino, clienti' },
   { id: 'healthcare' as SectorId, emoji: '🏥', label: 'Sanità', desc: 'Pazienti, prescrizioni, percorsi di cura' },
@@ -35,10 +35,13 @@ const SECTOR_NAMES: Record<SectorId, string> = {
   finance: 'Finanza',
 }
 
+const TOTAL_STEPS = 5
+
 export default function OnboardingWizard({ onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
   const [companyName, setCompanyName] = useState('')
   const [selectedSector, setSelectedSector] = useState<SectorId | null>(null)
+  const [customEntity, setCustomEntity] = useState('')
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set())
 
   const toggleConnector = (name: string) => {
@@ -53,17 +56,18 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
 
   const handleComplete = () => {
     localStorage.setItem('si-onboarding-done', '1')
-    onComplete(companyName.trim(), selectedSector!)
+    onComplete(companyName.trim(), selectedSector!, customEntity.trim())
   }
+
+  const ontologyEntities = selectedSector ? SECTORS[selectedSector].ontology.nodes : []
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
       <div className="max-w-2xl w-full mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden">
         {/* Header bar */}
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          {/* Step dots */}
           <div className="flex gap-2">
-            {[1, 2, 3, 4].map(s => (
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map(s => (
               <span
                 key={s}
                 className={`w-2.5 h-2.5 rounded-full transition-colors ${s === step ? 'bg-teal-600' : s < step ? 'bg-teal-300' : 'bg-gray-200'}`}
@@ -77,7 +81,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
 
         {/* Content */}
         <div className="px-6 pb-2" style={{ minHeight: '380px' }}>
-          {/* Step 1 */}
+          {/* Step 1 — Welcome + sector */}
           {step === 1 && (
             <div className="flex flex-col gap-5">
               <div className="flex flex-col items-center gap-2 pt-2">
@@ -100,7 +104,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Settore</p>
                 <div className="grid grid-cols-2 gap-3">
-                  {SECTORS.map(s => (
+                  {SECTOR_CARDS.map(s => (
                     <button
                       key={s.id}
                       onClick={() => setSelectedSector(s.id)}
@@ -120,8 +124,43 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 2 */}
+          {/* Step 2 — Ontology preview + customization */}
           {step === 2 && selectedSector && (
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <GitBranch size={18} className="text-teal-600" />
+                  <h2 className="text-xl font-bold text-gray-900">La tua ontologia</h2>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  Layer semantico pre-costruito per {SECTOR_NAMES[selectedSector]} · {ontologyEntities.length} entità pronte all'uso
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 bg-gradient-to-br from-teal-50/50 to-slate-50 rounded-xl p-4 border border-gray-100">
+                {ontologyEntities.map(n => (
+                  <span key={n.id} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 shadow-sm">
+                    {n.data.label}
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-gray-700">
+                  Vuoi aggiungere un'entità specifica del tuo business? <span className="text-gray-400 font-normal">(opzionale)</span>
+                </label>
+                <input
+                  type="text"
+                  value={customEntity}
+                  onChange={e => setCustomEntity(e.target.value)}
+                  placeholder='es. "Stabilimento" oppure "Reparto produttivo"'
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-400">Potrai arricchirla con proprietà e relazioni nella sezione Builder AI</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 — Connectors */}
+          {step === 3 && selectedSector && (
             <div className="flex flex-col gap-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Connetti i tuoi sistemi</h2>
@@ -145,14 +184,14 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                   </button>
                 ))}
               </div>
-              <button onClick={() => setStep(3)} className="text-xs text-gray-400 hover:text-gray-600 underline self-start mt-1">
+              <button onClick={() => setStep(4)} className="text-xs text-gray-400 hover:text-gray-600 underline self-start mt-1">
                 Salta
               </button>
             </div>
           )}
 
-          {/* Step 3 */}
-          {step === 3 && selectedSector && (
+          {/* Step 4 — Suggested agent */}
+          {step === 4 && selectedSector && (
             <div className="flex flex-col gap-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Il tuo primo agente suggerito</h2>
@@ -177,21 +216,27 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 4 */}
-          {step === 4 && (
+          {/* Step 5 — Complete */}
+          {step === 5 && (
             <div className="flex flex-col items-center gap-5 pt-2">
               <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center">
                 <Check size={32} className="text-white" strokeWidth={3} />
               </div>
               <div className="text-center">
                 <h2 className="text-2xl font-bold text-gray-900">Tutto pronto!</h2>
-                <p className="text-gray-500 text-sm mt-1">Il tuo layer semantico è configurato per <span className="font-semibold text-gray-700">{companyName}</span></p>
+                <p className="text-gray-500 text-sm mt-1">
+                  Il tuo layer semantico è configurato per <span className="font-semibold text-gray-700">{companyName}</span>
+                  {customEntity && (
+                    <> con l'entità <span className="font-semibold text-teal-700">{customEntity}</span> personalizzata</>
+                  )}
+                </p>
               </div>
               <div className="w-full flex flex-col gap-2 bg-gray-50 rounded-xl p-4">
                 {[
-                  { icon: <Building2 size={15} className="text-teal-600" />, text: 'Esplora l\'ontologia nella sezione Builder AI' },
-                  { icon: <Zap size={15} className="text-teal-600" />, text: 'Esegui il tuo primo agente nella sezione Agenti' },
-                  { icon: <Package size={15} className="text-teal-600" />, text: 'Connetti altre fonti dati in Sources' },
+                  { icon: <GitBranch size={15} className="text-teal-600" />, text: `${ontologyEntities.length}${customEntity ? '+1' : ''} entità configurate nella tua ontologia` },
+                  { icon: <Building2 size={15} className="text-teal-600" />, text: `${selectedConnectors.size} font${selectedConnectors.size === 1 ? 'e dati' : 'i dati'} pronte alla connessione` },
+                  { icon: <Zap size={15} className="text-teal-600" />, text: '1 agente raccomandato pronto per la prima esecuzione' },
+                  { icon: <Package size={15} className="text-teal-600" />, text: 'Compliance GDPR + EU AI Act già mappata' },
                 ].map(({ icon, text }, i) => (
                   <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
                     {icon}
@@ -216,9 +261,9 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               </button>
             )}
           </div>
-          <span className="text-xs text-gray-400">Passo {step} di 4</span>
+          <span className="text-xs text-gray-400">Passo {step} di {TOTAL_STEPS}</span>
           <div>
-            {step < 4 ? (
+            {step < TOTAL_STEPS ? (
               <button
                 onClick={() => setStep(s => s + 1)}
                 disabled={step === 1 && !canAdvanceStep1}
@@ -232,7 +277,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                 onClick={handleComplete}
                 className="flex items-center gap-1 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors"
               >
-                Accedi alla piattaforma
+                Accedi al Dashboard
                 <ChevronRight size={16} />
               </button>
             )}

@@ -98,6 +98,13 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
   const { sectorId } = useSector()
   const runs = useAgentStore(sectorId)
   const counts = countFindings(runs)
+  const [companyName, setCompanyName] = useState<string | null>(() => localStorage.getItem('si-company-name'))
+
+  useEffect(() => {
+    const refresh = () => setCompanyName(localStorage.getItem('si-company-name'))
+    window.addEventListener('company-name-changed', refresh)
+    return () => window.removeEventListener('company-name-changed', refresh)
+  }, [])
 
   return (
     <div className="h-14 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
@@ -119,6 +126,14 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
         )}
       </div>
       <div className="flex items-center gap-2.5">
+        {companyName && (
+          <>
+            <span className="text-sm font-semibold text-slate-700 truncate max-w-[200px]" title={companyName}>
+              {companyName}
+            </span>
+            <div className="w-px h-5 bg-slate-200" />
+          </>
+        )}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 hover:shadow-sm text-[11px] font-mono text-slate-400 hover:text-slate-600 transition-all"

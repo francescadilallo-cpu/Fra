@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   TrendingUp, ShoppingCart, FileText, Users, Database,
   CheckCircle, Activity, Package, BotMessageSquare,
-  GitBranch, Zap, ArrowUp, ArrowDown, Download,
+  GitBranch, Zap, ArrowUp, ArrowDown, Download, Sparkles, X,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
@@ -448,8 +448,37 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const activities = ACTIVITIES[sectorId]
   const maxCount = funnel[0]?.count ?? 1
 
+  const companyName = typeof window !== 'undefined' ? localStorage.getItem('si-company-name') : null
+  const [showWelcome, setShowWelcome] = useState(() =>
+    !!companyName && localStorage.getItem('si-welcome-banner-dismissed') !== '1'
+  )
+  const dismissWelcome = () => {
+    localStorage.setItem('si-welcome-banner-dismissed', '1')
+    setShowWelcome(false)
+  }
+
   return (
     <div className="p-8 space-y-6">
+      {showWelcome && companyName && (
+        <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+          <div className="w-11 h-11 rounded-xl bg-teal-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-200">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900">Benvenuto, {companyName} 👋</p>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Il tuo layer semantico è pronto · {ontology.nodes.length} entità · {sector.name} · 1 agente raccomandato preconfigurato
+            </p>
+          </div>
+          <button
+            onClick={dismissWelcome}
+            className="w-7 h-7 rounded-lg hover:bg-white/60 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors flex-shrink-0"
+            title="Chiudi"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
