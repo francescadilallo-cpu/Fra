@@ -1118,6 +1118,11 @@ export default function OntologyBuilder() {
       })
     }
     saveExtension(sectorId, ext)
+    if (change.newNode) {
+      window.dispatchEvent(new CustomEvent('ontology-entity-added', {
+        detail: { entity: change.newNode.label },
+      }))
+    }
   }, [pending, sectorId])
 
   const reject = useCallback((changeId: string) => {

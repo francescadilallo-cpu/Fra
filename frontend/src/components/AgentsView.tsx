@@ -3,14 +3,14 @@ import {
   Play, Zap, Bot, Workflow as WorkflowIcon,
   TrendingUp, ShieldCheck, Package, Truck, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
-  Bell, Sparkles, Plus, Trash2,
+  Bell, Sparkles, Plus, Trash2, Clock,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS } from '../data/sectors'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { loadExtension } from '../data/ontologyExtensions'
-import { useCustomAgents, addCustomAgent, removeCustomAgent, type CustomAgentDef, type AgentTemplate } from '../data/customAgents'
+import { useCustomAgents, addCustomAgent, removeCustomAgent, updateCustomAgent, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 import AgentBuilder from './AgentBuilder'
 
@@ -736,6 +736,31 @@ function ActionButtons({ actions, onAction }: { actions: string[]; onAction: (la
   )
 }
 
+// ── Trigger badge ─────────────────────────────────────────────────────────────
+function TriggerBadge({ trigger }: { trigger: AgentTrigger }) {
+  if (trigger.kind === 'manual') return null
+  if (trigger.kind === 'schedule') {
+    const label: Record<ScheduleInterval, string> = {
+      '5min': 'Every 5 min', 'hourly': 'Hourly', 'daily': 'Daily', 'weekly': 'Weekly',
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded-full">
+        <Clock className="w-3 h-3" />
+        {label[trigger.interval]}
+      </span>
+    )
+  }
+  const label: Record<EventTriggerKind, string> = {
+    'new-entity': 'On new entity', 'pipeline-complete': 'On pipeline', 'critical-finding': 'On critical finding',
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] bg-violet-50 text-violet-600 border border-violet-200 px-1.5 py-0.5 rounded-full">
+      <Zap className="w-3 h-3" />
+      {label[trigger.on]}
+    </span>
+  )
+}
+
 // ── Agent Card ────────────────────────────────────────────────────────────────
 function AgentCard({
   def,
@@ -745,6 +770,7 @@ function AgentCard({
   onToggle,
   onAction,
   onDelete,
+  triggerBadge,
 }: {
   def: AgentDef
   state: AgentRunState
@@ -753,6 +779,7 @@ function AgentCard({
   onToggle: () => void
   onAction: (label: string) => void
   onDelete?: () => void
+  triggerBadge?: React.ReactNode
 }) {
   const Icon = def.icon
   const isRunning = state.status === 'running'
@@ -789,6 +816,7 @@ function AgentCard({
               </span>
             ))}
           </div>
+          {triggerBadge && <div className="mt-1.5">{triggerBadge}</div>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {isDone && (
@@ -901,6 +929,10 @@ export default function AgentsView() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [toasts, setToasts] = useState<Toast[]>([])
   const logRef = useRef<HTMLDivElement>(null)
+  const statesRef = useRef(states)
+  statesRef.current = states
+  const customAgentsDefsRef = useRef(customAgentsDefs)
+  customAgentsDefsRef.current = customAgentsDefs
 
   const addToast = useCallback((message: string) => {
     const id = Math.random().toString(36).slice(2)
@@ -1008,10 +1040,63 @@ export default function AgentsView() {
           metrics: def.metrics.map(m => ({ label: m.label, value: m.value })),
           findings: def.findings,
         })
+        // Dispatch critical-finding event so event-triggered custom agents can react
+        if (def.findings.some(f => f.severity === 'critical')) {
+          const isBuiltIn = Object.values(AGENTS).flat().some(a => a.id === def.id)
+          if (isBuiltIn) {
+            setTimeout(() => window.dispatchEvent(new CustomEvent('critical-finding', { detail: { agentId: def.id } })), 800)
+          }
+        }
         onComplete?.()
       }
     }, stepInterval)
   }, [appendLog, sectorId])
+
+  // Background scheduler: auto-run schedule-triggered custom agents (demo-accelerated intervals)
+  useEffect(() => {
+    const DEMO_MS: Record<ScheduleInterval, number> = {
+      '5min': 20_000, 'hourly': 45_000, 'daily': 90_000, 'weekly': 180_000,
+    }
+    const tick = setInterval(() => {
+      const now = Date.now()
+      customAgentsDefsRef.current.forEach(cd => {
+        const trigger = getTrigger(cd)
+        if (trigger.kind !== 'schedule') return
+        const lastRun = cd.lastRunAt ? new Date(cd.lastRunAt).getTime() : 0
+        if (now - lastRun < DEMO_MS[trigger.interval]) return
+        if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
+        const def = customToAgentDef(cd)
+        updateCustomAgent(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
+        simulateAgent(def, () => addToast(`⏰ Scheduled run: "${cd.name}"`))
+      })
+    }, 5_000)
+    return () => clearInterval(tick)
+  }, [sectorId, simulateAgent, addToast])
+
+  // Event-driven trigger: auto-run event-triggered custom agents
+  useEffect(() => {
+    const fireEventAgents = (eventKind: EventTriggerKind) => {
+      customAgentsDefsRef.current.forEach(cd => {
+        const trigger = getTrigger(cd)
+        if (trigger.kind !== 'event' || trigger.on !== eventKind) return
+        if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
+        const def = customToAgentDef(cd)
+        updateCustomAgent(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
+        simulateAgent(def, () => addToast(`⚡ Event triggered: "${cd.name}"`))
+      })
+    }
+    const onEntityAdded = () => fireEventAgents('new-entity')
+    const onPipelineComplete = () => fireEventAgents('pipeline-complete')
+    const onCriticalFinding = () => fireEventAgents('critical-finding')
+    window.addEventListener('ontology-entity-added', onEntityAdded)
+    window.addEventListener('pipeline-run-updated', onPipelineComplete)
+    window.addEventListener('critical-finding', onCriticalFinding)
+    return () => {
+      window.removeEventListener('ontology-entity-added', onEntityAdded)
+      window.removeEventListener('pipeline-run-updated', onPipelineComplete)
+      window.removeEventListener('critical-finding', onCriticalFinding)
+    }
+  }, [sectorId, simulateAgent, addToast])
 
   const runAgent = useCallback((def: AgentDef) => {
     simulateAgent(def)
@@ -1221,23 +1306,26 @@ export default function AgentsView() {
                 <span className="text-xs text-slate-400">· built on your ontology · {customAgents.length} defined</span>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {customAgents.map(def => (
-                  <AgentCard
-                    key={def.id}
-                    def={def}
-                    state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
-                    onRun={() => runAgent(def)}
-                    expanded={!!expanded[def.id]}
-                    onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
-                    onAction={handleAction}
-                    onDelete={() => {
-                      const cd = customAgentsDefs.find(c => c.id === def.id)
-                      if (cd && confirm(`Remove agent "${cd.name}"?`)) {
-                        removeCustomAgent(sectorId, def.id)
-                      }
-                    }}
-                  />
-                ))}
+                {customAgents.map(def => {
+                  const cd = customAgentsDefs.find(c => c.id === def.id)
+                  return (
+                    <AgentCard
+                      key={def.id}
+                      def={def}
+                      state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
+                      onRun={() => runAgent(def)}
+                      expanded={!!expanded[def.id]}
+                      onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
+                      onAction={handleAction}
+                      triggerBadge={cd ? <TriggerBadge trigger={getTrigger(cd)} /> : undefined}
+                      onDelete={() => {
+                        if (cd && confirm(`Remove agent "${cd.name}"?`)) {
+                          removeCustomAgent(sectorId, def.id)
+                        }
+                      }}
+                    />
+                  )
+                })}
               </div>
             </section>
           )}
