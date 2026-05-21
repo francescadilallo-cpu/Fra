@@ -127,6 +127,16 @@ export function deleteCompany(id: string) {
   }
 }
 
+// Logout: archive the current company's data, then clear live state so the
+// next login starts at the onboarding wizard. Previously-saved companies
+// remain accessible via switchToCompany() from the dropdown after a new
+// company is set up.
+export function logoutCurrent() {
+  archiveCurrent()
+  clearLiveData()
+  localStorage.removeItem(CURRENT_KEY)
+}
+
 // Auto-register a pre-existing company (for users who had a setup before this feature shipped).
 export function migrateExistingCompany(sectorId: SectorId) {
   const name = localStorage.getItem('si-company-name')

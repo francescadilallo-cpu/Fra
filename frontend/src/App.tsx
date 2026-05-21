@@ -18,7 +18,7 @@ import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
 import type { SectorId } from './data/sectors'
 import { loadExtension, saveExtension } from './data/ontologyExtensions'
-import { createCompany, migrateExistingCompany } from './data/companies'
+import { createCompany, migrateExistingCompany, logoutCurrent } from './data/companies'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
@@ -94,9 +94,14 @@ export default function App() {
     return () => window.removeEventListener('create-agent-from-entity', handler)
   }, [])
 
-  // Logout: closes the session only. Data is always preserved per-company.
+  // Logout: archives the active company so all its data is preserved, then
+  // clears the live state and onboarding flag. Re-entry triggers the wizard.
+  // Previously-saved companies remain accessible via the dropdown after the
+  // new one is configured.
   useEffect(() => {
     const onLogout = () => {
+      logoutCurrent()
+      localStorage.removeItem(ONBOARDING_KEY)
       sessionStorage.removeItem(SESSION_KEY)
       setGranted(false)
       setActiveTab('overview')

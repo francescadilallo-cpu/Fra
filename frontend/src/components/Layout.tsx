@@ -115,7 +115,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
 
   const handleLogout = () => {
     setOpen(false)
-    if (confirm('Chiudere la sessione? La configurazione di tutte le aziende viene mantenuta — potrai rientrare con il codice di accesso.')) {
+    if (confirm('Chiudere la sessione? L\'azienda corrente verrà archiviata (potrai ritrovarla nel dropdown) e al prossimo accesso si aprirà il wizard per configurare una nuova azienda.')) {
       window.dispatchEvent(new CustomEvent('logout-requested'))
     }
   }
@@ -345,7 +345,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         <div className="px-4 py-4 border-t border-white/5">
           <button
             onClick={() => {
-              if (confirm('Chiudere la sessione? La configurazione di tutte le aziende viene mantenuta.')) {
+              if (confirm('Chiudere la sessione? L\'azienda corrente verrà archiviata e al prossimo accesso si aprirà il wizard per configurare una nuova azienda.')) {
                 window.dispatchEvent(new CustomEvent('logout-requested'))
               }
             }}
