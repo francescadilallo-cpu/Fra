@@ -343,6 +343,17 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
         {/* Footer */}
         <div className="px-4 py-4 border-t border-white/5">
+          <button
+            onClick={() => {
+              if (confirm('Chiudere la sessione? La configurazione di tutte le aziende viene mantenuta.')) {
+                window.dispatchEvent(new CustomEvent('logout-requested'))
+              }
+            }}
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors mb-2"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Esci</span>
+          </button>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
             <span className="text-xs text-slate-500">Demo · Mock Data</span>
