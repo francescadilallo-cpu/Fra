@@ -101,6 +101,10 @@ const ACTION_RESULTS: Record<string, string> = {
   'Submit STR to UIF':           'Suspicious Transaction Report submitted to UIF — protocol #STR-2024-0847',
   'Freeze account BA-0291 pending review': 'Account BA-0291 frozen — customer notification sent per AMLD6',
   'Notify compliance officer':   'Compliance officer Marco Bianchi notified — case #AML-2024-0291',
+  // Finance — SDI Monitor
+  'Correggere e riemettere 3 fatture': '3 fatture corrette e riemesse via SDI — 3/3 accettate (Ricevuta di Consegna)',
+  'Notificare clienti mancata consegna': '7 clienti notificati via email con istruzioni per ricevere la fattura elettronica',
+  'Esporta report SDI': 'Report SDI esportato in XML — 384 fatture, 374 riconciliate, 3 scartate, 7 in mancata consegna',
 }
 
 // ── Custom agent → AgentDef conversion ───────────────────────────────────────
@@ -663,6 +667,34 @@ const AGENTS: Record<SectorId, AgentDef[]> = {
         { severity: 'info', text: '6 rule alerts cleared after manual review — no further action' },
       ],
       actions: ['Submit STR to UIF', 'Freeze account BA-0291 pending review', 'Notify compliance officer'],
+    },
+    {
+      id: 'sdi-monitor',
+      name: 'SDI Invoice Monitor',
+      description: 'Monitora lo stato delle fatture elettroniche su SDI e rileva anomalie di consegna e riconciliazione.',
+      icon: FileText,
+      accessedEntities: ['FatturaElettronica', 'Applicant', 'Transaction'],
+      durationMs: 2800,
+      logSteps: [
+        'READ fin:FatturaElettronica → 384 fatture (last 30d) loaded',
+        'READ SDI API → stati aggiornati: consegnata, scartata, mancata consegna',
+        'READ fin:Applicant → anagrafica cedenti verificata (P.IVA, CF)',
+        'Rilevamento fatture scartate o con errore codice 00400…',
+        'Riconciliazione con movimenti contabili e incassi…',
+        'WRITE anomaly report → semantic layer',
+      ],
+      metrics: [
+        { label: 'Fatture monitorate', value: '384' },
+        { label: 'Scartate da SDI', value: '3', delta: 'da correggere', up: true },
+        { label: 'Mancata consegna', value: '7', delta: '>10 giorni', up: true },
+        { label: 'Riconciliate OK', value: '374', delta: '97.4%', up: false },
+      ],
+      findings: [
+        { severity: 'critical', text: '3 fatture scartate da SDI (codice 00400) — dati cedente non corretti, P.IVA mancante' },
+        { severity: 'warning', text: '7 fatture in stato "mancata consegna" da oltre 10 giorni — cliente non ha PEC attiva' },
+        { severity: 'info', text: '374 fatture riconciliate correttamente con movimenti contabili' },
+      ],
+      actions: ['Correggere e riemettere 3 fatture', 'Notificare clienti mancata consegna', 'Esporta report SDI'],
     },
   ],
 }

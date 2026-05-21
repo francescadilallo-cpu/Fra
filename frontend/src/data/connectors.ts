@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SectorId } from './sectors'
 
-export type ConnectorCategory = 'erp' | 'accounting' | 'ecommerce' | 'crm' | 'payments' | 'database' | 'cloud' | 'logistics'
+export type ConnectorCategory = 'erp' | 'accounting' | 'ecommerce' | 'crm' | 'payments' | 'database' | 'cloud' | 'logistics' | 'fiscal'
 export type ConnectorStatus = 'available' | 'beta' | 'coming-soon'
 
 export interface ConnectorDef {
@@ -26,6 +26,7 @@ export const CATEGORY_LABELS: Record<ConnectorCategory, string> = {
   database:   'Database',
   cloud:      'Cloud / File',
   logistics:  'Logistica',
+  fiscal:     'Fiscale / SDI',
 }
 
 export const CONNECTORS: ConnectorDef[] = [
@@ -66,6 +67,11 @@ export const CONNECTORS: ConnectorDef[] = [
   // ── Logistica ──────────────────────────────────────────────────────────────
   { id: 'brt',              name: 'BRT',              logo: 'B',  bg: 'bg-yellow-500', fg: 'text-slate-900', category: 'logistics', description: 'Corriere espresso italiano',          status: 'coming-soon', italian: true },
   { id: 'gls-italy',        name: 'GLS Italy',        logo: 'G',  bg: 'bg-blue-500',   fg: 'text-white', category: 'logistics',   description: 'Spedizioni e tracking',                 status: 'coming-soon', italian: true },
+
+  // ── Fiscale / SDI ─────────────────────────────────────────────────────────
+  { id: 'sdi',              name: 'SDI (Fatturazione Elettronica)', logo: '📄', bg: 'bg-green-700', fg: 'text-white', category: 'fiscal', description: 'Sistema di Interscambio — fatturazione elettronica obbligatoria', status: 'available', popular: true, italian: true },
+  { id: 'agenzia-entrate',  name: 'Agenzia delle Entrate', logo: 'AE', bg: 'bg-slate-700', fg: 'text-white', category: 'fiscal', description: 'Dichiarazioni, F24, cassetto fiscale',  status: 'beta', italian: true },
+  { id: 'inps',             name: 'INPS',             logo: 'IN', bg: 'bg-sky-700',    fg: 'text-white', category: 'fiscal',      description: 'Contributi, CU, UNIEMENS',              status: 'coming-soon', italian: true },
 ]
 
 // ── Connected sources persistence ────────────────────────────────────────────

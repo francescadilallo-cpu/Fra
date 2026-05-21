@@ -12,11 +12,26 @@ import ConfigurationView from './components/ConfigurationView'
 import AgentsView from './components/AgentsView'
 import DataExplorer from './components/DataExplorer'
 import DataSourcesView from './components/DataSourcesView'
+import ComplianceView from './components/ComplianceView'
+import OnboardingWizard from './components/OnboardingWizard'
 import type { NavTab } from './types'
+import { useSector } from './contexts/SectorContext'
+import type { SectorId } from './data/sectors'
+
+const ONBOARDING_KEY = 'si-onboarding-done'
 
 export default function App() {
   const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const { setSector } = useSector()
+
+  // Show onboarding on first login (after access gate, before main UI)
+  useEffect(() => {
+    if (granted && !localStorage.getItem(ONBOARDING_KEY)) {
+      setShowOnboarding(true)
+    }
+  }, [granted])
 
   // Navigate to agents tab when OntologyBuilder triggers "Create Agent"
   useEffect(() => {
@@ -39,18 +54,37 @@ export default function App() {
   }
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-      {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
-      {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
-      {activeTab === 'ontology' && <OntologyGraph />}
-      {activeTab === 'builder' && <OntologyBuilder />}
-      {activeTab === 'agents' && <AgentsView />}
-      {activeTab === 'sources' && <DataSourcesView />}
-      {activeTab === 'data' && <DataExplorer />}
-      {activeTab === 'query' && <QueryInterface />}
-      {activeTab === 'mappings' && <MappingView />}
-      {activeTab === 'process' && <ProcessView />}
-      {activeTab === 'config' && <ConfigurationView />}
-    </Layout>
+    <>
+      {showOnboarding && (
+        <OnboardingWizard
+          onComplete={(companyName: string, sectorId: SectorId) => {
+            localStorage.setItem(ONBOARDING_KEY, '1')
+            setSector(sectorId)
+            setShowOnboarding(false)
+            // Store company name for later use
+            localStorage.setItem('si-company-name', companyName)
+            setActiveTab('overview')
+          }}
+          onSkip={() => {
+            localStorage.setItem(ONBOARDING_KEY, '1')
+            setShowOnboarding(false)
+          }}
+        />
+      )}
+      <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+        {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
+        {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
+        {activeTab === 'ontology' && <OntologyGraph />}
+        {activeTab === 'builder' && <OntologyBuilder />}
+        {activeTab === 'agents' && <AgentsView />}
+        {activeTab === 'sources' && <DataSourcesView />}
+        {activeTab === 'data' && <DataExplorer />}
+        {activeTab === 'query' && <QueryInterface />}
+        {activeTab === 'mappings' && <MappingView />}
+        {activeTab === 'process' && <ProcessView />}
+        {activeTab === 'compliance' && <ComplianceView />}
+        {activeTab === 'config' && <ConfigurationView />}
+      </Layout>
+    </>
   )
 }
