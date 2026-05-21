@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, RefreshCw, Building2 } from 'lucide-react'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
@@ -94,6 +94,77 @@ function SectorSwitcher() {
   )
 }
 
+function CompanyMenu({ companyName }: { companyName: string }) {
+  const { sector } = useSector()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const handleLogout = () => {
+    setOpen(false)
+    if (confirm('Vuoi uscire? La sessione corrente verrà chiusa, ma la tua configurazione (ontologia, agenti, fonti) rimarrà salvata.')) {
+      window.dispatchEvent(new CustomEvent('logout-requested', { detail: { mode: 'soft' } }))
+    }
+  }
+
+  const handleChangeCompany = () => {
+    setOpen(false)
+    if (confirm(`Vuoi cambiare azienda?\n\nQuesta operazione cancellerà tutto:\n• Nome azienda e configurazione onboarding\n• Ontologia personalizzata\n• Agenti custom creati\n• Fonti dati connesse\n• Storico esecuzioni agenti\n\nAl prossimo accesso si aprirà il wizard per configurare una nuova azienda.\n\nProcedere?`)) {
+      window.dispatchEvent(new CustomEvent('logout-requested', { detail: { mode: 'hard' } }))
+    }
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-sm font-semibold text-slate-700 max-w-[200px]"
+        title="Gestione azienda"
+      >
+        <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+        <span className="truncate">{companyName}</span>
+        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Azienda corrente</p>
+            <p className="text-sm font-bold text-slate-900 mt-0.5 truncate">{companyName}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{sector.icon} {sector.name} · {sector.domain}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50 transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-800">Esci</p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-snug">Chiudi la sessione. Mantiene tutta la configurazione.</p>
+            </div>
+          </button>
+          <button
+            onClick={handleChangeCompany}
+            className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-red-50 transition-colors border-t border-slate-100"
+          >
+            <RefreshCw className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-red-700">Cambia azienda</p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-snug">Reset completo. Riapre il wizard per una nuova azienda.</p>
+            </div>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab) => void }) {
   const { sectorId } = useSector()
   const runs = useAgentStore(sectorId)
@@ -128,9 +199,7 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
       <div className="flex items-center gap-2.5">
         {companyName && (
           <>
-            <span className="text-sm font-semibold text-slate-700 truncate max-w-[200px]" title={companyName}>
-              {companyName}
-            </span>
+            <CompanyMenu companyName={companyName} />
             <div className="w-px h-5 bg-slate-200" />
           </>
         )}

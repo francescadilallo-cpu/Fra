@@ -88,6 +88,28 @@ export default function App() {
     return () => window.removeEventListener('create-agent-from-entity', handler)
   }, [])
 
+  // Logout flow: 'soft' clears only the session, 'hard' wipes all demo state
+  useEffect(() => {
+    const onLogout = (e: Event) => {
+      const mode = (e as CustomEvent<{ mode: 'soft' | 'hard' }>).detail?.mode ?? 'soft'
+      sessionStorage.removeItem(SESSION_KEY)
+      if (mode === 'hard') {
+        localStorage.removeItem(ONBOARDING_KEY)
+        localStorage.removeItem('si-company-name')
+        localStorage.removeItem('si-welcome-banner-dismissed')
+        const prefixes = ['custom-agents-', 'ontology-builder-ext-', 'connected-sources-', 'agent-runs-', 'pipeline-last-run-']
+        Object.keys(localStorage).forEach(k => {
+          if (prefixes.some(p => k.startsWith(p))) localStorage.removeItem(k)
+        })
+        window.dispatchEvent(new CustomEvent('company-name-changed'))
+      }
+      setGranted(false)
+      setActiveTab('overview')
+    }
+    window.addEventListener('logout-requested', onLogout)
+    return () => window.removeEventListener('logout-requested', onLogout)
+  }, [])
+
   if (!granted) {
     return (
       <AccessGate onGrant={() => {
