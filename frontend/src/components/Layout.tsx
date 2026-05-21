@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, RefreshCw, Building2 } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check } from 'lucide-react'
+import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
@@ -98,28 +99,53 @@ function CompanyMenu({ companyName }: { companyName: string }) {
   const { sector } = useSector()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const [companies, setCompanies] = useState<Company[]>(() => listCompanies())
+  const currentId = getCurrentCompanyId()
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
-    if (open) document.addEventListener('mousedown', onDocClick)
+    if (open) {
+      document.addEventListener('mousedown', onDocClick)
+      setCompanies(listCompanies())
+    }
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [open])
 
   const handleLogout = () => {
     setOpen(false)
-    if (confirm('Vuoi uscire? La sessione corrente verrà chiusa, ma la tua configurazione (ontologia, agenti, fonti) rimarrà salvata.')) {
-      window.dispatchEvent(new CustomEvent('logout-requested', { detail: { mode: 'soft' } }))
+    if (confirm('Chiudere la sessione? La configurazione di tutte le aziende viene mantenuta — potrai rientrare con il codice di accesso.')) {
+      window.dispatchEvent(new CustomEvent('logout-requested'))
     }
   }
 
-  const handleChangeCompany = () => {
+  const handleNewCompany = () => {
     setOpen(false)
-    if (confirm(`Vuoi cambiare azienda?\n\nQuesta operazione cancellerà tutto:\n• Nome azienda e configurazione onboarding\n• Ontologia personalizzata\n• Agenti custom creati\n• Fonti dati connesse\n• Storico esecuzioni agenti\n\nAl prossimo accesso si aprirà il wizard per configurare una nuova azienda.\n\nProcedere?`)) {
-      window.dispatchEvent(new CustomEvent('logout-requested', { detail: { mode: 'hard' } }))
+    window.dispatchEvent(new CustomEvent('new-company-requested'))
+  }
+
+  const handleSwitch = (id: string) => {
+    if (id === currentId) { setOpen(false); return }
+    setOpen(false)
+    switchToCompany(id)
+    window.dispatchEvent(new CustomEvent('company-switched'))
+  }
+
+  const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation()
+    if (id === currentId) {
+      alert('Non puoi eliminare l\'azienda attiva. Passa prima a un\'altra azienda.')
+      return
+    }
+    if (confirm(`Eliminare definitivamente "${name}"? Tutti i dati archiviati verranno persi.`)) {
+      deleteCompany(id)
+      setCompanies(listCompanies())
     }
   }
+
+  const otherCompanies = companies.filter(c => c.id !== currentId)
+    .sort((a, b) => b.lastAccessedAt.localeCompare(a.lastAccessedAt))
 
   return (
     <div ref={ref} className="relative">
@@ -133,32 +159,74 @@ function CompanyMenu({ companyName }: { companyName: string }) {
         <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+          {/* Current company header */}
           <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Azienda corrente</p>
-            <p className="text-sm font-bold text-slate-900 mt-0.5 truncate">{companyName}</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Azienda attiva</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <Check className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+              <p className="text-sm font-bold text-slate-900 truncate">{companyName}</p>
+            </div>
             <p className="text-xs text-slate-500 mt-0.5">{sector.icon} {sector.name} · {sector.domain}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50 transition-colors"
-          >
-            <LogOut className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800">Esci</p>
-              <p className="text-xs text-slate-500 mt-0.5 leading-snug">Chiudi la sessione. Mantiene tutta la configurazione.</p>
-            </div>
-          </button>
-          <button
-            onClick={handleChangeCompany}
-            className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-red-50 transition-colors border-t border-slate-100"
-          >
-            <RefreshCw className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-red-700">Cambia azienda</p>
-              <p className="text-xs text-slate-500 mt-0.5 leading-snug">Reset completo. Riapre il wizard per una nuova azienda.</p>
-            </div>
-          </button>
+
+          {/* Other saved companies */}
+          {otherCompanies.length > 0 && (
+            <>
+              <div className="px-4 pt-2.5 pb-1">
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Le tue aziende</p>
+              </div>
+              <div className="max-h-56 overflow-y-auto">
+                {otherCompanies.map(c => {
+                  const s = SECTORS[c.sectorId]
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => handleSwitch(c.id)}
+                      className="group w-full text-left px-4 py-2 flex items-center gap-3 hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <span className="text-base flex-shrink-0">{s.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{c.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{s.name}</p>
+                      </div>
+                      <button
+                        onClick={(e) => handleDelete(e, c.id, c.name)}
+                        className="w-6 h-6 rounded-md hover:bg-red-100 text-slate-300 hover:text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                        title="Elimina azienda"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="border-t border-slate-100">
+            <button
+              onClick={handleNewCompany}
+              className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-teal-50 transition-colors"
+            >
+              <Plus className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-teal-700">Nuova azienda</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Configura un'altra azienda. La corrente viene archiviata.</p>
+              </div>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full text-left px-4 py-2.5 flex items-start gap-3 hover:bg-slate-50 transition-colors border-t border-slate-100"
+            >
+              <LogOut className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800">Esci</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Chiudi la sessione. Tutte le aziende restano salvate.</p>
+              </div>
+            </button>
+          </div>
         </div>
       )}
     </div>

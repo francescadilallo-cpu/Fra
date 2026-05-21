@@ -18,6 +18,7 @@ import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
 import type { SectorId } from './data/sectors'
 import { loadExtension, saveExtension } from './data/ontologyExtensions'
+import { createCompany, migrateExistingCompany } from './data/companies'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
@@ -70,7 +71,12 @@ export default function App() {
   const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const { setSector } = useSector()
+  const { setSector, sectorId } = useSector()
+
+  // Migrate any pre-existing company so it appears in the dropdown after upgrade
+  useEffect(() => {
+    if (granted) migrateExistingCompany(sectorId)
+  }, [granted, sectorId])
 
   useEffect(() => {
     if (granted && !localStorage.getItem(ONBOARDING_KEY)) {
@@ -88,26 +94,36 @@ export default function App() {
     return () => window.removeEventListener('create-agent-from-entity', handler)
   }, [])
 
-  // Logout flow: 'soft' clears only the session, 'hard' wipes all demo state
+  // Logout: closes the session only. Data is always preserved per-company.
   useEffect(() => {
-    const onLogout = (e: Event) => {
-      const mode = (e as CustomEvent<{ mode: 'soft' | 'hard' }>).detail?.mode ?? 'soft'
+    const onLogout = () => {
       sessionStorage.removeItem(SESSION_KEY)
-      if (mode === 'hard') {
-        localStorage.removeItem(ONBOARDING_KEY)
-        localStorage.removeItem('si-company-name')
-        localStorage.removeItem('si-welcome-banner-dismissed')
-        const prefixes = ['custom-agents-', 'ontology-builder-ext-', 'connected-sources-', 'agent-runs-', 'pipeline-last-run-']
-        Object.keys(localStorage).forEach(k => {
-          if (prefixes.some(p => k.startsWith(p))) localStorage.removeItem(k)
-        })
-        window.dispatchEvent(new CustomEvent('company-name-changed'))
-      }
       setGranted(false)
       setActiveTab('overview')
     }
     window.addEventListener('logout-requested', onLogout)
     return () => window.removeEventListener('logout-requested', onLogout)
+  }, [])
+
+  // "New company": triggers the onboarding wizard. The existing company is
+  // archived by createCompany() in the wizard's onComplete handler.
+  useEffect(() => {
+    const onNewCompany = () => {
+      localStorage.removeItem(ONBOARDING_KEY)
+      setShowOnboarding(true)
+    }
+    window.addEventListener('new-company-requested', onNewCompany)
+    return () => window.removeEventListener('new-company-requested', onNewCompany)
+  }, [])
+
+  // "Switch company": archives current, restores target, then reload to reset
+  // all React state cleanly (sector context, hooks, etc.)
+  useEffect(() => {
+    const onSwitch = () => {
+      window.location.reload()
+    }
+    window.addEventListener('company-switched', onSwitch)
+    return () => window.removeEventListener('company-switched', onSwitch)
   }, [])
 
   if (!granted) {
@@ -123,15 +139,16 @@ export default function App() {
     <>
       {showOnboarding && (
         <OnboardingWizard
-          onComplete={(companyName: string, sectorId: SectorId, customEntity: string) => {
+          onComplete={(companyName: string, newSectorId: SectorId, customEntity: string) => {
+            // createCompany archives the previous company's data and starts the new one with clean storage
+            createCompany(companyName, newSectorId)
             localStorage.setItem(ONBOARDING_KEY, '1')
-            localStorage.setItem('si-company-name', companyName)
-            localStorage.removeItem('si-welcome-banner-dismissed')
-            if (customEntity) addCustomEntityToOntology(sectorId, customEntity)
-            setSector(sectorId)
+            if (customEntity) addCustomEntityToOntology(newSectorId, customEntity)
+            setSector(newSectorId)
             setShowOnboarding(false)
             window.dispatchEvent(new CustomEvent('company-name-changed'))
-            setActiveTab('dashboard')
+            // Reload to ensure all React state (sector context, hooks) reads from the new company's storage
+            window.location.reload()
           }}
           onSkip={() => {
             localStorage.setItem(ONBOARDING_KEY, '1')
