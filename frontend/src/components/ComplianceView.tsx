@@ -19,21 +19,21 @@ import {
 
 // -- Label maps --
 const CATEGORY_LABELS: Record<DataCategory, string> = {
-  identification: 'Anagrafica',
-  contact: 'Contatti',
-  financial: 'Finanziaria',
-  health: 'Sanitaria',
-  behavioral: 'Comportamentale',
-  professional: 'Professionale',
-  transactional: 'Transazionale',
+  identification: 'Identification',
+  contact: 'Contact',
+  financial: 'Financial',
+  health: 'Health',
+  behavioral: 'Behavioral',
+  professional: 'Professional',
+  transactional: 'Transactional',
 }
 
 const BASIS_LABELS: Record<LawfulBasis, string> = {
-  contract: 'Contratto',
-  'legal-obligation': 'Obbligo legale',
-  'legitimate-interests': 'Int. legittimi',
-  consent: 'Consenso',
-  'vital-interests': 'Interessi vitali',
+  contract: 'Contract',
+  'legal-obligation': 'Legal obligation',
+  'legitimate-interests': 'Leg. interests',
+  consent: 'Consent',
+  'vital-interests': 'Vital interests',
 }
 
 const RISK_ORDER: Record<AiRiskLevel, number> = { high: 0, limited: 1, minimal: 2, unacceptable: -1 }
@@ -78,32 +78,32 @@ function ScoreBar({ label, score, icon }: { label: string; score: number; icon: 
 
 function PersonalDataChip({ entity }: { entity: EntityCompliance }) {
   if (!entity.personalData) {
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500">Nessuno</span>
+    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500">None</span>
   }
   if (entity.specialCategory) {
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Speciali</span>
+    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Special</span>
   }
-  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Personali</span>
+  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">Personal</span>
 }
 
 function ResidencyCell({ residency }: { residency: DataResidency }) {
   if (residency === 'EU-only') {
     return (
       <span className="flex items-center gap-1 text-xs text-red-600 font-medium">
-        <Lock size={12} /> Solo UE
+        <Lock size={12} /> EU-only
       </span>
     )
   }
   if (residency === 'EU-adequacy') {
     return (
       <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
-        <Globe size={12} /> UE + Adeguati
+        <Globe size={12} /> EU + Adequate
       </span>
     )
   }
   return (
     <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
-      <Globe size={12} /> Clausole std
+      <Globe size={12} /> Std. clauses
     </span>
   )
 }
@@ -160,10 +160,10 @@ function RiskBadge({ level }: { level: AiRiskLevel }) {
     unacceptable: 'bg-purple-100 text-purple-700',
   }
   const labels: Record<AiRiskLevel, string> = {
-    high: 'Alto rischio',
-    limited: 'Rischio limitato',
-    minimal: 'Rischio minimo',
-    unacceptable: 'Inaccettabile',
+    high: 'High risk',
+    limited: 'Limited risk',
+    minimal: 'Minimal risk',
+    unacceptable: 'Unacceptable',
   }
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${styles[level]}`}>
@@ -179,9 +179,9 @@ function OversightBadge({ level }: { level: HumanOversight }) {
     'not-required': 'bg-slate-50 text-slate-500 border-slate-200',
   }
   const labels: Record<HumanOversight, string> = {
-    mandatory: 'Supervisione obbligatoria',
-    recommended: 'Supervisione consigliata',
-    'not-required': 'Non richiesta',
+    mandatory: 'Mandatory oversight',
+    recommended: 'Oversight recommended',
+    'not-required': 'Not required',
   }
   return (
     <span className={`px-2 py-0.5 rounded text-xs border ${styles[level]}`}>
@@ -201,7 +201,7 @@ function AgentCard({ agent }: { agent: AgentCompliance }) {
         <OversightBadge level={agent.humanOversight} />
         {agent.dpiaRequired && (
           <span className="px-2 py-0.5 rounded text-xs border bg-teal-50 text-teal-700 border-teal-200">
-            DPIA richiesta
+            DPIA required
           </span>
         )}
       </div>
@@ -264,22 +264,22 @@ export default function ComplianceView() {
               <h1 className="text-xl font-bold text-gray-900">Compliance &amp; Governance</h1>
             </div>
             <p className="text-sm text-gray-500">
-              Mappa dati GDPR e registro rischi EU AI Act — settore{' '}
+              GDPR data map and EU AI Act risk register — sector{' '}
               <span className="font-medium text-gray-700">{sector.name}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => showToast('ROPA generato — download in corso')}
+              onClick={() => showToast('ROPA generated — downloading')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              <FileText size={14} /> Genera ROPA
+              <FileText size={14} /> Generate ROPA
             </button>
             <button
-              onClick={() => showToast('DPA Checklist scaricata — download in corso')}
+              onClick={() => showToast('DPA Checklist downloaded — downloading')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm hover:bg-teal-700 transition-colors"
             >
-              <Download size={14} /> Scarica DPA
+              <Download size={14} /> Download DPA
             </button>
           </div>
         </div>
@@ -288,15 +288,15 @@ export default function ComplianceView() {
         <div className="flex flex-wrap gap-2 mt-4">
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
             <Database size={13} className="text-blue-500" />
-            <span><strong>{entitiesWithData.length}</strong> entità con dati personali</span>
+            <span><strong>{entitiesWithData.length}</strong> entities with personal data</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
             <Clock size={13} className="text-amber-500" />
-            <span><strong>{dpiaCount}</strong> DPIA {dpiaCount === 1 ? 'richiesta' : 'richieste'}</span>
+            <span><strong>{dpiaCount}</strong> DPIA required</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
             <AlertTriangle size={13} className="text-red-500" />
-            <span><strong>{highRiskCount}</strong> agenti ad alto rischio AI</span>
+            <span><strong>{highRiskCount}</strong> high-risk AI agents</span>
           </div>
         </div>
       </div>
@@ -322,15 +322,15 @@ export default function ComplianceView() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
               <Database size={16} className="text-blue-500" />
-              <h2 className="text-sm font-semibold text-gray-800">Mappa Dati GDPR</h2>
+              <h2 className="text-sm font-semibold text-gray-800">GDPR Data Map</h2>
               <ChevronRight size={14} className="text-gray-400 ml-auto" />
-              <span className="text-xs text-gray-400">{compliance.entities.length} entità</span>
+              <span className="text-xs text-gray-400">{compliance.entities.length} entities</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    {['Entità', 'Dati personali', 'Categoria', 'Base giuridica', 'Conservazione', 'Residenza', 'DPIA'].map(h => (
+                    {['Entity', 'Personal data', 'Category', 'Lawful basis', 'Retention', 'Residency', 'DPIA'].map(h => (
                       <th key={h} className="px-3 py-2 text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -350,9 +350,9 @@ export default function ComplianceView() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
               <Bot size={16} className="text-purple-500" />
-              <h2 className="text-sm font-semibold text-gray-800">Registro Rischi EU AI Act</h2>
+              <h2 className="text-sm font-semibold text-gray-800">EU AI Act Risk Register</h2>
               <ChevronRight size={14} className="text-gray-400 ml-auto" />
-              <span className="text-xs text-gray-400">{compliance.agents.length} agenti</span>
+              <span className="text-xs text-gray-400">{compliance.agents.length} agents</span>
             </div>
             <div className="p-3 flex flex-col gap-2.5">
               {sortedAgents.map(agent => (
@@ -361,10 +361,10 @@ export default function ComplianceView() {
             </div>
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
               <button
-                onClick={() => showToast('DPIA pianificata — controlla il calendario')}
+                onClick={() => showToast('DPIA scheduled — check your calendar')}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                <Info size={14} className="text-teal-500" /> Pianifica DPIA
+                <Info size={14} className="text-teal-500" /> Schedule DPIA
               </button>
             </div>
           </div>
@@ -374,7 +374,7 @@ export default function ComplianceView() {
       {/* Footer note */}
       <p className="mt-5 text-xs text-gray-400 flex items-center gap-1.5">
         <Info size={12} />
-        I punteggi sono calcolati automaticamente in base al profilo di rischio del settore. Non sostituiscono una consulenza legale.
+        Scores are computed automatically based on the sector risk profile. They do not replace professional legal advice.
       </p>
     </div>
   )

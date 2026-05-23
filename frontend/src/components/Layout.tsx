@@ -117,7 +117,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
 
   const handleLogout = () => {
     setOpen(false)
-    if (confirm('Chiudere la sessione? L\'azienda corrente verrà archiviata (potrai ritrovarla nel dropdown) e al prossimo accesso si aprirà il wizard per configurare una nuova azienda.')) {
+    if (confirm('Close session? The current company will be archived (you can find it in the dropdown later) and the wizard will open on next login.')) {
       window.dispatchEvent(new CustomEvent('logout-requested'))
     }
   }
@@ -137,10 +137,10 @@ function CompanyMenu({ companyName }: { companyName: string }) {
   const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
     if (id === currentId) {
-      alert('Non puoi eliminare l\'azienda attiva. Passa prima a un\'altra azienda.')
+      alert('Cannot delete the active company. Switch to another company first.')
       return
     }
-    if (confirm(`Eliminare definitivamente "${name}"? Tutti i dati archiviati verranno persi.`)) {
+    if (confirm(`Permanently delete "${name}"? All archived data will be lost.`)) {
       deleteCompany(id)
       setCompanies(listCompanies())
     }
@@ -154,7 +154,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
       <button
         onClick={() => setOpen(v => !v)}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-sm font-semibold text-slate-700 max-w-[200px]"
-        title="Gestione azienda"
+        title="Manage company"
       >
         <Building2 className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
         <span className="truncate">{companyName}</span>
@@ -164,7 +164,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
         <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
           {/* Current company header */}
           <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Azienda attiva</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Active company</p>
             <div className="flex items-center gap-2 mt-0.5">
               <Check className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
               <p className="text-sm font-bold text-slate-900 truncate">{companyName}</p>
@@ -176,7 +176,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
           {otherCompanies.length > 0 && (
             <>
               <div className="px-4 pt-2.5 pb-1">
-                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Le tue aziende</p>
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Your companies</p>
               </div>
               <div className="max-h-56 overflow-y-auto">
                 {otherCompanies.map(c => {
@@ -214,8 +214,8 @@ function CompanyMenu({ companyName }: { companyName: string }) {
             >
               <Plus className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-teal-700">Nuova azienda</p>
-                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Configura un'altra azienda. La corrente viene archiviata.</p>
+                <p className="text-sm font-medium text-teal-700">New company</p>
+                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Set up another company. The current one is archived.</p>
               </div>
             </button>
             <button
@@ -224,8 +224,8 @@ function CompanyMenu({ companyName }: { companyName: string }) {
             >
               <LogOut className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800">Esci</p>
-                <p className="text-xs text-slate-500 mt-0.5 leading-snug">Chiudi la sessione. Tutte le aziende restano salvate.</p>
+                <p className="text-sm font-medium text-slate-800">Log out</p>
+<p className="text-xs text-slate-500 mt-0.5 leading-snug">Close session. All companies remain saved.</p>
               </div>
             </button>
           </div>
@@ -347,14 +347,14 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         <div className="px-4 py-4 border-t border-white/5">
           <button
             onClick={() => {
-              if (confirm('Chiudere la sessione? L\'azienda corrente verrà archiviata e al prossimo accesso si aprirà il wizard per configurare una nuova azienda.')) {
+              if (confirm('Close session? The current company will be archived and the wizard will open on next login.')) {
                 window.dispatchEvent(new CustomEvent('logout-requested'))
               }
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors mb-2"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Esci</span>
+            <span>Log out</span>
           </button>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />

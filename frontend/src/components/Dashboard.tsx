@@ -465,15 +465,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
             <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-900">Benvenuto, {companyName} 👋</p>
+            <p className="text-sm font-bold text-slate-900">Welcome, {companyName} 👋</p>
             <p className="text-xs text-slate-600 mt-0.5">
-              Il tuo layer semantico è pronto · {ontology.nodes.length} entità · {sector.name} · 1 agente raccomandato preconfigurato
+              Your semantic layer is ready · {ontology.nodes.length} entities · {sector.name} · 1 recommended agent pre-configured
             </p>
           </div>
           <button
             onClick={dismissWelcome}
             className="w-7 h-7 rounded-lg hover:bg-white/60 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors flex-shrink-0"
-            title="Chiudi"
+            title="Dismiss"
           >
             <X className="w-4 h-4" />
           </button>

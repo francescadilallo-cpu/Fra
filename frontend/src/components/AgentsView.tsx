@@ -102,9 +102,9 @@ const ACTION_RESULTS: Record<string, string> = {
   'Freeze account BA-0291 pending review': 'Account BA-0291 frozen — customer notification sent per AMLD6',
   'Notify compliance officer':   'Compliance officer Marco Bianchi notified — case #AML-2024-0291',
   // Finance — SDI Monitor
-  'Correggere e riemettere 3 fatture': '3 fatture corrette e riemesse via SDI — 3/3 accettate (Ricevuta di Consegna)',
-  'Notificare clienti mancata consegna': '7 clienti notificati via email con istruzioni per ricevere la fattura elettronica',
-  'Esporta report SDI': 'Report SDI esportato in XML — 384 fatture, 374 riconciliate, 3 scartate, 7 in mancata consegna',
+  'Correct and reissue 3 invoices': '3 invoices corrected and reissued via SDI — 3/3 accepted (Delivery Receipt)',
+  'Notify customers of undelivered invoices': '7 customers notified by email with instructions for receiving the electronic invoice',
+  'Export SDI report': 'SDI report exported as XML — 384 invoices, 374 reconciled, 3 rejected, 7 undelivered',
 }
 
 // ── Custom agent → AgentDef conversion ───────────────────────────────────────
@@ -671,30 +671,30 @@ const AGENTS: Record<SectorId, AgentDef[]> = {
     {
       id: 'sdi-monitor',
       name: 'SDI Invoice Monitor',
-      description: 'Monitora lo stato delle fatture elettroniche su SDI e rileva anomalie di consegna e riconciliazione.',
+      description: 'Monitors the status of electronic invoices on SDI and detects delivery and reconciliation anomalies.',
       icon: FileText,
       accessedEntities: ['FatturaElettronica', 'Applicant', 'Transaction'],
       durationMs: 2800,
       logSteps: [
-        'READ fin:FatturaElettronica → 384 fatture (last 30d) loaded',
-        'READ SDI API → stati aggiornati: consegnata, scartata, mancata consegna',
-        'READ fin:Applicant → anagrafica cedenti verificata (P.IVA, CF)',
-        'Rilevamento fatture scartate o con errore codice 00400…',
-        'Riconciliazione con movimenti contabili e incassi…',
+        'READ fin:FatturaElettronica → 384 invoices (last 30d) loaded',
+        'READ SDI API → statuses updated: delivered, rejected, undelivered',
+        'READ fin:Applicant → supplier registry verified (VAT no., tax code)',
+        'Detecting rejected invoices or error code 00400…',
+        'Reconciling against accounting movements and receipts…',
         'WRITE anomaly report → semantic layer',
       ],
       metrics: [
-        { label: 'Fatture monitorate', value: '384' },
-        { label: 'Scartate da SDI', value: '3', delta: 'da correggere', up: true },
-        { label: 'Mancata consegna', value: '7', delta: '>10 giorni', up: true },
-        { label: 'Riconciliate OK', value: '374', delta: '97.4%', up: false },
+        { label: 'Invoices monitored', value: '384' },
+        { label: 'Rejected by SDI', value: '3', delta: 'to be corrected', up: true },
+        { label: 'Undelivered', value: '7', delta: '>10 days', up: true },
+        { label: 'Reconciled OK', value: '374', delta: '97.4%', up: false },
       ],
       findings: [
-        { severity: 'critical', text: '3 fatture scartate da SDI (codice 00400) — dati cedente non corretti, P.IVA mancante' },
-        { severity: 'warning', text: '7 fatture in stato "mancata consegna" da oltre 10 giorni — cliente non ha PEC attiva' },
-        { severity: 'info', text: '374 fatture riconciliate correttamente con movimenti contabili' },
+        { severity: 'critical', text: '3 invoices rejected by SDI (code 00400) — incorrect supplier data, missing VAT number' },
+        { severity: 'warning', text: '7 invoices in "undelivered" status for over 10 days — recipient has no active PEC mailbox' },
+        { severity: 'info', text: '374 invoices correctly reconciled with accounting movements' },
       ],
-      actions: ['Correggere e riemettere 3 fatture', 'Notificare clienti mancata consegna', 'Esporta report SDI'],
+      actions: ['Correct and reissue 3 invoices', 'Notify customers of undelivered invoices', 'Export SDI report'],
     },
   ],
 }

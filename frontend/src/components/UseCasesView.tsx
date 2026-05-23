@@ -43,30 +43,30 @@ const USE_CASES: UseCase[] = [
     company: 'Ferretti Metalli S.r.l.',
     sector: 'manufacturing',
     sectorIcon: '🏭',
-    industry: 'Lavorazione metalli · Brescia',
+    industry: 'Metal processing · Brescia',
     city: 'Brescia',
-    employees: '120 dipendenti',
-    revenue: '€18M fatturato',
-    tagline: 'Da 3 ERP disconnessi a una fabbrica che si autogestisce',
-    problem: 'Tre sistemi ERP non comunicanti (Zucchetti + TeamSystem + fogli Excel). Il responsabile di produzione scopriva i colli di bottiglia solo a fine settimana, quando i ritardi erano già irreversibili.',
+    employees: '120 employees',
+    revenue: '€18M revenue',
+    tagline: 'From 3 disconnected ERPs to a self-managing factory',
+    problem: 'Three non-communicating ERP systems (Zucchetti + TeamSystem + Excel spreadsheets). The production manager only discovered bottlenecks on weekends, when delays were already irreversible.',
     painPoints: [
-      'OEE al 67% — 4 ore/giorno di fermo non pianificato per macchina',
-      'Lead time medio 18 giorni (vs 11 dei competitor)',
-      'Tasso difetti 4,2% · €85K/anno in rilavorazioni',
-      'Report produzione: 3 ore di Excel ogni lunedì mattina',
+      'OEE at 67% — 4 hours/day of unplanned downtime per machine',
+      'Average lead time 18 days (vs. 11 for competitors)',
+      'Defect rate 4.2% · €85K/year in rework',
+      'Production reports: 3 hours of Excel every Monday morning',
     ],
-    agents: ['Anomaly Detection · Produzione', 'Production Scheduler', 'Supplier Risk Monitor'],
+    agents: ['Anomaly Detection · Production', 'Production Scheduler', 'Supplier Risk Monitor'],
     findings: [
-      { severity: 'critical', text: 'CNC-07: efficienza scesa al 43% nelle ultime 72h — manutenzione preventiva entro 3gg' },
-      { severity: 'critical', text: 'ORD-2024-389 a rischio ritardo 5gg — collo di bottiglia reparto fresatura (3 ordini in coda)' },
-      { severity: 'warning',  text: 'Fornitore Acciai Lombardi: lead time medio salito da 8 a 14gg negli ultimi 30gg' },
-      { severity: 'info',     text: 'Lotto LT-88 completato con zero difetti — parametri CNC ottimali documentati' },
+      { severity: 'critical', text: 'CNC-07: efficiency dropped to 43% in the last 72h — preventive maintenance within 3 days' },
+      { severity: 'critical', text: 'ORD-2024-389 at risk of 5-day delay — bottleneck in milling department (3 orders queued)' },
+      { severity: 'warning',  text: 'Supplier Acciai Lombardi: average lead time rose from 8 to 14 days in the last 30 days' },
+      { severity: 'info',     text: 'Batch LT-88 completed with zero defects — optimal CNC parameters documented' },
     ],
     results: [
-      { metric: 'OEE',          before: '67%',     after: '83%',      positive: true },
-      { metric: 'Lead time',    before: '18 gg',   after: '11 gg',    positive: true },
-      { metric: 'Difetti',      before: '4,2%',    after: '1,4%',     positive: true },
-      { metric: 'Report Excel', before: '3h/sett', after: '0h',       positive: true },
+      { metric: 'OEE',          before: '67%',      after: '83%',     positive: true },
+      { metric: 'Lead time',    before: '18 days',  after: '11 days', positive: true },
+      { metric: 'Defects',      before: '4.2%',     after: '1.4%',    positive: true },
+      { metric: 'Excel reports',before: '3h/week',  after: '0h',      positive: true },
     ],
     annualValue: '€240K',
   },
@@ -75,30 +75,30 @@ const USE_CASES: UseCase[] = [
     company: 'ModaVerde S.r.l.',
     sector: 'retail',
     sectorIcon: '🛍️',
-    industry: 'Fashion accessories · Milano',
-    city: 'Milano',
-    employees: '85 dipendenti · 28 negozi',
-    revenue: '€22M fatturato',
-    tagline: 'Niente più carrelli abbandonati e scaffali vuoti nel giorno sbagliato',
-    problem: 'Con 28 punti vendita e un e-commerce Shopify, l\'inventario era invisibile in tempo reale. Gli stockout venivano scoperti solo dalla lamentela del cliente. I carrelli abbandonati — quasi 1.900/mese — non venivano seguiti.',
+    industry: 'Fashion accessories · Milan',
+    city: 'Milan',
+    employees: '85 employees · 28 stores',
+    revenue: '€22M revenue',
+    tagline: 'No more abandoned carts and empty shelves on the wrong day',
+    problem: 'With 28 points of sale and a Shopify e-commerce, inventory was invisible in real time. Stockouts were only discovered from customer complaints. Abandoned carts — nearly 1,900/month — received no follow-up.',
     painPoints: [
-      '1.850 carrelli abbandonati/mese · valore medio €154',
-      'Stockout rate 22% — scoperto mediamente con 3gg di ritardo',
-      'Zero visibilità cross-canale: negozi e online su sistemi separati',
-      'Campagne email recovery: manuali, inviate 72h dopo l\'abbandono',
+      '1,850 abandoned carts/month · average value €154',
+      'Stockout rate 22% — discovered on average 3 days late',
+      'Zero cross-channel visibility: stores and online on separate systems',
+      'Email recovery campaigns: manual, sent 72h after abandonment',
     ],
     agents: ['Cart Recovery Agent', 'Inventory Reorder Agent', 'Churn Predictor'],
     findings: [
-      { severity: 'critical', text: '847 carrelli con valore >€85 abbandonati nelle ultime 48h — sequenza recovery automatica avviata' },
-      { severity: 'critical', text: 'Borsa Pelle Cognac (SKU-3847): 6 pz rimasti · 3 negozi in stockout — riordino automatico generato' },
-      { severity: 'warning',  text: '312 clienti Gold inattivi da >60gg — inclusi nel prossimo segmento winback' },
-      { severity: 'info',     text: 'Promo ESTATE25: conversion rate 8,3% vs 4,1% baseline — estensione consigliata' },
+      { severity: 'critical', text: '847 carts with value >€85 abandoned in the last 48h — automatic recovery sequence launched' },
+      { severity: 'critical', text: 'Cognac Leather Bag (SKU-3847): 6 units remaining · 3 stores out of stock — auto-reorder generated' },
+      { severity: 'warning',  text: '312 Gold customers inactive for >60 days — included in next winback segment' },
+      { severity: 'info',     text: 'Promo SUMMER25: conversion rate 8.3% vs 4.1% baseline — extension recommended' },
     ],
     results: [
-      { metric: 'Cart recovery',  before: '0%',       after: '31%',      positive: true },
-      { metric: 'Stockout rate',  before: '22%',      after: '7,7%',     positive: true },
-      { metric: 'Tempo reazione', before: '72h',      after: '<2h',      positive: true },
-      { metric: 'LTV clienti',    before: '€340',     after: '€510',     positive: true },
+      { metric: 'Cart recovery',   before: '0%',    after: '31%',   positive: true },
+      { metric: 'Stockout rate',   before: '22%',   after: '7.7%',  positive: true },
+      { metric: 'Response time',   before: '72h',   after: '<2h',   positive: true },
+      { metric: 'Customer LTV',    before: '€340',  after: '€510',  positive: true },
     ],
     annualValue: '€180K',
   },
@@ -107,30 +107,30 @@ const USE_CASES: UseCase[] = [
     company: 'Centro Medico Salus S.r.l.',
     sector: 'healthcare',
     sectorIcon: '⚕️',
-    industry: 'Specialistica privata · Roma',
-    city: 'Roma',
-    employees: '42 operatori · 12 medici',
-    revenue: '€4,8M fatturato',
-    tagline: 'Pazienti seguiti nel tempo, non solo durante la visita',
-    problem: 'Il 23% delle visite veniva "bruciato" dai no-show. Il 34% dei pazienti non tornava mai per il follow-up consigliato. L\'audit GDPR annuale richiedeva 3 giorni di lavoro manuale per ricostruire i flussi di dati.',
+    industry: 'Private specialist clinic · Rome',
+    city: 'Rome',
+    employees: '42 staff · 12 doctors',
+    revenue: '€4.8M revenue',
+    tagline: 'Patients followed over time, not just during the visit',
+    problem: '23% of appointments were lost to no-shows. 34% of patients never returned for the recommended follow-up. The annual GDPR audit required 3 days of manual work to reconstruct data flows.',
     painPoints: [
-      'No-show rate 23% — ogni slot perso vale €180 medio',
-      '34% pazienti non torna per il follow-up: malattie croniche non monitorate',
-      'Prescrizioni scadute non rinnovate: 15% dei pazienti cronici a rischio',
-      'GDPR audit: 3 giorni di lavoro — categorie di dati classificate a mano',
+      'No-show rate 23% — each lost slot is worth €180 on average',
+      '34% of patients don\'t return for follow-up: chronic conditions unmonitored',
+      'Expired prescriptions not renewed: 15% of chronic patients at risk',
+      'GDPR audit: 3 days of work — data categories classified manually',
     ],
     agents: ['Follow-up Scheduler', 'No-show Predictor', 'GDPR Auto-Classifier'],
     findings: [
-      { severity: 'critical', text: '38 pazienti diabetici senza visita di controllo da >90gg — reminder SMS/email inviato automaticamente' },
-      { severity: 'critical', text: '12 prescrizioni per ipertensione scadute e non rinnovate — alert inviato al medico curante' },
-      { severity: 'warning',  text: '7 pazienti ad alto rischio no-show domani (modello: 3+ assenze pregresse) — chiamata di conferma consigliata' },
-      { severity: 'info',     text: 'GDPR: 1.240 record Patient classificati "dati sanitari speciali" — base giuridica verificata (Art. 9(2)(h))' },
+      { severity: 'critical', text: '38 diabetic patients with no check-up in >90 days — SMS/email reminder sent automatically' },
+      { severity: 'critical', text: '12 expired hypertension prescriptions not renewed — alert sent to treating physician' },
+      { severity: 'warning',  text: '7 patients at high no-show risk tomorrow (model: 3+ prior absences) — confirmation call recommended' },
+      { severity: 'info',     text: 'GDPR: 1,240 Patient records classified as "special health data" — legal basis verified (Art. 9(2)(h))' },
     ],
     results: [
-      { metric: 'No-show rate',      before: '23%',    after: '13,5%',  positive: true },
-      { metric: 'Follow-up aderenza',before: '66%',    after: '87%',    positive: true },
-      { metric: 'GDPR audit',        before: '3 gg',   after: '2h',     positive: true },
-      { metric: 'Ricavi recuperati', before: '€0',     after: '+€68K/a',positive: true },
+      { metric: 'No-show rate',       before: '23%',    after: '13.5%',   positive: true },
+      { metric: 'Follow-up adherence',before: '66%',    after: '87%',     positive: true },
+      { metric: 'GDPR audit',         before: '3 days', after: '2h',      positive: true },
+      { metric: 'Revenue recovered',  before: '€0',     after: '+€68K/yr',positive: true },
     ],
     annualValue: '€68K',
   },
@@ -139,38 +139,38 @@ const USE_CASES: UseCase[] = [
     company: 'Credito Regionale S.p.A.',
     sector: 'finance',
     sectorIcon: '💰',
-    industry: 'Banca cooperativa · Milano',
-    city: 'Milano',
-    employees: '210 dipendenti',
-    revenue: '€12M margine di interesse',
-    tagline: 'KYC in 4 ore, AML senza falsi positivi, SDI a zero interventi manuali',
-    problem: 'Il processo KYC richiedeva 3 giorni di lavoro manuale. Il sistema AML generava il 18% di falsi positivi — ogni alert richiedeva 45 minuti di revisione. La riconciliazione fatture SDI occupava 3 FTE a tempo pieno.',
+    industry: 'Cooperative bank · Milan',
+    city: 'Milan',
+    employees: '210 employees',
+    revenue: '€12M net interest margin',
+    tagline: 'KYC in 4 hours, AML without false positives, SDI at zero manual interventions',
+    problem: 'The KYC process required 3 days of manual work. The AML system generated 18% false positives — each alert required 45 minutes of review. SDI invoice reconciliation kept 3 FTEs busy full-time.',
     painPoints: [
-      'KYC: 72h di attesa per i clienti — il 12% abbandonava prima dell\'approvazione',
-      'AML false positive rate 18% — 45 min/alert di revisione manuale',
-      'SDI: 3 FTE dedicate alla riconciliazione fatture — zero automazione',
-      'Risk scoring: aggiornato mensilmente, non in real-time',
+      'KYC: 72h wait for customers — 12% dropped out before approval',
+      'AML false positive rate 18% — 45 min/alert of manual review',
+      'SDI: 3 FTEs dedicated to invoice reconciliation — zero automation',
+      'Risk scoring: updated monthly, not in real-time',
     ],
     agents: ['KYC Automation Agent', 'AML Risk Scorer', 'SDI Monitor', 'Credit Risk Analyzer'],
     findings: [
-      { severity: 'critical', text: '3 transazioni anomale rilevate (importi inusuali rispetto al pattern storico) — segnalate per review umana con score 94/100' },
-      { severity: 'critical', text: 'Fattura SDI-2024-8847 non riconciliata da 45gg — notifica automatica al creditore inviata' },
-      { severity: 'warning',  text: 'Applicant APP-1847: score AML 78/100 · nationality match con lista PEP — escalation a compliance officer' },
-      { severity: 'info',     text: 'KYC completati oggi: 23 in <4h (media 2h18m) · 0 pratiche in attesa da >24h' },
+      { severity: 'critical', text: '3 anomalous transactions detected (unusual amounts vs historical pattern) — flagged for human review with score 94/100' },
+      { severity: 'critical', text: 'Invoice SDI-2024-8847 unreconciled for 45 days — automatic notification sent to creditor' },
+      { severity: 'warning',  text: 'Applicant APP-1847: AML score 78/100 · nationality match on PEP list — escalated to compliance officer' },
+      { severity: 'info',     text: 'KYC completions today: 23 in <4h (avg 2h18m) · 0 applications pending >24h' },
     ],
     results: [
-      { metric: 'KYC time',         before: '72h',    after: '4h',     positive: true },
-      { metric: 'AML falsi pos.',    before: '18%',    after: '6%',     positive: true },
-      { metric: 'SDI ore manuali',  before: '120h/m', after: '0h',     positive: true },
-      { metric: 'Abbandono KYC',    before: '12%',    after: '2,3%',   positive: true },
+      { metric: 'KYC time',      before: '72h',    after: '4h',    positive: true },
+      { metric: 'AML false pos.',before: '18%',    after: '6%',    positive: true },
+      { metric: 'SDI manual hrs',before: '120h/mo',after: '0h',    positive: true },
+      { metric: 'KYC dropout',   before: '12%',    after: '2.3%',  positive: true },
     ],
     annualValue: '€380K',
   },
 ]
 
 const SEVERITY_CONFIG = {
-  critical: { bg: 'bg-red-50', border: 'border-red-200', dot: 'bg-red-500', text: 'text-red-700', label: 'CRITICO' },
-  warning:  { bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', text: 'text-amber-700', label: 'ATTENZIONE' },
+  critical: { bg: 'bg-red-50', border: 'border-red-200', dot: 'bg-red-500', text: 'text-red-700', label: 'CRITICAL' },
+  warning:  { bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', text: 'text-amber-700', label: 'WARNING' },
   info:     { bg: 'bg-teal-50', border: 'border-teal-200', dot: 'bg-teal-500', text: 'text-teal-700', label: 'INFO' },
 }
 
@@ -219,7 +219,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
           </div>
           <div className="flex items-center gap-1.5 bg-teal-50 border border-teal-200 rounded-full px-2.5 py-1">
             <span className="text-xs font-bold text-teal-700">{uc.annualValue}</span>
-            <span className="text-[10px] text-teal-600">/anno</span>
+            <span className="text-[10px] text-teal-600">/yr</span>
           </div>
         </div>
         <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{uc.company}</h3>
@@ -234,7 +234,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
       <div className="px-6 py-4 flex-1 space-y-5">
         {/* Problem */}
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">Il problema</p>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">The problem</p>
           <p className="text-xs text-slate-600 leading-relaxed">{uc.problem}</p>
           <ul className="mt-2 space-y-1">
             {uc.painPoints.map((p, i) => (
@@ -249,7 +249,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
         {/* Agents */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">
-            <Bot className="w-3 h-3 inline mr-1" />Agenti attivati
+            <Bot className="w-3 h-3 inline mr-1" />Agents activated
           </p>
           <div className="flex flex-wrap gap-1.5">
             {uc.agents.map(a => (
@@ -263,7 +263,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
         {/* Findings */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">
-            <Zap className="w-3 h-3 inline mr-1" />Esempi di finding reali
+            <Zap className="w-3 h-3 inline mr-1" />Real findings
           </p>
           <div className="space-y-1.5">
             {uc.findings.map((f, i) => <FindingRow key={i} finding={f} />)}
@@ -273,7 +273,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
         {/* Results */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">
-            <CheckCircle2 className="w-3 h-3 inline mr-1" />Risultati dopo 90 giorni
+            <CheckCircle2 className="w-3 h-3 inline mr-1" />Results after 90 days
           </p>
           <div className="space-y-2">
             {uc.results.map((r, i) => <ResultRow key={i} r={r} />)}
@@ -287,7 +287,7 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
           onClick={onLoad}
           className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
         >
-          Esplora questo scenario →
+          Explore this scenario →
         </button>
       </div>
     </div>
@@ -315,12 +315,12 @@ export default function UseCasesView({ onNavigate }: Props) {
       {/* Header strip */}
       <div className="bg-slate-900 text-white px-12 py-4">
         <div className="max-w-6xl flex items-center gap-6">
-          <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Casi di Business Reali</span>
+          <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Real Business Cases</span>
           <div className="h-3 w-px bg-slate-700" />
-          <span className="text-xs text-slate-400">4 aziende italiane · settori diversi · risultati misurabili</span>
+          <span className="text-xs text-slate-400">4 European companies · different sectors · measurable results</span>
           <div className="ml-auto">
-            <span className="text-xs text-slate-400">Valore generato medio: </span>
-            <span className="text-sm font-bold text-teal-400">€{(totalValue / USE_CASES.length / 1000).toFixed(0)}K/anno per cliente</span>
+            <span className="text-xs text-slate-400">Average value generated: </span>
+            <span className="text-sm font-bold text-teal-400">€{(totalValue / USE_CASES.length / 1000).toFixed(0)}K/yr per client</span>
           </div>
         </div>
       </div>
@@ -332,11 +332,11 @@ export default function UseCasesView({ onNavigate }: Props) {
             04 — Use Cases
           </span>
           <h1 className="text-3xl font-bold text-slate-900 mb-3">
-            Non una demo generica.<br />
-            <span className="text-teal-600">Aziende italiane reali, problemi reali.</span>
+            Not a generic demo.<br />
+            <span className="text-teal-600">Real European businesses, real problems.</span>
           </h1>
           <p className="text-base text-slate-500 max-w-2xl">
-            Ogni caso mostra il percorso completo: il problema operativo concreto, gli agenti attivati sul layer semantico, i finding generati automaticamente e i risultati misurati dopo 90 giorni.
+            Each case shows the complete journey: the concrete operational problem, the agents activated on the semantic layer, the automatically generated findings, and the results measured after 90 days.
           </p>
         </div>
       </section>
@@ -353,16 +353,16 @@ export default function UseCasesView({ onNavigate }: Props) {
       {/* Pattern recap */}
       <section className="px-12 py-14 border-t border-slate-100">
         <div className="max-w-6xl">
-          <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">Il pattern comune</span>
+          <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The common pattern</span>
           <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
-            Stesso approccio, settori diversi — risultati sistematici
+            Same approach, different sectors — systematic results
           </h2>
           <div className="grid grid-cols-4 gap-4">
             {[
-              { step: '01', title: 'Ontologia', desc: 'Definiamo un modello semantico delle entità chiave del business — una sola fonte di verità per tutti i sistemi.', color: 'border-l-teal-500' },
-              { step: '02', title: 'Connessione', desc: 'I connettori mappano automaticamente i campi di ogni sistema ERP/CRM/MES sull\'ontologia, senza ETL custom.', color: 'border-l-blue-500' },
-              { step: '03', title: 'Agenti', desc: 'Agenti AI operano direttamente sul layer semantico: trovano anomalie, generano alert, automatizzano workflow.', color: 'border-l-violet-500' },
-              { step: '04', title: 'ROI', desc: 'Il valore si misura: ore risparmiate, ricavi recuperati, rischi evitati — tutto tracciabile sull\'ontologia.', color: 'border-l-amber-500' },
+              { step: '01', title: 'Ontology', desc: 'We define a semantic model of key business entities — a single source of truth for all systems.', color: 'border-l-teal-500' },
+              { step: '02', title: 'Connection', desc: 'Connectors automatically map fields from every ERP/CRM/MES system onto the ontology — no custom ETL.', color: 'border-l-blue-500' },
+              { step: '03', title: 'Agents', desc: 'AI agents operate directly on the semantic layer: finding anomalies, generating alerts, automating workflows.', color: 'border-l-violet-500' },
+              { step: '04', title: 'ROI', desc: 'Value is measurable: hours saved, revenue recovered, risks avoided — all traceable on the ontology.', color: 'border-l-amber-500' },
             ].map(({ step, title, desc, color }) => (
               <div key={step} className={`bg-white border border-slate-200 rounded-xl p-5 border-l-4 ${color}`}>
                 <p className="text-2xl font-extrabold text-slate-200 mb-2">{step}</p>
@@ -377,16 +377,16 @@ export default function UseCasesView({ onNavigate }: Props) {
       {/* Summary stats */}
       <section className="px-12 py-14 bg-slate-900">
         <div className="max-w-6xl">
-          <span className="text-xs font-semibold tracking-widest text-teal-400 uppercase">In numeri</span>
+          <span className="text-xs font-semibold tracking-widest text-teal-400 uppercase">By the numbers</span>
           <h2 className="mt-3 text-2xl font-bold text-white mb-10">
-            I 4 casi di uso sommano risultati concreti
+            The 4 use cases add up to concrete results
           </h2>
           <div className="grid grid-cols-4 gap-6">
             {[
-              { value: '€868K',   label: 'Valore totale generato/anno',    sub: 'media €217K per cliente' },
-              { value: '90 gg',   label: 'Time-to-value medio',             sub: 'dalla firma all\'impatto misurabile' },
-              { value: '4 settori', label: 'Manifattura · Retail · Sanità · Finance', sub: 'stesso layer semantico, ontologie verticali' },
-              { value: '0 FTE',   label: 'Dipendenti riconvertiti',          sub: 'nessun licenziamento — solo attività di maggior valore' },
+              { value: '€868K',    label: 'Total value generated/year',           sub: 'avg €217K per client' },
+              { value: '90 days',  label: 'Average time-to-value',                sub: 'from signature to measurable impact' },
+              { value: '4 sectors',label: 'Manufacturing · Retail · Healthcare · Finance', sub: 'same semantic layer, vertical ontologies' },
+              { value: '0 FTE',    label: 'Employees redeployed',                  sub: 'no job cuts — only higher-value work' },
             ].map(({ value, label, sub }) => (
               <div key={label} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
                 <p className="text-2xl font-extrabold text-teal-400 mb-1">{value}</p>
