@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase } from 'lucide-react'
 import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
@@ -15,6 +15,7 @@ interface Props {
 
 const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
   overview: 'bg-teal-500',
+  usecases: 'bg-orange-500',
   builder: 'bg-violet-500',
   agents: 'bg-blue-500',
   sources: 'bg-emerald-500',
@@ -24,6 +25,7 @@ const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
 
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview',  label: 'Overview',       icon: Presentation },
+  { id: 'usecases',  label: 'Use Cases',      icon: Briefcase },
   { id: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
   { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
   { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
