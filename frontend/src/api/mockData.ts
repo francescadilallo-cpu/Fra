@@ -1,98 +1,342 @@
 import type { DashboardData, MappingsResponse, OntologyGraphData, OntologyProperty, QueryResult } from '../types'
 
-function sp(name: string): OntologyProperty { return { name, type: 'string' } }
+// ── AdventureWorks 2014 — real data from distributed scenario ─────────────────
+// Sources: ERP OrionSales (PostgreSQL/DuckDB), CRM ClientHub (SQLite),
+//          HR CSV + PIM JSON — 31,465 orders, 20,201 customers, 504 products
+
+function prop(name: string, type: OntologyProperty['type'] = 'string', opts: Partial<OntologyProperty> = {}): OntologyProperty {
+  return { name, type, ...opts }
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export const mockDashboard: DashboardData = {
-  total_customers: 20,
-  total_products: 30,
-  total_quotes: 50,
-  total_orders: 13,
-  quote_conversion_rate: 26.0,
-  open_quotes_value: 1173063.45,
-  process_funnel: [
-    { stage: 'Preventivi Creati',    count: 50, value: 2340000 },
-    { stage: 'Preventivi Inviati',   count: 38, value: 1820000 },
-    { stage: 'Preventivi Accettati', count: 13, value: 820000  },
-    { stage: 'Ordini Confermati',    count: 13, value: 810000  },
-    { stage: 'In Produzione',        count: 6,  value: 380000  },
-    { stage: 'Consegnati',           count: 4,  value: 240000  },
-  ],
-  recent_activities: [
-    { id: 1, type: 'order', message: 'Nuovo ordine da Moccia s.r.l.',            time: '2 ore fa',    status: 'Confermato' },
-    { id: 2, type: 'quote', message: 'Preventivo accettato – Tutino e figli',    time: '5 ore fa',    status: 'Accettato'  },
-    { id: 3, type: 'order', message: 'Ordine spedito – Ferrari Metalli S.p.A.',  time: 'ieri',        status: 'Spedito'    },
-    { id: 4, type: 'quote', message: 'Nuovo preventivo – Bianchi Impianti',      time: 'ieri',        status: 'Inviato'    },
-    { id: 5, type: 'order', message: 'Consegna completata – Rossi Meccanica',    time: '2 giorni fa', status: 'Consegnato' },
-  ],
-  recent_orders: [
-    { id: 5,  customer_name: 'Tutino e figli',                      total_value: 197866.48, status: 'Annullato',     date: '2026-05-03' },
-    { id: 11, customer_name: 'Lettiere-Cremonesi e figli',           total_value: 142066.66, status: 'In Produzione', date: '2026-04-24' },
-    { id: 3,  customer_name: 'Moccia s.r.l.',                        total_value:  98451.37, status: 'In Produzione', date: '2026-04-16' },
-    { id: 4,  customer_name: 'Caracciolo, Asmundo e Leone e figli',  total_value:  16383.72, status: 'Consegnato',    date: '2026-04-02' },
-    { id: 12, customer_name: 'Moccia s.r.l.',                        total_value:  55136.48, status: 'Consegnato',    date: '2026-03-30' },
-    { id: 7,  customer_name: 'Ferrari Metalli S.p.A.',               total_value:  82300.00, status: 'Spedito',       date: '2026-05-10' },
-    { id: 9,  customer_name: 'Rossi Meccanica S.r.l.',               total_value:  34750.50, status: 'Confermato',    date: '2026-05-12' },
-    { id: 13, customer_name: 'Bianchi Impianti S.p.A.',              total_value:  61200.00, status: 'Confermato',    date: '2026-05-14' },
-  ],
+  total_customers: 19829,   // unique CRM accounts after dedup (372 neg-ID removed)
+  total_products:  504,     // PIM catalog
+  total_quotes:    290,     // HR employees (field repurposed)
+  total_orders:    31465,   // ERP sales_order_header
+  quote_conversion_rate: 71.4,   // orders shipped / total (indicative)
+  open_quotes_value: 22419498,   // total_due 2014 (all years: ~$109M)
+
   data_sources: [
-    { name: 'ERP – Clienti & Prodotti',    type: 'SQLite', status: 'connected', tables: ['customers', 'products'],                              row_counts: { customers: 20, products: 30 } },
-    { name: 'ERP – Preventivi & Ordini',   type: 'SQLite', status: 'connected', tables: ['quotes', 'quote_lines', 'orders', 'order_lines'],     row_counts: { quotes: 50, quote_lines: 155, orders: 13, order_lines: 37 } },
+    {
+      name: 'ERP — OrionSales',
+      type: 'PostgreSQL / DuckDB',
+      status: 'connected',
+      tables: ['sales_order_header', 'sales_order_line', 'salesperson', 'territory', 'offer'],
+      row_counts: {
+        sales_order_header: 31465,
+        sales_order_line:  121317,
+        salesperson:           17,
+        territory:             10,
+        offer:                 16,
+      },
+    },
+    {
+      name: 'CRM — ClientHub',
+      type: 'SQLite',
+      status: 'connected',
+      tables: ['account', 'contact', 'address', 'account_address', 'state_province', 'country'],
+      row_counts: {
+        account:        20201,   // 372 duplicates (accountId < 0)
+        contact:        19302,
+        address:        19614,
+        state_province:    70,
+        country:           6,
+      },
+    },
+    {
+      name: 'HR + PIM — Files',
+      type: 'CSV + JSON',
+      status: 'connected',
+      tables: ['dipendenti_hr', 'product_catalog_pim'],
+      row_counts: {
+        dipendenti_hr:       290,
+        product_catalog_pim: 504,
+      },
+    },
+  ],
+
+  recent_orders: [
+    { id: 75123, customer_name: 'Bike World',              total_value: 87145.20, status: 'shipped',   date: '2014-12-28' },
+    { id: 75089, customer_name: 'Action Bicycle Specialists', total_value: 53209.80, status: 'delivered', date: '2014-12-26' },
+    { id: 75044, customer_name: 'Riding Cycles',           total_value: 46312.50, status: 'delivered', date: '2014-12-24' },
+    { id: 74998, customer_name: 'Valley Bicycle Specialists', total_value: 32890.00, status: 'shipped',   date: '2014-12-22' },
+    { id: 74956, customer_name: 'Eastside Department Store', total_value: 28750.40, status: 'delivered', date: '2014-12-20' },
+    { id: 74901, customer_name: 'Sporting Goods Store',   total_value: 19435.60, status: 'confirmed', date: '2014-12-18' },
+    { id: 74870, customer_name: 'Bike Riders Company',    total_value: 14820.90, status: 'confirmed', date: '2014-12-17' },
+    { id: 74835, customer_name: 'Metropolitan Bicycle Supply', total_value: 11260.00, status: 'confirmed', date: '2014-12-15' },
+  ],
+
+  process_funnel: [
+    { stage: 'Orders Created',  count: 31465, value: 22419498 },
+    { stage: 'Orders Shipped',  count: 22468, value: 16003964 },
+    { stage: 'Top Territory',   count:  6692, value:  7905146 },  // Southwest
+    { stage: 'Online Sales',    count: 27659, value: 19651300 },  // online channel
+    { stage: 'With Discount',   count:  3806, value:  2768198 },  // offer_ref != 1
+  ],
+
+  recent_activities: [
+    { id: 1, type: 'order', message: 'Top salesperson 2014: Jae Pak — 67 orders in Q4', time: '2014-12-31', status: 'Confirmed' },
+    { id: 2, type: 'order', message: 'Southwest territory leads: $7.9M revenue',         time: '2014-12-30', status: 'Shipped'   },
+    { id: 3, type: 'quote', message: 'CRM dedup completed — 372 duplicate accounts merged', time: '2014-12-29', status: 'Resolved' },
+    { id: 4, type: 'order', message: 'PIM sync: 504 products, 97 Bikes · 134 Components', time: '2014-12-28', status: 'Synced'   },
+    { id: 5, type: 'order', message: 'HR load: 290 employees across 16 departments',    time: '2014-12-27', status: 'Loaded'   },
   ],
 }
+
+// ── Ontology graph — AdventureWorks entities ──────────────────────────────────
 
 export const mockOntologyGraph: OntologyGraphData = {
   nodes: [
-    { id: 'Organization',    type: 'ontologyClass', position: { x: 400, y: 50  }, data: { label: 'Organization',    uri: 'mfg:Organization',    db_table: null,          row_count: 0,   properties: [sp('name')] } },
-    { id: 'Customer',        type: 'ontologyClass', position: { x: 100, y: 200 }, data: { label: 'Customer',        uri: 'mfg:Customer',        db_table: 'customers',   row_count: 20,  properties: [sp('name'), sp('sector'), sp('country'), sp('vatNumber'), sp('creditLimit')] } },
-    { id: 'Product',         type: 'ontologyClass', position: { x: 700, y: 200 }, data: { label: 'Product',         uri: 'mfg:Product',         db_table: 'products',    row_count: 30,  properties: [sp('sku'), sp('name'), sp('category'), sp('unitPrice'), sp('unitOfMeasure')] } },
-    { id: 'Quote',           type: 'ontologyClass', position: { x: 100, y: 400 }, data: { label: 'Quote',           uri: 'mfg:Quote',           db_table: 'quotes',      row_count: 50,  properties: [sp('date'), sp('status'), sp('totalValue'), sp('validUntil')] } },
-    { id: 'Order',           type: 'ontologyClass', position: { x: 700, y: 400 }, data: { label: 'Order',           uri: 'mfg:Order',           db_table: 'orders',      row_count: 13,  properties: [sp('date'), sp('status'), sp('totalValue'), sp('deliveryDate')] } },
-    { id: 'QuoteLineItem',   type: 'ontologyClass', position: { x: 400, y: 550 }, data: { label: 'QuoteLineItem',   uri: 'mfg:QuoteLineItem',   db_table: 'quote_lines', row_count: 155, properties: [sp('quantity'), sp('unitPrice'), sp('discountPct'), sp('lineTotal')] } },
-    { id: 'OrderLineItem',   type: 'ontologyClass', position: { x: 700, y: 550 }, data: { label: 'OrderLineItem',   uri: 'mfg:OrderLineItem',   db_table: 'order_lines', row_count: 37,  properties: [sp('quantity'), sp('unitPrice'), sp('lineTotal')] } },
+    {
+      id: 'Customer',
+      type: 'ontologyNode',
+      position: { x: 150, y: 280 },
+      data: {
+        label: 'Customer',
+        uri: 'aw:Customer',
+        db_table: 'crm.account',
+        row_count: 19829,
+        properties: [
+          prop('customer_id', 'integer', { required: true, unique: true }),
+          prop('display_name', 'string', { required: true }),
+          prop('account_type', 'string'),   // B2C | B2B
+          prop('email', 'string'),
+          prop('is_active', 'boolean'),
+        ],
+      },
+    },
+    {
+      id: 'B2CCustomer',
+      type: 'ontologyNode',
+      position: { x: -80, y: 460 },
+      data: {
+        label: 'B2C Customer',
+        uri: 'aw:B2CCustomer',
+        db_table: 'crm.account (accountType=B2C)',
+        row_count: 19119,
+        properties: [
+          prop('contact_name', 'string'),
+        ],
+      },
+    },
+    {
+      id: 'B2BCustomer',
+      type: 'ontologyNode',
+      position: { x: 360, y: 460 },
+      data: {
+        label: 'B2B Customer',
+        uri: 'aw:B2BCustomer',
+        db_table: 'crm.account (accountType=B2B)',
+        row_count: 710,
+        properties: [
+          prop('company_name', 'string'),
+        ],
+      },
+    },
+    {
+      id: 'Employee',
+      type: 'ontologyNode',
+      position: { x: 150, y: 60 },
+      data: {
+        label: 'Employee',
+        uri: 'aw:Employee',
+        db_table: 'hr.dipendenti_hr',
+        row_count: 290,
+        properties: [
+          prop('employee_id', 'integer', { required: true }),
+          prop('full_name', 'string'),
+          prop('department', 'string'),
+          prop('hire_date', 'date'),
+          prop('hourly_rate', 'decimal'),
+        ],
+      },
+    },
+    {
+      id: 'Salesperson',
+      type: 'ontologyNode',
+      position: { x: 420, y: 60 },
+      data: {
+        label: 'Salesperson',
+        uri: 'aw:Salesperson',
+        db_table: 'erp.salesperson',
+        row_count: 17,
+        properties: [
+          prop('salesperson_id', 'integer', { required: true }),
+          prop('sales_quota', 'decimal'),
+          prop('territory_id', 'fk', { fkTarget: 'Territory' }),
+        ],
+      },
+    },
+    {
+      id: 'SalesOrder',
+      type: 'ontologyNode',
+      position: { x: 590, y: 280 },
+      data: {
+        label: 'SalesOrder',
+        uri: 'aw:SalesOrder',
+        db_table: 'erp.sales_order_header',
+        row_count: 31465,
+        properties: [
+          prop('order_id', 'integer', { required: true, unique: true }),
+          prop('order_date', 'date'),
+          prop('customer_ref', 'fk', { fkTarget: 'Customer' }),
+          prop('salesperson_ref', 'fk', { fkTarget: 'Salesperson' }),
+          prop('territory_ref', 'fk', { fkTarget: 'Territory' }),
+          prop('subtotal_amount', 'decimal'),
+          prop('tax_amount', 'decimal'),
+          prop('total_due', 'decimal'),
+        ],
+      },
+    },
+    {
+      id: 'SalesOrderLine',
+      type: 'ontologyNode',
+      position: { x: 800, y: 460 },
+      data: {
+        label: 'SalesOrderLine',
+        uri: 'aw:SalesOrderLine',
+        db_table: 'erp.sales_order_line',
+        row_count: 121317,
+        properties: [
+          prop('order_id', 'fk', { fkTarget: 'SalesOrder' }),
+          prop('line_id', 'integer'),
+          prop('product_ref', 'fk', { fkTarget: 'Product' }),
+          prop('qty', 'integer'),
+          prop('unit_price', 'decimal'),
+          prop('line_total', 'decimal'),
+        ],
+      },
+    },
+    {
+      id: 'Product',
+      type: 'ontologyNode',
+      position: { x: 1020, y: 280 },
+      data: {
+        label: 'Product',
+        uri: 'aw:Product',
+        db_table: 'pim.product_catalog_pim',
+        row_count: 504,
+        properties: [
+          prop('product_id', 'integer', { required: true }),
+          prop('sku', 'string', { unique: true }),
+          prop('display_name', 'string'),
+          prop('category_path', 'string'),
+          prop('standard_cost', 'decimal'),
+          prop('list_price', 'decimal'),
+        ],
+      },
+    },
+    {
+      id: 'Territory',
+      type: 'ontologyNode',
+      position: { x: 590, y: 60 },
+      data: {
+        label: 'Territory',
+        uri: 'aw:Territory',
+        db_table: 'erp.territory',
+        row_count: 10,
+        properties: [
+          prop('territory_id', 'integer', { required: true }),
+          prop('territory_name', 'string'),
+          prop('country_region', 'string'),
+        ],
+      },
+    },
+    {
+      id: 'Offer',
+      type: 'ontologyNode',
+      position: { x: 800, y: 60 },
+      data: {
+        label: 'Offer',
+        uri: 'aw:Offer',
+        db_table: 'erp.offer',
+        row_count: 16,
+        properties: [
+          prop('offer_id', 'integer', { required: true }),
+          prop('offer_name', 'string'),
+          prop('discount_pct', 'decimal'),
+        ],
+      },
+    },
   ],
+
   edges: [
-    { id: 'e1', source: 'Customer',      target: 'Organization',  label: 'subClassOf',       type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e2', source: 'Quote',         target: 'Customer',      label: 'hasCustomer',      type: 'smoothstep', animated: true,  style: { stroke: '#14b8a6' }, labelStyle: { fill: '#14b8a6', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e3', source: 'Order',         target: 'Customer',      label: 'hasCustomer',      type: 'smoothstep', animated: true,  style: { stroke: '#14b8a6' }, labelStyle: { fill: '#14b8a6', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e4', source: 'Order',         target: 'Quote',         label: 'relatedToQuote',   type: 'smoothstep', animated: false, style: { stroke: '#f59e0b' }, labelStyle: { fill: '#f59e0b', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e5', source: 'Quote',         target: 'QuoteLineItem', label: 'hasLineItem',      type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e6', source: 'Order',         target: 'OrderLineItem', label: 'hasLineItem',      type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-    { id: 'e7', source: 'QuoteLineItem', target: 'Product',       label: 'hasProduct',       type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
+    // Subtype edges
+    { id: 'e-b2c',    source: 'B2CCustomer',    target: 'Customer',      label: 'subClassOf',          type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#64748b' } },
+    { id: 'e-b2b',    source: 'B2BCustomer',    target: 'Customer',      label: 'subClassOf',          type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#64748b' } },
+    { id: 'e-sp',     source: 'Salesperson',    target: 'Employee',      label: 'subClassOf',          type: 'smoothstep', animated: false, style: { stroke: '#64748b' }, labelStyle: { fill: '#94a3b8', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#64748b' } },
+    // SalesOrder relations — cross-source bridges highlighted
+    { id: 'e-placed', source: 'SalesOrder',     target: 'Customer',      label: 'PLACED_BY ⚡',        type: 'smoothstep', animated: true,  style: { stroke: '#f59e0b' }, labelStyle: { fill: '#f59e0b', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#f59e0b' }, cardinality: 'N:1' },
+    { id: 'e-sold',   source: 'SalesOrder',     target: 'Salesperson',   label: 'SOLD_BY ⚡',          type: 'smoothstep', animated: true,  style: { stroke: '#f59e0b' }, labelStyle: { fill: '#f59e0b', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#f59e0b' }, cardinality: 'N:1' },
+    { id: 'e-terr',   source: 'SalesOrder',     target: 'Territory',     label: 'IN_TERRITORY',        type: 'smoothstep', animated: false, style: { stroke: '#14b8a6' }, labelStyle: { fill: '#14b8a6', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#14b8a6' }, cardinality: 'N:1' },
+    { id: 'e-offer',  source: 'SalesOrder',     target: 'Offer',         label: 'HAS_OFFER',           type: 'smoothstep', animated: false, style: { stroke: '#14b8a6' }, labelStyle: { fill: '#14b8a6', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#14b8a6' }, cardinality: 'N:1' },
+    { id: 'e-lines',  source: 'SalesOrder',     target: 'SalesOrderLine', label: 'CONTAINS_LINE',      type: 'smoothstep', animated: false, style: { stroke: '#6366f1' }, labelStyle: { fill: '#6366f1', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#6366f1' }, cardinality: '1:N' },
+    { id: 'e-prod',   source: 'SalesOrderLine', target: 'Product',       label: 'OF_PRODUCT ⚡',       type: 'smoothstep', animated: true,  style: { stroke: '#f59e0b' }, labelStyle: { fill: '#f59e0b', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#f59e0b' }, cardinality: 'N:1' },
+    { id: 'e-works',  source: 'Salesperson',    target: 'Territory',     label: 'WORKS_IN',            type: 'smoothstep', animated: false, style: { stroke: '#14b8a6' }, labelStyle: { fill: '#14b8a6', fontSize: 10 }, markerEnd: { type: 'ArrowClosed', color: '#14b8a6' }, cardinality: 'N:1' },
   ],
 }
+
+// ── Mappings — cross-source field bridges (the semantic challenge) ─────────────
 
 export const mockMappings: MappingsResponse = {
   mappings: [
-    { table: 'customers', field: 'id',            ontology_class: 'Customer', ontology_property: 'identifier',    field_type: 'INTEGER' },
-    { table: 'customers', field: 'name',          ontology_class: 'Customer', ontology_property: 'name',          field_type: 'TEXT' },
-    { table: 'customers', field: 'sector',        ontology_class: 'Customer', ontology_property: 'sector',        field_type: 'TEXT' },
-    { table: 'customers', field: 'country',       ontology_class: 'Customer', ontology_property: 'country',       field_type: 'TEXT' },
-    { table: 'customers', field: 'credit_limit',  ontology_class: 'Customer', ontology_property: 'creditLimit',   field_type: 'REAL' },
-    { table: 'products',  field: 'id',            ontology_class: 'Product',  ontology_property: 'identifier',    field_type: 'INTEGER' },
-    { table: 'products',  field: 'sku',           ontology_class: 'Product',  ontology_property: 'sku',           field_type: 'TEXT' },
-    { table: 'products',  field: 'name',          ontology_class: 'Product',  ontology_property: 'name',          field_type: 'TEXT' },
-    { table: 'products',  field: 'category',      ontology_class: 'Product',  ontology_property: 'category',      field_type: 'TEXT' },
-    { table: 'products',  field: 'unit_price',    ontology_class: 'Product',  ontology_property: 'unitPrice',     field_type: 'REAL' },
-    { table: 'quotes',    field: 'id',            ontology_class: 'Quote',    ontology_property: 'identifier',    field_type: 'INTEGER' },
-    { table: 'quotes',    field: 'status',        ontology_class: 'Quote',    ontology_property: 'status',        field_type: 'TEXT' },
-    { table: 'quotes',    field: 'total_value',   ontology_class: 'Quote',    ontology_property: 'totalValue',    field_type: 'REAL' },
-    { table: 'quotes',    field: 'valid_until',   ontology_class: 'Quote',    ontology_property: 'validUntil',    field_type: 'DATE' },
-    { table: 'orders',    field: 'id',            ontology_class: 'Order',    ontology_property: 'identifier',    field_type: 'INTEGER' },
-    { table: 'orders',    field: 'status',        ontology_class: 'Order',    ontology_property: 'status',        field_type: 'TEXT' },
-    { table: 'orders',    field: 'total_value',   ontology_class: 'Order',    ontology_property: 'totalValue',    field_type: 'REAL' },
-    { table: 'orders',    field: 'delivery_date', ontology_class: 'Order',    ontology_property: 'deliveryDate',  field_type: 'DATE' },
+    // ⚡ Cross-source key bridges
+    { table: 'erp.sales_order_header', field: 'customer_ref',    ontology_class: 'Customer',    ontology_property: 'customer_id',   field_type: 'INTEGER' },
+    { table: 'crm.account',            field: 'accountId',        ontology_class: 'Customer',    ontology_property: 'customer_id',   field_type: 'INTEGER' },
+    { table: 'erp.sales_order_header', field: 'salesperson_ref', ontology_class: 'Salesperson', ontology_property: 'employee_id',   field_type: 'INTEGER' },
+    { table: 'hr.dipendenti',          field: 'MatricolaDip',     ontology_class: 'Employee',    ontology_property: 'employee_id',   field_type: 'INTEGER' },
+    { table: 'erp.sales_order_line',   field: 'product_ref',     ontology_class: 'Product',     ontology_property: 'product_id',    field_type: 'INTEGER' },
+    { table: 'pim.products',           field: 'internal_id',     ontology_class: 'Product',     ontology_property: 'product_id',    field_type: 'INTEGER' },
+    // Customer fields — CRM Italian schema
+    { table: 'crm.account', field: 'ragioneSociale',  ontology_class: 'B2BCustomer', ontology_property: 'company_name',   field_type: 'TEXT' },
+    { table: 'crm.account', field: 'nomeContatto',    ontology_class: 'B2CCustomer', ontology_property: 'contact_name',   field_type: 'TEXT' },
+    { table: 'crm.account', field: 'emailContatto',   ontology_class: 'Customer',    ontology_property: 'email',          field_type: 'TEXT' },
+    { table: 'crm.account', field: 'accountType',     ontology_class: 'Customer',    ontology_property: 'account_type',   field_type: 'TEXT' },
+    { table: 'crm.account', field: 'isActive',        ontology_class: 'Customer',    ontology_property: 'is_active',      field_type: 'INTEGER' },
+    // Employee fields — HR Italian schema, Italian dates
+    { table: 'hr.dipendenti', field: 'Nome',              ontology_class: 'Employee', ontology_property: 'first_name',    field_type: 'TEXT' },
+    { table: 'hr.dipendenti', field: 'Cognome',           ontology_class: 'Employee', ontology_property: 'last_name',     field_type: 'TEXT' },
+    { table: 'hr.dipendenti', field: 'Reparto',           ontology_class: 'Employee', ontology_property: 'department',    field_type: 'TEXT' },
+    { table: 'hr.dipendenti', field: 'DataAssunzione',    ontology_class: 'Employee', ontology_property: 'hire_date',     field_type: 'DATE (DD/MM/YYYY)' },
+    { table: 'hr.dipendenti', field: 'RetribuzioneOraria', ontology_class: 'Employee', ontology_property: 'hourly_rate',  field_type: 'DECIMAL' },
+    // SalesOrder fields
+    { table: 'erp.sales_order_header', field: 'order_id',         ontology_class: 'SalesOrder', ontology_property: 'order_id',        field_type: 'INTEGER' },
+    { table: 'erp.sales_order_header', field: 'order_date',       ontology_class: 'SalesOrder', ontology_property: 'order_date',      field_type: 'DATE' },
+    { table: 'erp.sales_order_header', field: 'subtotal_amount',  ontology_class: 'SalesOrder', ontology_property: 'subtotal_amount', field_type: 'DECIMAL' },
+    { table: 'erp.sales_order_header', field: 'total_due',        ontology_class: 'SalesOrder', ontology_property: 'total_due',       field_type: 'DECIMAL' },
+    // Product fields — PIM JSON schema
+    { table: 'pim.products', field: 'sku',          ontology_class: 'Product', ontology_property: 'sku',           field_type: 'TEXT' },
+    { table: 'pim.products', field: 'displayName',  ontology_class: 'Product', ontology_property: 'display_name',  field_type: 'TEXT' },
+    { table: 'pim.products', field: 'categoryPath', ontology_class: 'Product', ontology_property: 'category_path', field_type: 'TEXT' },
+    { table: 'pim.products', field: 'standardCost', ontology_class: 'Product', ontology_property: 'standard_cost', field_type: 'DECIMAL' },
+    { table: 'pim.products', field: 'listPrice',    ontology_class: 'Product', ontology_property: 'list_price',    field_type: 'DECIMAL' },
   ],
-  raw: {},
+  raw: {
+    erp_crm_bridge: 'sales_order_header.customer_ref = account.accountId',
+    erp_hr_bridge:  'sales_order_header.salesperson_ref = dipendenti.MatricolaDip',
+    erp_pim_bridge: 'sales_order_line.product_ref = products.internal_id',
+    known_ambiguity: '"fatturato" → subtotal_amount ($20.1M) OR total_due ($22.4M)',
+    crm_duplicates:  '372 accounts with accountId < 0 (merge by email + normalised name)',
+    hr_date_format:  'DD/MM/YYYY → normalised to ISO at load time',
+  },
 }
 
+// ── Query result — top salesperson golden question ────────────────────────────
+
 export const mockQueryResult: QueryResult = {
-  question: 'Quali clienti hanno preventivi accettati questo mese?',
-  interpreted_as: "Clienti con almeno un preventivo in stato 'Accettato' nel mese corrente",
-  sql_query: "SELECT DISTINCT c.name, q.total_value, q.date\nFROM customers c\nJOIN quotes q ON q.customer_id = c.id\nWHERE q.status = 'Accettato'\nAND q.date >= date('now','start of month')\nORDER BY q.total_value DESC",
+  question: 'Chi è il venditore con più ordini nel 2014?',
+  interpreted_as: "Salesperson con COUNT(sales_order_header) massimo WHERE year=2014 — join cross-fonte ERP→HR (salesperson_ref ↔ MatricolaDip)",
+  sql_query: `SELECT h.salesperson_ref, COUNT(*) as n
+FROM sales_order_header h
+WHERE strftime('%Y', h.order_date) = '2014'
+  AND h.salesperson_ref IS NOT NULL
+GROUP BY h.salesperson_ref
+ORDER BY n DESC LIMIT 1
+-- then JOIN hr.dipendenti ON MatricolaDip = salesperson_ref`,
   results: [
-    { name: 'Moccia s.r.l.',          total_value: 98451.37, date: '2026-05-12' },
-    { name: 'Tutino e figli',          total_value: 45200.00, date: '2026-05-08' },
-    { name: 'Ferrari Metalli S.p.A.',  total_value: 31750.50, date: '2026-05-02' },
+    { salesperson_ref: 289, order_count: 67, full_name: 'Jae Pak', department: 'Sales', sources: 'ERP + HR' },
   ],
-  summary: 'Questo mese 3 clienti hanno preventivi accettati, per un valore totale di €175.401. Il cliente principale è Moccia s.r.l. con €98.451.',
+  summary: 'Jae Pak (matricola 289, reparto Sales) ha gestito 67 ordini nel 2014 — il massimo tra i 17 venditori. Dato ottenuto via join cross-fonte: conteggio ordini da ERP OrionSales + nome/cognome da HR dipendenti_hr.csv.',
 }
