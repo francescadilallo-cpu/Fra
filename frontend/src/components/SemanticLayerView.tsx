@@ -50,7 +50,7 @@ const AW_SOURCES = [
   },
   {
     id: 'hr',
-    name: 'HR — Dipendenti',
+    name: 'HR — Employees',
     type: 'CSV',
     icon: '👥',
     colorBorder: 'border-violet-200',
@@ -65,7 +65,7 @@ const AW_SOURCES = [
   },
   {
     id: 'pim',
-    name: 'PIM — Catalogo',
+    name: 'PIM — Catalog',
     type: 'JSON',
     icon: '📦',
     colorBorder: 'border-amber-200',
@@ -99,7 +99,7 @@ const AW_BRIDGES = [
     fromSource: 'ERP — OrionSales',
     fromField: 'salesperson_ref : integer',
     fromEntity: 'SalesOrder',
-    toSource: 'HR — Dipendenti',
+    toSource: 'HR — Employees',
     toField: 'MatricolaDip : string',
     toEntity: 'Employee',
     cardinality: 'N:1',
@@ -112,7 +112,7 @@ const AW_BRIDGES = [
     fromSource: 'ERP — OrionSales',
     fromField: 'product_ref : integer',
     fromEntity: 'SalesOrderLine',
-    toSource: 'PIM — Catalogo',
+    toSource: 'PIM — Catalog',
     toField: 'internal_id : string',
     toEntity: 'Product',
     cardinality: 'N:1',
@@ -125,20 +125,20 @@ const QUALITY_ISSUES = [
   {
     severity: 'warning' as const,
     entity: 'Customer (CRM)',
-    issue: '372 account con accountId < 0 — duplicati da migrazione',
-    resolution: 'Rimossi nel KG; 19,829 account unici mantenuti',
+    issue: '372 accounts with accountId < 0 — duplicates from legacy migration',
+    resolution: 'Removed from KG; 19,829 unique accounts retained',
   },
   {
     severity: 'info' as const,
     entity: 'Employee (HR)',
-    issue: 'Schema italiano: matricolaDip, cognome, nome, dataNascita, ruolo',
-    resolution: 'Mappati nel layer semantico → Employee.employeeId, lastName, firstName…',
+    issue: 'Italian schema field names: matricolaDip, cognome, nome, dataNascita, ruolo',
+    resolution: 'Mapped in semantic layer → Employee.employeeId, lastName, firstName…',
   },
   {
     severity: 'warning' as const,
     entity: 'SalesOrder (ERP)',
-    issue: '"fatturato" è ambiguo: subtotal_amount ($20.1M) vs total_due ($22.4M, include tax+freight)',
-    resolution: 'Richiede disambiguazione esplicita al momento della query',
+    issue: '"fatturato" (revenue) is ambiguous: subtotal_amount ($20.1M) vs total_due ($22.4M, includes tax+freight)',
+    resolution: 'Requires explicit disambiguation at query time',
   },
 ]
 
@@ -155,7 +155,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
 }
 
 function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
-  const total = source.total.toLocaleString('it-IT')
+  const total = source.total.toLocaleString('en-US')
   return (
     <div className={`border ${source.colorBorder} rounded-xl p-4 bg-white`}>
       <div className="flex items-start justify-between mb-3">
@@ -180,7 +180,7 @@ function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
               <div className={`w-1.5 h-1.5 rounded-full ${source.colorDot}`} />
               <span className="text-slate-600 font-mono">{e.name}</span>
             </div>
-            <span className="text-slate-400">{e.rows.toLocaleString('it-IT')}</span>
+            <span className="text-slate-400">{e.rows.toLocaleString('en-US')}</span>
           </div>
         ))}
       </div>
@@ -251,7 +251,7 @@ function KGBuilder({ bridges, onAdd, onRemove }: {
         <Plus className="w-4 h-4 text-teal-600" />
         Add Custom Relationship
       </h3>
-      <p className="text-xs text-slate-500 mb-4">Definisci un nuovo bridge cross-source o una relazione custom nel Knowledge Graph.</p>
+      <p className="text-xs text-slate-500 mb-4">Define a new cross-source bridge or custom relationship in the Knowledge Graph.</p>
       <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
           <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
@@ -269,7 +269,7 @@ function KGBuilder({ bridges, onAdd, onRemove }: {
           <input
             value={form.label}
             onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-            placeholder="es. MANAGED_BY"
+            placeholder="e.g. MANAGED_BY"
             className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-mono"
           />
         </div>
@@ -328,7 +328,7 @@ export default function SemanticLayerView() {
               <h1 className="text-2xl font-bold text-slate-900">Knowledge Graph</h1>
             </div>
             <p className="text-slate-400 text-sm">
-              AdventureWorks · 4 fonti integrate · {(193062 + customBridges.length).toLocaleString('it-IT')} nodi · 313,193 archi
+              AdventureWorks · 4 integrated sources · {(193062 + customBridges.length).toLocaleString('en-US')} nodes · 313,193 edges
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs bg-teal-50 border border-teal-200 text-teal-700 rounded-full px-3 py-1.5 font-medium">
@@ -349,7 +349,7 @@ export default function SemanticLayerView() {
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Database className="w-4 h-4 text-slate-500" />
-            <h2 className="font-semibold text-slate-900">Architettura delle Fonti</h2>
+            <h2 className="font-semibold text-slate-900">Source Architecture</h2>
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             {AW_SOURCES.map(s => <SourceCard key={s.id} source={s} />)}
@@ -361,7 +361,7 @@ export default function SemanticLayerView() {
           <div className="flex items-center gap-2 mb-3">
             <GitBranch className="w-4 h-4 text-slate-500" />
             <h2 className="font-semibold text-slate-900">Cross-source Bridges</h2>
-            <span className="text-xs text-slate-400">— join tra sistemi diversi tramite chiavi semantiche</span>
+            <span className="text-xs text-slate-400">— joins across systems via semantic keys</span>
           </div>
           <div className="space-y-3">
             {AW_BRIDGES.map(b => <BridgeRow key={b.id} bridge={b} />)}
@@ -372,7 +372,7 @@ export default function SemanticLayerView() {
         <section>
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 text-slate-500" />
-            <h2 className="font-semibold text-slate-900">Qualità dei Dati</h2>
+            <h2 className="font-semibold text-slate-900">Data Quality</h2>
           </div>
           <div className="space-y-2">
             {QUALITY_ISSUES.map((issue, i) => {

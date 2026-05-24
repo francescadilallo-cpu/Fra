@@ -14,15 +14,15 @@ interface SemanticDef {
 }
 
 const INITIAL_DEFS: SemanticDef[] = [
-  { entity: 'SalesOrder', field: 'subtotal_amount', definition: 'Importo netto ordine prima di tasse e spese di spedizione. Usare per "fatturato commerciale" ($20.1M 2014).', status: 'ok' },
-  { entity: 'SalesOrder', field: 'total_due',       definition: 'Importo totale dovuto incluse tasse e freight. Usare per "ricavo lordo" ($22.4M 2014).', status: 'ambiguous' },
-  { entity: 'SalesOrder', field: 'online_order_flag', definition: 'TRUE = ordine online (B2C), FALSE = ordine offline (B2B tramite rappresentante).', status: 'ok' },
-  { entity: 'Customer',   field: 'accountId',       definition: 'Chiave primaria CRM. Valori negativi = duplicati da migrazione legacy. Rimossi nel KG (372 account).', status: 'ok' },
-  { entity: 'Customer',   field: 'customer_ref',    definition: 'Chiave esterna in ERP che punta a CRM.accountId. Bridge principale ERP↔CRM.', status: 'ok' },
-  { entity: 'Employee',   field: 'matricolaDip',    definition: 'Codice dipendente HR (schema italiano). Corrisponde a salesperson_ref in ERP per il bridge ERP↔HR.', status: 'ok' },
-  { entity: 'Employee',   field: 'cognome',         definition: 'Cognome dipendente (italiano). Mappa a Employee.lastName nel layer semantico.', status: 'ok' },
-  { entity: 'Product',    field: 'internal_id',     definition: 'Codice prodotto PIM. Corrisponde a product_ref in ERP per il bridge ERP↔PIM.', status: 'ok' },
-  { entity: 'Territory',  field: 'sales_ytd',       definition: 'Fatturato territorio anno corrente. Southwest = top territory ($7.9M, 6692 ordini).', status: 'ok' },
+  { entity: 'SalesOrder', field: 'subtotal_amount', definition: 'Net order amount before taxes and shipping. Use for "commercial revenue" ($20.1M 2014).', status: 'ok' },
+  { entity: 'SalesOrder', field: 'total_due',       definition: 'Total amount due including taxes and freight. Use for "gross revenue" ($22.4M 2014).', status: 'ambiguous' },
+  { entity: 'SalesOrder', field: 'online_order_flag', definition: 'TRUE = online order (B2C), FALSE = offline order (B2B via sales rep).', status: 'ok' },
+  { entity: 'Customer',   field: 'accountId',       definition: 'CRM primary key. Negative values = duplicates from legacy migration. Removed from KG (372 accounts).', status: 'ok' },
+  { entity: 'Customer',   field: 'customer_ref',    definition: 'Foreign key in ERP pointing to CRM.accountId. Main ERP↔CRM bridge.', status: 'ok' },
+  { entity: 'Employee',   field: 'matricolaDip',    definition: 'HR employee code (Italian schema). Corresponds to salesperson_ref in ERP for the ERP↔HR bridge.', status: 'ok' },
+  { entity: 'Employee',   field: 'cognome',         definition: 'Employee last name (Italian). Maps to Employee.lastName in the semantic layer.', status: 'ok' },
+  { entity: 'Product',    field: 'internal_id',     definition: 'PIM product code. Corresponds to product_ref in ERP for the ERP↔PIM bridge.', status: 'ok' },
+  { entity: 'Territory',  field: 'sales_ytd',       definition: 'Territory year-to-date revenue. Southwest = top territory ($7.9M, 6,692 orders).', status: 'ok' },
 ]
 
 const STATUS_BADGE: Record<SemanticDef['status'], string> = {
@@ -36,19 +36,19 @@ const AMBIGUITIES = [
     term: 'fatturato',
     context: 'SalesOrder (ERP)',
     candidates: [
-      { label: 'subtotal_amount', desc: 'Imponibile netto — $20,057,928 (2014)', recommended: true },
-      { label: 'total_due',       desc: 'Totale con tasse+freight — $22,419,498 (2014)', recommended: false },
+      { label: 'subtotal_amount', desc: 'Net taxable amount — $20,057,928 (2014)', recommended: true },
+      { label: 'total_due',       desc: 'Total with taxes+freight — $22,419,498 (2014)', recommended: false },
     ],
-    resolution: 'Query AI chiede disambiguazione. Se contesto = "commerciale" → subtotal. Se "finanziario/contabile" → total_due.',
+    resolution: 'Query AI asks for disambiguation. If context = "commercial" → subtotal. If "financial/accounting" → total_due.',
   },
   {
     term: 'cliente',
     context: 'CRM (account) vs ERP (customer_ref)',
     candidates: [
-      { label: 'CRM.account (20,201)', desc: 'Include 372 duplicati con accountId < 0', recommended: false },
-      { label: 'CRM.account dedup (19,829)', desc: 'Solo account validi dopo rimozione duplicati', recommended: true },
+      { label: 'CRM.account (20,201)', desc: 'Includes 372 duplicates with accountId < 0', recommended: false },
+      { label: 'CRM.account dedup (19,829)', desc: 'Valid accounts only, after dedup removal', recommended: true },
     ],
-    resolution: 'Il KG usa sempre la versione dedup. Mostrare 19,829 come "clienti unici".',
+    resolution: 'The KG always uses the dedup version. Show 19,829 as "unique customers".',
   },
 ]
 
@@ -79,31 +79,31 @@ function SemanticDefinitionsPanel() {
   return (
     <div className="flex-1 px-8 py-6 space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{defs.length} definizioni semantiche · {defs.filter(d => d.status === 'ambiguous').length} ambigue · clic su una riga per modificare</p>
+        <p className="text-sm text-slate-500">{defs.length} semantic definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
         <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />
-          Aggiungi definizione
+          Add definition
         </button>
       </div>
 
       {showAdd && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-semibold text-slate-700">Nuova definizione semantica</p>
+          <p className="text-xs font-semibold text-slate-700">New semantic definition</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] text-slate-500 mb-1 block">Entità</label>
-              <input value={newForm.entity} onChange={e => setNewForm(f => ({ ...f, entity: e.target.value }))} placeholder="es. SalesOrder" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
+              <label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
+              <input value={newForm.entity} onChange={e => setNewForm(f => ({ ...f, entity: e.target.value }))} placeholder="e.g. SalesOrder" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
             </div>
             <div>
-              <label className="text-[11px] text-slate-500 mb-1 block">Campo</label>
-              <input value={newForm.field} onChange={e => setNewForm(f => ({ ...f, field: e.target.value }))} placeholder="es. subtotal_amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" />
+              <label className="text-[11px] text-slate-500 mb-1 block">Field</label>
+              <input value={newForm.field} onChange={e => setNewForm(f => ({ ...f, field: e.target.value }))} placeholder="e.g. subtotal_amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" />
             </div>
             <div>
-              <label className="text-[11px] text-slate-500 mb-1 block">Definizione</label>
-              <input value={newForm.definition} onChange={e => setNewForm(f => ({ ...f, definition: e.target.value }))} placeholder="Cosa significa questo campo?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
+              <label className="text-[11px] text-slate-500 mb-1 block">Definition</label>
+              <input value={newForm.definition} onChange={e => setNewForm(f => ({ ...f, definition: e.target.value }))} placeholder="What does this field mean?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
             </div>
           </div>
-          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors">Aggiungi</button>
+          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors">Add</button>
         </div>
       )}
 
@@ -112,7 +112,7 @@ function SemanticDefinitionsPanel() {
           <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Tag className="w-3.5 h-3.5 text-teal-600" />
             <span className="text-sm font-semibold text-slate-800">{entity}</span>
-            <span className="text-[11px] text-slate-400">· {entityDefs.length} campi</span>
+            <span className="text-[11px] text-slate-400">· {entityDefs.length} fields</span>
           </div>
           <div className="divide-y divide-slate-100">
             {entityDefs.map((def, i) => {
@@ -155,7 +155,7 @@ function SemanticDefinitionsPanel() {
 function AmbiguityLogPanel() {
   return (
     <div className="flex-1 px-8 py-6 space-y-4">
-      <p className="text-sm text-slate-500">{AMBIGUITIES.length} ambiguità documentate — risolte a query time dal layer semantico</p>
+      <p className="text-sm text-slate-500">{AMBIGUITIES.length} documented ambiguities — resolved at query time by the semantic layer</p>
       {AMBIGUITIES.map((amb, i) => (
         <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
@@ -174,13 +174,13 @@ function AmbiguityLogPanel() {
                   <div>
                     <code className="text-[11px] font-mono font-semibold text-slate-800">{c.label}</code>
                     <p className="text-xs text-slate-500 mt-0.5">{c.desc}</p>
-                    {c.recommended && <span className="text-[10px] font-bold text-teal-600 uppercase">Raccomandato</span>}
+                    {c.recommended && <span className="text-[10px] font-bold text-teal-600 uppercase">Recommended</span>}
                   </div>
                 </div>
               ))}
             </div>
             <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <strong>Risoluzione:</strong> {amb.resolution}
+              <strong>Resolution:</strong> {amb.resolution}
             </div>
           </div>
         </div>
@@ -412,7 +412,7 @@ export default function MappingView() {
               <h1 className="text-2xl font-bold text-slate-900">Semantic Layer</h1>
             </div>
             <p className="text-slate-400 mt-1 text-sm">
-              {sector.name} · {totalTables} tables · {totalFields} field mappings · definizioni e ambiguità semantiche
+              {sector.name} · {totalTables} tables · {totalFields} field mappings · semantic definitions and ambiguities
             </p>
           </div>
           <div className="flex items-center gap-3">

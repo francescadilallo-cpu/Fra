@@ -203,7 +203,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
                       <button
                         onClick={(e) => handleDelete(e, c.id, c.name)}
                         className="w-6 h-6 rounded-md hover:bg-red-100 text-slate-300 hover:text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Elimina azienda"
+                        title="Delete company"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

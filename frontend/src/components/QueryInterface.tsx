@@ -163,7 +163,7 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
                   {row[col] === null || row[col] === undefined ? (
                     <span className="text-slate-400 italic">null</span>
                   ) : typeof row[col] === 'number' ? (
-                    (row[col] as number).toLocaleString('it-IT')
+                    (row[col] as number).toLocaleString('en-US')
                   ) : (
                     String(row[col])
                   )}
@@ -280,7 +280,7 @@ function MessageBubble({ message }: { message: Message }) {
         <SqlBlock sql={r.sql} />
 
         <p className="text-[10px] text-slate-300">
-          {message.timestamp.toLocaleTimeString('it-IT')}
+          {message.timestamp.toLocaleTimeString('en-US')}
         </p>
       </div>
     </div>

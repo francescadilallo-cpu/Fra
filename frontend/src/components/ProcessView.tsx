@@ -264,7 +264,7 @@ const ACTIVE_CASES = [
 ]
 
 function fmt(v: number) {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -347,7 +347,7 @@ export default function ProcessView() {
       // Emit log lines
       stepLogs.forEach((log, i) => {
         timeoutsRef.current.push(window.setTimeout(() => {
-          const time = new Date().toLocaleTimeString('it-IT', { hour12: false })
+          const time = new Date().toLocaleTimeString('en-US', { hour12: false })
           setLogs(prev => [...prev, { id: Date.now() + i, time, text: log.text, type: log.type }])
         }, stepOffset + Math.floor((i + 1) * logInterval)))
       })
@@ -364,7 +364,7 @@ export default function ProcessView() {
     timeoutsRef.current.push(window.setTimeout(() => {
       const duration = Date.now() - startTimeRef.current
       setLastRunDuration(duration)
-      setLastRunAt(new Date().toLocaleTimeString('it-IT', { hour12: false }))
+      setLastRunAt(new Date().toLocaleTimeString('en-US', { hour12: false }))
       setRunState('done')
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
       setElapsed(TOTAL_MS)
@@ -506,7 +506,7 @@ export default function ProcessView() {
                     <Icon className={`w-6 h-6 ${style.color}`} />
                   </div>
                   <p className={`text-sm font-bold ${style.color}`}>{stage.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('it-IT') ?? 0}</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('en-US') ?? 0}</p>
                   {funnelItem?.value ? (
                     <p className="text-xs text-slate-500 mt-0.5">{fmt(funnelItem.value)}</p>
                   ) : (
@@ -541,7 +541,7 @@ export default function ProcessView() {
                     className="h-full rounded-full flex items-center px-3 transition-all duration-700"
                     style={{ width: `${pct}%`, backgroundColor: `rgba(13,148,136,${opacity})` }}
                   >
-                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('it-IT')}</span>
+                    <span className="text-xs font-semibold text-white">{item.count.toLocaleString('en-US')}</span>
                   </div>
                 </div>
                 <span className="text-sm text-slate-500 w-28 text-right flex-shrink-0">

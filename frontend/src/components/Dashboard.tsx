@@ -336,7 +336,7 @@ function SemanticLayerStats({ sectorId, onNavigate }: { sectorId: SectorId; onNa
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 function fmt(v: number) {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
 }
 
 function relativeTime(d: Date): string {
@@ -344,7 +344,7 @@ function relativeTime(d: Date): string {
   if (s < 60) return 'just now'
   if (s < 3600) return `${Math.round(s / 60)}m ago`
   if (s < 86400) return `${Math.round(s / 3600)}h ago`
-  return d.toLocaleDateString('it-IT')
+  return d.toLocaleDateString('en-US')
 }
 
 export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) => void }) {
@@ -538,7 +538,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
             <TrendingUp className="w-4 h-4 text-teal-600" />
             Process Funnel
           </h2>
-          <span className="text-xs text-slate-500">{funnel[0]?.count.toLocaleString('it-IT') ?? 0} total</span>
+          <span className="text-xs text-slate-500">{funnel[0]?.count.toLocaleString('en-US') ?? 0} total</span>
         </div>
         <div className="space-y-3">
           {funnel.map((s, i) => {

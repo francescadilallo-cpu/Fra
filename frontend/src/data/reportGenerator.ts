@@ -16,7 +16,7 @@ function esc(s: string): string {
 }
 
 function fmt(v: number): string {
-  return new Intl.NumberFormat('it-IT', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format(v)
+  return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(v)
 }
 
 function severityIcon(s: string) {
@@ -80,8 +80,8 @@ export function generateHtmlReport(input: ReportInput): string {
   const hasMonetary = funnel.some(f => f.value > 0)
 
   const recs = recommendations(agentRuns, sectorId)
-  const dateStr = generatedAt.toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' })
-  const timeStr = generatedAt.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' })
+  const dateStr = generatedAt.toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' })
+  const timeStr = generatedAt.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' })
 
   // Simple bar chart via div widths
   const maxFunnel = funnel[0]?.count ?? 1
@@ -106,7 +106,7 @@ export function generateHtmlReport(input: ReportInput): string {
         return `
           <div style="margin-bottom:20px;">
             <h4 style="font-size:13px;color:#334155;margin-bottom:8px;">
-              ${esc(run.agentName)} <span style="font-weight:400;color:#94a3b8;font-size:11px;">· ${new Date(run.ranAt).toLocaleTimeString('it-IT')}</span>
+              ${esc(run.agentName)} <span style="font-weight:400;color:#94a3b8;font-size:11px;">· ${new Date(run.ranAt).toLocaleTimeString('en-US')}</span>
             </h4>
             ${run.findings.map(f => `
               <div style="display:flex;gap:10px;padding:8px 12px;border-radius:8px;margin-bottom:6px;background:${f.severity==='critical'?'#fef2f2':f.severity==='warning'?'#fffbeb':'#f8fafc'};border:1px solid ${f.severity==='critical'?'#fecaca':f.severity==='warning'?'#fde68a':'#e2e8f0'};">
