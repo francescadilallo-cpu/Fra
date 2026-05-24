@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Layers } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, BookOpen, Network } from 'lucide-react'
 import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
@@ -14,30 +14,39 @@ interface Props {
 }
 
 const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
-  overview: 'bg-teal-500',
-  usecases: 'bg-orange-500',
-  builder: 'bg-violet-500',
+  sembuilder: 'bg-violet-500',
   agents: 'bg-blue-500',
-  sources: 'bg-emerald-500',
   compliance: 'bg-rose-500',
-  config: 'bg-amber-500',
 }
 
-const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'overview',    label: 'Overview',        icon: Presentation },
-  { id: 'usecases',    label: 'Use Cases',       icon: Briefcase },
-  { id: 'sembuilder',  label: 'Semantic Layer',   icon: Layers },
-  { id: 'dashboard',   label: 'Dashboard',       icon: LayoutDashboard },
-  { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
-  { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
-  { id: 'agents',    label: 'Agents',         icon: BotMessageSquare },
-  { id: 'sources',   label: 'Sources',        icon: Plug },
-  { id: 'data',      label: 'Data Explorer',  icon: Table2 },
-  { id: 'query',     label: 'Query AI',       icon: MessageSquare },
-  { id: 'mappings',  label: 'Mappings',       icon: Table2 },
-  { id: 'process',     label: 'Process',        icon: Workflow },
-  { id: 'compliance',  label: 'Compliance',     icon: ShieldCheck },
-  { id: 'config',      label: 'Configuration',  icon: Settings },
+type NavEntry =
+  | { kind: 'item'; id: NavTab; label: string; icon: typeof LayoutDashboard }
+  | { kind: 'section'; label: string }
+
+const NAV_ENTRIES: NavEntry[] = [
+  { kind: 'section', label: 'Connect' },
+  { kind: 'item', id: 'sources',     label: 'Data Sources',      icon: Plug },
+  { kind: 'item', id: 'data',        label: 'Data Explorer',     icon: Table2 },
+
+  { kind: 'section', label: 'Build' },
+  { kind: 'item', id: 'ontology',    label: 'Ontology',          icon: GitBranch },
+  { kind: 'item', id: 'builder',     label: 'Ontology Builder',  icon: Wand2 },
+  { kind: 'item', id: 'sembuilder',  label: 'Knowledge Graph',   icon: Network },
+  { kind: 'item', id: 'mappings',    label: 'Semantic Layer',    icon: BookOpen },
+
+  { kind: 'section', label: 'Query & Act' },
+  { kind: 'item', id: 'query',       label: 'Query AI',          icon: MessageSquare },
+  { kind: 'item', id: 'agents',      label: 'Agents',            icon: BotMessageSquare },
+
+  { kind: 'section', label: 'Monitor' },
+  { kind: 'item', id: 'dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
+  { kind: 'item', id: 'overview',    label: 'Overview',          icon: Presentation },
+
+  { kind: 'section', label: 'More' },
+  { kind: 'item', id: 'usecases',    label: 'Use Cases',         icon: Briefcase },
+  { kind: 'item', id: 'process',     label: 'Process',           icon: Workflow },
+  { kind: 'item', id: 'compliance',  label: 'Compliance',        icon: ShieldCheck },
+  { kind: 'item', id: 'config',      label: 'Configuration',     icon: Settings },
 ]
 
 function SectorSwitcher() {
@@ -317,8 +326,16 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto sidebar-scrollbar">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+        <nav className="flex-1 px-2 py-3 overflow-y-auto sidebar-scrollbar">
+          {NAV_ENTRIES.map((entry, i) => {
+            if (entry.kind === 'section') {
+              return (
+                <p key={`s-${i}`} className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 first:pt-1">
+                  {entry.label}
+                </p>
+              )
+            }
+            const { id, label, icon: Icon } = entry
             const badgeColor = NEW_BADGE_TABS[id]
             const showNew = badgeColor !== undefined && !visitedTabs.has(id)
             const isActive = activeTab === id

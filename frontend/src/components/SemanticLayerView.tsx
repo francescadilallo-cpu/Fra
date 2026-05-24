@@ -1,356 +1,425 @@
-import { useState, useEffect } from 'react'
-import { Brain, Database, GitBranch, BarChart3, Layers, Terminal, CheckCircle, Clock, AlertCircle, Play, Loader2 } from 'lucide-react'
-import axios from 'axios'
+import { useState } from 'react'
+import { Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X, Network } from 'lucide-react'
 
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+// ── AdventureWorks Knowledge Graph — static data ───────────────────────────────
 
-interface SemanticStatus {
-  loaded: boolean
-  entities: number
-  kg_nodes: number
-  kg_edges: number
-  metadata_rows: number
-  sources: { name: string; rows: number; status: string }[]
-  dedup_count: number
-}
+const KG_STATS = [
+  { label: 'KG Nodes',          value: '193,062', sub: 'entity instances' },
+  { label: 'KG Edges',          value: '313,193', sub: 'relationships' },
+  { label: 'Sources Integrated',value: '4',        sub: 'ERP · CRM · HR · PIM' },
+  { label: 'Dedup Removed',     value: '372',      sub: 'CRM duplicate accounts' },
+]
 
-interface SemanticResult {
-  question: string
-  intent: string
-  answer: unknown
-  sql?: string
-  sources_touched: string[]
-  provenance: Record<string, unknown>
-  disambiguation_required?: boolean
-  candidates?: string[]
-  latency_ms: number
-}
-
-const MOCK_STATUS: SemanticStatus = {
-  loaded: true,
-  entities: 8,
-  kg_nodes: 193062,
-  kg_edges: 313193,
-  metadata_rows: 8,
-  dedup_count: 372,
-  sources: [
-    { name: 'erp',    rows: 152825, status: 'ok' },
-    { name: 'crm',    rows: 79820,  status: 'ok' },
-    { name: 'hr_pim', rows: 794,    status: 'ok' },
-  ],
-}
-
-const MOCK_RESULTS: Record<string, SemanticResult> = {
-  'Qual è il fatturato 2014?': {
-    question: 'Qual è il fatturato 2014?',
-    intent: 'ambiguous: fatturato',
-    answer: null,
-    sources_touched: [],
-    provenance: {},
-    disambiguation_required: true,
-    candidates: ['revenue (~subtotal_amount) → $20,057,928', 'revenue_with_tax (~total_due) → $22,419,498'],
-    latency_ms: 0,
-  },
-  'Chi è il venditore con più ordini nel 2014?': {
-    question: 'Chi è il venditore con più ordini nel 2014?',
-    intent: 'entity=Salesperson, filter year=2014, limit=1',
-    answer: { salesperson_ref: 289, order_count: 67, full_name: 'Jae Pak', department: 'Sales' },
-    sql: "SELECT salesperson_ref, COUNT(*) as n FROM sales_order_header WHERE strftime('%Y', order_date)='2014' GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1",
-    sources_touched: ['erp', 'hr_pim'],
-    provenance: { erp: 'sales_order_header', hr_pim: 'dipendenti_hr.csv' },
-    latency_ms: 81,
-  },
-  'Top 5 prodotti più venduti per quantità': {
-    question: 'Top 5 prodotti più venduti per quantità',
-    intent: 'entity=Product, limit=5',
-    answer: [
-      { displayName: 'Water Bottle - 30 oz.', qty_total: 4688 },
-      { displayName: 'Sport-100 Helmet, Blue', qty_total: 3382 },
-      { displayName: 'Patch Kit/8 Patches', qty_total: 3382 },
-      { displayName: 'Mountain Tire Tube', qty_total: 3354 },
-      { displayName: 'Road Tire Tube', qty_total: 3338 },
+const AW_SOURCES = [
+  {
+    id: 'erp',
+    name: 'ERP — OrionSales',
+    type: 'PostgreSQL / DuckDB',
+    icon: '🏭',
+    colorBorder: 'border-blue-200',
+    colorBg: 'bg-blue-50',
+    colorText: 'text-blue-700',
+    colorDot: 'bg-blue-500',
+    entities: [
+      { name: 'SalesOrder',     rows: 31465  },
+      { name: 'SalesOrderLine', rows: 121317 },
+      { name: 'Salesperson',    rows: 17     },
+      { name: 'Territory',      rows: 10     },
+      { name: 'Offer',          rows: 16     },
     ],
-    sources_touched: ['erp', 'hr_pim'],
-    provenance: { erp: 'sales_order_line', hr_pim: 'product_catalog_pim.json' },
-    latency_ms: 194,
+    total: 152825,
   },
-  'Elenco delle aziende clienti B2B attive': {
-    question: 'Elenco delle aziende clienti B2B attive',
-    intent: 'entity=Customer, filter account_type=B2B',
-    answer: '710 aziende B2B attive trovate nel CRM (deduplicate, accountId > 0)',
-    sources_touched: ['crm'],
-    provenance: { crm: 'account WHERE accountType=B2B AND isActive=1' },
-    latency_ms: 6,
+  {
+    id: 'crm',
+    name: 'CRM — ClientHub',
+    type: 'SQLite',
+    icon: '🤝',
+    colorBorder: 'border-teal-200',
+    colorBg: 'bg-teal-50',
+    colorText: 'text-teal-700',
+    colorDot: 'bg-teal-500',
+    entities: [
+      { name: 'Customer (account)', rows: 20201 },
+      { name: 'Contact',            rows: 19302 },
+      { name: 'Address',            rows: 19614 },
+      { name: 'StateProvince',      rows: 70    },
+      { name: 'Country',            rows: 6     },
+    ],
+    total: 59193,
+    warning: '372 duplicate accounts (accountId < 0)',
   },
-  'Qual è il cliente che ha speso di più in assoluto?': {
-    question: 'Qual è il cliente che ha speso di più in assoluto?',
-    intent: 'metric=revenue_with_tax, entity=Customer, limit=1',
-    answer: { customer_ref: 29736, total_spent: 469823.25, display_name: 'Lindsey' },
-    sources_touched: ['erp', 'crm'],
-    provenance: { erp: 'SUM(total_due) GROUP BY customer_ref', crm: 'account lookup' },
-    latency_ms: 25,
+  {
+    id: 'hr',
+    name: 'HR — Dipendenti',
+    type: 'CSV',
+    icon: '👥',
+    colorBorder: 'border-violet-200',
+    colorBg: 'bg-violet-50',
+    colorText: 'text-violet-700',
+    colorDot: 'bg-violet-500',
+    entities: [
+      { name: 'Employee (dipendenti_hr)', rows: 290 },
+    ],
+    total: 290,
+    warning: 'Italian schema: matricolaDip, cognome, nome, ruolo',
   },
+  {
+    id: 'pim',
+    name: 'PIM — Catalogo',
+    type: 'JSON',
+    icon: '📦',
+    colorBorder: 'border-amber-200',
+    colorBg: 'bg-amber-50',
+    colorText: 'text-amber-700',
+    colorDot: 'bg-amber-500',
+    entities: [
+      { name: 'Product (product_catalog)', rows: 504 },
+    ],
+    total: 504,
+  },
+]
+
+const AW_BRIDGES = [
+  {
+    id: 1,
+    label: 'PLACED_BY',
+    fromSource: 'ERP — OrionSales',
+    fromField: 'customer_ref : integer',
+    fromEntity: 'SalesOrder',
+    toSource: 'CRM — ClientHub',
+    toField: 'accountId : integer',
+    toEntity: 'Customer',
+    cardinality: 'N:1',
+    status: 'active' as const,
+    note: '19,829 unique customers after dedup (372 neg-ID removed)',
+  },
+  {
+    id: 2,
+    label: 'SOLD_BY',
+    fromSource: 'ERP — OrionSales',
+    fromField: 'salesperson_ref : integer',
+    fromEntity: 'SalesOrder',
+    toSource: 'HR — Dipendenti',
+    toField: 'MatricolaDip : string',
+    toEntity: 'Employee',
+    cardinality: 'N:1',
+    status: 'active' as const,
+    note: '17 salespersons mapped across ERP ↔ HR records',
+  },
+  {
+    id: 3,
+    label: 'OF_PRODUCT',
+    fromSource: 'ERP — OrionSales',
+    fromField: 'product_ref : integer',
+    fromEntity: 'SalesOrderLine',
+    toSource: 'PIM — Catalogo',
+    toField: 'internal_id : string',
+    toEntity: 'Product',
+    cardinality: 'N:1',
+    status: 'active' as const,
+    note: '504 products enriched with PIM metadata (category, listPrice, color)',
+  },
+]
+
+const QUALITY_ISSUES = [
+  {
+    severity: 'warning' as const,
+    entity: 'Customer (CRM)',
+    issue: '372 account con accountId < 0 — duplicati da migrazione',
+    resolution: 'Rimossi nel KG; 19,829 account unici mantenuti',
+  },
+  {
+    severity: 'info' as const,
+    entity: 'Employee (HR)',
+    issue: 'Schema italiano: matricolaDip, cognome, nome, dataNascita, ruolo',
+    resolution: 'Mappati nel layer semantico → Employee.employeeId, lastName, firstName…',
+  },
+  {
+    severity: 'warning' as const,
+    entity: 'SalesOrder (ERP)',
+    issue: '"fatturato" è ambiguo: subtotal_amount ($20.1M) vs total_due ($22.4M, include tax+freight)',
+    resolution: 'Richiede disambiguazione esplicita al momento della query',
+  },
+]
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+      <p className="text-2xl font-bold text-slate-900">{value}</p>
+      <p className="text-xs font-semibold text-slate-600 mt-1">{label}</p>
+      <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>
+    </div>
+  )
 }
 
-const COMPONENTS = [
-  { key: 'connectors', label: 'Connectors', icon: Database, desc: 'ERP (DuckDB), CRM (SQLite), HR + PIM (Files)' },
-  { key: 'ontology',   label: 'Ontology',   icon: GitBranch, desc: 'Pydantic v2 + RDFLib — Customer, Product, SalesOrder…' },
-  { key: 'kg',         label: 'Knowledge Graph', icon: Brain, desc: 'NetworkX MultiDiGraph — cross-source identity resolution' },
-  { key: 'metadata',   label: 'Metadata Catalog', icon: BarChart3, desc: 'SQLAlchemy — lineage, null rates, freshness, provenance' },
-  { key: 'semantic',   label: 'Semantic Layer', icon: Layers, desc: 'NL → Intent → QueryPlan → Result + AmbiguityError' },
-]
-
-const SAMPLE_QUESTIONS = [
-  'Qual è il fatturato 2014?',
-  'Chi è il venditore con più ordini nel 2014?',
-  'Top 5 prodotti più venduti per quantità',
-  'Elenco delle aziende clienti B2B attive',
-  'Qual è il cliente che ha speso di più in assoluto?',
-]
-
-export default function SemanticLayerView() {
-  const [status, setStatus] = useState<SemanticStatus | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [question, setQuestion] = useState('')
-  const [result, setResult] = useState<SemanticResult | null>(null)
-  const [asking, setAsking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => { fetchStatus() }, [])
-
-  async function fetchStatus() {
-    if (USE_MOCK) { setStatus(MOCK_STATUS); return }
-    setLoading(true)
-    try {
-      const r = await axios.get(`${API}/api/semantic/status`)
-      setStatus(r.data)
-    } catch {
-      setStatus(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function ask(q: string) {
-    if (USE_MOCK) {
-      setAsking(true)
-      setError(null)
-      setResult(null)
-      await new Promise(r => setTimeout(r, 400))
-      const mock = MOCK_RESULTS[q] ?? {
-        question: q,
-        intent: 'rule-based match',
-        answer: 'Demo: questa risposta verrebbe calcolata dal backend Python in tempo reale.',
-        sources_touched: ['erp'],
-        provenance: {},
-        latency_ms: 12,
-      }
-      setResult(mock)
-      setAsking(false)
-      return
-    }
-    setAsking(true)
-    setError(null)
-    setResult(null)
-    try {
-      const r = await axios.post(`${API}/api/semantic/ask`, { question: q })
-      setResult(r.data)
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Errore nella richiesta'
-      setError(msg)
-    } finally {
-      setAsking(false)
-    }
-  }
-
-  const isBackendUp = status !== null
-
+function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
+  const total = source.total.toLocaleString('it-IT')
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className={`border ${source.colorBorder} rounded-xl p-4 bg-white`}>
+      <div className="flex items-start justify-between mb-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Layers className="w-6 h-6 text-violet-400" />
-            Semantic Layer
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Python backend — ontology + knowledge graph + metadata catalog + NL query
-          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{source.icon}</span>
+            <span className="font-semibold text-slate-900 text-sm">{source.name}</span>
+          </div>
+          <span className={`mt-1 inline-block text-[10px] font-mono px-2 py-0.5 rounded-full ${source.colorBg} ${source.colorText} font-medium`}>
+            {source.type}
+          </span>
         </div>
-        <button
-          onClick={fetchStatus}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"
-        >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-          Refresh
-        </button>
+        <div className="text-right">
+          <p className="text-lg font-bold text-slate-800">{total}</p>
+          <p className="text-[11px] text-slate-400">total rows</p>
+        </div>
       </div>
-
-      {/* Status grid */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {COMPONENTS.map(c => (
-          <div key={c.key} className="bg-slate-800 rounded-xl p-4 border border-slate-700 flex flex-col gap-2">
-            <c.icon className={`w-5 h-5 ${isBackendUp ? 'text-emerald-400' : 'text-slate-500'}`} />
-            <div>
-              <div className="text-white text-sm font-medium">{c.label}</div>
-              <div className="text-slate-500 text-xs mt-0.5">{c.desc}</div>
+      <div className="space-y-1.5">
+        {source.entities.map(e => (
+          <div key={e.name} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${source.colorDot}`} />
+              <span className="text-slate-600 font-mono">{e.name}</span>
             </div>
-            {isBackendUp
-              ? <CheckCircle className="w-4 h-4 text-emerald-400 mt-auto" />
-              : <Clock className="w-4 h-4 text-amber-400 mt-auto" />}
+            <span className="text-slate-400">{e.rows.toLocaleString('it-IT')}</span>
           </div>
         ))}
       </div>
-
-      {/* KG Stats */}
-      {isBackendUp && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'KG Nodes',  value: status!.kg_nodes.toLocaleString() },
-            { label: 'KG Edges',  value: status!.kg_edges.toLocaleString() },
-            { label: 'Entities',  value: status!.entities.toLocaleString() },
-            { label: 'Dedup\'d',  value: status!.dedup_count.toLocaleString() },
-          ].map(s => (
-            <div key={s.label} className="bg-slate-800 border border-slate-700 rounded-xl p-4">
-              <div className="text-slate-400 text-xs">{s.label}</div>
-              <div className="text-white text-2xl font-bold mt-1">{s.value}</div>
-            </div>
-          ))}
+      {source.warning && (
+        <div className="mt-3 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+          <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          {source.warning}
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Not loaded notice */}
-      {!isBackendUp && !loading && (
-        <div className="bg-amber-900/20 border border-amber-700/40 rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <div className="text-amber-300 font-medium text-sm">Backend Python non ancora caricato</div>
-            <div className="text-amber-400/70 text-xs mt-1">
-              Avvia il sistema con: <code className="bg-slate-800 px-1 rounded">python -m fra.cli load --scenario test_scenario/</code>
-            </div>
-          </div>
+function BridgeRow({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* From */}
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">From</p>
+          <p className="text-xs font-semibold text-slate-700">{bridge.fromSource}</p>
+          <p className="text-[11px] text-slate-500 font-mono">{bridge.fromEntity}.{bridge.fromField}</p>
         </div>
-      )}
+        {/* Arrow */}
+        <div className="flex flex-col items-center gap-1 flex-shrink-0">
+          <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2.5 py-1 whitespace-nowrap">
+            ⚡ {bridge.label}
+          </span>
+          <span className="text-[10px] text-slate-400">{bridge.cardinality}</span>
+        </div>
+        {/* To */}
+        <div className="flex-1 min-w-0 text-right">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">To</p>
+          <p className="text-xs font-semibold text-slate-700">{bridge.toSource}</p>
+          <p className="text-[11px] text-slate-500 font-mono">{bridge.toEntity}.{bridge.toField}</p>
+        </div>
+        {/* Status */}
+        <div className="flex-shrink-0">
+          <CheckCircle className="w-4 h-4 text-teal-500" />
+        </div>
+      </div>
+      <p className="mt-2.5 text-[11px] text-slate-500 border-t border-slate-100 pt-2.5">{bridge.note}</p>
+    </div>
+  )
+}
 
-      {/* Query interface */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 space-y-4">
-        <h2 className="text-white font-semibold flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-violet-400" />
-          Query Semantica
-        </h2>
+// ── Builder (custom bridges) ───────────────────────────────────────────────────
 
-        <div className="flex gap-2">
-          <input
-            className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
-            placeholder="Es. Qual è il fatturato 2014?"
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && question.trim() && ask(question.trim())}
-          />
-          <button
-            onClick={() => question.trim() && ask(question.trim())}
-            disabled={asking || !question.trim()}
-            className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm font-medium transition-colors flex items-center gap-2"
+interface CustomBridge { from: string; to: string; label: string }
+
+function KGBuilder({ bridges, onAdd, onRemove }: {
+  bridges: CustomBridge[]
+  onAdd: (b: CustomBridge) => void
+  onRemove: (i: number) => void
+}) {
+  const [form, setForm] = useState({ from: '', to: '', label: '' })
+  const allEntities = AW_SOURCES.flatMap(s => s.entities.map(e => `${s.name} · ${e.name}`))
+
+  function submit() {
+    if (!form.from || !form.to || !form.label) return
+    onAdd({ ...form })
+    setForm({ from: '', to: '', label: '' })
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <h3 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
+        <Plus className="w-4 h-4 text-teal-600" />
+        Add Custom Relationship
+      </h3>
+      <p className="text-xs text-slate-500 mb-4">Definisci un nuovo bridge cross-source o una relazione custom nel Knowledge Graph.</p>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div>
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
+          <select
+            value={form.from}
+            onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none"
           >
-            {asking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            Ask
-          </button>
+            <option value="">Select entity…</option>
+            {allEntities.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
         </div>
+        <div>
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Relationship label</label>
+          <input
+            value={form.label}
+            onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+            placeholder="es. MANAGED_BY"
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-mono"
+          />
+        </div>
+        <div>
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">To entity</label>
+          <select
+            value={form.to}
+            onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none"
+          >
+            <option value="">Select entity…</option>
+            {allEntities.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </div>
+      </div>
+      <button
+        onClick={submit}
+        disabled={!form.from || !form.to || !form.label}
+        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+      >
+        Add to Knowledge Graph
+      </button>
 
-        {/* Sample questions */}
-        <div className="flex flex-wrap gap-2">
-          {SAMPLE_QUESTIONS.map(q => (
-            <button
-              key={q}
-              onClick={() => { setQuestion(q); ask(q) }}
-              className="text-xs px-3 py-1 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
-            >
-              {q}
-            </button>
+      {bridges.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Custom bridges</p>
+          {bridges.map((b, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+              <span className="text-slate-600 font-mono truncate flex-1">{b.from}</span>
+              <span className="text-violet-600 font-bold whitespace-nowrap">— {b.label} →</span>
+              <span className="text-slate-600 font-mono truncate flex-1 text-right">{b.to}</span>
+              <button onClick={() => onRemove(i)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           ))}
         </div>
+      )}
+    </div>
+  )
+}
 
-        {/* Error */}
-        {error && (
-          <div className="bg-red-900/20 border border-red-700/40 rounded-lg p-3 text-red-300 text-sm">
-            {error}
-          </div>
-        )}
+// ── Main ───────────────────────────────────────────────────────────────────────
 
-        {/* Result */}
-        {result && (
-          <div className="space-y-3">
-            {result.disambiguation_required && (
-              <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg p-3">
-                <div className="text-amber-300 text-sm font-medium">Disambiguazione richiesta</div>
-                {result.candidates && (
-                  <ul className="mt-1 space-y-1">
-                    {result.candidates.map((c, i) => (
-                      <li key={i} className="text-amber-400/80 text-xs">• {c}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+export default function SemanticLayerView() {
+  const [customBridges, setCustomBridges] = useState<CustomBridge[]>([])
 
-            <div className="bg-slate-900 rounded-lg p-4 space-y-2">
-              <div className="text-slate-400 text-xs">Risposta</div>
-              <div className="text-white text-sm font-medium">
-                {typeof result.answer === 'object'
-                  ? <pre className="text-xs text-slate-300 overflow-x-auto">{JSON.stringify(result.answer, null, 2)}</pre>
-                  : String(result.answer)}
-              </div>
+  return (
+    <div className="flex flex-col h-full overflow-auto">
+      {/* Header */}
+      <div className="px-8 py-5 border-b border-slate-200 bg-white flex-shrink-0">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Network className="w-5 h-5 text-teal-600" />
+              <h1 className="text-2xl font-bold text-slate-900">Knowledge Graph</h1>
             </div>
-
-            {result.sql && (
-              <div className="bg-slate-900 rounded-lg p-3">
-                <div className="text-slate-500 text-xs mb-1">SQL generato</div>
-                <pre className="text-emerald-400 text-xs overflow-x-auto">{result.sql}</pre>
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="bg-slate-700 rounded px-2 py-1 text-slate-400">
-                Fonti: {result.sources_touched.join(', ') || '—'}
-              </span>
-              <span className="bg-slate-700 rounded px-2 py-1 text-slate-400">
-                {result.latency_ms}ms
-              </span>
-            </div>
-
-            {Object.keys(result.provenance).length > 0 && (
-              <details className="text-xs">
-                <summary className="text-slate-500 cursor-pointer hover:text-slate-400">Provenance metadata</summary>
-                <pre className="mt-2 bg-slate-900 rounded p-3 text-slate-400 overflow-x-auto">
-                  {JSON.stringify(result.provenance, null, 2)}
-                </pre>
-              </details>
-            )}
+            <p className="text-slate-400 text-sm">
+              AdventureWorks · 4 fonti integrate · {(193062 + customBridges.length).toLocaleString('it-IT')} nodi · 313,193 archi
+            </p>
           </div>
-        )}
+          <div className="flex items-center gap-2 text-xs bg-teal-50 border border-teal-200 text-teal-700 rounded-full px-3 py-1.5 font-medium">
+            <Zap className="w-3.5 h-3.5" />
+            3 cross-source bridges active
+          </div>
+        </div>
       </div>
 
-      {/* CLI reference */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
-        <h2 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-slate-400" />
-          CLI Reference
-        </h2>
-        <div className="space-y-2 font-mono text-xs">
-          {[
-            ['load', 'python -m fra.cli load --scenario test_scenario/'],
-            ['ask',  'python -m fra.cli ask "Qual è il fatturato 2014?"'],
-            ['report', 'python -m fra.cli report'],
-            ['test', 'pytest tests/test_golden_questions.py -q'],
-          ].map(([label, cmd]) => (
-            <div key={label} className="flex items-center gap-3">
-              <span className="text-violet-400 w-14 shrink-0">{label}</span>
-              <code className="text-slate-300 bg-slate-900 px-2 py-1 rounded">{cmd}</code>
-            </div>
-          ))}
+      <div className="flex-1 px-8 py-6 space-y-8">
+
+        {/* KG Stats */}
+        <div className="grid grid-cols-4 gap-4">
+          {KG_STATS.map(s => <StatCard key={s.label} {...s} />)}
         </div>
+
+        {/* Source Architecture */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Database className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Architettura delle Fonti</h2>
+          </div>
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            {AW_SOURCES.map(s => <SourceCard key={s.id} source={s} />)}
+          </div>
+        </section>
+
+        {/* Cross-source Bridges */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <GitBranch className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Cross-source Bridges</h2>
+            <span className="text-xs text-slate-400">— join tra sistemi diversi tramite chiavi semantiche</span>
+          </div>
+          <div className="space-y-3">
+            {AW_BRIDGES.map(b => <BridgeRow key={b.id} bridge={b} />)}
+          </div>
+        </section>
+
+        {/* Data Quality */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Qualità dei Dati</h2>
+          </div>
+          <div className="space-y-2">
+            {QUALITY_ISSUES.map((issue, i) => {
+              const isWarning = issue.severity === 'warning'
+              return (
+                <div
+                  key={i}
+                  className={`border rounded-xl p-4 ${isWarning ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {isWarning
+                      ? <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                      : <Info className="w-4 h-4 text-sky-500 mt-0.5 flex-shrink-0" />
+                    }
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-semibold text-slate-700">{issue.entity}</span>
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${isWarning ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>
+                          {issue.severity}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700">{issue.issue}</p>
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3 text-teal-500" />
+                        {issue.resolution}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        {/* Builder */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Plus className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Knowledge Graph Builder</h2>
+          </div>
+          <KGBuilder
+            bridges={customBridges}
+            onAdd={b => setCustomBridges(prev => [...prev, b])}
+            onRemove={i => setCustomBridges(prev => prev.filter((_, idx) => idx !== i))}
+          />
+        </section>
+
       </div>
     </div>
   )
