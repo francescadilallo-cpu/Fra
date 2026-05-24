@@ -13,11 +13,7 @@ interface Props {
   children: ReactNode
 }
 
-const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
-  sembuilder: 'bg-violet-500',
-  agents: 'bg-blue-500',
-  compliance: 'bg-rose-500',
-}
+const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {}
 
 type NavEntry =
   | { kind: 'item'; id: NavTab; label: string; icon: typeof LayoutDashboard }
