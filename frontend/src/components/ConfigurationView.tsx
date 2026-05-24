@@ -234,7 +234,7 @@ function Toggle({ on, locked, onToggle }: { on: boolean; locked: boolean; onTogg
 // ── Agent cards ───────────────────────────────────────────────────────────────
 
 const AGENT_SECTOR: Record<SectorId, { name: string; desc: string; model: string; traffic: string }> = {
-  manufacturing: { name: 'Order Specialist',  desc: 'Manages the quote→order→production cycle on the mfg: ontology',    model: 'claude-haiku-4', traffic: '89 req/day'  },
+  manufacturing: { name: 'Sales Analyst',    desc: 'Queries 31,465 AW orders across ERP+CRM+HR — resolves fatturato ambiguity, ranks Jae Pak vs peers', model: 'claude-haiku-4', traffic: '89 req/day'  },
   retail:        { name: 'Cart Recovery',     desc: 'Recovers abandoned carts with personalized messages per customer', model: 'claude-haiku-4', traffic: '420 req/day' },
   healthcare:    { name: 'Care Coordinator',  desc: 'Aligns diagnosis, treatments and follow-up with clinical protocols',model: 'claude-haiku-4', traffic: '156 req/day' },
   finance:       { name: 'Risk Analyst',      desc: 'Computes risk scores by aggregating data from multiple sources',   model: 'claude-haiku-4', traffic: '210 req/day' },
@@ -255,6 +255,63 @@ function AgentCard({ name, icon: Icon, desc, model, traffic }: { name: string; i
             <span className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{traffic}</span>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── AW active sources (manufacturing only) ────────────────────────────────────
+const AW_CONFIG_SOURCES = [
+  { name: 'OrionSales ERP',       type: 'PostgreSQL / DuckDB', detail: '31,465 orders · 152,825 rows total',    latencyMs: 18  },
+  { name: 'ClientHub CRM',        type: 'SQLite',              detail: '59,193 rows · 372 dedup removed',       latencyMs: 42  },
+  { name: 'dipendenti_hr',        type: 'CSV',                 detail: '290 employees · Italian schema (IT)',   latencyMs: 5   },
+  { name: 'product_catalog_pim',  type: 'JSON',                detail: '504 products · internal_id join key',  latencyMs: 3   },
+]
+
+function AWConfigSources() {
+  const [tests, setTests] = useState<Record<string, TestState>>({})
+  function runTest(name: string) {
+    setTests(t => ({ ...t, [name]: 'testing' }))
+    setTimeout(() => setTests(t => ({ ...t, [name]: 'ok' })), 700 + Math.random() * 600)
+  }
+  return (
+    <div className="mb-5 bg-teal-50/60 border border-teal-200 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-teal-100">
+        <Database className="w-3.5 h-3.5 text-teal-600" />
+        <p className="text-xs font-bold text-teal-800 uppercase tracking-wide">AdventureWorks — Active Sources</p>
+        <span className="text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5 ml-auto">
+          4 connected
+        </span>
+      </div>
+      <div className="divide-y divide-teal-100">
+        {AW_CONFIG_SOURCES.map(src => {
+          const st = tests[src.name] ?? 'idle'
+          return (
+            <div key={src.name} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-900 truncate">{src.name}</p>
+                <p className="text-[11px] text-slate-500">{src.detail}</p>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400 hidden sm:block">{src.type}</span>
+              {st === 'ok' && (
+                <span className="text-[10px] text-teal-700 font-medium">{src.latencyMs}ms</span>
+              )}
+              <button
+                onClick={() => runTest(src.name)}
+                disabled={st === 'testing'}
+                className={`text-[11px] font-medium px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                  st === 'testing' ? 'text-slate-400 cursor-wait' :
+                  st === 'ok'      ? 'text-teal-600 hover:bg-teal-100' :
+                  'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {st === 'testing' ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                 st === 'ok'      ? <CheckCircle2 className="w-3 h-3" /> : null}
+                {st === 'ok' ? 'OK' : st === 'testing' ? 'Testing…' : 'Test'}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -350,6 +407,8 @@ export default function ConfigurationView() {
             </span>
           </div>
         </div>
+
+        {sectorId === 'manufacturing' && <AWConfigSources />}
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mt-5">
           {connectors.map(c => (
@@ -456,7 +515,7 @@ export default function ConfigurationView() {
             const s = SECTORS[id]
             const isActive = id === sectorId
             const stats = {
-              manufacturing: { classes: 12, mappings: 47, conns: 5 },
+              manufacturing: { classes: 8, mappings: 47, conns: 4 },
               retail:        { classes:  9, mappings: 38, conns: 5 },
               healthcare:    { classes: 14, mappings: 62, conns: 5 },
               finance:       { classes: 11, mappings: 53, conns: 5 },

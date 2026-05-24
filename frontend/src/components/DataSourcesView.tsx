@@ -555,6 +555,235 @@ function UploadPanel({
   )
 }
 
+// ── Connector workflow ───────────────────────────────────────────────────────
+interface ConnectorFieldMapping {
+  source: string; target: string; include: boolean; confidence: 'high' | 'medium' | 'low'
+}
+interface ConnectorValidationCheck { label: string; status: 'ok' | 'warning'; detail: string }
+interface ConnectorWorkflow {
+  connector: ConnectorDef
+  step: 'map' | 'validate' | 'ingest'
+  mappings: ConnectorFieldMapping[]
+  rowCount: number
+  checks: ConnectorValidationCheck[]
+}
+
+const CONNECTOR_FIELD_TEMPLATES: Partial<Record<ConnectorCategory, ConnectorFieldMapping[]>> = {
+  erp: [
+    { source: 'order_id',       target: 'SalesOrder.orderId',          include: true,  confidence: 'high'   },
+    { source: 'customer_ref',   target: 'Customer.customerId',         include: true,  confidence: 'high'   },
+    { source: 'product_ref',    target: 'Product.productId',           include: true,  confidence: 'high'   },
+    { source: 'subtotal',       target: 'SalesOrder.subtotal_amount',  include: true,  confidence: 'medium' },
+    { source: 'order_date',     target: 'SalesOrder.orderDate',        include: true,  confidence: 'high'   },
+    { source: 'salesperson_id', target: 'Salesperson.salespersonId',   include: true,  confidence: 'high'   },
+    { source: 'total_due',      target: 'SalesOrder.total_due',        include: false, confidence: 'medium' },
+  ],
+  crm: [
+    { source: 'account_id',   target: 'Customer.accountId', include: true,  confidence: 'high'   },
+    { source: 'company_name', target: 'Customer.name',       include: true,  confidence: 'high'   },
+    { source: 'email',        target: 'Customer.email',      include: true,  confidence: 'high'   },
+    { source: 'region',       target: 'Territory.name',      include: true,  confidence: 'medium' },
+    { source: 'status',       target: 'Customer.status',     include: true,  confidence: 'high'   },
+    { source: 'created_at',   target: 'Customer.createdAt',  include: false, confidence: 'low'    },
+  ],
+  ecommerce: [
+    { source: 'order_number',   target: 'SalesOrder.orderId',       include: true,  confidence: 'high'   },
+    { source: 'sku',            target: 'Product.productId',         include: true,  confidence: 'high'   },
+    { source: 'qty',            target: 'SalesOrderLine.quantity',   include: true,  confidence: 'high'   },
+    { source: 'unit_price',     target: 'SalesOrderLine.unitPrice',  include: true,  confidence: 'high'   },
+    { source: 'customer_email', target: 'Customer.email',            include: true,  confidence: 'medium' },
+    { source: 'shipped_at',     target: 'SalesOrder.shipDate',       include: true,  confidence: 'high'   },
+  ],
+  accounting: [
+    { source: 'invoice_no',   target: 'SalesOrder.orderId',         include: true,  confidence: 'high'   },
+    { source: 'net_amount',   target: 'SalesOrder.subtotal_amount',  include: true,  confidence: 'high'   },
+    { source: 'vat_amount',   target: 'SalesOrder.tax_amount',       include: true,  confidence: 'medium' },
+    { source: 'posting_date', target: 'SalesOrder.orderDate',        include: true,  confidence: 'high'   },
+    { source: 'vendor_code',  target: 'Salesperson.salespersonId',   include: false, confidence: 'low'    },
+  ],
+  database: [
+    { source: 'id',       target: 'SalesOrder.orderId',         include: true,  confidence: 'high'   },
+    { source: 'amount',   target: 'SalesOrder.subtotal_amount',  include: true,  confidence: 'medium' },
+    { source: 'date',     target: 'SalesOrder.orderDate',        include: true,  confidence: 'high'   },
+    { source: 'customer', target: 'Customer.customerId',         include: true,  confidence: 'medium' },
+    { source: 'product',  target: 'Product.productId',           include: false, confidence: 'low'    },
+  ],
+  payments: [
+    { source: 'txn_id',       target: 'SalesOrder.orderId',     include: true,  confidence: 'medium' },
+    { source: 'amount_cents', target: 'SalesOrder.total_due',   include: true,  confidence: 'medium' },
+    { source: 'customer_id',  target: 'Customer.customerId',    include: true,  confidence: 'high'   },
+    { source: 'created_at',   target: 'SalesOrder.orderDate',   include: true,  confidence: 'high'   },
+    { source: 'currency',     target: 'SalesOrder.currency',    include: false, confidence: 'low'    },
+  ],
+  cloud: [
+    { source: 'record_id',    target: 'SalesOrder.orderId',         include: true,  confidence: 'medium' },
+    { source: 'value',        target: 'SalesOrder.subtotal_amount',  include: true,  confidence: 'low'    },
+    { source: 'owner',        target: 'Salesperson.salespersonId',   include: false, confidence: 'low'    },
+    { source: 'created_date', target: 'SalesOrder.orderDate',        include: true,  confidence: 'medium' },
+  ],
+  logistics: [
+    { source: 'shipment_id',   target: 'SalesOrder.orderId',  include: true,  confidence: 'medium' },
+    { source: 'destination',   target: 'Territory.name',       include: true,  confidence: 'medium' },
+    { source: 'delivery_date', target: 'SalesOrder.shipDate',  include: true,  confidence: 'high'   },
+    { source: 'weight_kg',     target: 'Product.weight',       include: false, confidence: 'low'    },
+    { source: 'carrier_code',  target: 'SalesOrder.carrier',   include: false, confidence: 'low'    },
+  ],
+}
+
+function generateConnectorMappings(c: ConnectorDef): ConnectorFieldMapping[] {
+  return (CONNECTOR_FIELD_TEMPLATES[c.category] ?? CONNECTOR_FIELD_TEMPLATES.database!).map(m => ({ ...m }))
+}
+
+function generateValidationChecks(rowCount: number): ConnectorValidationCheck[] {
+  const dupes = Math.floor(rowCount * 0.015)
+  const nulls = Math.floor(rowCount * 0.008)
+  return [
+    { label: 'Records found',               status: 'ok',                         detail: `${rowCount.toLocaleString('en-US')} rows available` },
+    { label: 'Primary key uniqueness',       status: 'ok',                         detail: 'No duplicate IDs detected' },
+    { label: 'Potential duplicates',         status: dupes > 0 ? 'warning' : 'ok', detail: `${dupes} suspected duplicate records` },
+    { label: 'Null values in mapped fields', status: nulls > 0 ? 'warning' : 'ok', detail: `${nulls} rows with null values` },
+    { label: 'Type compatibility',           status: 'ok',                         detail: 'All mapped fields are type-compatible' },
+    { label: 'Cross-source key resolution',  status: 'ok',                         detail: `${Math.floor(rowCount * 0.87).toLocaleString('en-US')} records matched to existing entities` },
+  ]
+}
+
+function ConnectorWorkflowPanel({
+  workflow, onToggleMapping, onConfirmMappings, onProceedIngest, onCancel,
+}: {
+  workflow: ConnectorWorkflow
+  onToggleMapping: (source: string) => void
+  onConfirmMappings: () => void
+  onProceedIngest: () => void
+  onCancel: () => void
+}) {
+  const includedCount = workflow.mappings.filter(m => m.include).length
+  const warnCount = workflow.checks.filter(c => c.status === 'warning').length
+
+  return (
+    <div className="bg-white border border-blue-200 rounded-xl overflow-hidden shadow-sm">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-blue-50/70 border-b border-blue-100">
+        <ConnectorLogo c={workflow.connector} size="sm" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-slate-900">{workflow.connector.name}</p>
+          <p className="text-[11px] text-slate-500">
+            {workflow.step === 'map'      && 'Step 2 of 3 — Map fields to your ontology'}
+            {workflow.step === 'validate' && 'Step 3 of 3 — Validate data quality before ingesting'}
+            {workflow.step === 'ingest'   && 'Ingesting into semantic layer…'}
+          </p>
+        </div>
+        {workflow.step !== 'ingest' && (
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Map step */}
+      {workflow.step === 'map' && (
+        <>
+          <div className="max-h-72 overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-white border-b border-slate-200 z-10">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Source Field</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">→ Ontology Target</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Confidence</th>
+                  <th className="w-12 px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {workflow.mappings.map(m => (
+                  <tr key={m.source} className={`border-t border-slate-100 ${m.include ? 'bg-blue-50/30' : ''}`}>
+                    <td className="px-4 py-2 font-mono text-slate-700">{m.source}</td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {m.target.includes('.') ? (
+                        <>
+                          <span className="font-medium">{m.target.split('.')[0]}</span>
+                          <span className="text-slate-400">.{m.target.split('.')[1]}</span>
+                        </>
+                      ) : m.target}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${CONFIDENCE_COLORS[m.confidence]}`}>
+                        {m.confidence}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        onClick={() => onToggleMapping(m.source)}
+                        className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                          m.include ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        {m.include && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+            <p className="text-xs text-slate-500">{includedCount} of {workflow.mappings.length} fields included</p>
+            <button
+              onClick={onConfirmMappings}
+              disabled={includedCount === 0}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                includedCount > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+              Confirm Mappings
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Validate step */}
+      {workflow.step === 'validate' && (
+        <>
+          <div className="px-4 py-4 space-y-2.5">
+            {workflow.checks.map(check => (
+              <div key={check.label} className="flex items-start gap-3">
+                {check.status === 'ok'
+                  ? <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
+                  : <AlertCircle  className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                }
+                <div>
+                  <p className="text-xs font-medium text-slate-700">{check.label}</p>
+                  <p className="text-[11px] text-slate-500">{check.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+            <p className="text-xs text-slate-500">
+              {warnCount > 0 ? `${warnCount} warning${warnCount > 1 ? 's' : ''} — proceeding is safe` : 'All checks passed'}
+            </p>
+            <button
+              onClick={onProceedIngest}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white transition-colors"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Ingest {workflow.rowCount.toLocaleString('en-US')} records
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Ingest step */}
+      {workflow.step === 'ingest' && (
+        <div className="px-4 py-8 flex flex-col items-center gap-3">
+          <Loader2 className="w-6 h-6 text-teal-500 animate-spin" />
+          <p className="text-sm font-semibold text-slate-900">Ingesting to semantic layer…</p>
+          <p className="text-xs text-slate-500">Mapping fields · validating types · indexing nodes & edges</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main view ────────────────────────────────────────────────────────────────
 export default function DataSourcesView() {
   const { sectorId, sector } = useSector()
@@ -567,6 +796,7 @@ export default function DataSourcesView() {
   const [upload, setUpload] = useState<UploadState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [ingesting, setIngesting] = useState(false)
+  const [connectorWorkflow, setConnectorWorkflow] = useState<ConnectorWorkflow | null>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -575,19 +805,22 @@ export default function DataSourcesView() {
 
   // Determine active workflow step
   const activeStep: Step = useMemo(() => {
+    if (connectorWorkflow) return connectorWorkflow.step
     if (ingesting) return 'ingest'
     if (upload && Object.values(upload.accepted).some(Boolean)) return 'validate'
     if (upload) return 'map'
     return 'connect'
-  }, [upload, ingesting])
+  }, [connectorWorkflow, upload, ingesting])
 
   const completeSteps = useMemo(() => {
     const done = new Set<Step>()
-    if (connectedSources.length > 0 || upload) done.add('connect')
-    if (upload && Object.values(upload.accepted).some(Boolean)) done.add('map')
+    if (connectedSources.length > 0 || upload || connectorWorkflow) done.add('connect')
+    if (connectorWorkflow && (connectorWorkflow.step === 'validate' || connectorWorkflow.step === 'ingest')) done.add('map')
+    if (connectorWorkflow && connectorWorkflow.step === 'ingest') done.add('validate')
+    if (upload && Object.values(upload.accepted).some(Boolean)) { done.add('connect'); done.add('map') }
     if (ingesting) { done.add('map'); done.add('validate') }
     return done
-  }, [connectedSources, upload, ingesting])
+  }, [connectedSources, upload, ingesting, connectorWorkflow])
 
   // ── Filters
   const filteredConnectors = useMemo(() => {
@@ -606,16 +839,47 @@ export default function DataSourcesView() {
     if (c.status === 'coming-soon' || connecting) return
     setConnecting(c.id)
     setTimeout(() => {
-      const now = new Date().toISOString()
-      const next: ConnectedSource[] = [
-        ...connectedSources,
-        { connectorId: c.id, connectedAt: now, lastSyncAt: now, rowCount: Math.floor(800 + Math.random() * 4200) },
-      ]
-      setConnectedSources(next)
+      const rowCount = Math.floor(800 + Math.random() * 4200)
+      setConnectorWorkflow({
+        connector: c,
+        step: 'map',
+        mappings: generateConnectorMappings(c),
+        rowCount,
+        checks: generateValidationChecks(rowCount),
+      })
       setConnecting(null)
-      showToast(`Connected to ${c.name} · initial sync complete`)
+      showToast(`Connected to ${c.name} · configure field mappings below`)
     }, 1200)
   }
+
+  const toggleConnectorMapping = (source: string) => {
+    if (!connectorWorkflow) return
+    setConnectorWorkflow({
+      ...connectorWorkflow,
+      mappings: connectorWorkflow.mappings.map(m => m.source === source ? { ...m, include: !m.include } : m),
+    })
+  }
+
+  const confirmConnectorMappings = () => {
+    if (!connectorWorkflow) return
+    setConnectorWorkflow({ ...connectorWorkflow, step: 'validate' })
+  }
+
+  const proceedConnectorIngest = () => {
+    if (!connectorWorkflow) return
+    const wf = connectorWorkflow
+    const currentSources = connectedSources
+    setConnectorWorkflow({ ...wf, step: 'ingest' })
+    setTimeout(() => {
+      const now = new Date().toISOString()
+      const filtered = currentSources.filter(s => s.connectorId !== wf.connector.id)
+      setConnectedSources([...filtered, { connectorId: wf.connector.id, connectedAt: now, lastSyncAt: now, rowCount: wf.rowCount }])
+      setConnectorWorkflow(null)
+      showToast(`${wf.connector.name} ingested · ${wf.rowCount.toLocaleString('en-US')} records added`)
+    }, 2000)
+  }
+
+  const cancelConnectorWorkflow = () => setConnectorWorkflow(null)
 
   const disconnectConnector = (id: string) => {
     setConnectedSources(connectedSources.filter(s => s.connectorId !== id))
@@ -700,6 +964,17 @@ export default function DataSourcesView() {
 
         {/* Workflow */}
         <WorkflowProgress active={activeStep} complete={completeSteps} />
+
+        {/* Connector workflow (Map → Validate → Ingest after connecting a new source) */}
+        {connectorWorkflow && (
+          <ConnectorWorkflowPanel
+            workflow={connectorWorkflow}
+            onToggleMapping={toggleConnectorMapping}
+            onConfirmMappings={confirmConnectorMappings}
+            onProceedIngest={proceedConnectorIngest}
+            onCancel={cancelConnectorWorkflow}
+          />
+        )}
 
         {/* Connected sources */}
         <section>
