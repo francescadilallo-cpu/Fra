@@ -151,11 +151,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 const RECORDS: Record<SectorId, RecordItem[]> = {
   manufacturing: [
-    { id: 1923, name: 'Beta Industrie Srl',   value: 48500,   status: 'Confirmed',    sub: 'Order #1923' },
-    { id: 1921, name: 'Tecnomec SpA',          value: 127800,  status: 'In Production',sub: 'Order #1921' },
-    { id: 1918, name: 'Alfa Componenti Srl',   value: 34200,   status: 'Shipped',      sub: 'Order #1918' },
-    { id: 1915, name: 'Delta Automazione',     value: 89600,   status: 'Delivered',    sub: 'Order #1915' },
-    { id: 1912, name: 'Gamma Stampaggi SpA',   value: 22100,   status: 'Confirmed',    sub: 'Order #1912' },
+    { id: 75123, name: 'Bike World',                    value: 87145,  status: 'Shipped',   sub: 'Order #75123 · Southwest' },
+    { id: 75089, name: 'Action Bicycle Specialists',    value: 53209,  status: 'Delivered', sub: 'Order #75089 · Northwest' },
+    { id: 75044, name: 'Riding Cycles',                 value: 46312,  status: 'Delivered', sub: 'Order #75044 · Central' },
+    { id: 74998, name: 'Valley Bicycle Specialists',    value: 32890,  status: 'Shipped',   sub: 'Order #74998 · Canada' },
+    { id: 74956, name: 'Eastside Department Store',     value: 28750,  status: 'Delivered', sub: 'Order #74956 · Northeast' },
   ],
   retail: [
     { id: 4820, name: 'Marco Rossi',           value: 184,     status: 'Paid',         sub: 'Order #4820' },
@@ -182,11 +182,11 @@ const RECORDS: Record<SectorId, RecordItem[]> = {
 
 const ACTIVITIES: Record<SectorId, ActivityItem[]> = {
   manufacturing: [
-    { id: 1, dot: 'bg-teal-500',   message: 'New quote Q-2847 from Alfa Meccanica Srl',             time: '2m ago',  status: 'Draft' },
-    { id: 2, dot: 'bg-blue-500',   message: 'Order O-1923 confirmed by Beta Industrie',             time: '15m ago', status: 'Confirmed' },
-    { id: 3, dot: 'bg-amber-400',  message: 'Agent flagged 4 orders with anomalous values',         time: '38m ago', status: 'Warning' },
-    { id: 4, dot: 'bg-purple-500', message: 'Work order WO-589 started on Machine M-07',            time: '1h ago',  status: 'In Production' },
-    { id: 5, dot: 'bg-emerald-500',message: 'Quote Q-2846 accepted — €127,800',                     time: '2h ago',  status: 'Accepted' },
+    { id: 1, dot: 'bg-teal-500',   message: 'Top salesperson 2014: Jae Pak — 67 orders, $289k, Southwest', time: 'Dec 2014', status: 'Confirmed' },
+    { id: 2, dot: 'bg-amber-400',  message: 'Agent: 372 duplicate CRM accounts detected (accountId < 0)',   time: '2h ago',   status: 'Warning'   },
+    { id: 3, dot: 'bg-blue-500',   message: 'Order #75123 shipped — Bike World — $87,145',                 time: '4h ago',   status: 'Shipped'   },
+    { id: 4, dot: 'bg-purple-500', message: 'Cross-source join resolved: customer_ref → CRM accountId',    time: '6h ago',   status: 'Active'    },
+    { id: 5, dot: 'bg-red-500',    message: '"fatturato" ambiguity: subtotal $20.1M vs total_due $22.4M',  time: '1d ago',   status: 'Warning'   },
   ],
   retail: [
     { id: 1, dot: 'bg-teal-500',   message: 'Order #4820 paid — Marco Rossi — €184',               time: '1m ago',  status: 'Paid' },
@@ -212,7 +212,7 @@ const ACTIVITIES: Record<SectorId, ActivityItem[]> = {
 }
 
 const TREND_CONFIG: Record<SectorId, { label: string; unit: string; base: number; jitter: number; seed: number }> = {
-  manufacturing: { label: 'Orders Confirmed',   unit: 'count',  base: 13,   jitter: 4,      seed: 42   },
+  manufacturing: { label: 'Orders per Month',   unit: 'count',  base: 2622, jitter: 350,    seed: 42   },
   retail:        { label: 'Orders Paid',         unit: 'count',  base: 320,  jitter: 60,     seed: 77   },
   healthcare:    { label: 'Encounters',          unit: 'count',  base: 280,  jitter: 40,     seed: 13   },
   finance:       { label: 'Loan Disbursements',  unit: '€k',     base: 4200, jitter: 800,    seed: 99   },
@@ -220,9 +220,9 @@ const TREND_CONFIG: Record<SectorId, { label: string; unit: string; base: number
 
 const DATA_SOURCES: Record<SectorId, { name: string; type: string; tables: number; rows: string }[]> = {
   manufacturing: [
-    { name: 'SAP S/4HANA',   type: 'ERP',      tables: 5, rows: '13,343' },
-    { name: 'Siemens MES',   type: 'MES',      tables: 2, rows: '1,204'  },
-    { name: 'PostgreSQL',    type: 'Database', tables: 8, rows: '24,801' },
+    { name: 'ERP — OrionSales', type: 'PostgreSQL / DuckDB', tables: 5, rows: '153,225' },
+    { name: 'CRM — ClientHub',  type: 'SQLite',              tables: 6, rows: '59,193'  },
+    { name: 'HR + PIM — Files', type: 'CSV + JSON',          tables: 2, rows: '794'     },
   ],
   retail: [
     { name: 'Shopify',       type: 'eCommerce',tables: 4, rows: '20,388' },
