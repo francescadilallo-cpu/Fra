@@ -14,7 +14,7 @@ import DataExplorer from './components/DataExplorer'
 import DataSourcesView from './components/DataSourcesView'
 import ComplianceView from './components/ComplianceView'
 import UseCasesView from './components/UseCasesView'
-import SemanticBuilderView from './components/SemanticBuilderView'
+import SemanticLayerView from './components/SemanticLayerView'
 import OnboardingWizard from './components/OnboardingWizard'
 import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
@@ -166,7 +166,7 @@ export default function App() {
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
         {activeTab === 'usecases' && <UseCasesView onNavigate={setActiveTab} />}
-        {activeTab === 'sembuilder' && <SemanticBuilderView />}
+        {activeTab === 'sembuilder' && <SemanticLayerView />}
         {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
         {activeTab === 'ontology' && <OntologyGraph />}
         {activeTab === 'builder' && <OntologyBuilder />}
