@@ -3,6 +3,7 @@ import { Brain, Database, GitBranch, BarChart3, Layers, Terminal, CheckCircle, C
 import axios from 'axios'
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 interface SemanticStatus {
   loaded: boolean
@@ -24,6 +25,72 @@ interface SemanticResult {
   disambiguation_required?: boolean
   candidates?: string[]
   latency_ms: number
+}
+
+const MOCK_STATUS: SemanticStatus = {
+  loaded: true,
+  entities: 8,
+  kg_nodes: 193062,
+  kg_edges: 313193,
+  metadata_rows: 8,
+  dedup_count: 372,
+  sources: [
+    { name: 'erp',    rows: 152825, status: 'ok' },
+    { name: 'crm',    rows: 79820,  status: 'ok' },
+    { name: 'hr_pim', rows: 794,    status: 'ok' },
+  ],
+}
+
+const MOCK_RESULTS: Record<string, SemanticResult> = {
+  'Qual è il fatturato 2014?': {
+    question: 'Qual è il fatturato 2014?',
+    intent: 'ambiguous: fatturato',
+    answer: null,
+    sources_touched: [],
+    provenance: {},
+    disambiguation_required: true,
+    candidates: ['revenue (~subtotal_amount) → $20,057,928', 'revenue_with_tax (~total_due) → $22,419,498'],
+    latency_ms: 0,
+  },
+  'Chi è il venditore con più ordini nel 2014?': {
+    question: 'Chi è il venditore con più ordini nel 2014?',
+    intent: 'entity=Salesperson, filter year=2014, limit=1',
+    answer: { salesperson_ref: 289, order_count: 67, full_name: 'Jae Pak', department: 'Sales' },
+    sql: "SELECT salesperson_ref, COUNT(*) as n FROM sales_order_header WHERE strftime('%Y', order_date)='2014' GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1",
+    sources_touched: ['erp', 'hr_pim'],
+    provenance: { erp: 'sales_order_header', hr_pim: 'dipendenti_hr.csv' },
+    latency_ms: 81,
+  },
+  'Top 5 prodotti più venduti per quantità': {
+    question: 'Top 5 prodotti più venduti per quantità',
+    intent: 'entity=Product, limit=5',
+    answer: [
+      { displayName: 'Water Bottle - 30 oz.', qty_total: 4688 },
+      { displayName: 'Sport-100 Helmet, Blue', qty_total: 3382 },
+      { displayName: 'Patch Kit/8 Patches', qty_total: 3382 },
+      { displayName: 'Mountain Tire Tube', qty_total: 3354 },
+      { displayName: 'Road Tire Tube', qty_total: 3338 },
+    ],
+    sources_touched: ['erp', 'hr_pim'],
+    provenance: { erp: 'sales_order_line', hr_pim: 'product_catalog_pim.json' },
+    latency_ms: 194,
+  },
+  'Elenco delle aziende clienti B2B attive': {
+    question: 'Elenco delle aziende clienti B2B attive',
+    intent: 'entity=Customer, filter account_type=B2B',
+    answer: '710 aziende B2B attive trovate nel CRM (deduplicate, accountId > 0)',
+    sources_touched: ['crm'],
+    provenance: { crm: 'account WHERE accountType=B2B AND isActive=1' },
+    latency_ms: 6,
+  },
+  'Qual è il cliente che ha speso di più in assoluto?': {
+    question: 'Qual è il cliente che ha speso di più in assoluto?',
+    intent: 'metric=revenue_with_tax, entity=Customer, limit=1',
+    answer: { customer_ref: 29736, total_spent: 469823.25, display_name: 'Lindsey' },
+    sources_touched: ['erp', 'crm'],
+    provenance: { erp: 'SUM(total_due) GROUP BY customer_ref', crm: 'account lookup' },
+    latency_ms: 25,
+  },
 }
 
 const COMPONENTS = [
@@ -53,6 +120,7 @@ export default function SemanticLayerView() {
   useEffect(() => { fetchStatus() }, [])
 
   async function fetchStatus() {
+    if (USE_MOCK) { setStatus(MOCK_STATUS); return }
     setLoading(true)
     try {
       const r = await axios.get(`${API}/api/semantic/status`)
@@ -65,6 +133,23 @@ export default function SemanticLayerView() {
   }
 
   async function ask(q: string) {
+    if (USE_MOCK) {
+      setAsking(true)
+      setError(null)
+      setResult(null)
+      await new Promise(r => setTimeout(r, 400))
+      const mock = MOCK_RESULTS[q] ?? {
+        question: q,
+        intent: 'rule-based match',
+        answer: 'Demo: questa risposta verrebbe calcolata dal backend Python in tempo reale.',
+        sources_touched: ['erp'],
+        provenance: {},
+        latency_ms: 12,
+      }
+      setResult(mock)
+      setAsking(false)
+      return
+    }
     setAsking(true)
     setError(null)
     setResult(null)
