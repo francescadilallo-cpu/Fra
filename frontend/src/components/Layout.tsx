@@ -26,7 +26,7 @@ const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {
 const NAV_ITEMS: { id: NavTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'overview',    label: 'Overview',        icon: Presentation },
   { id: 'usecases',    label: 'Use Cases',       icon: Briefcase },
-  { id: 'sembuilder',  label: 'Sem. Builder',    icon: Layers },
+  { id: 'sembuilder',  label: 'Semantic Layer',   icon: Layers },
   { id: 'dashboard',   label: 'Dashboard',       icon: LayoutDashboard },
   { id: 'ontology',  label: 'Ontology',       icon: GitBranch },
   { id: 'builder',   label: 'Builder AI',     icon: Wand2 },
