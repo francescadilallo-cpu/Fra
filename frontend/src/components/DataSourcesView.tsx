@@ -14,6 +14,165 @@ import {
   parseCSV, suggestMappings, SAMPLE_CSV_BY_SECTOR,
   type MappingSuggestion,
 } from '../data/csvImport'
+import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
+
+// ── AW Sources Panel (manufacturing only) ───────────────────────────────────
+function downloadEntityCSV(entityName: AWEntityName, filename: string) {
+  const rows = AW_SAMPLE_DATA[entityName]
+  if (!rows || rows.length === 0) return
+  const columns = Object.keys(rows[0])
+  const header = columns.join(',')
+  const csvRows = rows.map(row =>
+    columns.map(col => {
+      const v = row[col]
+      if (v === null || v === undefined) return ''
+      const s = String(v)
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(',')
+  )
+  const csv = [header, ...csvRows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+interface AWSource {
+  label: string
+  type: string
+  tables: { name: string; rows: number }[]
+  totalRows: number
+  lastSync: string
+  warning?: string
+  note?: string
+  downloadEntity: AWEntityName
+  downloadFilename: string
+}
+
+const AW_SOURCES: AWSource[] = [
+  {
+    label: 'ERP — OrionSales',
+    type: 'PostgreSQL / DuckDB',
+    tables: [
+      { name: 'sales_order_header', rows: 31465 },
+      { name: 'sales_order_line',   rows: 121317 },
+      { name: 'salesperson',        rows: 17 },
+      { name: 'territory',          rows: 10 },
+      { name: 'offer',              rows: 16 },
+    ],
+    totalRows: 152825,
+    lastSync: '2014-12-31',
+    downloadEntity: 'SalesOrder',
+    downloadFilename: 'aw_sales_order_sample.csv',
+  },
+  {
+    label: 'CRM — ClientHub',
+    type: 'SQLite',
+    tables: [
+      { name: 'account',        rows: 20201 },
+      { name: 'contact',        rows: 19302 },
+      { name: 'address',        rows: 19614 },
+      { name: 'state_province', rows: 70 },
+      { name: 'country',        rows: 6 },
+    ],
+    totalRows: 59193,
+    lastSync: '2014-12-31',
+    warning: '372 account duplicati rimossi (accountId<0)',
+    downloadEntity: 'Customer',
+    downloadFilename: 'aw_customer_sample.csv',
+  },
+  {
+    label: 'HR + PIM — Files',
+    type: 'CSV + JSON',
+    tables: [
+      { name: 'dipendenti_hr',      rows: 290 },
+      { name: 'product_catalog_pim', rows: 504 },
+    ],
+    totalRows: 794,
+    lastSync: '2014-12-31',
+    note: 'Schema italiano · HR CSV + PIM JSON',
+    downloadEntity: 'Employee',
+    downloadFilename: 'aw_employee_sample.csv',
+  },
+]
+
+function AWSourcesPanel() {
+  return (
+    <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2.5">
+        <Database className="w-4 h-4 text-teal-600" />
+        <h2 className="text-sm font-bold text-slate-800">AdventureWorks — Fonti Attive</h2>
+        <span className="flex items-center gap-1 text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">
+          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />
+          3 connected
+        </span>
+      </div>
+
+      {/* Source cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {AW_SOURCES.map(src => (
+          <div key={src.label} className="bg-white border border-teal-100 rounded-xl p-3 space-y-2.5 shadow-sm">
+            {/* Card header */}
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 leading-tight">{src.label}</p>
+                <p className="text-[10px] text-slate-400 font-mono mt-0.5">{src.type}</p>
+              </div>
+              <span className="flex items-center gap-1 text-[9px] font-semibold bg-teal-50 text-teal-700 border border-teal-100 rounded-full px-1.5 py-0.5 flex-shrink-0 mt-0.5">
+                <span className="w-1 h-1 bg-teal-500 rounded-full" />
+                connected
+              </span>
+            </div>
+
+            {/* Tables list */}
+            <div className="space-y-0.5">
+              {src.tables.map(t => (
+                <div key={t.name} className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-slate-500">{t.name}</span>
+                  <span className="text-[10px] text-slate-400">{t.rows.toLocaleString('en-US')}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t border-slate-100 mt-1 pt-1">
+                <span className="text-[10px] font-semibold text-slate-600">Total</span>
+                <span className="text-[10px] font-semibold text-teal-700">{src.totalRows.toLocaleString('en-US')}</span>
+              </div>
+            </div>
+
+            {/* Last sync */}
+            <p className="text-[10px] text-slate-400">
+              Last sync: <span className="font-medium text-slate-500">{src.lastSync}</span>
+            </p>
+
+            {/* Warning / note */}
+            {src.warning && (
+              <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1 leading-tight">
+                ⚠ {src.warning}
+              </p>
+            )}
+            {src.note && (
+              <p className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 rounded px-2 py-1 leading-tight">
+                {src.note}
+              </p>
+            )}
+
+            {/* Download sample */}
+            <button
+              onClick={() => downloadEntityCSV(src.downloadEntity, src.downloadFilename)}
+              className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-500 hover:text-teal-600 border border-slate-200 hover:border-teal-300 rounded-lg px-2 py-1.5 transition-colors bg-slate-50 hover:bg-teal-50"
+            >
+              <Download className="w-3 h-3" />
+              Download sample
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Workflow progress strip ──────────────────────────────────────────────────
 type Step = 'connect' | 'map' | 'validate' | 'ingest'
@@ -536,6 +695,9 @@ export default function DataSourcesView() {
 
       {/* Body */}
       <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+        {/* AW active sources (manufacturing only) */}
+        {sectorId === 'manufacturing' && <AWSourcesPanel />}
+
         {/* Workflow */}
         <WorkflowProgress active={activeStep} complete={completeSteps} />
 

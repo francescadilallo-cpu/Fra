@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
-import { Database, Search, ChevronUp, ChevronDown, X, Table2 } from 'lucide-react'
+import { Database, Search, ChevronUp, ChevronDown, X, Table2, Download } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateMockData } from '../data/mockDataGenerator'
+import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import type { OntologyNode } from '../types'
 
 // ── Type badge colours (same as OntologyGraph) ───────────────────────────────
@@ -28,7 +29,8 @@ function DataTable({ node }: { node: OntologyNode }) {
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 10
 
-  const rows = useMemo(() => generateMockData(node, 30), [node.id])
+  const awRows = AW_SAMPLE_DATA[node.data.label as AWEntityName]
+  const rows = useMemo(() => awRows ?? generateMockData(node, 30), [node.id])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows
@@ -59,6 +61,26 @@ function DataTable({ node }: { node: OntologyNode }) {
 
   const propByName = Object.fromEntries(node.data.properties.map(p => [p.name, p]))
 
+  function downloadCSV() {
+    const header = columns.join(',')
+    const csvRows = rows.map(row =>
+      columns.map(col => {
+        const v = row[col]
+        if (v === null || v === undefined) return ''
+        const s = String(v)
+        return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+      }).join(',')
+    )
+    const csv = [header, ...csvRows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${node.data.db_table ?? node.data.label}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -80,6 +102,9 @@ function DataTable({ node }: { node: OntologyNode }) {
         <span className="text-xs text-slate-400 flex-shrink-0">
           {filtered.length} of {rows.length} rows
         </span>
+        <button onClick={downloadCSV} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-600 border border-slate-200 hover:border-teal-300 rounded-lg px-2.5 py-1.5 transition-colors">
+          <Download className="w-3.5 h-3.5" /> Download CSV
+        </button>
       </div>
 
       {/* Table */}
@@ -230,7 +255,7 @@ export default function DataExplorer() {
           )}
         </div>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.name} · Browse mock data for each ontology entity
+          {sector.name} · Browse real AdventureWorks data for each entity
           {selected && rowCount > 0 && (
             <span className="ml-2 text-teal-600 font-medium">{rowCount.toLocaleString('en-US')} records in production DB</span>
           )}

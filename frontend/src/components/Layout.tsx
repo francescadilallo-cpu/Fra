@@ -24,6 +24,9 @@ type NavEntry =
   | { kind: 'section'; label: string }
 
 const NAV_ENTRIES: NavEntry[] = [
+  { kind: 'section', label: 'Start' },
+  { kind: 'item', id: 'overview',    label: 'Overview',          icon: Presentation },
+
   { kind: 'section', label: 'Connect' },
   { kind: 'item', id: 'sources',     label: 'Data Sources',      icon: Plug },
   { kind: 'item', id: 'data',        label: 'Data Explorer',     icon: Table2 },
@@ -40,12 +43,11 @@ const NAV_ENTRIES: NavEntry[] = [
 
   { kind: 'section', label: 'Monitor' },
   { kind: 'item', id: 'dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
-  { kind: 'item', id: 'overview',    label: 'Overview',          icon: Presentation },
+  { kind: 'item', id: 'compliance',  label: 'Compliance',        icon: ShieldCheck },
 
   { kind: 'section', label: 'More' },
   { kind: 'item', id: 'usecases',    label: 'Use Cases',         icon: Briefcase },
   { kind: 'item', id: 'process',     label: 'Process',           icon: Workflow },
-  { kind: 'item', id: 'compliance',  label: 'Compliance',        icon: ShieldCheck },
   { kind: 'item', id: 'config',      label: 'Configuration',     icon: Settings },
 ]
 
