@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from .database import get_connection, get_table_counts, init_db
 from .models import (
@@ -27,6 +29,83 @@ from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .query.engine import run_query
 
 load_dotenv()
+
+# ── Semantic Layer global state (lazy-initialised on first /api/semantic/* call) ──
+
+_semantic_state: dict[str, Any] = {
+    "loaded": False,
+    "layer": None,
+    "kg": None,
+    "catalog": None,
+    "erp": None,
+    "crm": None,
+    "hr_pim": None,
+}
+
+_SCENARIO_PATH = Path(__file__).parent.parent.parent / "test_scenario"
+
+
+def _ensure_semantic_loaded() -> None:
+    """Lazily build the semantic stack (connectors → KG → catalog → layer)."""
+    if _semantic_state["loaded"]:
+        return
+
+    from .connectors.postgres_connector import PostgresConnector
+    from .connectors.sqlite_connector import SQLiteConnector
+    from .connectors.file_connector import FileConnector
+    from .ontology.ontology import Ontology
+    from .kg.graph import KnowledgeGraph
+    from .metadata.catalog import MetadataCatalog
+    from .semantic.layer import SemanticLayer
+    from .context.manager import ContextManager
+
+    erp = PostgresConnector(_SCENARIO_PATH / "erp_postgres" / "orion_sales_dump.sql")
+    crm = SQLiteConnector(_SCENARIO_PATH / "crm_sqlite" / "clienthub.db")
+    hr_pim = FileConnector(
+        hr_csv_path=_SCENARIO_PATH / "hr_pim_files" / "dipendenti_hr.csv",
+        pim_json_path=_SCENARIO_PATH / "hr_pim_files" / "product_catalog_pim.json",
+    )
+
+    ontology_path = _SCENARIO_PATH / "ontology_example.yaml"
+    ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
+
+    kg = KnowledgeGraph()
+    kg.build(erp, crm, hr_pim)
+
+    catalog = MetadataCatalog()
+    catalog.populate([erp, crm, hr_pim], ontology, kg)
+
+    ctx_mgr = ContextManager()
+    layer = SemanticLayer(ontology, kg, catalog, ctx_mgr)
+    layer.set_connectors(erp, crm, hr_pim)
+
+    _semantic_state.update({
+        "loaded": True,
+        "layer": layer,
+        "kg": kg,
+        "catalog": catalog,
+        "erp": erp,
+        "crm": crm,
+        "hr_pim": hr_pim,
+    })
+
+
+# ── Pydantic models for semantic endpoints ──────────────────────────────────
+
+class SemanticAskRequest(BaseModel):
+    question: str
+
+
+class SemanticAskResponse(BaseModel):
+    answer: Any
+    sql_used: str | None = None
+    sources_touched: list[str] = []
+    provenance: dict[str, Any] = {}
+    latency_ms: float = 0.0
+    disambiguation_required: bool = False
+    candidates: list[str] = []
+    notes: str = ""
+    ambiguity_error: bool = False
 
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
@@ -212,3 +291,66 @@ def get_table_data(
         )
     finally:
         conn.close()
+
+
+# ── Semantic Layer endpoints ────────────────────────────────────────────────────
+
+
+@app.get("/api/semantic/status")
+def semantic_status() -> dict[str, Any]:
+    """Return the current status of the semantic layer (loaded/not loaded)."""
+    if not _semantic_state["loaded"]:
+        return {
+            "loaded": False,
+            "entities": [],
+            "kg_nodes": 0,
+            "kg_edges": 0,
+            "metadata_rows": 0,
+            "sources": [],
+            "dedup_count": 0,
+        }
+    kg = _semantic_state["kg"]
+    catalog = _semantic_state["catalog"]
+    return {
+        "loaded": True,
+        "entities": catalog.list_entities(),
+        "kg_nodes": kg.node_count,
+        "kg_edges": kg.edge_count,
+        "metadata_rows": catalog.row_count(),
+        "sources": ["erp", "crm", "hr_pim"],
+        "dedup_count": kg.dedup_count,
+    }
+
+
+@app.post("/api/semantic/ask")
+def semantic_ask(req: SemanticAskRequest) -> SemanticAskResponse:
+    """Ask a natural-language question to the Semantic Layer."""
+    from .semantic.layer import AmbiguityError
+
+    if not req.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    _ensure_semantic_loaded()
+    layer = _semantic_state["layer"]
+
+    try:
+        result = layer.ask(req.question)
+        return SemanticAskResponse(
+            answer=result.answer,
+            sql_used=result.sql_used,
+            sources_touched=result.sources_touched,
+            provenance=result.provenance,
+            latency_ms=result.latency_ms,
+            disambiguation_required=result.disambiguation_required,
+            candidates=result.candidates,
+            notes=result.notes,
+            ambiguity_error=False,
+        )
+    except AmbiguityError as e:
+        return SemanticAskResponse(
+            answer=None,
+            disambiguation_required=True,
+            candidates=e.candidates,
+            notes=str(e),
+            ambiguity_error=True,
+        )
