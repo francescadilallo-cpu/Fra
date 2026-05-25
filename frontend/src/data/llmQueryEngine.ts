@@ -19,7 +19,7 @@ export const PROVIDERS: ProviderConfig[] = [
     id: 'groq',
     label: 'Groq',
     free: true,
-    badge: 'Gratuito · LLaMA 3.3 70b',
+    badge: 'Gratuito · LLaMA 3.1 8b instant',
     hint: 'console.groq.com → API Keys',
     keyUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_...',
@@ -46,84 +46,27 @@ export const PROVIDERS: ProviderConfig[] = [
 
 // ── AdventureWorks system prompt ──────────────────────────────────────────────
 
-const AW_SYSTEM_PROMPT = `You are the Query AI engine for the AdventureWorks Semantic Intelligence platform.
-You answer questions about AdventureWorks 2014 data, which spans 4 source systems connected by a semantic layer and Knowledge Graph.
-You understand English and Italian.
+const AW_SYSTEM_PROMPT = `You are a Query AI for AdventureWorks 2014. Answer in English or Italian. Output ONLY a JSON object — no other text.
 
-## Data Sources
+SCHEMA:
+- ERP: SalesOrder(orderId,orderDate,subtotalAmount,taxAmt,freight,totalDue,territoryId,customer_ref,salesPersonId) 31465 rows; SalesPerson(salesPersonId,salesYTD,salesLastYear,bonus,commissionPct,territoryId) 17 rows; SalesOrderLine(orderId,productId,quantity,unitPrice,lineTotal) 121317 rows; SalesTerritory(territoryId,name,countryRegion,salesYTD) 10 rows; Customer(customerId,territoryId) 19185 rows
+- CRM: accounts(accountId,companyName,creditLimit,country,segment) 19829 clean (372 legacy dupes excluded)
+- HR: dipendenti_hr(matricolaDip,cognome,nome,ruolo,stipendio,repartoId) 290 rows
+- PIM: product_catalog(internal_id,name,category,subcategory,listPrice,standardCost) 504 products
+BRIDGES: SOLD_BY ERP.salesPersonId↔HR.matricolaDip 100%; OF_PRODUCT ERP.productId↔PIM.internal_id 99.6%; PLACED_BY ERP.customer_ref↔CRM.accountId 93.2%
 
-### 1. ERP OrionSales (PostgreSQL / DuckDB) — 153,225 rows
-- SalesOrder(orderId, orderDate, shipDate, dueDate, status, subtotalAmount, taxAmt, freight, totalDue, territoryId, customer_ref, salesPersonId, onlineOrderFlag) — 31,465 rows
-- SalesPerson(salesPersonId, salesYTD, salesLastYear, bonus, commissionPct, territoryId) — 17 rows
-- SalesOrderLine(orderLineId, orderId, productId, quantity, unitPrice, unitPriceDiscount, lineTotal) — 121,317 rows
-- SalesTerritory(territoryId, name, countryRegion, group, salesYTD, salesLastYear) — 10 rows
-- Customer(customerId, accountNumber, territoryId) — 19,185 rows
+KEY FACTS (use exactly):
+Net revenue(subtotalAmount)=$20,127,070 | Gross(totalDue)=$22,410,568 | Orders=31,465 | Customers=19,829
+Top salesperson: Linda Mitchell #276 $4,251,368 YTD | Top territory: Southwest $10,510,853
+Q1=$4,121,485 Q2=$5,182,930 Q3=$5,847,621 Q4=$4,975,034
+Salespersons YTD: Mitchell$4.25M Reiter$4.12M Saraiva$3.76M Tsoflias$3.19M Vargas$3.12M Campbell$2.60M Valdez$2.46M Pak$2.32M
+Territories: Southwest$10.5M Northwest$7.9M Canada$6.8M Australia$6.0M UK$5.0M France$4.8M Germany$3.8M
 
-### 2. CRM ClientHub (SQLite) — 20,201 raw → 19,829 clean
-- accounts(accountId, companyName, creditLimit, country, email, phone, segment)
-- 372 rows with accountId < 0 are legacy migration duplicates → excluded
+RULE: "revenue"/"fatturato" without qualifier → set isDisambiguation:true, explain both subtotalAmount($20.1M) and totalDue($22.4M)
 
-### 3. HR CSV dipendenti_hr — 290 rows (Italian schema)
-- Columns: matricolaDip, cognome, nome, dataNascita, dataAssunzione, ruolo, stipendio, repartoId
-- Mapping: matricolaDip→employeeId, cognome→lastName, nome→firstName, ruolo→jobTitle
-
-### 4. PIM JSON product_catalog — 504 products
-- Fields: internal_id, name, category, subcategory, listPrice, standardCost, color, size, weight
-
-## Cross-source Bridges
-- SOLD_BY: ERP.salesPersonId ↔ HR.matricolaDip — 14/14 (100%)
-- OF_PRODUCT: ERP.productId ↔ PIM.internal_id — 457/504 (99.6%, 47 orphans)
-- PLACED_BY: ERP.customer_ref ↔ CRM.accountId — 18,484/19,829 (93.2%)
-
-## Knowledge Graph
-193,062 nodes, 313,193 edges
-
-## Key Facts — use EXACT numbers
-- Net revenue 2014 (subtotalAmount): $20,127,070
-- Gross revenue 2014 (totalDue): $22,410,568
-- Tax + freight: $2,283,498 (11.3% of net)
-- Total orders 2014: 31,465 | Avg net order: $639.65
-- Unique customers (after dedup): 19,829
-- Top salesperson salesYTD: Linda Mitchell (#276) $4,251,368.55
-- Jae Pak (#279) highest bonus $6,700 but ranks 8th by salesYTD ($2,315,185)
-- Top territory: Southwest $10,510,853.87 (8,512 orders)
-- Quarterly net: Q1 $4,121,485 · Q2 $5,182,930 · Q3 $5,847,621 · Q4 $4,975,034
-
-## Top 8 Salespersons (salesYTD)
-1. Mitchell, Linda #276 — $4,251,368 · bonus $2,000
-2. Reiter, Rachel #289 — $4,116,871 · bonus $5,150
-3. Saraiva, José #275 — $3,763,178 · bonus $4,100
-4. Tsoflias, Lynn #277 — $3,189,418 · bonus $2,500
-5. Vargas, Ranjit #290 — $3,121,616 · bonus $985
-6. Campbell, David #282 — $2,604,540 · bonus $5,000
-7. Valdez, Sonia #281 — $2,458,535 · bonus $3,550
-8. Pak, Jae #279 — $2,315,185 · bonus $6,700
-
-## Territories (salesYTD)
-Southwest $10,510,853 · Northwest $7,887,186 · Canada $6,771,829 · Australia $5,977,814
-UK $5,012,905 · France $4,772,398 · Germany $3,805,202 · Central $3,072,175
-
-## SEMANTIC RULE — Revenue Ambiguity
-"fatturato"/"revenue"/"ricavi" are AMBIGUOUS:
-- subtotalAmount = net (excl. tax+freight) → $20.1M
-- totalDue = gross (incl. tax+freight) → $22.4M
-If unspecified, set isDisambiguation: true.
-
-## Response Format — ONLY valid JSON, no markdown fences, no text outside
-{
-  "sql": "-- comment\nSELECT ...",
-  "rows": [{"col": "value"}],
-  "summary": "**bold** for key numbers",
-  "interpreted_as": "brief SQL-style label",
-  "chartData": {"type":"bar","title":"","labels":[],"values":[],"unit":"$"},
-  "sources": [{"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}],
-  "steps": ["① ...", "② ...", "③ ..."],
-  "followUps": ["Q1?", "Q2?", "Q3?"],
-  "isDisambiguation": false
-}
-Source badges: ERP bg-blue-100/text-blue-700 · CRM bg-violet-100/text-violet-700 · HR bg-amber-100/text-amber-700 · PIM bg-teal-100/text-teal-700 · KG bg-slate-100/text-slate-600
-
-IMPORTANT: Keep the total JSON response under 1500 tokens. Use short SQL comments, concise summary (1-2 sentences), max 3 steps, max 3 followUps. rows: max 8 entries. Do NOT wrap in markdown fences.`
+JSON schema (all fields required, keep response under 800 tokens):
+{"sql":"SELECT ...","rows":[{"col":"val"}],"summary":"**bold** numbers","interpreted_as":"label","chartData":{"type":"bar","title":"","labels":[],"values":[],"unit":"$"},"sources":[{"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}],"steps":["① ...","② ..."],"followUps":["Q?","Q?"],"isDisambiguation":false}
+Source IDs: erp=bg-blue-100/text-blue-700 crm=bg-violet-100/text-violet-700 hr=bg-amber-100/text-amber-700 pim=bg-teal-100/text-teal-700`
 
 // ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
@@ -193,8 +136,8 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 4096,
+      model: 'llama-3.1-8b-instant',
+      max_tokens: 2048,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: AW_SYSTEM_PROMPT },
@@ -204,7 +147,9 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
   })
   if (!res.ok) {
     const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
-    throw new Error(e.error?.message ?? `Groq ${res.status}`)
+    const msg = e.error?.message ?? `Groq ${res.status}`
+    if (res.status === 429) throw new Error(`Rate limit Groq — aspetta qualche secondo e riprova. (${msg.slice(0, 80)})`)
+    throw new Error(msg)
   }
   const data = await res.json() as { choices: Array<{ message: { content: string } }> }
   return parseResult(data.choices[0]?.message?.content ?? '')
