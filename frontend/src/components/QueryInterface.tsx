@@ -560,7 +560,7 @@ export default function QueryInterface() {
       }
 
       const entities = ontology.nodes
-        .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
+        .filter(n => n.data.db_table && result.sql?.toLowerCase().includes(n.data.db_table.toLowerCase()))
         .map(n => n.data.label)
 
       const assistantMsg: Message = {

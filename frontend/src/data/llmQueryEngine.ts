@@ -121,7 +121,9 @@ If unspecified, set isDisambiguation: true.
   "followUps": ["Q1?", "Q2?", "Q3?"],
   "isDisambiguation": false
 }
-Source badges: ERP bg-blue-100/text-blue-700 · CRM bg-violet-100/text-violet-700 · HR bg-amber-100/text-amber-700 · PIM bg-teal-100/text-teal-700 · KG bg-slate-100/text-slate-600`
+Source badges: ERP bg-blue-100/text-blue-700 · CRM bg-violet-100/text-violet-700 · HR bg-amber-100/text-amber-700 · PIM bg-teal-100/text-teal-700 · KG bg-slate-100/text-slate-600
+
+IMPORTANT: Keep the total JSON response under 1500 tokens. Use short SQL comments, concise summary (1-2 sentences), max 3 steps, max 3 followUps. rows: max 8 entries. Do NOT wrap in markdown fences.`
 
 // ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
@@ -172,7 +174,7 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
     },
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 2048,
+      max_tokens: 4096,
       messages: [
         { role: 'system', content: AW_SYSTEM_PROMPT },
         { role: 'user', content: question },
