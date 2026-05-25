@@ -14,15 +14,37 @@ interface SemanticDef {
 }
 
 const INITIAL_DEFS: SemanticDef[] = [
-  { entity: 'SalesOrder', field: 'subtotal_amount', definition: 'Net order amount before taxes and shipping. Use for "commercial revenue" ($20.1M 2014).', status: 'ok' },
-  { entity: 'SalesOrder', field: 'total_due',       definition: 'Total amount due including taxes and freight. Use for "gross revenue" ($22.4M 2014).', status: 'ambiguous' },
-  { entity: 'SalesOrder', field: 'online_order_flag', definition: 'TRUE = online order (B2C), FALSE = offline order (B2B via sales rep).', status: 'ok' },
-  { entity: 'Customer',   field: 'accountId',       definition: 'CRM primary key. Negative values = duplicates from legacy migration. Removed from KG (372 accounts).', status: 'ok' },
-  { entity: 'Customer',   field: 'customer_ref',    definition: 'Foreign key in ERP pointing to CRM.accountId. Main ERP↔CRM bridge.', status: 'ok' },
-  { entity: 'Employee',   field: 'matricolaDip',    definition: 'HR employee code (Italian schema). Corresponds to salesperson_ref in ERP for the ERP↔HR bridge.', status: 'ok' },
-  { entity: 'Employee',   field: 'cognome',         definition: 'Employee last name (Italian). Maps to Employee.lastName in the semantic layer.', status: 'ok' },
-  { entity: 'Product',    field: 'internal_id',     definition: 'PIM product code. Corresponds to product_ref in ERP for the ERP↔PIM bridge.', status: 'ok' },
-  { entity: 'Territory',  field: 'sales_ytd',       definition: 'Territory year-to-date revenue. Southwest = top territory ($7.9M, 6,692 orders).', status: 'ok' },
+  // SalesOrder (ERP — OrionSales)
+  { entity: 'SalesOrder', field: 'subtotalAmount',   definition: 'Net order amount before taxes and shipping costs. Canonical "commercial revenue" — use for sales metrics ($20.1M total 2014).', status: 'ok' },
+  { entity: 'SalesOrder', field: 'totalDue',         definition: 'Gross amount billed to customer — includes taxes and freight. Use for finance/accounting contexts ($22.4M total 2014, +$2.3M vs subtotal).', status: 'ambiguous' },
+  { entity: 'SalesOrder', field: 'onlineOrderFlag',  definition: 'TRUE = online B2C order (self-service). FALSE = offline B2B order placed through a sales representative.', status: 'ok' },
+  { entity: 'SalesOrder', field: 'status',           definition: 'Order lifecycle status: Confirmed (open, not shipped), Processing (being prepared), Shipped (en route), Delivered (complete).', status: 'ok' },
+  { entity: 'SalesOrder', field: 'orderDate',        definition: 'Date the order was placed by the customer or entered by the sales rep. Reference date for all revenue period calculations.', status: 'ok' },
+  // Customer (CRM — ClientHub)
+  { entity: 'Customer',   field: 'accountId',        definition: 'CRM primary key (integer). Values < 0 are duplicates from a legacy migration — 372 such records removed from the Knowledge Graph.', status: 'ok' },
+  { entity: 'Customer',   field: 'accountNumber',    definition: 'Human-readable customer code (string). Stable across system migrations. Used for manual cross-reference with legacy ERP data.', status: 'ok' },
+  { entity: 'Customer',   field: 'customerType',     definition: 'Customer classification: "Company" (B2B reseller/retailer) or "Individual" (B2C direct buyer). Drives pricing tier and rep assignment.', status: 'todo' },
+  // Salesperson / Employee bridges
+  { entity: 'Salesperson', field: 'salesPersonId',  definition: 'ERP primary key for the salesperson. Bridges to HR.matricolaDip for cross-source ERP↔HR join.', status: 'ok' },
+  { entity: 'Salesperson', field: 'salesYTD',       definition: 'Year-to-date sales revenue attributed to this rep (ERP). Top: Linda Mitchell $4.25M, Rachel Reiter $4.12M (2014).', status: 'ok' },
+  { entity: 'Salesperson', field: 'bonus',          definition: 'Annual bonus paid to the salesperson. Not proportional to revenue — Jae Pak has highest bonus ($6,700) but ranks 8th in YTD revenue.', status: 'ambiguous' },
+  { entity: 'Salesperson', field: 'commissionPct',  definition: 'Commission rate applied to net sales (subtotalAmount). Ranges from 1.0% to 2.0% across reps.', status: 'ok' },
+  // Employee (HR CSV — Italian schema)
+  { entity: 'Employee',   field: 'matricolaDip',    definition: 'HR employee ID (Italian: "matricola dipendente"). ERP↔HR bridge key — maps to Salesperson.salesPersonId. 14/14 reps matched.', status: 'ok' },
+  { entity: 'Employee',   field: 'cognome',         definition: 'Employee last name (Italian schema). Semantic layer maps this to Employee.lastName in English queries.', status: 'ok' },
+  { entity: 'Employee',   field: 'nome',            definition: 'Employee first name (Italian schema). Semantic layer maps this to Employee.firstName in English queries.', status: 'ok' },
+  { entity: 'Employee',   field: 'ruolo',           definition: 'Job title (Italian: "ruolo"). Maps to Employee.jobTitle. Examples: "Sales Representative", "Sales Manager", "Engineering Manager".', status: 'ok' },
+  { entity: 'Employee',   field: 'dataAssunzione',  definition: 'Hire date (Italian: "data di assunzione"). All sales staff hired 2007–2009 — useful for tenure-based performance analysis.', status: 'ok' },
+  // Product (PIM — JSON)
+  { entity: 'Product',    field: 'internalId',      definition: 'PIM product identifier. ERP↔PIM bridge key — maps to SalesOrderLine.product_ref. 504 products in catalog; 47 SalesOrderLine rows have no PIM match.', status: 'ok' },
+  { entity: 'Product',    field: 'listPrice',       definition: 'Published catalog price (USD). Not the actual sale price — discounts and offers applied at SalesOrderLine level via offerRef.', status: 'ok' },
+  { entity: 'Product',    field: 'category',        definition: 'Top-level product category: "Bikes" (highest revenue), "Accessories", "Clothing", "Components". Bikes drive ~85% of line item revenue.', status: 'ok' },
+  // Territory (ERP)
+  { entity: 'Territory',  field: 'salesYTD',        definition: 'Territory year-to-date revenue (ERP aggregate). Southwest leads at $10.5M, Northwest $7.9M, Canada $6.8M. 10 territories total.', status: 'ok' },
+  { entity: 'Territory',  field: 'group',           definition: 'Geographic group: "North America" (5 territories), "Europe" (3: UK, France, Germany), "Pacific" (Australia). North America = $32.7M.', status: 'ok' },
+  // SalesOrderLine (ERP)
+  { entity: 'SalesOrderLine', field: 'unitPrice',   definition: 'Actual unit sale price after any list price adjustments. May differ from Product.listPrice when volume or seasonal discounts apply.', status: 'ok' },
+  { entity: 'SalesOrderLine', field: 'offerRef',    definition: 'Foreign key to the Offer/discount applied on this line. offerRef=1 = No Discount; higher values = volume or seasonal discounts (up to 50% off).', status: 'ok' },
 ]
 
 const STATUS_BADGE: Record<SemanticDef['status'], string> = {
@@ -33,22 +55,40 @@ const STATUS_BADGE: Record<SemanticDef['status'], string> = {
 
 const AMBIGUITIES = [
   {
-    term: 'fatturato',
-    context: 'SalesOrder (ERP)',
+    term: 'fatturato / revenue',
+    context: 'SalesOrder (ERP — OrionSales)',
     candidates: [
-      { label: 'subtotal_amount', desc: 'Net taxable amount — $20,057,928 (2014)', recommended: true },
-      { label: 'total_due',       desc: 'Total with taxes+freight — $22,419,498 (2014)', recommended: false },
+      { label: 'subtotalAmount — $20,127,070', desc: 'Net commercial revenue, excl. taxes and freight. Use for sales performance, rep KPIs, territory ranking.', recommended: true },
+      { label: 'totalDue — $22,410,568',       desc: 'Gross billed amount including taxes + freight ($2.3M delta). Use for finance, AR, billing reconciliation.', recommended: false },
     ],
-    resolution: 'Query AI asks for disambiguation. If context = "commercial" → subtotal. If "financial/accounting" → total_due.',
+    resolution: 'Query AI disambiguates at query time. "commercial revenue" → subtotalAmount. "billed" / "total due" / "invoiced" → totalDue. When ambiguous, shows both and asks.',
   },
   {
-    term: 'cliente',
-    context: 'CRM (account) vs ERP (customer_ref)',
+    term: 'customer count / clienti',
+    context: 'CRM — ClientHub (SQLite)',
     candidates: [
-      { label: 'CRM.account (20,201)', desc: 'Includes 372 duplicates with accountId < 0', recommended: false },
-      { label: 'CRM.account dedup (19,829)', desc: 'Valid accounts only, after dedup removal', recommended: true },
+      { label: 'CRM raw — 20,201 accounts', desc: 'Includes 372 duplicates with accountId < 0 from legacy migration. Inflates customer count by 1.9%.', recommended: false },
+      { label: 'CRM dedup — 19,829 accounts', desc: 'Clean unique accounts after removing negative-ID duplicates. Canonical source for the Knowledge Graph.', recommended: true },
     ],
-    resolution: 'The KG always uses the dedup version. Show 19,829 as "unique customers".',
+    resolution: 'Knowledge Graph always uses 19,829 unique accounts. Any query on "customers" or "clienti" returns the dedup figure. Raw count only shown in audit/data quality views.',
+  },
+  {
+    term: 'bonus vs commissionPct',
+    context: 'Salesperson (ERP)',
+    candidates: [
+      { label: 'bonus — fixed annual amount ($75 to $6,700)', desc: 'Discretionary bonus paid annually. Jae Pak has highest ($6,700) despite ranking 8th in YTD revenue — not performance-proportional.', recommended: false },
+      { label: 'commissionPct × salesYTD', desc: 'Variable commission: actual earnings proportional to net sales (1.0%–2.0%). Linda Mitchell earns ~$42.5K commission on $4.25M YTD.', recommended: true },
+    ],
+    resolution: 'Use commissionPct × salesYTD to compare rep economic outcomes. Bonus is a separate discretionary component — do not conflate with performance pay.',
+  },
+  {
+    term: 'top salesperson',
+    context: 'Salesperson × Employee (ERP × HR)',
+    candidates: [
+      { label: 'By salesYTD — Linda Mitchell ($4.25M)', desc: 'Highest revenue producer 2014. Manages Southwest + Northwest territories.', recommended: true },
+      { label: 'By bonus — Jae Pak ($6,700)', desc: 'Highest bonus but 8th in revenue ($2.3M YTD, Southeast). Bonus not revenue-correlated.', recommended: false },
+    ],
+    resolution: '"Top salesperson" in sales context = highest salesYTD = Linda Mitchell. Query AI defaults to this. Only use bonus ranking when explicitly asked about compensation.',
   },
 ]
 
