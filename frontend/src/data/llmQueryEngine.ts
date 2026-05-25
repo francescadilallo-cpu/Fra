@@ -195,6 +195,7 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
     body: JSON.stringify({
       model: 'llama-3.3-70b-versatile',
       max_tokens: 4096,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: AW_SYSTEM_PROMPT },
         { role: 'user', content: question },
@@ -217,7 +218,7 @@ async function callGemini(question: string, apiKey: string): Promise<EngineResul
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: AW_SYSTEM_PROMPT }] },
       contents: [{ parts: [{ text: question }] }],
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.2 },
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.2, responseMimeType: 'application/json' },
     }),
   })
   if (!res.ok) {
