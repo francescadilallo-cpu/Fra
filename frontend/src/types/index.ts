@@ -77,7 +77,7 @@ export interface OntologyEdge {
   label: string
   type: string
   animated: boolean
-  style: Record<string, string>
+  style: Record<string, string | number>
   labelStyle: Record<string, string | number>
   markerEnd: Record<string, string>
   cardinality?: '1:1' | '1:N' | 'N:1' | 'N:M'

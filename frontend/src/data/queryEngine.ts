@@ -865,6 +865,303 @@ ORDER BY match_pct DESC`,
       ],
     }),
   },
+
+  // ── Product categories ────────────────────────────────────────────────────────
+  {
+    test: q => /\bcategor|bike|bicycle|mountain.*bike|road.*bike|touring|cloth|accessori/i.test(q),
+    result: () => ({
+      sql: `-- Revenue and unit distribution by product category (ERP × PIM)
+SELECT   p.category,
+         COUNT(DISTINCT p.internal_id)  AS products,
+         SUM(sol.quantity)              AS units_sold,
+         SUM(sol.lineTotal)             AS revenue,
+         AVG(p.listPrice)               AS avg_list_price
+FROM     pim.product_catalog p
+JOIN     erp.SalesOrderLine sol ON sol.productId = p.internal_id
+GROUP BY p.category
+ORDER BY revenue DESC`,
+      rows: [
+        { category: 'Bikes',       products: 97,  units_sold: 15_204, revenue: 19_791_723, avg_list_price: 1508.46 },
+        { category: 'Components',  products: 189, units_sold: 82_341, revenue:   931_644,  avg_list_price:  218.30 },
+        { category: 'Clothing',    products: 35,  units_sold: 14_987, revenue:   339_772,  avg_list_price:   34.82 },
+        { category: 'Accessories', products: 36,  units_sold: 9_082,  revenue:   231_521,  avg_list_price:   25.23 },
+      ],
+      summary: '**Bikes dominate**: $19.8M revenue (98% of net), 97 SKUs. Components $932K, Clothing $340K, Accessories $232K. Bikes avg list price $1,508 vs Accessories $25. Cross-source: ERP SalesOrderLine × PIM product_catalog.',
+      interpreted_as: 'PIM.category GROUP BY category · SUM(lineTotal) · ERP × PIM bridge',
+      chartData: {
+        type: 'bar',
+        title: 'Revenue by product category (ERP × PIM)',
+        labels: ['Bikes', 'Components', 'Clothing', 'Accessories'],
+        values: [19791723, 931644, 339772, 231521],
+        unit: '$',
+      },
+      sources: [SRC.ERP, SRC.PIM],
+      steps: [
+        '① PIM product_catalog: 504 products across 4 categories',
+        '② Bridge OF_PRODUCT: productId ↔ internal_id (457/504 — 99.6%)',
+        '③ GROUP BY category · SUM(lineTotal) for revenue · AVG(listPrice)',
+        '④ Bikes = 97 SKUs but 98% of revenue — high unit price drives result',
+      ],
+      followUps: [
+        'Which products generated the most revenue?',
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+      ],
+    }),
+  },
+  // ── Online vs in-store channel ────────────────────────────────────────────────
+  {
+    test: q => /online|in.?store|channel|e.?commerce|web.*order|canale|direct.*sale/i.test(q),
+    result: () => ({
+      sql: `-- Online vs in-store order split (ERP SalesOrder)
+SELECT
+  CASE WHEN onlineOrderFlag = 1 THEN 'Online' ELSE 'In-store' END AS channel,
+  COUNT(*)                    AS orders,
+  SUM(subtotalAmount)         AS net_revenue,
+  AVG(subtotalAmount)         AS avg_order_value,
+  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS pct_orders
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY onlineOrderFlag
+ORDER BY orders DESC`,
+      rows: [
+        { channel: 'Online',   orders: 27_659, net_revenue: '$9,836,152',  avg_order_value: '$355.60', pct_orders: '87.9%' },
+        { channel: 'In-store', orders:  3_806, net_revenue: '$10,290,918', avg_order_value: '$2,704.39', pct_orders: '12.1%' },
+      ],
+      summary: '**87.9% of orders are online** (27,659) but in-store orders have **7.6× higher avg value** ($2,704 vs $356). In-store revenue ($10.3M) narrowly edges online ($9.8M) despite far fewer transactions.',
+      interpreted_as: 'ERP.SalesOrder · GROUP BY onlineOrderFlag · 2014',
+      chartData: {
+        type: 'bar',
+        title: 'Net revenue by channel — 2014',
+        labels: ['In-store', 'Online'],
+        values: [10290918, 9836152],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder: onlineOrderFlag decoded → Online / In-store',
+        '② Filter: YEAR(orderDate) = 2014 · 31,465 orders',
+        '③ GROUP BY channel · COUNT · SUM(subtotalAmount) · AVG(subtotalAmount)',
+        '④ Insight: online = volume, in-store = value (7.6× higher avg order)',
+      ],
+      followUps: [
+        'Show orders by territory ranked by sales YTD',
+        'Who is the top salesperson by revenue in 2014?',
+        'What is our total revenue — subtotal vs total due?',
+      ],
+    }),
+  },
+  // ── Bonus & commission ────────────────────────────────────────────────────────
+  {
+    test: q => /bonus|commission|compensat|incentiv|pay.*salesrep|salesrep.*pay|stipendio.*sales/i.test(q),
+    result: () => ({
+      sql: `-- Salesperson compensation vs YTD performance (ERP × HR)
+SELECT e.cognome || ', ' || e.nome AS salesperson,
+       sp.salesYTD,
+       sp.bonus,
+       sp.commissionPct,
+       ROUND(sp.bonus + sp.salesYTD * sp.commissionPct / 100, 2) AS est_total_comp,
+       ROUND(sp.bonus * 100.0 / sp.salesYTD, 4)                  AS bonus_pct_ytd
+FROM   erp.SalesPerson sp
+JOIN   hr.dipendenti_hr e ON sp.salesPersonId = e.matricolaDip
+ORDER  BY sp.bonus DESC`,
+      rows: [
+        { salesperson: 'Pak, Jae',          salesYTD: 2315185.61, bonus: 6700, commissionPct: '1.0%', est_total_comp: 29851.86, bonus_pct_ytd: '0.29%' },
+        { salesperson: 'Reiter, Rachel',    salesYTD: 4116871.23, bonus: 5150, commissionPct: '2.0%', est_total_comp: 87487.42, bonus_pct_ytd: '0.13%' },
+        { salesperson: 'Campbell, David',   salesYTD: 2604540.72, bonus: 5000, commissionPct: '1.5%', est_total_comp: 44068.11, bonus_pct_ytd: '0.19%' },
+        { salesperson: 'Saraiva, José',     salesYTD: 3763178.18, bonus: 4100, commissionPct: '1.2%', est_total_comp: 49258.14, bonus_pct_ytd: '0.11%' },
+        { salesperson: 'Valdez, Sonia',     salesYTD: 2458535.62, bonus: 3550, commissionPct: '1.0%', est_total_comp: 28135.36, bonus_pct_ytd: '0.14%' },
+        { salesperson: 'Tsoflias, Lynn',    salesYTD: 3189418.37, bonus: 2500, commissionPct: '1.5%', est_total_comp: 50341.28, bonus_pct_ytd: '0.08%' },
+        { salesperson: 'Mitchell, Linda',   salesYTD: 4251368.55, bonus: 2000, commissionPct: '1.5%', est_total_comp: 65770.53, bonus_pct_ytd: '0.05%' },
+        { salesperson: 'Vargas, Ranjit',    salesYTD: 3121616.32, bonus:  985, commissionPct: '1.6%', est_total_comp: 50930.86, bonus_pct_ytd: '0.03%' },
+      ],
+      summary: '**Jae Pak** has the highest bonus ($6,700) but ranks 8th by salesYTD. **Rachel Reiter** has the highest estimated total comp ($87K: 2% commission + bonus). **Linda Mitchell** #1 by revenue but modest bonus ($2,000). Cross-source: ERP × HR bridge.',
+      interpreted_as: 'ERP.SalesPerson JOIN HR.dipendenti_hr · ORDER BY bonus DESC',
+      sources: [SRC.ERP, SRC.HR],
+      steps: [
+        '① Bridge SOLD_BY: salesPersonId ↔ matricolaDip (14/14 — 100%)',
+        '② ERP: salesYTD, bonus, commissionPct per sales rep',
+        '③ Calculated: est_total_comp = bonus + salesYTD × commissionPct',
+        '④ Insight: highest bonus ≠ highest revenue (Pak vs Mitchell)',
+      ],
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'What is our total revenue — subtotal vs total due?',
+      ],
+    }),
+  },
+  // ── Average order value ───────────────────────────────────────────────────────
+  {
+    test: q => /average.*order|avg.*order|order.*value|mean.*order|valore.*medio|ordine.*medio/i.test(q),
+    result: () => ({
+      sql: `-- Average order value by channel and quarter (ERP SalesOrder)
+SELECT
+  CASE WHEN onlineOrderFlag = 1 THEN 'Online' ELSE 'In-store' END AS channel,
+  CONCAT('Q', DATEPART(quarter, orderDate)) AS quarter,
+  COUNT(*)               AS orders,
+  AVG(subtotalAmount)    AS avg_net,
+  AVG(totalDue)          AS avg_gross,
+  MIN(subtotalAmount)    AS min_order,
+  MAX(subtotalAmount)    AS max_order
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY onlineOrderFlag, DATEPART(quarter, orderDate)
+ORDER BY channel, quarter`,
+      rows: [
+        { channel: 'In-store', quarter: 'Q1', orders: 901,  avg_net: 2628.16, avg_gross: 2814.23, min_order: 2.29,    max_order: 187487.83 },
+        { channel: 'In-store', quarter: 'Q2', orders: 1102, avg_net: 2851.90, avg_gross: 3054.37, min_order: 5.70,    max_order: 217628.97 },
+        { channel: 'In-store', quarter: 'Q3', orders: 1187, avg_net: 2791.44, avg_gross: 2988.96, min_order: 3.99,    max_order: 189519.73 },
+        { channel: 'In-store', quarter: 'Q4', orders:  616, avg_net: 2380.09, avg_gross: 2549.06, min_order: 0.99,    max_order: 112103.14 },
+        { channel: 'Online',   quarter: 'Q1', orders: 6411, avg_net:  342.41, avg_gross: 366.71,  min_order: 2.29,    max_order:   9887.43 },
+        { channel: 'Online',   quarter: 'Q2', orders: 7102, avg_net:  365.98, avg_gross: 391.90,  min_order: 2.29,    max_order:  12049.37 },
+        { channel: 'Online',   quarter: 'Q3', orders: 7660, avg_net:  382.13, avg_gross: 409.01,  min_order: 2.29,    max_order:  11988.73 },
+        { channel: 'Online',   quarter: 'Q4', orders: 6486, avg_net:  308.97, avg_gross: 331.04,  min_order: 1.99,    max_order:   9437.82 },
+      ],
+      summary: 'Global avg order net: **$639.65**. In-store avg **$2,704** (7.6× higher than online $356). Q2 is peak for both channels. Largest single order: $217K in-store Q2 2014.',
+      interpreted_as: 'ERP.SalesOrder · AVG(subtotalAmount) GROUP BY channel, quarter · 2014',
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder: 31,465 orders in 2014',
+        '② Split by channel (onlineOrderFlag) and quarter',
+        '③ AVG, MIN, MAX of subtotalAmount and totalDue per group',
+        '④ Global avg: $20,127,070 ÷ 31,465 orders = $639.65',
+      ],
+      followUps: [
+        'Show orders by territory ranked by sales YTD',
+        'What is our total revenue — subtotal vs total due?',
+        'Who is the top salesperson by revenue in 2014?',
+      ],
+    }),
+  },
+  // ── Quarterly analysis ────────────────────────────────────────────────────────
+  {
+    test: q => /\bquart|\bQ1\b|\bQ2\b|\bQ3\b|\bQ4\b|quarterly|trimest/i.test(q),
+    result: () => ({
+      sql: `-- Full quarterly breakdown 2014 — revenue, orders, avg, channel split
+SELECT
+  CONCAT('Q', DATEPART(quarter, orderDate), ' 2014') AS quarter,
+  COUNT(*)                         AS orders,
+  SUM(subtotalAmount)              AS net_revenue,
+  SUM(totalDue)                    AS gross_revenue,
+  AVG(subtotalAmount)              AS avg_order_net,
+  SUM(CASE WHEN onlineOrderFlag=1 THEN 1 ELSE 0 END) AS online_orders,
+  SUM(CASE WHEN onlineOrderFlag=0 THEN 1 ELSE 0 END) AS store_orders
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY DATEPART(quarter, orderDate)
+ORDER BY quarter`,
+      rows: [
+        { quarter: 'Q1 2014', orders: 7312,  net_revenue: 4121485,  gross_revenue: 4588234,  avg_order_net: 563.63, online_orders: 6411, store_orders: 901 },
+        { quarter: 'Q2 2014', orders: 8204,  net_revenue: 5182930,  gross_revenue: 5768412,  avg_order_net: 631.76, online_orders: 7102, store_orders: 1102 },
+        { quarter: 'Q3 2014', orders: 8847,  net_revenue: 5847621,  gross_revenue: 6504891,  avg_order_net: 661.07, online_orders: 7660, store_orders: 1187 },
+        { quarter: 'Q4 2014', orders: 7102,  net_revenue: 4975034,  gross_revenue: 5549031,  avg_order_net: 700.51, online_orders: 6486, store_orders: 616 },
+      ],
+      summary: '**Q3 2014 is the peak quarter** ($5.85M net, 8,847 orders). Q4 has the highest avg order ($700) despite fewer orders. Full year: $20.1M net / $22.4M gross. Q4 store_orders drop sharply (616 vs 1,187 in Q3).',
+      interpreted_as: 'ERP.SalesOrder GROUP BY quarter · net + gross + channel split · 2014',
+      chartData: {
+        type: 'bar',
+        title: 'Net revenue by quarter — 2014',
+        labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
+        values: [4121485, 5182930, 5847621, 4975034],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder: 31,465 orders filtered to YEAR 2014',
+        '② GROUP BY DATEPART(quarter) · 4 groups',
+        '③ SUM net + gross · AVG net · channel split by onlineOrderFlag',
+        '④ Q3 peak: highest orders (8,847) and highest net ($5.85M)',
+      ],
+      followUps: [
+        'What is our total revenue — subtotal vs total due?',
+        'Show online vs in-store channel breakdown',
+        'Who is the top salesperson by revenue in 2014?',
+      ],
+    }),
+  },
+  // ── Year-over-year comparison ─────────────────────────────────────────────────
+  {
+    test: q => /2011|year.{0,10}year|year.{0,10}compar|yoy|annual.{0,10}compar|confronto.*anno|vs.*2014/i.test(q),
+    result: () => ({
+      sql: `-- Year-over-year comparison: 2011 vs 2014 (ERP SalesOrder)
+SELECT
+  YEAR(orderDate)           AS year,
+  COUNT(*)                  AS orders,
+  SUM(subtotalAmount)       AS net_revenue,
+  AVG(subtotalAmount)       AS avg_order,
+  COUNT(DISTINCT customer_ref) AS unique_customers
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) IN (2011, 2014)
+GROUP BY YEAR(orderDate)
+ORDER BY year`,
+      rows: [
+        { year: 2011, orders: 1607,  net_revenue: 12646110,  avg_order:  7868.49, unique_customers: 1401 },
+        { year: 2014, orders: 31465, net_revenue: 20127070,  avg_order:   639.65, unique_customers: 19829 },
+        { year: 'Δ (2011→2014)', orders: '+29858 (+1858%)', net_revenue: '+$7,480,960 (+59%)', avg_order: '-$7,229 (-92%)', unique_customers: '+18,428 (+1315%)' },
+      ],
+      summary: '**Orders grew 1,858%** from 2011→2014 (1,607→31,465) but **avg order dropped 92%** ($7,868→$640) as online channel expanded. Net revenue grew +59% ($12.6M→$20.1M). Customer base grew 13×.',
+      interpreted_as: 'ERP.SalesOrder · GROUP BY YEAR · 2011 vs 2014 comparison',
+      chartData: {
+        type: 'bar',
+        title: 'Net revenue 2011 vs 2014',
+        labels: ['2011', '2014'],
+        values: [12646110, 20127070],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder filtered to YEAR IN (2011, 2014)',
+        '② 2011: 1,607 orders — mostly large in-store orders (avg $7,868)',
+        '③ 2014: 31,465 orders — online expansion drove volume, avg order fell to $640',
+        '④ Net revenue +59% · orders +1,858% · avg order -92% → channel mix shift',
+      ],
+      followUps: [
+        'Show online vs in-store channel breakdown',
+        'What is our total revenue — subtotal vs total due?',
+        'Who is the top salesperson by revenue in 2014?',
+      ],
+    }),
+  },
+  // ── Tax & freight analysis ────────────────────────────────────────────────────
+  {
+    test: q => /tax|freight|spese.*spediz|spedizione|shipping.?cost|tasse|impost/i.test(q),
+    result: () => ({
+      sql: `-- Tax and freight breakdown by territory (ERP SalesOrder)
+SELECT t.name           AS territory,
+       COUNT(o.orderId) AS orders,
+       SUM(o.taxAmt)    AS total_tax,
+       SUM(o.freight)   AS total_freight,
+       SUM(o.taxAmt + o.freight) AS total_overhead,
+       ROUND(SUM(o.taxAmt + o.freight) * 100.0 / SUM(o.totalDue), 1) AS overhead_pct
+FROM   erp.SalesOrder o
+JOIN   erp.SalesTerritory t ON o.territoryId = t.territoryId
+WHERE  YEAR(o.orderDate) = 2014
+GROUP  BY t.territoryId
+ORDER  BY total_overhead DESC`,
+      rows: [
+        { territory: 'Southwest',      orders: 8512, total_tax: 906432, total_freight: 226608, total_overhead: 1133040, overhead_pct: '10.8%' },
+        { territory: 'Northwest',      orders: 6438, total_tax: 680145, total_freight: 170036, total_overhead: 850181, overhead_pct: '10.8%' },
+        { territory: 'Canada',         orders: 4821, total_tax: 0,       total_freight: 127843, total_overhead: 127843, overhead_pct: '1.9%' },
+        { territory: 'Australia',      orders: 3944, total_tax: 0,       total_freight: 104634, total_overhead: 104634, overhead_pct: '1.7%' },
+        { territory: 'United Kingdom', orders: 3201, total_tax: 0,       total_freight: 84981,  total_overhead: 84981,  overhead_pct: '1.7%' },
+      ],
+      summary: 'Total 2014 overhead: **$2,283,498** (tax $1,717,041 + freight $566,457). US territories pay ~10.8% overhead; international territories pay freight only (no US sales tax). Tax + freight = **11.3% of net revenue**.',
+      interpreted_as: 'ERP.SalesOrder · SUM(taxAmt + freight) GROUP BY territory · 2014',
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder: taxAmt and freight are separate columns',
+        '② JOIN SalesTerritory for geographic grouping',
+        '③ US territories (Southwest, Northwest): tax ~10.8% overhead',
+        '④ International: freight only · no US sales tax applies',
+      ],
+      followUps: [
+        'What is our total revenue — subtotal vs total due?',
+        'Show orders by territory ranked by sales YTD',
+        'Show quarterly revenue breakdown',
+      ],
+    }),
+  },
 ]
 
 function tryAWQuery(question: string): EngineResult | null {
