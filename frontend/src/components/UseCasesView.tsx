@@ -249,7 +249,15 @@ function ResultRow({ r }: { r: ResultMetric }) {
   )
 }
 
-function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
+function CaseCard({ uc, onLoad, onNavigate }: { uc: UseCase; onLoad: () => void; onNavigate: (tab: NavTab) => void }) {
+  function handleDemoQuery() {
+    if (!uc.demoQuery) return
+    // Load scenario first, then navigate to Query AI
+    localStorage.setItem('si-company-name', uc.company)
+    sessionStorage.setItem('query-prefill', uc.demoQuery)
+    onNavigate('query')
+  }
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col hover:shadow-lg transition-shadow">
       {/* Card header */}
@@ -304,13 +312,15 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
           </div>
         </div>
 
-        {/* Findings */}
+        {/* Findings — with interactive deep-links */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">
             <Zap className="w-3 h-3 inline mr-1" />Real findings
           </p>
           <div className="space-y-1.5">
-            {uc.findings.map((f, i) => <FindingRow key={i} finding={f} />)}
+            {uc.findings.map((f, i) => (
+              <FindingRow key={i} finding={f} onNavigate={onNavigate} />
+            ))}
           </div>
         </div>
 
@@ -325,13 +335,26 @@ function CaseCard({ uc, onLoad }: { uc: UseCase; onLoad: () => void }) {
         </div>
       </div>
 
-      {/* CTA */}
-      <div className="px-6 pb-6 pt-2">
+      {/* CTAs */}
+      <div className="px-6 pb-6 pt-2 flex flex-col gap-2">
+        {uc.demoQuery && (
+          <button
+            onClick={handleDemoQuery}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+          >
+            <Zap className="w-4 h-4 text-teal-400" />
+            Try live in Query AI →
+          </button>
+        )}
         <button
           onClick={onLoad}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+          className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+            uc.demoQuery
+              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              : 'bg-teal-600 hover:bg-teal-700 text-white'
+          }`}
         >
-          Explore this scenario →
+          Load scenario → Dashboard
         </button>
       </div>
     </div>
@@ -349,7 +372,7 @@ export default function UseCasesView({ onNavigate }: Props) {
   }
 
   const totalValue = USE_CASES.reduce((acc, uc) => {
-    const n = parseFloat(uc.annualValue.replace(/[€K]/g, '')) * (uc.annualValue.includes('K') ? 1000 : 1)
+    const n = parseFloat(uc.annualValue.replace(/[€$K]/g, '')) * (uc.annualValue.includes('K') ? 1000 : 1)
     return acc + n
   }, 0)
 
@@ -361,7 +384,7 @@ export default function UseCasesView({ onNavigate }: Props) {
         <div className="max-w-6xl flex items-center gap-6">
           <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Real Business Cases</span>
           <div className="h-3 w-px bg-slate-700" />
-          <span className="text-xs text-slate-400">4 European companies · different sectors · measurable results</span>
+          <span className="text-xs text-slate-400">4 real companies · manufacturing · retail · healthcare · finance</span>
           <div className="ml-auto">
             <span className="text-xs text-slate-400">Average value generated: </span>
             <span className="text-sm font-bold text-teal-400">€{(totalValue / USE_CASES.length / 1000).toFixed(0)}K/yr per client</span>
@@ -377,7 +400,7 @@ export default function UseCasesView({ onNavigate }: Props) {
           </span>
           <h1 className="text-3xl font-bold text-slate-900 mb-3">
             Not a generic demo.<br />
-            <span className="text-teal-600">Real European businesses, real problems.</span>
+            <span className="text-teal-600">Real companies, real data, real problems.</span>
           </h1>
           <p className="text-base text-slate-500 max-w-2xl">
             Each case shows the complete journey: the concrete operational problem, the agents activated on the semantic layer, the automatically generated findings, and the results measured after 90 days.
@@ -389,7 +412,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       <section className="px-12 py-12 bg-slate-50">
         <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6">
           {USE_CASES.map(uc => (
-            <CaseCard key={uc.id} uc={uc} onLoad={() => loadScenario(uc)} />
+            <CaseCard key={uc.id} uc={uc} onLoad={() => loadScenario(uc)} onNavigate={onNavigate} />
           ))}
         </div>
       </section>
