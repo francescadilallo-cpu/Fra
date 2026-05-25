@@ -32,6 +32,8 @@ export interface EngineResult {
   summary: string
   interpreted_as: string
   chartData?: ChartData
+  followUps?: string[]
+  isDisambiguation?: boolean
 }
 
 // ── Entity matching ───────────────────────────────────────────────────────────
@@ -439,6 +441,11 @@ LIMIT  10`,
         values: [4251368, 4116871, 3763178, 3189418, 3121616, 2604540, 2458535, 2315185],
         unit: '$',
       },
+      followUps: [
+        'Show orders by territory ranked by sales YTD',
+        'What is our total revenue — subtotal vs total due?',
+        'Which products generated the most revenue?',
+      ],
     }),
   },
   {
@@ -464,6 +471,12 @@ WHERE YEAR(orderDate) = 2014`,
       ],
       summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — Query AI asks for context before answering.',
       interpreted_as: 'SUM(subtotalAmount) + SUM(totalDue) · SalesOrder 2014 · DISAMBIGUATION required',
+      isDisambiguation: true,
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'How many unique customers after CRM deduplication?',
+      ],
     }),
   },
   {
@@ -496,6 +509,11 @@ FROM crm.ClientHub_accounts`,
         values: [19829, 18484, 1345, 372],
         unit: '',
       },
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'Which products generated the most revenue?',
+      ],
     }),
   },
   {
@@ -531,6 +549,11 @@ ORDER  BY t.salesYTD DESC`,
         values: [10510853, 7887186, 6771829, 5977814, 5012905, 4772398, 3805202, 3072175],
         unit: '$',
       },
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'What is our total revenue — subtotal vs total due?',
+        'Which products generated the most revenue?',
+      ],
     }),
   },
   {
@@ -570,6 +593,11 @@ LIMIT    10`,
         values: [261435, 106419, 32726, 14289, 8159, 4079, 2039, 2024],
         unit: '$',
       },
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'How many unique customers after CRM deduplication?',
+      ],
     }),
   },
   {
@@ -601,6 +629,11 @@ LIMIT  10`,
       ],
       summary: '**290 employees** in the HR CSV (Italian schema). The semantic layer maps Italian field names (`matricolaDip`, `cognome`, `nome`, `ruolo`) to standard English equivalents. 14 sales representatives linked to ERP via `matricolaDip ↔ salesperson_ref`.',
       interpreted_as: 'SELECT Employee · HR CSV (IT schema) · semantic layer mapping',
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'How many unique customers after CRM deduplication?',
+      ],
     }),
   },
   {
@@ -630,6 +663,11 @@ LIMIT  12`,
       ],
       summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Online channel active since 2014.',
       interpreted_as: 'SELECT SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'What is our total revenue — subtotal vs total due?',
+        'Show orders by territory ranked by sales YTD',
+      ],
     }),
   },
 ]

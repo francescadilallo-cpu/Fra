@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import { useSector } from '../contexts/SectorContext'
@@ -178,6 +178,47 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
   )
 }
 
+// ── Disambiguation card ────────────────────────────────────────────────────────
+
+function DisambiguationCard({ onChoose }: { onChoose: (q: string) => void }) {
+  return (
+    <div className="mt-1 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+        <span className="text-sm font-semibold text-amber-800">Disambiguation required — which "revenue" do you mean?</span>
+      </div>
+      <p className="text-xs text-slate-600 leading-relaxed">
+        The term <span className="font-mono bg-white border border-amber-200 rounded px-1 text-amber-700">fatturato</span> / "revenue" maps to two different database fields in AdventureWorks. Choose which one applies to your analysis:
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => onChoose('Show net revenue subtotalAmount by territory')}
+          className="bg-white border-2 border-teal-200 hover:border-teal-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
+        >
+          <p className="text-2xl font-bold text-teal-600 group-hover:text-teal-700">$20.1M</p>
+          <p className="text-xs font-semibold text-slate-800 mt-1.5">Net Revenue</p>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">subtotal_amount</p>
+          <p className="text-[10px] text-slate-400 mt-1">Excl. tax &amp; freight · commercial "fatturato"</p>
+          <p className="text-[10px] text-teal-600 font-medium mt-2">Use this →</p>
+        </button>
+        <button
+          onClick={() => onChoose('Show gross revenue totalDue billed amount by territory')}
+          className="bg-white border-2 border-blue-200 hover:border-blue-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
+        >
+          <p className="text-2xl font-bold text-blue-600 group-hover:text-blue-700">$22.4M</p>
+          <p className="text-xs font-semibold text-slate-800 mt-1.5">Gross Revenue</p>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">total_due</p>
+          <p className="text-[10px] text-slate-400 mt-1">Incl. tax &amp; freight · billing amount</p>
+          <p className="text-[10px] text-blue-600 font-medium mt-2">Use this →</p>
+        </button>
+      </div>
+      <p className="text-[10px] text-slate-400 italic">
+        ⚡ Selecting an option will run a follow-up query using that field definition.
+      </p>
+    </div>
+  )
+}
+
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
 function SqlBlock({ sql }: { sql: string }) {
@@ -202,7 +243,7 @@ function SqlBlock({ sql }: { sql: string }) {
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?: (q: string) => void }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end gap-3 items-start">
@@ -277,8 +318,34 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
+        {/* Disambiguation card */}
+        {r.isDisambiguation && onFollowUp && (
+          <DisambiguationCard onChoose={onFollowUp} />
+        )}
+
         {/* SQL */}
         <SqlBlock sql={r.sql} />
+
+        {/* Follow-up suggestions */}
+        {r.followUps && r.followUps.length > 0 && onFollowUp && (
+          <div className="border-t border-slate-100 pt-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase tracking-wide">
+              <Sparkles className="w-3 h-3" />
+              <span>Follow-up questions</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {r.followUps.map(q => (
+                <button
+                  key={q}
+                  onClick={() => onFollowUp(q)}
+                  className="text-[11px] bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-full px-3 py-1 text-slate-600 hover:text-teal-700 transition-all"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="text-[10px] text-slate-300">
           {message.timestamp.toLocaleTimeString('en-US')}
@@ -305,6 +372,13 @@ export default function QueryInterface() {
   useEffect(() => {
     setMessages([])
     setHistory(loadHistory(sectorId))
+    // Check for pre-fill from dashboard navigation
+    const prefill = sessionStorage.getItem('query-prefill')
+    if (prefill) {
+      sessionStorage.removeItem('query-prefill')
+      setTimeout(() => sendMessage(prefill), 100)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectorId])
 
   useEffect(() => {
@@ -445,7 +519,7 @@ export default function QueryInterface() {
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onFollowUp={sendMessage} />
         ))}
 
         {loading && (
