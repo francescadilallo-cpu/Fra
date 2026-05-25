@@ -62,7 +62,7 @@ const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
       { text: '→ Building Knowledge Graph nodes and edges...', type: 'info' },
       { text: '✓ 193,062 KG nodes created', type: 'ok' },
       { text: '✓ 313,193 relationships indexed', type: 'ok' },
-      { text: '⚠ Salesperson #289 (Jae Pak) flagged as top performer — Q4 67 orders', type: 'warn' },
+      { text: '→ Top rep 2014: Linda Mitchell #276 ($4.25M YTD, Southwest)', type: 'info' },
     ],
     index: [
       { text: 'Writing to semantic layer index...', type: 'info' },
@@ -189,7 +189,7 @@ const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
 }
 
 const SECTOR_SUMMARY: Record<SectorId, { rows: string; entities: number; enrichments: string; triples: string }> = {
-  manufacturing: { rows: '13,343', entities: 8, enrichments: '2,105', triples: '48,721' },
+  manufacturing: { rows: '212,736', entities: 8, enrichments: '193,062', triples: '313,193' },
   retail:        { rows: '20,388', entities: 8, enrichments: '3,912', triples: '67,204' },
   healthcare:    { rows: '14,648', entities: 8, enrichments: '1,847', triples: '59,312' },
   finance:       { rows: '23,221', entities: 8, enrichments: '3,204', triples: '84,107' },
@@ -254,14 +254,46 @@ const STAGE_COLORS: Record<string, string> = {
   'Stage 4': 'bg-teal-50 text-teal-700 border border-teal-200',
 }
 
-const AVG_DAYS = ['1.2 d', '3.5 d', '8.3 d', '1.5 d']
-const ACTIVE_CASES = [
-  { id: 9,  name: 'Case #9',  value: 34750,  stage: 'Stage 2', daysInStage: 2  },
-  { id: 13, name: 'Case #13', value: 61200,  stage: 'Stage 2', daysInStage: 1  },
-  { id: 11, name: 'Case #11', value: 142067, stage: 'Stage 3', daysInStage: 6  },
-  { id: 3,  name: 'Case #3',  value: 98451,  stage: 'Stage 3', daysInStage: 11 },
-  { id: 7,  name: 'Case #7',  value: 82300,  stage: 'Stage 4', daysInStage: 2  },
-]
+const AVG_DAYS = ['0.5 d', '2.1 d', '5.8 d', '3.2 d']
+
+// Real AW orders — keyed by sector so other sectors keep generic data
+const ACTIVE_CASES_BY_SECTOR: Record<SectorId, { id: number; name: string; value: number; stage: string; daysInStage: number; territory?: string }[]> = {
+  manufacturing: [
+    { id: 75123, name: 'Bike World Inc.',               value: 87145,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Southwest'  },
+    { id: 75124, name: 'Action Bicycle Specialists',    value: 53209,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Northwest'  },
+    { id: 75120, name: 'Eastside Department Store',     value: 2049,   stage: 'Processing', daysInStage: 1,  territory: 'Canada'     },
+    { id: 75119, name: 'Valley Bicycle Specialists',    value: 2039,   stage: 'Processing', daysInStage: 1,  territory: 'Australia'  },
+    { id: 75122, name: 'Riding Cycles',                 value: 1898,   stage: 'Shipped',    daysInStage: 5,  territory: 'Germany'    },
+  ],
+  retail: [
+    { id: 4820, name: 'Marco Rossi',     value: 184,    stage: 'Stage 2', daysInStage: 2  },
+    { id: 4819, name: 'Giulia Ferrari',  value: 326,    stage: 'Stage 2', daysInStage: 1  },
+    { id: 4817, name: 'Luca Bianchi',    value: 95,     stage: 'Stage 3', daysInStage: 6  },
+    { id: 4815, name: 'Sofia Conti',     value: 412,    stage: 'Stage 3', daysInStage: 11 },
+    { id: 4814, name: 'Andrea Marino',   value: 78,     stage: 'Stage 4', daysInStage: 2  },
+  ],
+  healthcare: [
+    { id: 8041, name: 'Rossi Mario (M/72)',    value: 0,   stage: 'Stage 2', daysInStage: 2  },
+    { id: 8040, name: 'Ferrari Anna (F/58)',   value: 0,   stage: 'Stage 3', daysInStage: 6  },
+    { id: 8038, name: 'Conti Luca (M/45)',     value: 0,   stage: 'Stage 3', daysInStage: 11 },
+    { id: 8036, name: 'Bianchi Sara (F/34)',   value: 0,   stage: 'Stage 4', daysInStage: 2  },
+    { id: 8034, name: 'Esposito Carlo (M/61)', value: 0,   stage: 'Stage 2', daysInStage: 1  },
+  ],
+  finance: [
+    { id: 2941, name: 'Rossi & Figli Srl',     value: 350000,  stage: 'Stage 2', daysInStage: 2  },
+    { id: 2939, name: 'Tech Startup SB Srl',   value: 500000,  stage: 'Stage 2', daysInStage: 1  },
+    { id: 2937, name: 'Ferrari Holding SA',    value: 1200000, stage: 'Stage 3', daysInStage: 6  },
+    { id: 2935, name: 'Bianchi Costruzioni',   value: 280000,  stage: 'Stage 3', daysInStage: 11 },
+    { id: 2933, name: 'Conti Real Estate Srl', value: 750000,  stage: 'Stage 4', daysInStage: 2  },
+  ],
+}
+
+const STAGE_COLORS_AW: Record<string, string> = {
+  'Confirmed':   'bg-blue-50 text-blue-700 border border-blue-200',
+  'Processing':  'bg-amber-50 text-amber-700 border border-amber-200',
+  'Shipped':     'bg-purple-50 text-purple-700 border border-purple-200',
+  'Delivered':   'bg-teal-50 text-teal-700 border border-teal-200',
+}
 
 function fmt(v: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
@@ -477,14 +509,15 @@ export default function ProcessView() {
         {runState === 'done' && (
           <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
             {[
-              { label: 'Rows Extracted', value: summary.rows },
-              { label: 'Entities Mapped', value: String(summary.entities) },
-              { label: 'AI Enrichments', value: summary.enrichments },
-              { label: 'RDF Triples', value: summary.triples },
-            ].map(({ label, value }) => (
+              { label: 'Rows Extracted',   value: summary.rows,                   sub: '4 sources · ERP+CRM+HR+PIM' },
+              { label: 'Entities Mapped',  value: String(summary.entities),        sub: '8 AW ontology classes' },
+              { label: 'KG Nodes Created', value: summary.enrichments,             sub: 'instances in Knowledge Graph' },
+              { label: 'KG Edges Indexed', value: summary.triples,                 sub: '3 cross-source bridges' },
+            ].map(({ label, value, sub }) => (
               <div key={label} className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 text-center">
                 <p className="text-lg font-bold text-teal-700">{value}</p>
                 <p className="text-[10px] text-teal-600 uppercase tracking-wide mt-0.5">{label}</p>
+                <p className="text-[10px] text-teal-500 mt-0.5">{sub}</p>
               </div>
             ))}
           </div>
@@ -564,40 +597,62 @@ export default function ProcessView() {
         </div>
       </div>
 
-      {/* ── Active cases ──────────────────────────────────────────────────── */}
+      {/* ── Active records ────────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
-        <h2 className="font-semibold text-slate-900 mb-4">Active Cases</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-slate-900">
+            {sectorId === 'manufacturing' ? 'Recent Orders — ERP OrionSales' : 'Active Cases'}
+          </h2>
+          {sectorId === 'manufacturing' && (
+            <span className="text-xs text-slate-400 font-mono">31,465 total orders · showing latest 5</span>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500 border-b border-slate-200">
-                <th className="text-left pb-2 font-medium">#</th>
-                <th className="text-left pb-2 font-medium">Name</th>
-                <th className="text-left pb-2 font-medium">Stage</th>
-                <th className="text-right pb-2 font-medium">Value</th>
-                <th className="text-right pb-2 font-medium">Days in stage</th>
+                <th className="text-left pb-2 font-medium">Order ID</th>
+                <th className="text-left pb-2 font-medium">Customer</th>
+                {sectorId === 'manufacturing' && <th className="text-left pb-2 font-medium">Territory</th>}
+                <th className="text-left pb-2 font-medium">Status</th>
+                <th className="text-right pb-2 font-medium">Value (subtotal)</th>
+                <th className="text-right pb-2 font-medium">Days open</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {ACTIVE_CASES.map(c => (
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 text-slate-400">#{c.id}</td>
-                  <td className="py-3 text-slate-900 font-medium">{c.name}</td>
-                  <td className="py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${STAGE_COLORS[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                      {c.stage}
-                    </span>
-                  </td>
-                  <td className="py-3 text-right text-slate-900">{fmt(c.value)}</td>
-                  <td className={`py-3 text-right font-semibold ${c.daysInStage > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
-                    {c.daysInStage} d
-                    {c.daysInStage > 8 && <AlertTriangle className="w-3 h-3 inline ml-1 text-amber-500" />}
-                  </td>
-                </tr>
-              ))}
+              {ACTIVE_CASES_BY_SECTOR[sectorId].map(c => {
+                const stageColor = sectorId === 'manufacturing'
+                  ? (STAGE_COLORS_AW[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
+                  : (STAGE_COLORS[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-3 text-slate-400 font-mono text-xs">#{c.id}</td>
+                    <td className="py-3 text-slate-900 font-medium">{c.name}</td>
+                    {sectorId === 'manufacturing' && (
+                      <td className="py-3 text-xs text-slate-500">{c.territory ?? '—'}</td>
+                    )}
+                    <td className="py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${stageColor}`}>
+                        {c.stage}
+                      </span>
+                    </td>
+                    <td className="py-3 text-right text-slate-900 font-mono">{c.value > 0 ? fmt(c.value) : '—'}</td>
+                    <td className={`py-3 text-right font-semibold ${c.daysInStage > 8 ? 'text-amber-600' : 'text-slate-600'}`}>
+                      {c.daysInStage} d
+                      {c.daysInStage > 8 && <AlertTriangle className="w-3 h-3 inline ml-1 text-amber-500" />}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
+        {sectorId === 'manufacturing' && (
+          <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
+            Orders #75123 and #75124 are large confirmed orders (Dec 2014) pending shipment — combined value $140K.
+            Status sourced from ERP OrionSales · Joined with CRM for customer names via <span className="font-mono text-teal-600">customer_ref ↔ accountId</span>.
+          </p>
+        )}
       </div>
     </div>
   )

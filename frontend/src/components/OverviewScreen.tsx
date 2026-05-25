@@ -44,13 +44,13 @@ const JOURNEY: {
     step: 5, section: 'QUERY',
     tab: 'query',        icon: MessageSquare,  title: 'Query AI',
     desc: 'Query the semantic layer in natural language. The engine resolves cross-source joins and ambiguities.',
-    aw: '"Who is the top salesperson?" → Jae Pak, 67 orders, ERP×HR join',
+    aw: '"Who is the top salesperson?" → Linda Mitchell $4.25M · ERP×HR join',
   },
   {
     step: 6, section: 'ACT',
     tab: 'agents',       icon: BotMessageSquare, title: 'Agents',
     desc: 'Automated agents running on the semantic layer: anomaly detection, trend analysis, alerts.',
-    aw: 'Configure agents on AW entities (Customer, SalesOrder, Salesperson)',
+    aw: '4 AW agents: Sales Performance · CRM Dedup · Revenue Disambiguator · Bridge Validator',
   },
 ]
 
@@ -255,7 +255,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               {
                 icon: MessageSquare, color: 'border-l-blue-500', bg: 'bg-blue-50',
                 title: 'Natural Language Query AI',
-                desc: '"Who is the top salesperson 2014?" → Jae Pak, 67 orders, $4.1M YTD. ERP×HR join resolved automatically by the semantic layer.',
+                desc: '"Who is the top salesperson 2014?" → Linda Mitchell, $4.25M YTD. ERP×HR join resolved automatically — matricolaDip ↔ salesPersonId bridge.',
               },
               {
                 icon: BotMessageSquare, color: 'border-l-amber-500', bg: 'bg-amber-50',

@@ -29,25 +29,23 @@ interface AgentLookup {
 export const WORKFLOWS: Record<SectorId, WorkflowDef[]> = {
   manufacturing: [
     {
-      id: 'mfg-daily-ops',
-      name: 'Daily Operations Audit',
-      description: 'Cross-functional sweep: quotes, supply, production, deliveries — chained.',
-      trigger: 'Recommended · daily 18:00',
+      id: 'aw-data-quality',
+      name: 'AW Data Quality Pipeline',
+      description: 'CRM deduplication → cross-source bridge validation. Ensures clean identity resolution before any analytics run.',
+      trigger: 'Recommended · on data ingestion',
       steps: [
-        { agentId: 'quote-review',         dependsOn: [] },
-        { agentId: 'supplier-monitor',     dependsOn: [] },
-        { agentId: 'production-scheduler', dependsOn: ['supplier-monitor'] },
-        { agentId: 'delivery-alert',       dependsOn: ['production-scheduler'] },
+        { agentId: 'crm-dedup',        dependsOn: [] },
+        { agentId: 'bridge-validator', dependsOn: ['crm-dedup'] },
       ],
     },
     {
-      id: 'mfg-supply-chain',
-      name: 'Supply Chain Health',
-      description: 'Supplier risk → reschedule production if disruption detected.',
-      trigger: 'On supplier rating drop',
+      id: 'aw-sales-intelligence',
+      name: 'AW Sales Intelligence',
+      description: 'Revenue disambiguation → cross-source sales ranking. ERP × HR join resolves top performer by salesYTD.',
+      trigger: 'Recommended · daily 07:00',
       steps: [
-        { agentId: 'supplier-monitor',     dependsOn: [] },
-        { agentId: 'production-scheduler', dependsOn: ['supplier-monitor'] },
+        { agentId: 'revenue-disambiguator', dependsOn: [] },
+        { agentId: 'sales-performance',     dependsOn: ['revenue-disambiguator'] },
       ],
     },
   ],

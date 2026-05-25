@@ -182,7 +182,7 @@ const RECORDS: Record<SectorId, RecordItem[]> = {
 
 const ACTIVITIES: Record<SectorId, ActivityItem[]> = {
   manufacturing: [
-    { id: 1, dot: 'bg-teal-500',   message: 'Top salesperson 2014: Jae Pak — 67 orders, $289k, Southwest', time: 'Dec 2014', status: 'Confirmed' },
+    { id: 1, dot: 'bg-teal-500',   message: 'Top salesperson 2014: Linda Mitchell (#276) — $4.25M YTD, Southwest', time: 'Dec 2014', status: 'Confirmed' },
     { id: 2, dot: 'bg-amber-400',  message: 'Agent: 372 duplicate CRM accounts detected (accountId < 0)',   time: '2h ago',   status: 'Warning'   },
     { id: 3, dot: 'bg-blue-500',   message: 'Order #75123 shipped — Bike World — $87,145',                 time: '4h ago',   status: 'Shipped'   },
     { id: 4, dot: 'bg-purple-500', message: 'Cross-source join resolved: customer_ref → CRM accountId',    time: '6h ago',   status: 'Active'    },
@@ -457,8 +457,46 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setShowWelcome(false)
   }
 
+  const isAW = sectorId === 'manufacturing'
+
   return (
     <div className="p-8 space-y-6">
+      {/* AW real-data stats strip */}
+      {isAW && (
+        <div className="bg-slate-900 rounded-2xl px-6 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">AdventureWorks · Live Data</span>
+            <span className="text-[10px] text-slate-500">Click a card to query</span>
+          </div>
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+            {[
+              { label: 'Net Revenue 2014',    value: '$20.1M',      sub: 'subtotal_amount · excl. tax+freight', color: 'text-teal-400',   query: 'What is our total revenue — subtotal vs total due?' },
+              { label: 'Gross Revenue 2014',  value: '$22.4M',      sub: 'total_due · incl. tax+freight',       color: 'text-teal-300',   query: 'What is our total revenue — subtotal vs total due?' },
+              { label: 'Total Orders (ERP)',  value: '31,465',      sub: 'OrionSales PostgreSQL',               color: 'text-blue-400',   query: 'Show recent orders from ERP' },
+              { label: 'Unique Customers',    value: '19,829',      sub: 'CRM after 372 dedup removed',         color: 'text-violet-400', query: 'How many unique customers after CRM deduplication?' },
+              { label: 'Top Salesperson',     value: 'L. Mitchell', sub: '$4.25M YTD · ERP×HR join',           color: 'text-amber-400',  query: 'Who is the top salesperson by revenue in 2014?' },
+            ].map(s => (
+              <button
+                key={s.label}
+                onClick={() => {
+                  sessionStorage.setItem('query-prefill', s.query)
+                  onNavigate?.('query')
+                }}
+                className="border border-slate-700 hover:border-slate-500 rounded-xl px-4 py-3 text-left transition-all hover:bg-slate-800 group"
+              >
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[11px] text-slate-300 font-medium mt-0.5">{s.label}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{s.sub}</p>
+                <p className="text-[10px] text-slate-600 group-hover:text-slate-400 mt-1 transition-colors">Query →</p>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-slate-500">
+            ⚠️ <span className="text-amber-400 font-medium">"fatturato" disambiguation</span> — Net $20.1M (commercial) vs Gross $22.4M (billed) differ by $2.3M (tax + freight). The semantic layer resolves this at query time.
+          </p>
+        </div>
+      )}
+
       {showWelcome && companyName && (
         <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-11 h-11 rounded-xl bg-teal-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-200">

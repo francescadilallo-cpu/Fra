@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import { useSector } from '../contexts/SectorContext'
@@ -37,10 +37,11 @@ function saveToHistory(sectorId: string, query: string, current: string[]): stri
 
 const SECTOR_QUESTIONS: Record<string, string[]> = {
   manufacturing: [
-    'Show the 5 products with the highest unit price',
-    'Which suppliers have a reliability rating below 4.0?',
-    'What is the total value of confirmed orders?',
-    'Show active work orders',
+    'Who is the top salesperson by revenue in 2014?',
+    'What is our total revenue — subtotal vs total due?',
+    'How many unique customers after CRM deduplication?',
+    'Show orders by territory ranked by sales YTD',
+    'Which products generated the most revenue?',
   ],
   retail: [
     'Show the top 10 products by stock level',
@@ -177,6 +178,75 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
   )
 }
 
+// ── Disambiguation card ────────────────────────────────────────────────────────
+
+function DisambiguationCard({ onChoose }: { onChoose: (q: string) => void }) {
+  return (
+    <div className="mt-1 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+        <span className="text-sm font-semibold text-amber-800">Disambiguation required — which "revenue" do you mean?</span>
+      </div>
+      <p className="text-xs text-slate-600 leading-relaxed">
+        The term <span className="font-mono bg-white border border-amber-200 rounded px-1 text-amber-700">fatturato</span> / "revenue" maps to two different database fields in AdventureWorks. Choose which one applies to your analysis:
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => onChoose('Show net revenue subtotalAmount by territory')}
+          className="bg-white border-2 border-teal-200 hover:border-teal-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
+        >
+          <p className="text-2xl font-bold text-teal-600 group-hover:text-teal-700">$20.1M</p>
+          <p className="text-xs font-semibold text-slate-800 mt-1.5">Net Revenue</p>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">subtotal_amount</p>
+          <p className="text-[10px] text-slate-400 mt-1">Excl. tax &amp; freight · commercial "fatturato"</p>
+          <p className="text-[10px] text-teal-600 font-medium mt-2">Use this →</p>
+        </button>
+        <button
+          onClick={() => onChoose('Show gross revenue totalDue billed amount by territory')}
+          className="bg-white border-2 border-blue-200 hover:border-blue-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
+        >
+          <p className="text-2xl font-bold text-blue-600 group-hover:text-blue-700">$22.4M</p>
+          <p className="text-xs font-semibold text-slate-800 mt-1.5">Gross Revenue</p>
+          <p className="text-[10px] font-mono text-slate-500 mt-0.5">total_due</p>
+          <p className="text-[10px] text-slate-400 mt-1">Incl. tax &amp; freight · billing amount</p>
+          <p className="text-[10px] text-blue-600 font-medium mt-2">Use this →</p>
+        </button>
+      </div>
+      <p className="text-[10px] text-slate-400 italic">
+        ⚡ Selecting an option will run a follow-up query using that field definition.
+      </p>
+    </div>
+  )
+}
+
+// ── Resolution steps trace ─────────────────────────────────────────────────────
+
+function StepsTrace({ steps }: { steps: string[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <ListChecks className="w-3 h-3" />
+        <span>Semantic layer resolution</span>
+      </button>
+      {open && (
+        <ol className="mt-2 space-y-1 pl-1">
+          {steps.map((s, i) => (
+            <li key={i} className="text-[11px] text-slate-500 leading-snug flex gap-2">
+              <span className="text-teal-500 font-mono font-bold flex-shrink-0">{i + 1}.</span>
+              <span>{s.replace(/^[①②③④⑤]\s*/, '')}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
 function SqlBlock({ sql }: { sql: string }) {
@@ -201,7 +271,7 @@ function SqlBlock({ sql }: { sql: string }) {
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?: (q: string) => void }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end gap-3 items-start">
@@ -235,10 +305,22 @@ function MessageBubble({ message }: { message: Message }) {
         <Bot className="w-4 h-4 text-teal-400" />
       </div>
       <div className="flex-1 max-w-[85%] bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 space-y-3 shadow-sm">
-        {/* Interpreted as */}
-        <div>
-          <span className="text-[10px] text-slate-400 uppercase tracking-wide">Interpretation</span>
-          <p className="text-xs text-slate-500 mt-0.5 italic font-mono">{r.interpreted_as}</p>
+
+        {/* Source badges + interpretation row */}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Query</span>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-mono leading-snug">{r.interpreted_as}</p>
+          </div>
+          {r.sources && r.sources.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap flex-shrink-0">
+              {r.sources.map(s => (
+                <span key={s.id} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+                  {s.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Summary */}
@@ -247,6 +329,11 @@ function MessageBubble({ message }: { message: Message }) {
             __html: r.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           }} />
         </div>
+
+        {/* Disambiguation card */}
+        {r.isDisambiguation && onFollowUp && (
+          <DisambiguationCard onChoose={onFollowUp} />
+        )}
 
         {/* Inline chart */}
         {r.chartData && <InlineBarChart chart={r.chartData} />}
@@ -263,8 +350,14 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
+        {/* Steps trace + SQL in a compact row */}
+        <div className="flex flex-col gap-1.5">
+          {r.steps && <StepsTrace steps={r.steps} />}
+          <SqlBlock sql={r.sql} />
+        </div>
+
         {/* Ontology entities used */}
-        {message.entities && message.entities.length > 0 && (
+        {message.entities && message.entities.length > 0 && !r.sources && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <GitBranch className="w-3 h-3 text-teal-500 flex-shrink-0" />
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">Via semantic layer:</span>
@@ -276,8 +369,26 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
 
-        {/* SQL */}
-        <SqlBlock sql={r.sql} />
+        {/* Follow-up suggestions */}
+        {r.followUps && r.followUps.length > 0 && onFollowUp && (
+          <div className="border-t border-slate-100 pt-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase tracking-wide">
+              <Sparkles className="w-3 h-3" />
+              <span>Follow-up questions</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {r.followUps.map(q => (
+                <button
+                  key={q}
+                  onClick={() => onFollowUp(q)}
+                  className="text-[11px] bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-full px-3 py-1 text-slate-600 hover:text-teal-700 transition-all"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <p className="text-[10px] text-slate-300">
           {message.timestamp.toLocaleTimeString('en-US')}
@@ -304,6 +415,13 @@ export default function QueryInterface() {
   useEffect(() => {
     setMessages([])
     setHistory(loadHistory(sectorId))
+    // Check for pre-fill from dashboard navigation
+    const prefill = sessionStorage.getItem('query-prefill')
+    if (prefill) {
+      sessionStorage.removeItem('query-prefill')
+      setTimeout(() => sendMessage(prefill), 100)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectorId])
 
   useEffect(() => {
@@ -327,7 +445,7 @@ export default function QueryInterface() {
     // Brief timeout for UX — engine is synchronous
     setTimeout(() => {
       try {
-        const result = executeQuery(question, ontology.nodes)
+        const result = executeQuery(question, ontology.nodes, sectorId)
         const entities = ontology.nodes
           .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
           .map(n => n.data.label)
@@ -444,7 +562,7 @@ export default function QueryInterface() {
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onFollowUp={sendMessage} />
         ))}
 
         {loading && (

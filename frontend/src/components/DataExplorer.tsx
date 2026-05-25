@@ -1,10 +1,125 @@
 import { useState, useMemo } from 'react'
-import { Database, Search, ChevronUp, ChevronDown, X, Table2, Download } from 'lucide-react'
+import { Database, Search, ChevronUp, ChevronDown, X, Table2, Download, GitBranch, Zap } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateMockData } from '../data/mockDataGenerator'
 import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import type { OntologyNode } from '../types'
+
+// ── AW entity → source system map ─────────────────────────────────────────────
+const AW_SOURCE_MAP: Record<string, { system: string; color: string; bg: string; border: string }> = {
+  Customer:       { system: 'CRM — ClientHub',   color: 'text-teal-700',   bg: 'bg-teal-50',   border: 'border-teal-200' },
+  SalesOrder:     { system: 'ERP — OrionSales',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
+  SalesOrderLine: { system: 'ERP — OrionSales',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
+  Salesperson:    { system: 'ERP — OrionSales',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
+  Territory:      { system: 'ERP — OrionSales',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
+  Offer:          { system: 'ERP — OrionSales',  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200' },
+  Employee:       { system: 'HR — CSV (IT schema)', color: 'text-violet-700', bg: 'bg-violet-50', border: 'border-violet-200' },
+  Product:        { system: 'PIM — Catalog',     color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200' },
+}
+
+// ── AW cross-source join examples ─────────────────────────────────────────────
+const AW_JOIN_EXAMPLES: Record<string, { label: string; sql: string; rows: Record<string, unknown>[] } | undefined> = {
+  SalesOrder: {
+    label: 'SalesOrder × Customer (ERP ↔ CRM) × Salesperson × Employee (ERP ↔ HR)',
+    sql: `SELECT o.orderId, o.orderDate, o.subtotalAmount,
+       c.name       AS customer,        -- CRM · customer_ref ↔ accountId
+       e.cognome || ', ' || e.nome AS salesperson  -- HR  · salesperson_ref ↔ matricolaDip
+FROM   erp.SalesOrder o
+JOIN   crm.account    c ON o.customer_ref    = c.accountId
+JOIN   hr.dipendenti  e ON o.salesperson_ref = e.matricolaDip
+LIMIT  5`,
+    rows: [
+      { orderId: 75123, orderDate: '2014-12-28', subtotalAmount: 87145.20, customer: 'Bike World Inc.',               salesperson: 'Mitchell, Linda'  },
+      { orderId: 75124, orderDate: '2014-12-28', subtotalAmount: 53209.80, customer: 'Action Bicycle Specialists',    salesperson: 'Reiter, Rachel'   },
+      { orderId: 75122, orderDate: '2014-12-01', subtotalAmount:  1898.00, customer: 'Valley Bicycle Specialists',    salesperson: 'Saraiva, José'    },
+      { orderId: 75121, orderDate: '2014-12-01', subtotalAmount:    48.68, customer: 'Riding Cycles',                 salesperson: 'Pak, Jae'         },
+      { orderId: 75120, orderDate: '2014-12-01', subtotalAmount:  2049.00, customer: 'Eastside Department Store',     salesperson: 'Tsoflias, Lynn'   },
+    ],
+  },
+  SalesOrderLine: {
+    label: 'SalesOrderLine × Product (ERP ↔ PIM)',
+    sql: `SELECT sol.lineId, sol.quantity, sol.unitPrice, sol.lineTotal,
+       p.name     AS product,    -- PIM · product_ref ↔ internal_id
+       p.category AS category
+FROM   erp.SalesOrderLine sol
+JOIN   pim.product_catalog p ON sol.productId = p.internal_id
+LIMIT  5`,
+    rows: [
+      { lineId: 4365901, quantity: 1, unitPrice: 2024.99, lineTotal:   2024.99, product: 'Mountain-200 Black, 38', category: 'Bikes'       },
+      { lineId: 4365902, quantity: 3, unitPrice: 2024.99, lineTotal:   6074.98, product: 'Mountain-200 Black, 46', category: 'Bikes'       },
+      { lineId: 4365903, quantity: 1, unitPrice: 2039.99, lineTotal:   2039.99, product: 'Road-150 Red, 62',       category: 'Bikes'       },
+      { lineId: 7511701, quantity: 2, unitPrice: 2039.99, lineTotal:   4079.98, product: 'Touring-1000 Blue, 60',  category: 'Bikes'       },
+      { lineId: 7512201, quantity: 5, unitPrice: 1429.00, lineTotal:   7145.00, product: 'Long-Sleeve Logo Jersey', category: 'Clothing'  },
+    ],
+  },
+  Salesperson: {
+    label: 'Salesperson × Employee (ERP ↔ HR · matricolaDip ↔ salesPersonId)',
+    sql: `SELECT sp.salesPersonId, sp.salesYTD, sp.bonus,
+       e.cognome    AS lastName,   -- HR Italian schema
+       e.nome       AS firstName,
+       e.ruolo      AS jobTitle
+FROM   erp.SalesPerson sp
+JOIN   hr.dipendenti_hr e ON sp.salesPersonId = e.matricolaDip
+ORDER  BY sp.salesYTD DESC
+LIMIT  5`,
+    rows: [
+      { salesPersonId: 276, salesYTD: 4251368.55, bonus: 2000, lastName: 'Mitchell',  firstName: 'Linda',   jobTitle: 'Sales Manager'        },
+      { salesPersonId: 289, salesYTD: 4116871.23, bonus: 5150, lastName: 'Reiter',    firstName: 'Rachel',  jobTitle: 'Sales Representative' },
+      { salesPersonId: 275, salesYTD: 3763178.18, bonus: 4100, lastName: 'Saraiva',   firstName: 'José',    jobTitle: 'Sales Representative' },
+      { salesPersonId: 277, salesYTD: 3189418.37, bonus: 2500, lastName: 'Tsoflias',  firstName: 'Lynn',    jobTitle: 'Sales Representative' },
+      { salesPersonId: 279, salesYTD: 2315185.61, bonus: 6700, lastName: 'Pak',       firstName: 'Jae',     jobTitle: 'Sales Representative' },
+    ],
+  },
+}
+
+// ── Cross-source join panel ───────────────────────────────────────────────────
+function CrossSourcePanel({ entityLabel }: { entityLabel: string }) {
+  const [open, setOpen] = useState(false)
+  const example = AW_JOIN_EXAMPLES[entityLabel]
+  if (!example) return null
+  return (
+    <div className="flex-shrink-0 border-t border-slate-200 bg-slate-50">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-6 py-2.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
+      >
+        <GitBranch className="w-3.5 h-3.5 text-teal-600" />
+        <span className="font-semibold text-teal-700">Cross-source Join Preview</span>
+        <span className="text-slate-400 font-normal">— {example.label}</span>
+        <Zap className="w-3 h-3 text-teal-400 ml-auto" />
+        <span className="text-slate-400">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-6 pb-4 space-y-3">
+          <pre className="text-[10px] font-mono bg-slate-900 text-teal-300 rounded-lg px-4 py-3 overflow-x-auto leading-relaxed whitespace-pre">{example.sql}</pre>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-xs border-separate border-spacing-0">
+              <thead>
+                <tr>
+                  {Object.keys(example.rows[0]).map(col => (
+                    <th key={col} className="bg-slate-100 border-b border-slate-200 px-3 py-2 text-left font-medium text-slate-600 whitespace-nowrap">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {example.rows.map((row, i) => (
+                  <tr key={i} className="hover:bg-teal-50/30">
+                    {Object.values(row).map((val, j) => (
+                      <td key={j} className="border-b border-slate-100 px-3 py-2 text-slate-700 whitespace-nowrap font-mono">
+                        {typeof val === 'number' && val > 100 ? `$${val.toLocaleString('en-US')}` : String(val ?? '—')}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Type badge colours (same as OntologyGraph) ───────────────────────────────
 const TYPE_COLORS: Record<string, string> = {
@@ -159,7 +274,7 @@ function DataTable({ node }: { node: OntologyNode }) {
                           {col.includes('pct') || col.includes('rate') || col.includes('score') || col.includes('efficiency')
                             ? `${val}%`
                             : val > 1000
-                              ? `€${Number(val).toLocaleString('en-US')}`
+                              ? `$${Number(val).toLocaleString('en-US')}`
                               : val}
                         </span>
                       ) : (
@@ -281,8 +396,14 @@ export default function DataExplorer() {
                 </div>
                 <span className="text-slate-300">·</span>
                 <span className="text-xs text-slate-500">{props} properties</span>
-                <span className="text-slate-300">·</span>
-                <span className="text-xs text-slate-500 font-mono text-slate-400">{selected.data.uri}</span>
+                {AW_SOURCE_MAP[selected.data.label] && (
+                  <>
+                    <span className="text-slate-300">·</span>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${AW_SOURCE_MAP[selected.data.label].bg} ${AW_SOURCE_MAP[selected.data.label].color} ${AW_SOURCE_MAP[selected.data.label].border}`}>
+                      {AW_SOURCE_MAP[selected.data.label].system}
+                    </span>
+                  </>
+                )}
                 <div className="ml-auto flex flex-wrap gap-1">
                   {selected.data.properties.slice(0, 6).map(p => (
                     <span key={p.name} className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100'}`}>
@@ -295,6 +416,7 @@ export default function DataExplorer() {
                 </div>
               </div>
               <DataTable key={selected.id} node={selected} />
+              {sectorId === 'manufacturing' && <CrossSourcePanel entityLabel={selected.data.label} />}
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400">
