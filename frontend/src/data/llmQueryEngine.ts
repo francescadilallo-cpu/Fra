@@ -128,14 +128,34 @@ IMPORTANT: Keep the total JSON response under 1500 tokens. Use short SQL comment
 // ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
 function parseResult(text: string): EngineResult {
-  const clean = text
+  // Strip markdown fences first
+  let clean = text
     .replace(/^```(?:json)?\s*/im, '')
     .replace(/\s*```\s*$/im, '')
     .trim()
+
+  // Extract the JSON object — LLaMA often adds preamble/postamble text
+  const start = clean.indexOf('{')
+  const end = clean.lastIndexOf('}')
+  if (start !== -1 && end > start) {
+    clean = clean.slice(start, end + 1)
+  }
+
   try {
-    return JSON.parse(clean) as EngineResult
+    const parsed = JSON.parse(clean) as Partial<EngineResult>
+    return {
+      sql: parsed.sql ?? '-- query',
+      rows: parsed.rows ?? [],
+      summary: parsed.summary ?? '',
+      interpreted_as: parsed.interpreted_as ?? '',
+      chartData: parsed.chartData,
+      sources: parsed.sources,
+      steps: parsed.steps,
+      followUps: parsed.followUps,
+      isDisambiguation: parsed.isDisambiguation ?? false,
+    }
   } catch {
-    throw new Error(`LLM returned non-JSON: ${clean.slice(0, 200)}`)
+    throw new Error(`LLM returned non-JSON: ${clean.slice(0, 300)}`)
   }
 }
 
