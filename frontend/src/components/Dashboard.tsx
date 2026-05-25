@@ -457,8 +457,37 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setShowWelcome(false)
   }
 
+  const isAW = sectorId === 'manufacturing'
+
   return (
     <div className="p-8 space-y-6">
+      {/* AW real-data stats strip */}
+      {isAW && (
+        <div className="bg-slate-900 rounded-2xl px-6 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">AdventureWorks · Live Data</span>
+          </div>
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
+            {[
+              { label: 'Net Revenue 2014',    value: '$20.1M',  sub: 'subtotal_amount · excl. tax+freight', color: 'text-teal-400' },
+              { label: 'Gross Revenue 2014',  value: '$22.4M',  sub: 'total_due · incl. tax+freight',       color: 'text-teal-300' },
+              { label: 'Total Orders (ERP)',  value: '31,465',  sub: 'OrionSales PostgreSQL',               color: 'text-blue-400' },
+              { label: 'Unique Customers',    value: '19,829',  sub: 'CRM after 372 dedup removed',         color: 'text-violet-400' },
+              { label: 'Top Salesperson',     value: 'L. Mitchell', sub: '$4.25M YTD · ERP×HR join',       color: 'text-amber-400' },
+            ].map(s => (
+              <div key={s.label} className="border border-slate-700 rounded-xl px-4 py-3">
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[11px] text-slate-300 font-medium mt-0.5">{s.label}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{s.sub}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] text-slate-500">
+            ⚠️ <span className="text-amber-400 font-medium">"fatturato" disambiguation</span> — Net $20.1M (commercial) vs Gross $22.4M (billed) differ by $2.3M (tax + freight). The semantic layer resolves this at query time.
+          </p>
+        </div>
+      )}
+
       {showWelcome && companyName && (
         <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-11 h-11 rounded-xl bg-teal-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-200">

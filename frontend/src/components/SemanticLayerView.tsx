@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X, Network } from 'lucide-react'
+import { Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X, Network, MessageSquare } from 'lucide-react'
 
 // ── AdventureWorks Knowledge Graph — static data ───────────────────────────────
 
@@ -91,6 +91,8 @@ const AW_BRIDGES = [
     toEntity: 'Customer',
     cardinality: 'N:1',
     status: 'active' as const,
+    matchRate: 93.2,
+    matchDetail: '18,484 / 19,829 accounts matched · 1,345 CRM-only prospects',
     note: '19,829 unique customers after dedup (372 neg-ID removed)',
   },
   {
@@ -100,11 +102,13 @@ const AW_BRIDGES = [
     fromField: 'salesperson_ref : integer',
     fromEntity: 'SalesOrder',
     toSource: 'HR — Employees',
-    toField: 'MatricolaDip : string',
+    toField: 'matricolaDip : integer',
     toEntity: 'Employee',
     cardinality: 'N:1',
     status: 'active' as const,
-    note: '17 salespersons mapped across ERP ↔ HR records',
+    matchRate: 100,
+    matchDetail: '14/14 sales reps fully matched · Italian schema mapped',
+    note: '14 salespersons mapped ERP ↔ HR — 100% match rate',
   },
   {
     id: 3,
@@ -113,11 +117,34 @@ const AW_BRIDGES = [
     fromField: 'product_ref : integer',
     fromEntity: 'SalesOrderLine',
     toSource: 'PIM — Catalog',
-    toField: 'internal_id : string',
+    toField: 'internal_id : integer',
     toEntity: 'Product',
     cardinality: 'N:1',
     status: 'active' as const,
+    matchRate: 99.6,
+    matchDetail: '47 SalesOrderLine rows unmatched · 121,270 / 121,317 matched',
     note: '504 products enriched with PIM metadata (category, listPrice, color)',
+  },
+]
+
+const QUERY_EXAMPLES = [
+  {
+    question: 'Who is the top salesperson?',
+    bridges: ['SOLD_BY'],
+    sql: 'SELECT e.cognome, sp.salesYTD FROM SalesPerson sp JOIN dipendenti_hr e ON sp.salesPersonId = e.matricolaDip ORDER BY salesYTD DESC',
+    result: 'Linda Mitchell · $4.25M YTD',
+  },
+  {
+    question: 'What is the revenue by territory?',
+    bridges: ['PLACED_BY'],
+    sql: 'SELECT t.name, SUM(o.subtotalAmount) FROM SalesOrder o JOIN Territory t ON o.territoryId = t.territoryId GROUP BY t.name',
+    result: 'Southwest $10.5M · Northwest $7.9M · Canada $6.8M',
+  },
+  {
+    question: 'Which products generated the most revenue?',
+    bridges: ['OF_PRODUCT'],
+    sql: 'SELECT p.name, SUM(sol.lineTotal) FROM SalesOrderLine sol JOIN product_catalog p ON sol.productId = p.internal_id GROUP BY p.name',
+    result: 'Mountain-200 Black $261K · Road-150 Red $106K',
   },
 ]
 
@@ -217,12 +244,20 @@ function BridgeRow({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
           <p className="text-xs font-semibold text-slate-700">{bridge.toSource}</p>
           <p className="text-[11px] text-slate-500 font-mono">{bridge.toEntity}.{bridge.toField}</p>
         </div>
-        {/* Status */}
-        <div className="flex-shrink-0">
+        {/* Status + match rate */}
+        <div className="flex-shrink-0 flex flex-col items-end gap-1">
           <CheckCircle className="w-4 h-4 text-teal-500" />
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+            bridge.matchRate === 100 ? 'bg-teal-100 text-teal-700' :
+            bridge.matchRate >= 95  ? 'bg-blue-100 text-blue-700' :
+                                       'bg-amber-100 text-amber-700'
+          }`}>{bridge.matchRate}%</span>
         </div>
       </div>
-      <p className="mt-2.5 text-[11px] text-slate-500 border-t border-slate-100 pt-2.5">{bridge.note}</p>
+      <div className="mt-2.5 border-t border-slate-100 pt-2.5 space-y-1">
+        <p className="text-[11px] text-slate-500">{bridge.note}</p>
+        <p className="text-[10px] text-slate-400 font-mono">{bridge.matchDetail}</p>
+      </div>
     </div>
   )
 }
@@ -404,6 +439,37 @@ export default function SemanticLayerView() {
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        {/* Cross-source Query Examples */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <MessageSquare className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Cross-source Query Examples</h2>
+            <span className="text-xs text-slate-400">— what the bridges unlock in Query AI</span>
+          </div>
+          <div className="space-y-3">
+            {QUERY_EXAMPLES.map((ex, i) => (
+              <div key={i} className="bg-white border border-slate-200 rounded-xl p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-900">"{ex.question}"</p>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {ex.bridges.map(b => (
+                        <span key={b} className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">⚡ {b}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">Result</p>
+                    <p className="text-xs font-semibold text-teal-700">{ex.result}</p>
+                  </div>
+                </div>
+                <pre className="text-[10px] font-mono bg-slate-900 text-teal-300 rounded-lg px-3 py-2.5 overflow-x-auto whitespace-pre leading-relaxed">{ex.sql}</pre>
+              </div>
+            ))}
           </div>
         </section>
 
