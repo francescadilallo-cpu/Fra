@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import { useSector } from '../contexts/SectorContext'
@@ -219,6 +219,34 @@ function DisambiguationCard({ onChoose }: { onChoose: (q: string) => void }) {
   )
 }
 
+// ── Resolution steps trace ─────────────────────────────────────────────────────
+
+function StepsTrace({ steps }: { steps: string[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <ListChecks className="w-3 h-3" />
+        <span>Semantic layer resolution</span>
+      </button>
+      {open && (
+        <ol className="mt-2 space-y-1 pl-1">
+          {steps.map((s, i) => (
+            <li key={i} className="text-[11px] text-slate-500 leading-snug flex gap-2">
+              <span className="text-teal-500 font-mono font-bold flex-shrink-0">{i + 1}.</span>
+              <span>{s.replace(/^[①②③④⑤]\s*/, '')}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
 function SqlBlock({ sql }: { sql: string }) {
@@ -277,10 +305,22 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
         <Bot className="w-4 h-4 text-teal-400" />
       </div>
       <div className="flex-1 max-w-[85%] bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 space-y-3 shadow-sm">
-        {/* Interpreted as */}
-        <div>
-          <span className="text-[10px] text-slate-400 uppercase tracking-wide">Interpretation</span>
-          <p className="text-xs text-slate-500 mt-0.5 italic font-mono">{r.interpreted_as}</p>
+
+        {/* Source badges + interpretation row */}
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Query</span>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-mono leading-snug">{r.interpreted_as}</p>
+          </div>
+          {r.sources && r.sources.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap flex-shrink-0">
+              {r.sources.map(s => (
+                <span key={s.id} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.bg} ${s.text}`}>
+                  {s.label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Summary */}
@@ -289,6 +329,11 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
             __html: r.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           }} />
         </div>
+
+        {/* Disambiguation card */}
+        {r.isDisambiguation && onFollowUp && (
+          <DisambiguationCard onChoose={onFollowUp} />
+        )}
 
         {/* Inline chart */}
         {r.chartData && <InlineBarChart chart={r.chartData} />}
@@ -305,8 +350,14 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
           </div>
         )}
 
+        {/* Steps trace + SQL in a compact row */}
+        <div className="flex flex-col gap-1.5">
+          {r.steps && <StepsTrace steps={r.steps} />}
+          <SqlBlock sql={r.sql} />
+        </div>
+
         {/* Ontology entities used */}
-        {message.entities && message.entities.length > 0 && (
+        {message.entities && message.entities.length > 0 && !r.sources && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <GitBranch className="w-3 h-3 text-teal-500 flex-shrink-0" />
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">Via semantic layer:</span>
@@ -317,14 +368,6 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
             ))}
           </div>
         )}
-
-        {/* Disambiguation card */}
-        {r.isDisambiguation && onFollowUp && (
-          <DisambiguationCard onChoose={onFollowUp} />
-        )}
-
-        {/* SQL */}
-        <SqlBlock sql={r.sql} />
 
         {/* Follow-up suggestions */}
         {r.followUps && r.followUps.length > 0 && onFollowUp && (

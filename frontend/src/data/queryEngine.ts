@@ -26,6 +26,13 @@ export interface ChartData {
   unit?: string
 }
 
+export interface SourceBadge {
+  id: string
+  label: string
+  bg: string
+  text: string
+}
+
 export interface EngineResult {
   sql: string
   rows: Record<string, unknown>[]
@@ -34,6 +41,8 @@ export interface EngineResult {
   chartData?: ChartData
   followUps?: string[]
   isDisambiguation?: boolean
+  sources?: SourceBadge[]
+  steps?: string[]
 }
 
 // ── Entity matching ───────────────────────────────────────────────────────────
@@ -402,10 +411,105 @@ function buildChartData(rows: Record<string, unknown>[], pq: ParsedQuery): Chart
 // Pattern-matched for the real AW demo scenario — returns precise data from
 // actual source tables instead of random mock rows.
 
+const SRC: Record<string, SourceBadge> = {
+  ERP: { id: 'erp', label: 'ERP OrionSales',  bg: 'bg-blue-100',   text: 'text-blue-700'   },
+  CRM: { id: 'crm', label: 'CRM ClientHub',   bg: 'bg-violet-100', text: 'text-violet-700' },
+  HR:  { id: 'hr',  label: 'HR CSV',           bg: 'bg-amber-100',  text: 'text-amber-700'  },
+  PIM: { id: 'pim', label: 'PIM JSON',         bg: 'bg-teal-100',   text: 'text-teal-700'   },
+  KG:  { id: 'kg',  label: 'Knowledge Graph',  bg: 'bg-slate-100',  text: 'text-slate-600'  },
+}
+
 const AW_PATTERNS: Array<{
   test: (q: string) => boolean
   result: () => EngineResult
 }> = [
+  // ── Net revenue (specific — before the general disambiguation pattern) ───────
+  {
+    test: q => /subtotalAmount|net.?revenue|commercial.?revenue/i.test(q),
+    result: () => ({
+      sql: `-- Net revenue by quarter 2014 (subtotal_amount = excl. tax + freight)
+SELECT
+  CONCAT('Q', DATEPART(quarter, orderDate), ' 2014') AS quarter,
+  COUNT(*)                     AS orders,
+  SUM(subtotalAmount)          AS net_revenue,
+  AVG(subtotalAmount)          AS avg_order_net
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY DATEPART(quarter, orderDate)
+ORDER BY quarter`,
+      rows: [
+        { quarter: 'Q1 2014', orders: 7312,  net_revenue: '$4,121,485', avg_order_net: '$563.63' },
+        { quarter: 'Q2 2014', orders: 8204,  net_revenue: '$5,182,930', avg_order_net: '$631.76' },
+        { quarter: 'Q3 2014', orders: 8847,  net_revenue: '$5,847,621', avg_order_net: '$661.07' },
+        { quarter: 'Q4 2014', orders: 7102,  net_revenue: '$4,975,034', avg_order_net: '$700.51' },
+      ],
+      summary: '**Net revenue (subtotal_amount) 2014: $20.1M** across 31,465 orders. Peak quarter is Q3 ($5.85M). Average net order: $639.65. This excludes tax and freight — the commercial "fatturato" figure.',
+      interpreted_as: 'SUM(subtotalAmount) GROUP BY quarter · ERP SalesOrder · YEAR 2014',
+      chartData: {
+        type: 'bar',
+        title: 'Net revenue by quarter — subtotal_amount',
+        labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
+        values: [4121485, 5182930, 5847621, 4975034],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① "net revenue" resolved → subtotal_amount (commercial, excl. tax + freight)',
+        '② Filter: YEAR(orderDate) = 2014 · 31,465 orders in scope',
+        '③ GROUP BY quarter · SUM(subtotalAmount) · AVG(subtotalAmount)',
+        '④ Total verified: $20,127,070',
+      ],
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'Which products generated the most revenue?',
+      ],
+    }),
+  },
+  // ── Gross revenue (specific — before the general disambiguation pattern) ─────
+  {
+    test: q => /totalDue|total.?due|gross.?revenue|billed.?amount/i.test(q),
+    result: () => ({
+      sql: `-- Gross revenue by quarter 2014 (total_due = incl. tax + freight)
+SELECT
+  CONCAT('Q', DATEPART(quarter, orderDate), ' 2014') AS quarter,
+  COUNT(*)                     AS orders,
+  SUM(totalDue)                AS gross_revenue,
+  SUM(totalDue) - SUM(subtotalAmount) AS tax_freight
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY DATEPART(quarter, orderDate)
+ORDER BY quarter`,
+      rows: [
+        { quarter: 'Q1 2014', orders: 7312,  gross_revenue: '$4,588,234', tax_freight: '$466,749' },
+        { quarter: 'Q2 2014', orders: 8204,  gross_revenue: '$5,768,412', tax_freight: '$585,482' },
+        { quarter: 'Q3 2014', orders: 8847,  gross_revenue: '$6,504,891', tax_freight: '$657,270' },
+        { quarter: 'Q4 2014', orders: 7102,  gross_revenue: '$5,549,031', tax_freight: '$573,997' },
+      ],
+      summary: '**Gross revenue (total_due) 2014: $22.4M** — includes $2.28M in tax + freight on top of net. Same 31,465 orders. Q3 peak at $6.5M gross. Average gross order: $712.24.',
+      interpreted_as: 'SUM(totalDue) GROUP BY quarter · ERP SalesOrder · YEAR 2014',
+      chartData: {
+        type: 'bar',
+        title: 'Gross revenue by quarter — total_due',
+        labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
+        values: [4588234, 5768412, 6504891, 5549031],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① "gross revenue" resolved → total_due (billing amount, incl. tax + freight)',
+        '② Filter: YEAR(orderDate) = 2014 · 31,465 orders in scope',
+        '③ GROUP BY quarter · SUM(totalDue) · delta = totalDue − subtotalAmount',
+        '④ Total verified: $22,410,568 (+$2,283,498 vs net)',
+      ],
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'Which products generated the most revenue?',
+      ],
+    }),
+  },
+  // ── Top salesperson ───────────────────────────────────────────────────────────
   {
     test: q => /top sales(person|rep)|best sales|who.*sold|jae pak|salesperson.*revenue|revenue.*salesperson/i.test(q),
     result: () => ({
@@ -432,8 +536,8 @@ LIMIT  10`,
         { salesperson: 'Mensa-Bonsu, Syed', salesYTD: 1827066.71, bonus:   75, commissionPct: '1.8%', erp_id: 288, hr_id: 288 },
         { salesperson: 'Alberts, Pamela',   salesYTD: 1453719.47, bonus:  500, commissionPct: '1.0%', erp_id: 278, hr_id: 278 },
       ],
-      summary: 'Top salesperson is **Linda Mitchell** ($4.25M YTD), followed by **Rachel Reiter** ($4.12M). **Jae Pak** ranks 8th with the highest bonus ($6,700). Data joined cross-source: ERP OrionSales × HR CSV via `salesPersonId ↔ matricolaDip`.',
-      interpreted_as: 'SELECT Salesperson JOIN Employee · ORDER BY salesYTD DESC · LIMIT 10',
+      summary: 'Top salesperson is **Linda Mitchell** ($4.25M YTD), followed by **Rachel Reiter** ($4.12M). **Jae Pak** ranks 8th with the highest bonus ($6,700). Cross-source join: ERP OrionSales × HR CSV via `salesPersonId ↔ matricolaDip`.',
+      interpreted_as: 'ERP.SalesPerson JOIN HR.dipendenti_hr · ORDER BY salesYTD DESC · LIMIT 10',
       chartData: {
         type: 'bar',
         title: 'Sales YTD by salesperson (ERP × HR)',
@@ -441,6 +545,13 @@ LIMIT  10`,
         values: [4251368, 4116871, 3763178, 3189418, 3121616, 2604540, 2458535, 2315185],
         unit: '$',
       },
+      sources: [SRC.ERP, SRC.HR],
+      steps: [
+        '① Bridge resolved: salesPersonId ↔ matricolaDip (14/14 matches — 100%)',
+        '② Cross-join ERP.SalesPerson × HR.dipendenti_hr on bridge key',
+        '③ Semantic mapping: cognome || \', \' || nome → salesperson label',
+        '④ ORDER BY salesYTD DESC · 14 reps ranked · LIMIT 10',
+      ],
       followUps: [
         'Show orders by territory ranked by sales YTD',
         'What is our total revenue — subtotal vs total due?',
@@ -448,8 +559,9 @@ LIMIT  10`,
       ],
     }),
   },
+  // ── Revenue disambiguation ────────────────────────────────────────────────────
   {
-    test: q => /\brevenue\b|fatturato|subtotal|total.?due|how much.*sold|total.*sales|sales.*total/i.test(q),
+    test: q => /\brevenue\b|fatturato|how much.*sold|total.*sales|sales.*total/i.test(q),
     result: () => ({
       sql: `-- "fatturato" disambiguation: two valid interpretations
 -- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
@@ -469,9 +581,16 @@ WHERE YEAR(orderDate) = 2014`,
         { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
         { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
       ],
-      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — Query AI asks for context before answering.',
-      interpreted_as: 'SUM(subtotalAmount) + SUM(totalDue) · SalesOrder 2014 · DISAMBIGUATION required',
+      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — choose which definition applies below.',
+      interpreted_as: 'SUM(subtotalAmount) ≠ SUM(totalDue) · SalesOrder 2014 · user resolution required',
       isDisambiguation: true,
+      sources: [SRC.ERP],
+      steps: [
+        '① Term "revenue" / "fatturato" matched → ambiguity detected',
+        '② Definition A: subtotal_amount = $20,127,070 (commercial net, excl. tax + freight)',
+        '③ Definition B: total_due = $22,410,568 (billed gross, incl. tax + freight)',
+        '④ Semantic layer paused — awaiting user disambiguation choice',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'Show orders by territory ranked by sales YTD',
@@ -479,6 +598,7 @@ WHERE YEAR(orderDate) = 2014`,
       ],
     }),
   },
+  // ── Customer / CRM dedup ──────────────────────────────────────────────────────
   {
     test: q => /customer|client|account|how many.*customer|crm|dedup|duplicate/i.test(q),
     result: () => ({
@@ -500,8 +620,8 @@ FROM crm.ClientHub_accounts`,
         { metric: 'ERP↔CRM bridge',        value: '18,484', note: 'Matched via customer_ref ↔ accountId' },
         { metric: 'Unmatched CRM-only',    value: '1,345',  note: 'No ERP order history — prospects' },
       ],
-      summary: 'After CRM deduplication, **19,829 unique customers** are in the Knowledge Graph (372 duplicates with `accountId < 0` removed). **18,484** are cross-referenced with ERP orders via the `customer_ref ↔ accountId` bridge.',
-      interpreted_as: 'COUNT Customer · CRM ClientHub dedup · ERP bridge match',
+      summary: 'After CRM deduplication, **19,829 unique customers** in the Knowledge Graph (372 duplicates with `accountId < 0` removed). **18,484** cross-referenced with ERP orders via `customer_ref ↔ accountId` bridge (93.2% match).',
+      interpreted_as: 'CRM.ClientHub_accounts · dedup filter accountId < 0 · ERP bridge join',
       chartData: {
         type: 'bar',
         title: 'CRM account breakdown',
@@ -509,6 +629,13 @@ FROM crm.ClientHub_accounts`,
         values: [19829, 18484, 1345, 372],
         unit: '',
       },
+      sources: [SRC.CRM, SRC.ERP, SRC.KG],
+      steps: [
+        '① CRM ClientHub loaded: 20,201 raw accounts',
+        '② Dedup rule applied: accountId < 0 → 372 legacy migration artefacts removed',
+        '③ Clean set: 19,829 unique customers ingested into Knowledge Graph',
+        '④ Bridge customer_ref ↔ accountId: 18,484/19,829 matched to ERP (93.2%)',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'Show orders by territory ranked by sales YTD',
@@ -516,6 +643,7 @@ FROM crm.ClientHub_accounts`,
       ],
     }),
   },
+  // ── Territory ─────────────────────────────────────────────────────────────────
   {
     test: q => /territory|region|area|geographic|by.*country|country.*by/i.test(q),
     result: () => ({
@@ -540,8 +668,8 @@ ORDER  BY t.salesYTD DESC`,
         { territory: 'Southeast',      countryRegion: 'US', group: 'North America', salesYTD:  2538667.25, order_count: 1910 },
         { territory: 'Northeast',      countryRegion: 'US', group: 'North America', salesYTD:  2402176.85, order_count: 1833 },
       ],
-      summary: '**Southwest** leads with $10.5M YTD (8,512 orders), followed by **Northwest** ($7.9M). North America accounts for $32.2M combined. Europe (UK, France, Germany) totals $13.6M.',
-      interpreted_as: 'SELECT Territory · ORDER BY salesYTD DESC · 10 territories',
+      summary: '**Southwest** leads with $10.5M YTD (8,512 orders), followed by **Northwest** ($7.9M). North America $32.2M combined. Europe (UK, France, Germany) $13.6M.',
+      interpreted_as: 'ERP.SalesTerritory LEFT JOIN SalesOrder · GROUP BY territory · ORDER BY salesYTD DESC',
       chartData: {
         type: 'bar',
         title: 'Sales YTD by territory',
@@ -549,6 +677,13 @@ ORDER  BY t.salesYTD DESC`,
         values: [10510853, 7887186, 6771829, 5977814, 5012905, 4772398, 3805202, 3072175],
         unit: '$',
       },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesTerritory loaded: 10 territories across 4 groups',
+        '② LEFT JOIN ERP.SalesOrder ON territoryId',
+        '③ GROUP BY territory · SUM(salesYTD) · COUNT(orderId)',
+        '④ ORDER BY salesYTD DESC · Southwest #1 at $10.5M',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'What is our total revenue — subtotal vs total due?',
@@ -556,6 +691,7 @@ ORDER  BY t.salesYTD DESC`,
       ],
     }),
   },
+  // ── Products ──────────────────────────────────────────────────────────────────
   {
     test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q),
     result: () => ({
@@ -584,8 +720,8 @@ LIMIT    10`,
         { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 1 },
         { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 1 },
       ],
-      summary: 'Top product by revenue: **Mountain-200 Black, 38** ($261K from 3 units). Bikes dominate revenue — all top 5 are bike models. Data joined cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
-      interpreted_as: 'SELECT Product JOIN SalesOrderLine · SUM(lineTotal) · ERP × PIM · ORDER BY revenue DESC',
+      summary: 'Top product: **Mountain-200 Black, 38** ($261K, 3 units). All top 5 are bikes. 47 PIM products had no matching ERP orders (orphans). Cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
+      interpreted_as: 'PIM.product_catalog JOIN ERP.SalesOrderLine · SUM(lineTotal) · ORDER BY revenue DESC',
       chartData: {
         type: 'bar',
         title: 'Revenue by product (ERP × PIM)',
@@ -593,6 +729,13 @@ LIMIT    10`,
         values: [261435, 106419, 32726, 14289, 8159, 4079, 2039, 2024],
         unit: '$',
       },
+      sources: [SRC.ERP, SRC.PIM],
+      steps: [
+        '① PIM product_catalog loaded: 504 products (JSON, field: internal_id)',
+        '② Bridge resolved: productId ↔ internal_id (457/504 matched — 99.6%)',
+        '③ 47 orphan products flagged (in PIM, no ERP sales history)',
+        '④ Cross-join ERP.SalesOrderLine × PIM · GROUP BY product · SUM(lineTotal)',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'Show orders by territory ranked by sales YTD',
@@ -600,6 +743,7 @@ LIMIT    10`,
       ],
     }),
   },
+  // ── Employees / HR ────────────────────────────────────────────────────────────
   {
     test: q => /employee|hr|staff|headcount|hired|dipendenti|matricola/i.test(q),
     result: () => ({
@@ -627,8 +771,15 @@ LIMIT  10`,
         { employeeId: 289, lastName: 'Reiter',     firstName: 'Rachel',  jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
         { employeeId: 290, lastName: 'Vargas',     firstName: 'Ranjit',  jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
       ],
-      summary: '**290 employees** in the HR CSV (Italian schema). The semantic layer maps Italian field names (`matricolaDip`, `cognome`, `nome`, `ruolo`) to standard English equivalents. 14 sales representatives linked to ERP via `matricolaDip ↔ salesperson_ref`.',
-      interpreted_as: 'SELECT Employee · HR CSV (IT schema) · semantic layer mapping',
+      summary: '**290 employees** in the HR CSV (Italian schema). Semantic layer maps: `matricolaDip→employeeId`, `cognome→lastName`, `nome→firstName`, `ruolo→jobTitle`. 14 sales reps linked to ERP via `matricolaDip ↔ salesperson_ref` (100% match).',
+      interpreted_as: 'HR.dipendenti_hr · Italian schema · semantic layer field mapping applied',
+      sources: [SRC.HR],
+      steps: [
+        '① HR CSV loaded: 290 rows · schema language: Italian',
+        '② Semantic mapping: matricolaDip→employeeId, cognome→lastName, nome→firstName',
+        '③ ruolo→jobTitle, dataNascita→birthDate, dataAssunzione→hireDate',
+        '④ Bridge available: matricolaDip ↔ salesPersonId (14 sales reps, 100% matched)',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'Show orders by territory ranked by sales YTD',
@@ -636,6 +787,7 @@ LIMIT  10`,
       ],
     }),
   },
+  // ── Orders ────────────────────────────────────────────────────────────────────
   {
     test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q),
     result: () => ({
@@ -661,12 +813,55 @@ LIMIT  12`,
         { orderId: 43662, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  28832.53, totalDue:  32474.93, channel: 'In-store' },
         { orderId: 43661, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  32726.48, totalDue:  36865.80, channel: 'In-store' },
       ],
-      summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Online channel active since 2014.',
-      interpreted_as: 'SELECT SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+      summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Note: `subtotalAmount` ≠ `totalDue` — tax + freight adds ~11%.',
+      interpreted_as: 'ERP.SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder loaded: 31,465 rows total',
+        '② ORDER BY orderDate DESC · most recent orders first',
+        '③ Channel decoded: onlineOrderFlag → \'Online\' / \'In-store\'',
+        '④ Note: subtotalAmount (net) vs totalDue (gross) differ by tax + freight',
+      ],
       followUps: [
         'Who is the top salesperson by revenue in 2014?',
         'What is our total revenue — subtotal vs total due?',
         'Show orders by territory ranked by sales YTD',
+      ],
+    }),
+  },
+  // ── Bridge & Knowledge Graph health ──────────────────────────────────────────
+  {
+    test: q => /bridge|data.?quality|match.?rate|knowledge.?graph|\bkg\b|cross.source.?health|identity.?resolution/i.test(q),
+    result: () => ({
+      sql: `-- Cross-source bridge validation report
+-- Knowledge Graph: 193,062 nodes · 313,193 edges
+
+SELECT
+  bridge_name,
+  source_a, field_a,
+  source_b, field_b,
+  total_a, matched, unmatched,
+  ROUND(matched * 100.0 / total_a, 1) AS match_pct
+FROM kg.bridge_validation_report
+ORDER BY match_pct DESC`,
+      rows: [
+        { bridge_name: 'SOLD_BY',       source_a: 'ERP SalesPerson', field_a: 'salesPersonId', source_b: 'HR CSV',      field_b: 'matricolaDip', total_a: 14,     matched: 14,    unmatched: 0,  match_pct: '100.0%' },
+        { bridge_name: 'OF_PRODUCT',    source_a: 'ERP OrderLine',   field_a: 'productId',     source_b: 'PIM JSON',    field_b: 'internal_id', total_a: 504,    matched: 457,   unmatched: 47, match_pct: '99.6%'  },
+        { bridge_name: 'PLACED_BY',     source_a: 'ERP SalesOrder',  field_a: 'customer_ref',  source_b: 'CRM ClientHub', field_b: 'accountId', total_a: 19829,  matched: 18484, unmatched: 1345, match_pct: '93.2%' },
+      ],
+      summary: '3 cross-source bridges validated. **SOLD_BY** (ERP × HR): 100% — all 14 sales reps matched. **OF_PRODUCT** (ERP × PIM): 99.6% — 47 orphan products. **PLACED_BY** (ERP × CRM): 93.2% — 1,345 CRM-only prospects. KG: **193,062 nodes · 313,193 edges**.',
+      interpreted_as: 'kg.bridge_validation_report · 3 bridges · match rates',
+      sources: [SRC.ERP, SRC.CRM, SRC.HR, SRC.PIM, SRC.KG],
+      steps: [
+        '① Knowledge Graph loaded: 193,062 nodes · 313,193 edges',
+        '② Bridge SOLD_BY: salesPersonId ↔ matricolaDip → 14/14 (100%)',
+        '③ Bridge OF_PRODUCT: productId ↔ internal_id → 457/504 (99.6%, 47 orphans)',
+        '④ Bridge PLACED_BY: customer_ref ↔ accountId → 18,484/19,829 (93.2%)',
+      ],
+      followUps: [
+        'How many unique customers after CRM deduplication?',
+        'Who is the top salesperson by revenue in 2014?',
+        'Which products generated the most revenue?',
       ],
     }),
   },
