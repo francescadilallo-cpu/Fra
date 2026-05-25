@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
-import { executeLLMQuery, getStoredApiKey, saveApiKey, clearApiKey } from '../data/llmQueryEngine'
+import {
+  executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
+  PROVIDERS, type LLMProvider,
+} from '../data/llmQueryEngine'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 
@@ -402,54 +405,86 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
 // ── API key panel ──────────────────────────────────────────────────────────────
 
 function ApiKeyPanel({ onClose }: { onClose: () => void }) {
-  const [draft, setDraft] = useState(getStoredApiKey)
+  const stored = getStoredCredentials()
+  const [provider, setProvider] = useState<LLMProvider>(stored.provider)
+  const [draft, setDraft] = useState(stored.key)
   const [saved, setSaved] = useState(false)
 
+  const cfg = PROVIDERS.find(p => p.id === provider)!
+
   function handleSave() {
-    saveApiKey(draft.trim())
+    saveCredentials(draft.trim(), provider)
     setSaved(true)
-    setTimeout(() => { setSaved(false); onClose() }, 800)
+    setTimeout(() => { setSaved(false); onClose() }, 700)
   }
 
   function handleClear() {
-    clearApiKey()
+    clearCredentials()
     setDraft('')
+    setSaved(false)
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 space-y-3">
+    <div className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Key className="w-3.5 h-3.5 text-teal-400" />
-          <span className="text-xs font-semibold text-white">Anthropic API Key</span>
+          <span className="text-xs font-semibold text-white">LLM Provider</span>
+          <span className="text-[10px] text-slate-400">— chiave salvata solo nel browser</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white">
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
       </div>
-      <p className="text-[11px] text-slate-400 leading-snug">
-        Inserisci la tua API key per abilitare il Query AI con Claude.
-        Risponderà a qualsiasi domanda sullo schema AdventureWorks.
-        La chiave viene salvata solo nel browser (localStorage).
-      </p>
+
+      {/* Provider selector */}
+      <div className="grid grid-cols-3 gap-2">
+        {PROVIDERS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => { setProvider(p.id); setDraft('') }}
+            className={`rounded-lg px-3 py-2.5 text-left border transition-all ${
+              provider === p.id
+                ? 'bg-teal-600 border-teal-500 text-white'
+                : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
+            }`}
+          >
+            <p className="text-xs font-semibold">{p.label}</p>
+            <p className={`text-[10px] mt-0.5 ${provider === p.id ? 'text-teal-200' : p.free ? 'text-teal-400' : 'text-slate-500'}`}>
+              {p.badge}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {/* Get key link */}
+      <a
+        href={cfg.keyUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 text-[11px] text-teal-400 hover:text-teal-300 transition-colors"
+      >
+        <ExternalLink className="w-3 h-3" />
+        {cfg.hint} — ottieni la chiave gratuita →
+      </a>
+
+      {/* Key input */}
       <div className="flex gap-2">
         <input
           type="password"
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSave()}
-          placeholder="sk-ant-api03-..."
+          onKeyDown={e => e.key === 'Enter' && draft.trim() && handleSave()}
+          placeholder={cfg.keyPlaceholder}
           className="flex-1 bg-slate-800 border border-slate-600 focus:border-teal-500 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 outline-none font-mono"
         />
         <button
           onClick={handleSave}
           disabled={!draft.trim()}
-          className="px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+          className="px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 flex-shrink-0"
         >
-          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Save'}
+          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Salva'}
         </button>
-        {getStoredApiKey() && (
-          <button onClick={handleClear} className="px-2 py-2 text-slate-400 hover:text-red-400 transition-colors">
+        {stored.key && (
+          <button onClick={handleClear} className="px-2 text-slate-500 hover:text-red-400 transition-colors">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -470,16 +505,16 @@ export default function QueryInterface() {
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<string[]>(() => loadHistory(sectorId))
   const [showApiPanel, setShowApiPanel] = useState(false)
-  const [apiKey, setApiKey] = useState(getStoredApiKey)
+  const [creds, setCreds] = useState(getStoredCredentials)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const isLLMActive = !!apiKey && sectorId === 'manufacturing'
+  const isLLMActive = !!creds.key && sectorId === 'manufacturing'
 
-  // Refresh apiKey from localStorage when panel closes
+  // Refresh creds from localStorage when panel closes
   function handleApiPanelClose() {
     setShowApiPanel(false)
-    setApiKey(getStoredApiKey())
+    setCreds(getStoredCredentials())
   }
 
   useEffect(() => {
@@ -516,8 +551,8 @@ export default function QueryInterface() {
       let result: EngineResult
 
       if (isLLMActive) {
-        // LLM path — call Claude API with full AW schema context
-        result = await executeLLMQuery(question, apiKey)
+        // LLM path — call provider API with full AW schema context
+        result = await executeLLMQuery(question, creds.key, creds.provider)
       } else {
         // Pattern engine path — synchronous, no API needed
         await new Promise(r => setTimeout(r, 420))
@@ -584,7 +619,7 @@ export default function QueryInterface() {
               }`}
             >
               {isLLMActive
-                ? <><Zap className="w-3.5 h-3.5 text-teal-500" />Claude LLM active</>
+                ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
                 : <><Key className="w-3.5 h-3.5" />Add API Key</>}
             </button>
           )}
@@ -675,7 +710,7 @@ export default function QueryInterface() {
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
-                <span>{isLLMActive ? 'Asking Claude…' : 'Querying semantic layer…'}</span>
+                <span>{isLLMActive ? `Asking ${PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'}…` : 'Querying semantic layer…'}</span>
               </div>
             </div>
           </div>

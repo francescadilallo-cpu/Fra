@@ -1,7 +1,50 @@
 import type { EngineResult } from './queryEngine'
 
+// ── Provider definitions ──────────────────────────────────────────────────────
+
+export type LLMProvider = 'anthropic' | 'groq' | 'gemini'
+
+export interface ProviderConfig {
+  id: LLMProvider
+  label: string
+  free: boolean
+  badge: string
+  hint: string
+  keyUrl: string
+  keyPlaceholder: string
+}
+
+export const PROVIDERS: ProviderConfig[] = [
+  {
+    id: 'groq',
+    label: 'Groq',
+    free: true,
+    badge: 'Gratuito · LLaMA 3.3 70b',
+    hint: 'console.groq.com → API Keys',
+    keyUrl: 'https://console.groq.com/keys',
+    keyPlaceholder: 'gsk_...',
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini Flash',
+    free: true,
+    badge: 'Gratuito · 1M token/day',
+    hint: 'aistudio.google.com → Get API Key',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    keyPlaceholder: 'AIza...',
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic Claude',
+    free: false,
+    badge: 'A pagamento · Haiku $0.001/query',
+    hint: 'console.anthropic.com → API Keys',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    keyPlaceholder: 'sk-ant-api03-...',
+  },
+]
+
 // ── AdventureWorks system prompt ──────────────────────────────────────────────
-// Full schema + bridge context injected as system prompt for the LLM.
 
 const AW_SYSTEM_PROMPT = `You are the Query AI engine for the AdventureWorks Semantic Intelligence platform.
 You answer questions about AdventureWorks 2014 data, which spans 4 source systems connected by a semantic layer and Knowledge Graph.
@@ -35,91 +78,69 @@ You understand English and Italian.
 ## Knowledge Graph
 193,062 nodes, 313,193 edges
 
-## Key Facts — use these EXACT numbers
+## Key Facts — use EXACT numbers
 - Net revenue 2014 (subtotalAmount): $20,127,070
 - Gross revenue 2014 (totalDue): $22,410,568
 - Tax + freight: $2,283,498 (11.3% of net)
-- Total orders 2014: 31,465
-- Average net order value: $639.65
+- Total orders 2014: 31,465 | Avg net order: $639.65
 - Unique customers (after dedup): 19,829
-- Top salesperson by salesYTD: Linda Mitchell (#276) $4,251,368.55
-- Jae Pak (#279) has highest bonus ($6,700) but ranks 8th by salesYTD ($2,315,185)
+- Top salesperson salesYTD: Linda Mitchell (#276) $4,251,368.55
+- Jae Pak (#279) highest bonus $6,700 but ranks 8th by salesYTD ($2,315,185)
 - Top territory: Southwest $10,510,853.87 (8,512 orders)
-- Quarterly net revenue: Q1 $4,121,485 · Q2 $5,182,930 · Q3 $5,847,621 · Q4 $4,975,034
-- KG nodes: 193,062 · edges: 313,193
+- Quarterly net: Q1 $4,121,485 · Q2 $5,182,930 · Q3 $5,847,621 · Q4 $4,975,034
 
-## Top Salespersons (salesYTD)
-1. Mitchell, Linda #276 — $4,251,368.55 · bonus $2,000
-2. Reiter, Rachel #289 — $4,116,871.23 · bonus $5,150
-3. Saraiva, José #275 — $3,763,178.18 · bonus $4,100
-4. Tsoflias, Lynn #277 — $3,189,418.37 · bonus $2,500
-5. Vargas, Ranjit #290 — $3,121,616.32 · bonus $985
-6. Campbell, David #282 — $2,604,540.72 · bonus $5,000
-7. Valdez, Sonia #281 — $2,458,535.62 · bonus $3,550
-8. Pak, Jae #279 — $2,315,185.61 · bonus $6,700 ← highest bonus but NOT top revenue
+## Top 8 Salespersons (salesYTD)
+1. Mitchell, Linda #276 — $4,251,368 · bonus $2,000
+2. Reiter, Rachel #289 — $4,116,871 · bonus $5,150
+3. Saraiva, José #275 — $3,763,178 · bonus $4,100
+4. Tsoflias, Lynn #277 — $3,189,418 · bonus $2,500
+5. Vargas, Ranjit #290 — $3,121,616 · bonus $985
+6. Campbell, David #282 — $2,604,540 · bonus $5,000
+7. Valdez, Sonia #281 — $2,458,535 · bonus $3,550
+8. Pak, Jae #279 — $2,315,185 · bonus $6,700
 
-## Territory Rankings (salesYTD)
-1. Southwest (US) — $10,510,853 · 8,512 orders
-2. Northwest (US) — $7,887,186 · 6,438 orders
-3. Canada — $6,771,829 · 4,821 orders
-4. Australia — $5,977,814 · 3,944 orders
-5. United Kingdom — $5,012,905 · 3,201 orders
-6. France — $4,772,398 · 2,988 orders
-7. Germany — $3,805,202 · 2,477 orders
-
-## Top Products by Revenue
-1. Mountain-200 Black, 38 (Bikes) — $261,435 · list $2,049
-2. Road-150 Red, 62 (Bikes) — $106,419 · list $3,578
-3. Touring-1000 Blue, 60 (Bikes) — $32,726 · list $2,384
+## Territories (salesYTD)
+Southwest $10,510,853 · Northwest $7,887,186 · Canada $6,771,829 · Australia $5,977,814
+UK $5,012,905 · France $4,772,398 · Germany $3,805,202 · Central $3,072,175
 
 ## SEMANTIC RULE — Revenue Ambiguity
-"fatturato" / "revenue" / "ricavi" / "vendite" are AMBIGUOUS:
-- subtotalAmount = net commercial revenue (excl. tax+freight) → $20.1M
-- totalDue = gross billed amount (incl. tax+freight) → $22.4M
-If the question does not specify which, set isDisambiguation: true.
+"fatturato"/"revenue"/"ricavi" are AMBIGUOUS:
+- subtotalAmount = net (excl. tax+freight) → $20.1M
+- totalDue = gross (incl. tax+freight) → $22.4M
+If unspecified, set isDisambiguation: true.
 
-## Response Format
-Respond ONLY with valid JSON. No markdown fences. No text outside the JSON object.
-
+## Response Format — ONLY valid JSON, no markdown fences, no text outside
 {
-  "sql": "-- SQL comment explaining source\nSELECT ...",
+  "sql": "-- comment\nSELECT ...",
   "rows": [{"col": "value"}],
-  "summary": "Summary with **bold** for key numbers. Use real AW data.",
-  "interpreted_as": "Brief SQL-style query description",
-  "chartData": {
-    "type": "bar",
-    "title": "Chart title",
-    "labels": ["A", "B"],
-    "values": [100, 200],
-    "unit": "$"
-  },
-  "sources": [
-    {"id": "erp", "label": "ERP OrionSales", "bg": "bg-blue-100", "text": "text-blue-700"}
-  ],
-  "steps": ["① Step one", "② Step two", "③ Step three"],
-  "followUps": ["Question 1?", "Question 2?", "Question 3?"],
+  "summary": "**bold** for key numbers",
+  "interpreted_as": "brief SQL-style label",
+  "chartData": {"type":"bar","title":"","labels":[],"values":[],"unit":"$"},
+  "sources": [{"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}],
+  "steps": ["① ...", "② ...", "③ ..."],
+  "followUps": ["Q1?", "Q2?", "Q3?"],
   "isDisambiguation": false
 }
+Source badges: ERP bg-blue-100/text-blue-700 · CRM bg-violet-100/text-violet-700 · HR bg-amber-100/text-amber-700 · PIM bg-teal-100/text-teal-700 · KG bg-slate-100/text-slate-600`
 
-Source badge values (copy exactly):
-- ERP: {"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}
-- CRM: {"id":"crm","label":"CRM ClientHub","bg":"bg-violet-100","text":"text-violet-700"}
-- HR:  {"id":"hr","label":"HR CSV","bg":"bg-amber-100","text":"text-amber-700"}
-- PIM: {"id":"pim","label":"PIM JSON","bg":"bg-teal-100","text":"text-teal-700"}
-- KG:  {"id":"kg","label":"Knowledge Graph","bg":"bg-slate-100","text":"text-slate-600"}
+// ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
-Rules:
-- Always include 3-5 resolution steps.
-- Always include 3 relevant follow-up questions.
-- Include chartData whenever a bar chart would add value (ranked lists, comparisons, time series).
-- rows should contain at most 12 rows with realistic AW data.
-- Use real numbers from the Key Facts section.
-- Write SQL that references the actual schema (erp.SalesOrder, hr.dipendenti_hr, etc.).`
+function parseResult(text: string): EngineResult {
+  const clean = text
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```\s*$/im, '')
+    .trim()
+  try {
+    return JSON.parse(clean) as EngineResult
+  } catch {
+    throw new Error(`LLM returned non-JSON: ${clean.slice(0, 200)}`)
+  }
+}
 
-// ── LLM execution ─────────────────────────────────────────────────────────────
+// ── Provider-specific callers ──────────────────────────────────────────────────
 
-export async function executeLLMQuery(question: string, apiKey: string): Promise<EngineResult> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+async function callAnthropic(question: string, apiKey: string): Promise<EngineResult> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -134,40 +155,101 @@ export async function executeLLMQuery(question: string, apiKey: string): Promise
       messages: [{ role: 'user', content: question }],
     }),
   })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    const msg = (err as { error?: { message?: string } }).error?.message
-    throw new Error(msg ?? `Anthropic API error ${response.status}`)
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(e.error?.message ?? `Anthropic ${res.status}`)
   }
+  const data = await res.json() as { content: Array<{ type: string; text: string }> }
+  return parseResult(data.content.find(c => c.type === 'text')?.text ?? '')
+}
 
-  const data = await response.json() as {
-    content: Array<{ type: string; text: string }>
+async function callGroq(question: string, apiKey: string): Promise<EngineResult> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 2048,
+      messages: [
+        { role: 'system', content: AW_SYSTEM_PROMPT },
+        { role: 'user', content: question },
+      ],
+    }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(e.error?.message ?? `Groq ${res.status}`)
   }
-  const text = data.content.find(c => c.type === 'text')?.text ?? ''
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> }
+  return parseResult(data.choices[0]?.message?.content ?? '')
+}
 
-  // Strip accidental markdown fences if the model wrapped the JSON
-  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+async function callGemini(question: string, apiKey: string): Promise<EngineResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: AW_SYSTEM_PROMPT }] },
+      contents: [{ parts: [{ text: question }] }],
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.2 },
+    }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(e.error?.message ?? `Gemini ${res.status}`)
+  }
+  const data = await res.json() as {
+    candidates: Array<{ content: { parts: Array<{ text: string }> } }>
+  }
+  return parseResult(data.candidates[0]?.content?.parts[0]?.text ?? '')
+}
 
+// ── Main entry ────────────────────────────────────────────────────────────────
+
+export async function executeLLMQuery(
+  question: string,
+  apiKey: string,
+  provider: LLMProvider,
+): Promise<EngineResult> {
+  switch (provider) {
+    case 'anthropic': return callAnthropic(question, apiKey)
+    case 'groq':      return callGroq(question, apiKey)
+    case 'gemini':    return callGemini(question, apiKey)
+  }
+}
+
+// ── Storage helpers ────────────────────────────────────────────────────────────
+
+const KEY_STORAGE   = 'aw-llm-api-key'
+const PROV_STORAGE  = 'aw-llm-provider'
+
+export function getStoredCredentials(): { key: string; provider: LLMProvider } {
   try {
-    return JSON.parse(clean) as EngineResult
-  } catch {
-    throw new Error(`LLM returned non-JSON response: ${clean.slice(0, 200)}`)
-  }
+    const key = localStorage.getItem(KEY_STORAGE) ?? ''
+    const provider = (localStorage.getItem(PROV_STORAGE) ?? 'groq') as LLMProvider
+    return { key, provider }
+  } catch { return { key: '', provider: 'groq' } }
 }
 
-// ── API key helpers ────────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'aw-anthropic-api-key'
-
-export function getStoredApiKey(): string {
-  try { return localStorage.getItem(STORAGE_KEY) ?? '' } catch { return '' }
+export function saveCredentials(key: string, provider: LLMProvider): void {
+  try {
+    localStorage.setItem(KEY_STORAGE, key)
+    localStorage.setItem(PROV_STORAGE, provider)
+  } catch { /* ignore */ }
 }
 
-export function saveApiKey(key: string): void {
-  try { localStorage.setItem(STORAGE_KEY, key) } catch { /* ignore */ }
+export function clearCredentials(): void {
+  try {
+    localStorage.removeItem(KEY_STORAGE)
+    localStorage.removeItem(PROV_STORAGE)
+  } catch { /* ignore */ }
 }
 
-export function clearApiKey(): void {
-  try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
-}
+// Legacy compat
+export function getStoredApiKey(): string { return getStoredCredentials().key }
+export function saveApiKey(key: string): void { saveCredentials(key, getStoredCredentials().provider) }
+export function clearApiKey(): void { clearCredentials() }
