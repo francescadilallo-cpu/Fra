@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
+import { executeLLMQuery, getStoredApiKey, saveApiKey, clearApiKey } from '../data/llmQueryEngine'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 
@@ -398,6 +399,65 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
   )
 }
 
+// ── API key panel ──────────────────────────────────────────────────────────────
+
+function ApiKeyPanel({ onClose }: { onClose: () => void }) {
+  const [draft, setDraft] = useState(getStoredApiKey)
+  const [saved, setSaved] = useState(false)
+
+  function handleSave() {
+    saveApiKey(draft.trim())
+    setSaved(true)
+    setTimeout(() => { setSaved(false); onClose() }, 800)
+  }
+
+  function handleClear() {
+    clearApiKey()
+    setDraft('')
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Key className="w-3.5 h-3.5 text-teal-400" />
+          <span className="text-xs font-semibold text-white">Anthropic API Key</span>
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-white">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-400 leading-snug">
+        Inserisci la tua API key per abilitare il Query AI con Claude.
+        Risponderà a qualsiasi domanda sullo schema AdventureWorks.
+        La chiave viene salvata solo nel browser (localStorage).
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSave()}
+          placeholder="sk-ant-api03-..."
+          className="flex-1 bg-slate-800 border border-slate-600 focus:border-teal-500 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 outline-none font-mono"
+        />
+        <button
+          onClick={handleSave}
+          disabled={!draft.trim()}
+          className="px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
+        >
+          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Save'}
+        </button>
+        {getStoredApiKey() && (
+          <button onClick={handleClear} className="px-2 py-2 text-slate-400 hover:text-red-400 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function QueryInterface() {
@@ -409,8 +469,18 @@ export default function QueryInterface() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<string[]>(() => loadHistory(sectorId))
+  const [showApiPanel, setShowApiPanel] = useState(false)
+  const [apiKey, setApiKey] = useState(getStoredApiKey)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const isLLMActive = !!apiKey && sectorId === 'manufacturing'
+
+  // Refresh apiKey from localStorage when panel closes
+  function handleApiPanelClose() {
+    setShowApiPanel(false)
+    setApiKey(getStoredApiKey())
+  }
 
   useEffect(() => {
     setMessages([])
@@ -442,39 +512,48 @@ export default function QueryInterface() {
     setInput('')
     setLoading(true)
 
-    // Brief timeout for UX — engine is synchronous
-    setTimeout(() => {
-      try {
-        const result = executeQuery(question, ontology.nodes, sectorId)
-        const entities = ontology.nodes
-          .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
-          .map(n => n.data.label)
+    const resolve = async () => {
+      let result: EngineResult
 
-        const assistantMsg: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: result.summary,
-          engineResult: result,
-          entities,
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, assistantMsg])
-      } catch (e: unknown) {
-        const errMsg = e instanceof Error ? e.message : 'Unknown error'
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'error',
-            content: `Error: ${errMsg}`,
-            timestamp: new Date(),
-          },
-        ])
-      } finally {
-        setLoading(false)
-        inputRef.current?.focus()
+      if (isLLMActive) {
+        // LLM path — call Claude API with full AW schema context
+        result = await executeLLMQuery(question, apiKey)
+      } else {
+        // Pattern engine path — synchronous, no API needed
+        await new Promise(r => setTimeout(r, 420))
+        result = executeQuery(question, ontology.nodes, sectorId)
       }
-    }, 420)
+
+      const entities = ontology.nodes
+        .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
+        .map(n => n.data.label)
+
+      const assistantMsg: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: result.summary,
+        engineResult: result,
+        entities,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, assistantMsg])
+    }
+
+    resolve().catch((e: unknown) => {
+      const errMsg = e instanceof Error ? e.message : 'Unknown error'
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'error',
+          content: `Error: ${errMsg}`,
+          timestamp: new Date(),
+        },
+      ])
+    }).finally(() => {
+      setLoading(false)
+      inputRef.current?.focus()
+    })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -488,10 +567,33 @@ export default function QueryInterface() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 bg-white">
-        <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
-        <p className="text-slate-400 mt-1 text-sm">
-          {sector.name} · Ask questions in natural language — powered by the semantic layer
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
+            <p className="text-slate-400 mt-1 text-sm">
+              {sector.name} · Ask questions in natural language — powered by the semantic layer
+            </p>
+          </div>
+          {sectorId === 'manufacturing' && (
+            <button
+              onClick={() => setShowApiPanel(v => !v)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${
+                isLLMActive
+                  ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
+                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              {isLLMActive
+                ? <><Zap className="w-3.5 h-3.5 text-teal-500" />Claude LLM active</>
+                : <><Key className="w-3.5 h-3.5" />Add API Key</>}
+            </button>
+          )}
+        </div>
+        {showApiPanel && sectorId === 'manufacturing' && (
+          <div className="mt-3">
+            <ApiKeyPanel onClose={handleApiPanelClose} />
+          </div>
+        )}
       </div>
 
       {/* Messages */}
@@ -573,7 +675,7 @@ export default function QueryInterface() {
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
-                <span>Querying semantic layer…</span>
+                <span>{isLLMActive ? 'Asking Claude…' : 'Querying semantic layer…'}</span>
               </div>
             </div>
           </div>
