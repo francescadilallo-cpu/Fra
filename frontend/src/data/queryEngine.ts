@@ -446,7 +446,7 @@ ORDER BY quarter`,
       summary: '**Net revenue (subtotal_amount) 2014: $20.1M** across 31,465 orders. Peak quarter is Q3 ($5.85M). Average net order: $639.65. This excludes tax and freight — the commercial "fatturato" figure.',
       interpreted_as: 'SUM(subtotalAmount) GROUP BY quarter · ERP SalesOrder · YEAR 2014',
       chartData: {
-        type: 'bar',
+        type: 'line',
         title: 'Net revenue by quarter — subtotal_amount',
         labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
         values: [4121485, 5182930, 5847621, 4975034],
@@ -489,7 +489,7 @@ ORDER BY quarter`,
       summary: '**Gross revenue (total_due) 2014: $22.4M** — includes $2.28M in tax + freight on top of net. Same 31,465 orders. Q3 peak at $6.5M gross. Average gross order: $712.24.',
       interpreted_as: 'SUM(totalDue) GROUP BY quarter · ERP SalesOrder · YEAR 2014',
       chartData: {
-        type: 'bar',
+        type: 'line',
         title: 'Gross revenue by quarter — total_due',
         labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
         values: [4588234, 5768412, 6504891, 5549031],
@@ -1060,7 +1060,7 @@ ORDER BY quarter`,
       summary: '**Q3 2014 is the peak quarter** ($5.85M net, 8,847 orders). Q4 has the highest avg order ($700) despite fewer orders. Full year: $20.1M net / $22.4M gross. Q4 store_orders drop sharply (616 vs 1,187 in Q3).',
       interpreted_as: 'ERP.SalesOrder GROUP BY quarter · net + gross + channel split · 2014',
       chartData: {
-        type: 'bar',
+        type: 'line',
         title: 'Net revenue by quarter — 2014',
         labels: ['Q1 2014', 'Q2 2014', 'Q3 2014', 'Q4 2014'],
         values: [4121485, 5182930, 5847621, 4975034],
@@ -1159,6 +1159,186 @@ ORDER  BY total_overhead DESC`,
         'What is our total revenue — subtotal vs total due?',
         'Show orders by territory ranked by sales YTD',
         'Show quarterly revenue breakdown',
+      ],
+    }),
+  },
+  // ── Special offers / discounts ────────────────────────────────────────────────
+  {
+    test: q => /discount|special.?offer|offer|promotion|promo|sconto|offerta/i.test(q),
+    result: () => ({
+      sql: `-- Special offer usage and discount impact (ERP SalesOrderLine × SpecialOffer)
+SELECT   so.description                      AS offer,
+         so.category,
+         so.discountPct,
+         COUNT(sol.orderId)                  AS lines_applied,
+         SUM(sol.lineTotal)                  AS net_revenue,
+         SUM(sol.quantity * sol.unitPriceDiscount) AS discount_given
+FROM     erp.SalesOrderLine sol
+JOIN     erp.SpecialOffer   so  ON so.offerId = sol.offerId
+WHERE    sol.unitPriceDiscount > 0
+GROUP BY so.description, so.category, so.discountPct
+ORDER BY discount_given DESC
+LIMIT 8`,
+      rows: [
+        { offer: 'Volume Discount 41 to 60',  category: 'Reseller',   discountPct: '0.02', lines_applied: 4_221, net_revenue: 1_847_312, discount_given: 37_702 },
+        { offer: 'Volume Discount 61 to 100', category: 'Reseller',   discountPct: '0.05', lines_applied: 1_843, net_revenue: 1_214_509, discount_given: 63_921 },
+        { offer: 'Mountain-100 Clearance',    category: 'Clearance',  discountPct: '0.35', lines_applied:   318, net_revenue:   184_621, discount_given: 99_411 },
+        { offer: 'Road-650 Overstock',        category: 'Clearance',  discountPct: '0.30', lines_applied:   241, net_revenue:   117_882, discount_given: 50_521 },
+        { offer: 'Touring-3000 Promotion',    category: 'Seasonal',   discountPct: '0.10', lines_applied:   892, net_revenue:   413_221, discount_given: 45_913 },
+      ],
+      summary: '**5 active offer types** applied to 7,515 order lines. Mountain-100 Clearance deepest discount (35%) — $99K given away but cleared aged inventory. Volume discounts (Reseller tier) account for most lines. Total discount given: **$297,468** (~1.5% of net revenue).',
+      interpreted_as: 'ERP.SalesOrderLine × SpecialOffer · unitPriceDiscount > 0 · GROUP BY offer',
+      chartData: {
+        type: 'bar',
+        title: 'Discount given by special offer',
+        labels: ['Volume 41-60', 'Volume 61-100', 'Mountain-100', 'Road-650', 'Touring-3000'],
+        values: [37702, 63921, 99411, 50521, 45913],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrderLine: offerId FK links to SpecialOffer (16 offers defined)',
+        '② Filter unitPriceDiscount > 0 — only lines where discount was applied',
+        '③ SUM(quantity × unitPriceDiscount) = total dollar discount given per offer',
+        '④ Mountain-100 Clearance: 35% discount, highest per-line impact',
+      ],
+      followUps: [
+        'What is our total revenue — subtotal vs total due?',
+        'Which products generated the most revenue?',
+        'Show orders by territory ranked by sales YTD',
+      ],
+    }),
+  },
+  // ── Customer geographic breakdown (by country) ────────────────────────────────
+  {
+    test: q => /customer.*country|country.*customer|geographic.*customer|customer.*geograph|where.*customer|clienti.*paese|paese.*clienti|customer.*region/i.test(q),
+    result: () => ({
+      sql: `SELECT   c.country,
+         COUNT(*)                     AS customers,
+         SUM(o.subtotalAmount)        AS total_revenue,
+         AVG(o.subtotalAmount)        AS avg_order,
+         ROUND(COUNT(*) * 100.0 / 19829, 1) AS pct_of_base
+FROM     crm.accounts c
+JOIN     erp.SalesOrder o ON o.customer_ref = c.accountId
+GROUP BY c.country
+ORDER BY total_revenue DESC
+LIMIT 8`,
+      rows: [
+        { country: 'United States',  customers: 9_841, total_revenue: 8_912_341, avg_order: 905,  pct_of_base: '49.6%' },
+        { country: 'Australia',      customers: 3_591, total_revenue: 4_121_847, avg_order: 1148, pct_of_base: '18.1%' },
+        { country: 'Canada',         customers: 1_571, total_revenue: 2_847_293, avg_order: 1813, pct_of_base: '7.9%'  },
+        { country: 'United Kingdom', customers: 1_913, total_revenue: 2_441_821, avg_order: 1276, pct_of_base: '9.7%'  },
+        { country: 'Germany',        customers: 1_241, total_revenue: 1_847_231, avg_order: 1489, pct_of_base: '6.3%'  },
+        { country: 'France',         customers: 1_128, total_revenue: 1_421_893, avg_order: 1261, pct_of_base: '5.7%'  },
+      ],
+      summary: '**US dominates** with 49.6% of customers (9,841) but only 44.3% of revenue. Australian customers have higher avg order ($1,148 vs US $905). Bridge PLACED_BY (93.2%) used to join CRM × ERP — 1,345 CRM-only prospects excluded.',
+      interpreted_as: 'CRM.accounts × ERP.SalesOrder via PLACED_BY · GROUP BY country',
+      chartData: {
+        type: 'bar',
+        title: 'Revenue by customer country (CRM × ERP)',
+        labels: ['United States', 'Australia', 'Canada', 'United Kingdom', 'Germany', 'France'],
+        values: [8912341, 4121847, 2847293, 2441821, 1847231, 1421893],
+        unit: '$',
+      },
+      sources: [SRC.ERP, SRC.CRM],
+      steps: [
+        '① CRM.accounts: 19,829 deduped (excluded 372 with accountId<0)',
+        '② Bridge PLACED_BY: customer_ref ↔ accountId — 93.2% match rate',
+        '③ JOIN ERP.SalesOrder ON customer_ref = accountId',
+        '④ GROUP BY country · SUM(subtotalAmount) · AVG(subtotalAmount)',
+      ],
+      followUps: [
+        'How many unique customers after CRM deduplication?',
+        'Show orders by territory ranked by sales YTD',
+        'What is the online vs in-store channel split?',
+      ],
+    }),
+  },
+  // ── Gross margin / profitability by category ──────────────────────────────────
+  {
+    test: q => /margin|profit|cost.*product|product.*cost|markup|gross.?profit|redditività|margine/i.test(q),
+    result: () => ({
+      sql: `SELECT   p.category,
+         SUM(sol.lineTotal)                            AS revenue,
+         SUM(sol.quantity * p.standardCost)            AS cogs,
+         SUM(sol.lineTotal - sol.quantity*p.standardCost) AS gross_profit,
+         ROUND((SUM(sol.lineTotal - sol.quantity*p.standardCost)
+                / SUM(sol.lineTotal)) * 100, 1)        AS margin_pct
+FROM     pim.product_catalog  p
+JOIN     erp.SalesOrderLine   sol ON sol.productId = p.internal_id
+GROUP BY p.category
+ORDER BY margin_pct DESC`,
+      rows: [
+        { category: 'Clothing',    revenue: 339_772,    cogs: 118_020,    gross_profit: 221_752,   margin_pct: '65.3%' },
+        { category: 'Accessories', revenue: 231_521,    cogs: 82_311,     gross_profit: 149_210,   margin_pct: '64.5%' },
+        { category: 'Bikes',       revenue: 19_791_723, cogs: 10_284_696, gross_profit: 9_507_027, margin_pct: '48.0%' },
+        { category: 'Components',  revenue: 931_644,    cogs: 521_721,    gross_profit: 409_923,   margin_pct: '44.0%' },
+      ],
+      summary: '**Clothing and Accessories are highest margin** (65.3% and 64.5%) but low volume. Bikes drive $9.5M gross profit at 48% margin. Total gross profit: **$10,287,912** (51.1% blended margin). Cross-source: ERP SalesOrderLine × PIM standardCost.',
+      interpreted_as: 'PIM.standardCost × ERP.lineTotal · gross margin = (revenue − COGS) / revenue',
+      chartData: {
+        type: 'bar',
+        title: 'Gross margin % by category',
+        labels: ['Clothing', 'Accessories', 'Bikes', 'Components'],
+        values: [65.3, 64.5, 48.0, 44.0],
+        unit: '%',
+      },
+      sources: [SRC.ERP, SRC.PIM],
+      steps: [
+        '① PIM.product_catalog: standardCost = unit cost of goods',
+        '② Bridge OF_PRODUCT: productId ↔ internal_id (99.6%)',
+        '③ COGS = quantity × standardCost per line',
+        '④ Gross profit = lineTotal − COGS · Margin % = GP / revenue',
+      ],
+      followUps: [
+        'Which products generated the most revenue?',
+        'What is our revenue by product category?',
+        'Show orders by territory ranked by sales YTD',
+      ],
+    }),
+  },
+  // ── HR department headcount and salary ───────────────────────────────────────
+  {
+    test: q => /department|reparto|salary.*dept|dept.*salary|stipendio.*reparto|headcount.*dept|org.?chart|department.*headcount/i.test(q),
+    result: () => ({
+      sql: `SELECT   d.repartoNome                AS department,
+         COUNT(*)                     AS headcount,
+         AVG(d.stipendio)             AS avg_salary,
+         MIN(d.stipendio)             AS min_salary,
+         MAX(d.stipendio)             AS max_salary,
+         SUM(d.stipendio)             AS total_payroll
+FROM     hr.dipendenti_hr d
+GROUP BY d.repartoNome
+ORDER BY headcount DESC`,
+      rows: [
+        { department: 'Production',      headcount: 179, avg_salary: 28_241,  min_salary: 18_000, max_salary: 84_000,  total_payroll: 5_055_139 },
+        { department: 'Sales',           headcount: 18,  avg_salary: 52_180,  min_salary: 35_000, max_salary: 91_000,  total_payroll: 939_240   },
+        { department: 'Engineering',     headcount: 31,  avg_salary: 71_432,  min_salary: 48_000, max_salary: 135_000, total_payroll: 2_214_392 },
+        { department: 'Finance',         headcount: 12,  avg_salary: 65_812,  min_salary: 42_000, max_salary: 112_000, total_payroll: 789_744   },
+        { department: 'Human Resources', headcount: 6,   avg_salary: 58_921,  min_salary: 41_000, max_salary: 78_000,  total_payroll: 353_526   },
+        { department: 'IT',              headcount: 8,   avg_salary: 69_441,  min_salary: 52_000, max_salary: 98_000,  total_payroll: 555_528   },
+        { department: 'Executive',       headcount: 4,   avg_salary: 124_500, min_salary: 98_000, max_salary: 165_000, total_payroll: 498_000   },
+      ],
+      summary: '**290 employees** across 7 departments. Production is largest (179 FTE, avg $28K). Engineering highest avg salary ($71K, 31 FTE). Total payroll: **$10,405,569/year**. Executive team (4): avg $124,500. Cross-reference: Sales dept ↔ ERP SalesPerson via SOLD_BY bridge (100% match).',
+      interpreted_as: 'HR.dipendenti_hr · GROUP BY repartoNome · payroll analysis',
+      chartData: {
+        type: 'bar',
+        title: 'Headcount by department (HR CSV)',
+        labels: ['Production', 'Sales', 'Engineering', 'Finance', 'IT', 'HR', 'Executive'],
+        values: [179, 18, 31, 12, 8, 6, 4],
+        unit: '',
+      },
+      sources: [SRC.HR],
+      steps: [
+        '① HR CSV (Italian schema): 290 rows, columns cognome/nome/ruolo/stipendio/repartoId',
+        '② repartoNome resolved via repartoId FK',
+        '③ GROUP BY department · COUNT · AVG/MIN/MAX salary',
+        '④ Sales dept bridges to ERP SalesPerson via SOLD_BY (100%)',
+      ],
+      followUps: [
+        'Show salary and bonus for the sales team',
+        'Who is the top salesperson by revenue in 2014?',
+        'What is the online vs in-store channel split?',
       ],
     }),
   },

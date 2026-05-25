@@ -19,7 +19,7 @@ export const PROVIDERS: ProviderConfig[] = [
     id: 'groq',
     label: 'Groq',
     free: true,
-    badge: 'Gratuito · LLaMA 3.3 70b',
+    badge: 'Gratuito · LLaMA 3.3 70b → 8b fallback',
     hint: 'console.groq.com → API Keys',
     keyUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_...',
@@ -28,7 +28,7 @@ export const PROVIDERS: ProviderConfig[] = [
     id: 'gemini',
     label: 'Google Gemini Flash',
     free: true,
-    badge: 'Gratuito · 1M token/day',
+    badge: 'Gratuito · Gemini 2.0 Flash',
     hint: 'aistudio.google.com → Get API Key',
     keyUrl: 'https://aistudio.google.com/app/apikey',
     keyPlaceholder: 'AIza...',
@@ -234,7 +234,7 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
 }
 
 async function callGemini(question: string, apiKey: string): Promise<EngineResult> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -260,11 +260,22 @@ async function callGemini(question: string, apiKey: string): Promise<EngineResul
 
 // ── Main entry ────────────────────────────────────────────────────────────────
 
+function validateKey(key: string, provider: LLMProvider): void {
+  if (!key) throw new Error('API key is empty — open the LLM panel and enter your key.')
+  if (provider === 'groq' && !key.startsWith('gsk_'))
+    throw new Error('Groq key must start with "gsk_". Get one free at console.groq.com/keys')
+  if (provider === 'anthropic' && !key.startsWith('sk-ant'))
+    throw new Error('Anthropic key must start with "sk-ant-". Get one at console.anthropic.com/settings/keys')
+  if (provider === 'gemini' && !key.startsWith('AIza'))
+    throw new Error('Gemini key must start with "AIza". Get one free at aistudio.google.com/app/apikey')
+}
+
 export async function executeLLMQuery(
   question: string,
   apiKey: string,
   provider: LLMProvider,
 ): Promise<EngineResult> {
+  validateKey(apiKey, provider)
   switch (provider) {
     case 'anthropic': return callAnthropic(question, apiKey)
     case 'groq':      return callGroq(question, apiKey)

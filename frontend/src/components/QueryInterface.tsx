@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import {
@@ -43,9 +43,14 @@ const SECTOR_QUESTIONS: Record<string, string[]> = {
   manufacturing: [
     'Who is the top salesperson by revenue in 2014?',
     'What is our total revenue — subtotal vs total due?',
+    'What is the online vs in-store channel split?',
+    'Show gross margin by product category',
+    'Which products generated the most revenue?',
+    'Show headcount and salary by department',
     'How many unique customers after CRM deduplication?',
     'Show orders by territory ranked by sales YTD',
-    'Which products generated the most revenue?',
+    'Show quarterly revenue breakdown',
+    'What is our YoY revenue comparison — 2011 vs 2014?',
   ],
   retail: [
     'Show the top 10 products by stock level',
@@ -67,17 +72,32 @@ const SECTOR_QUESTIONS: Record<string, string[]> = {
   ],
 }
 
+// ── Chart value formatter ─────────────────────────────────────────────────────
+
+function fmtVal(v: number, unit?: string): string {
+  const u = unit ?? ''
+  const prefix = u === '$' || u === '€'
+  const sym = prefix ? u : ''
+  const suffix = prefix ? '' : u
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M${suffix}`
+  if (abs >= 10_000)    return `${sym}${(v / 1_000).toFixed(0)}K${suffix}`
+  if (abs >= 1_000)     return `${sym}${(v / 1_000).toFixed(1)}K${suffix}`
+  if (u === '%')        return `${v.toFixed(1)}%`
+  return `${sym}${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)}${suffix}`
+}
+
 // ── Inline SVG bar chart ───────────────────────────────────────────────────────
 
 function InlineBarChart({ chart }: { chart: ChartData }) {
   const W = 480
   const H = 180
-  const pad = { top: 16, right: 12, bottom: 48, left: 52 }
+  const pad = { top: 20, right: 12, bottom: 52, left: 58 }
   const innerW = W - pad.left - pad.right
   const innerH = H - pad.top - pad.bottom
 
   const max = Math.max(...chart.values, 1)
-  const barW = Math.max(12, Math.floor(innerW / chart.labels.length) - 6)
+  const barW = Math.max(12, Math.floor(innerW / chart.labels.length) - 8)
 
   return (
     <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto">
@@ -86,56 +106,94 @@ function InlineBarChart({ chart }: { chart: ChartData }) {
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
       </div>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
-        {/* Y gridlines + labels */}
         {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
           const y = pad.top + innerH * (1 - frac)
-          const val = max * frac
-          const label = chart.unit === '€'
-            ? `${chart.unit}${val >= 1000 ? (val / 1000).toFixed(0) + 'k' : val.toFixed(0)}`
-            : `${val.toFixed(0)}${chart.unit ?? ''}`
           return (
             <g key={frac}>
               <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="#e2e8f0" strokeWidth={1} />
-              <text x={pad.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#94a3b8">{label}</text>
+              <text x={pad.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
+                {fmtVal(max * frac, chart.unit)}
+              </text>
             </g>
           )
         })}
-
-        {/* Bars */}
         {chart.labels.map((lbl, i) => {
-          const bH = (chart.values[i] / max) * innerH
+          const bH = Math.max(2, (chart.values[i] / max) * innerH)
           const x = pad.left + i * (innerW / chart.labels.length) + (innerW / chart.labels.length - barW) / 2
           const y = pad.top + innerH - bH
           const isTop = i === 0
-
           return (
             <g key={i}>
-              <rect
-                x={x} y={y} width={barW} height={bH}
-                rx={3}
-                fill={isTop ? '#0d9488' : '#99f6e4'}
-              />
-              {/* X label */}
-              <text
-                x={x + barW / 2}
-                y={pad.top + innerH + 14}
-                textAnchor="middle"
-                fontSize={9}
-                fill="#64748b"
-              >
-                {lbl.length > 10 ? lbl.slice(0, 10) + '…' : lbl}
+              <rect x={x} y={y} width={barW} height={bH} rx={3} fill={isTop ? '#0d9488' : '#99f6e4'} />
+              <text x={x + barW / 2} y={pad.top + innerH + 14} textAnchor="middle" fontSize={9} fill="#64748b">
+                {lbl.length > 12 ? lbl.slice(0, 11) + '…' : lbl}
               </text>
-              {/* Value on top */}
-              {bH > 14 && (
-                <text x={x + barW / 2} y={y - 3} textAnchor="middle" fontSize={8} fill="#0f766e" fontWeight={600}>
-                  {chart.unit === '€' && chart.values[i] >= 1000
-                    ? `€${(chart.values[i] / 1000).toFixed(0)}k`
-                    : `${chart.values[i].toFixed(0)}${chart.unit ?? ''}`}
+              {bH > 16 && (
+                <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={8} fill="#0f766e" fontWeight={600}>
+                  {fmtVal(chart.values[i], chart.unit)}
                 </text>
               )}
             </g>
           )
         })}
+      </svg>
+    </div>
+  )
+}
+
+// ── Inline SVG line chart ─────────────────────────────────────────────────────
+
+function InlineLineChart({ chart }: { chart: ChartData }) {
+  const W = 480
+  const H = 180
+  const pad = { top: 20, right: 20, bottom: 52, left: 58 }
+  const innerW = W - pad.left - pad.right
+  const innerH = H - pad.top - pad.bottom
+
+  const max = Math.max(...chart.values, 1)
+  const min = Math.min(...chart.values, 0)
+  const range = max - min || 1
+
+  const pts = chart.values.map((v, i) => ({
+    x: pad.left + (i / Math.max(chart.labels.length - 1, 1)) * innerW,
+    y: pad.top + innerH - ((v - min) / range) * innerH,
+    v,
+  }))
+
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
+  const area = `${path} L${pts[pts.length - 1].x},${pad.top + innerH} L${pts[0].x},${pad.top + innerH} Z`
+
+  return (
+    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto">
+      <div className="flex items-center gap-1.5 mb-2">
+        <TrendingUp className="w-3.5 h-3.5 text-teal-500" />
+        <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
+        {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+          const y = pad.top + innerH * (1 - frac)
+          return (
+            <g key={frac}>
+              <line x1={pad.left} y1={y} x2={W - pad.right} y2={y} stroke="#e2e8f0" strokeWidth={1} />
+              <text x={pad.left - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#94a3b8">
+                {fmtVal(min + range * frac, chart.unit)}
+              </text>
+            </g>
+          )
+        })}
+        <path d={area} fill="#ccfbf1" opacity={0.5} />
+        <path d={path} fill="none" stroke="#0d9488" strokeWidth={2} strokeLinejoin="round" />
+        {pts.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={4} fill="#0d9488" />
+            <text x={p.x} y={p.y - 8} textAnchor="middle" fontSize={8} fill="#0f766e" fontWeight={600}>
+              {fmtVal(p.v, chart.unit)}
+            </text>
+            <text x={p.x} y={pad.top + innerH + 14} textAnchor="middle" fontSize={9} fill="#64748b">
+              {chart.labels[i].length > 6 ? chart.labels[i].slice(0, 6) + '…' : chart.labels[i]}
+            </text>
+          </g>
+        ))}
       </svg>
     </div>
   )
@@ -255,6 +313,15 @@ function StepsTrace({ steps }: { steps: string[] }) {
 
 function SqlBlock({ sql }: { sql: string }) {
   const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    navigator.clipboard.writeText(sql).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   return (
     <div className="mt-2">
       <button
@@ -265,9 +332,18 @@ function SqlBlock({ sql }: { sql: string }) {
         <span>Generated SQL</span>
       </button>
       {open && (
-        <pre className="mt-2 text-xs bg-slate-900 border border-slate-700 rounded-lg p-3 text-teal-400 overflow-x-auto">
-          {sql}
-        </pre>
+        <div className="relative mt-2">
+          <pre className="text-xs bg-slate-900 border border-slate-700 rounded-lg p-3 pr-10 text-teal-400 overflow-x-auto">
+            {sql}
+          </pre>
+          <button
+            onClick={handleCopy}
+            title="Copy SQL"
+            className="absolute top-2 right-2 p-1 rounded text-slate-500 hover:text-teal-400 transition-colors"
+          >
+            {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       )}
     </div>
   )
@@ -340,7 +416,11 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
         )}
 
         {/* Inline chart */}
-        {r.chartData && <InlineBarChart chart={r.chartData} />}
+        {r.chartData && (
+          r.chartData.type === 'line'
+            ? <InlineLineChart chart={r.chartData} />
+            : <InlineBarChart chart={r.chartData} />
+        )}
 
         {/* Results table */}
         {r.rows.length > 0 && (
@@ -506,6 +586,7 @@ export default function QueryInterface() {
   const [history, setHistory] = useState<string[]>(() => loadHistory(sectorId))
   const [showApiPanel, setShowApiPanel] = useState(false)
   const [creds, setCreds] = useState(getStoredCredentials)
+  const queryCount = messages.filter(m => m.role === 'user').length
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -609,6 +690,17 @@ export default function QueryInterface() {
               {sector.name} · Ask questions in natural language — powered by the semantic layer
             </p>
           </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {queryCount > 0 && (
+              <button
+                onClick={() => setMessages([])}
+                title="Clear conversation"
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-600 border border-slate-200 hover:border-slate-300 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            )}
           {sectorId === 'manufacturing' && (
             <button
               onClick={() => setShowApiPanel(v => !v)}
@@ -623,6 +715,7 @@ export default function QueryInterface() {
                 : <><Key className="w-3.5 h-3.5" />Add API Key</>}
             </button>
           )}
+          </div>
         </div>
         {showApiPanel && sectorId === 'manufacturing' && (
           <div className="mt-3">
