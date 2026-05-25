@@ -96,6 +96,16 @@ export default function App() {
     return () => window.removeEventListener('create-agent-from-entity', handler)
   }, [])
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { question } = (e as CustomEvent<{ question: string }>).detail ?? {}
+      if (question) sessionStorage.setItem('query-prefill', question)
+      setActiveTab('query')
+    }
+    window.addEventListener('navigate-to-query', handler)
+    return () => window.removeEventListener('navigate-to-query', handler)
+  }, [])
+
   // Logout: archives the active company so all its data is preserved, then
   // clears the live state and onboarding flag. Re-entry triggers the wizard.
   // Previously-saved companies remain accessible via the dropdown after the
