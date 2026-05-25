@@ -1351,12 +1351,479 @@ function tryAWQuery(question: string): EngineResult | null {
   return null
 }
 
+// ── Retail canned responses ───────────────────────────────────────────────────
+
+const RETAIL_PATTERNS: Array<{
+  test: (q: string) => boolean
+  result: () => EngineResult
+}> = [
+  // ── Top products by revenue ───────────────────────────────────────────────
+  {
+    test: q => /top.*product|product.*revenue|best.*sell|best.*product|prodotto.*venduto|più.*venduto|prodotti.*top/i.test(q),
+    result: () => ({
+      sql: `SELECT p.name, p.sku, p.price, SUM(oi.quantity) AS units, SUM(oi.quantity*oi.unit_price) AS revenue FROM products p JOIN order_items oi ON oi.product_id = p.id GROUP BY p.id ORDER BY revenue DESC LIMIT 8`,
+      rows: [
+        { name: 'Wireless Headphones Pro', sku: 'TECH-001',  price: 149.99, units: 312,  revenue: 46797 },
+        { name: 'Running Shoes Elite',     sku: 'SPORT-021', price: 89.99,  units: 481,  revenue: 43275 },
+        { name: 'Smart Watch Series 5',    sku: 'TECH-008',  price: 199.99, units: 204,  revenue: 40798 },
+        { name: 'Yoga Mat Premium',        sku: 'SPORT-004', price: 34.99,  units: 892,  revenue: 31211 },
+        { name: 'Coffee Maker Deluxe',     sku: 'HOME-014',  price: 79.99,  units: 341,  revenue: 27277 },
+        { name: 'Laptop Sleeve 15"',       sku: 'TECH-022',  price: 24.99,  units: 1043, revenue: 26064 },
+        { name: 'Resistance Band Set',     sku: 'SPORT-009', price: 19.99,  units: 1211, revenue: 24208 },
+        { name: 'Electric Kettle',         sku: 'HOME-003',  price: 44.99,  units: 512,  revenue: 23035 },
+      ],
+      summary: '**Wireless Headphones Pro** leads with $46.8K revenue (312 units at $150). Electronics dominate top 3. Yoga Mat and Resistance Bands show strong unit velocity (892 and 1,211 sold). Total top-8 revenue: **$263K** of $740 paid orders.',
+      interpreted_as: 'products JOIN order_items · SUM(quantity×unit_price) · ORDER BY revenue DESC',
+      chartData: {
+        type: 'bar',
+        title: 'Revenue by top product',
+        labels: ['Headphones Pro', 'Running Shoes', 'Smart Watch', 'Yoga Mat', 'Coffee Maker', 'Laptop Sleeve', 'Resist. Bands', 'Elec. Kettle'],
+        values: [46797, 43275, 40798, 31211, 27277, 26064, 24208, 23035],
+        unit: '$',
+      },
+      sources: [
+        { id: 'pos',     label: 'POS Database',   bg: 'bg-blue-100', text: 'text-blue-700' },
+        { id: 'catalog', label: 'Product Catalog', bg: 'bg-teal-100', text: 'text-teal-700' },
+      ],
+      steps: [
+        '① products: 2,840 active SKUs across 84 categories',
+        '② JOIN order_items on product_id (740 paid orders)',
+        '③ SUM(quantity × unit_price) = revenue per product',
+        '④ ORDER BY revenue DESC LIMIT 8',
+      ],
+      followUps: ['Which promotions are active?', 'Show gold loyalty customers', 'What is the total amount of paid orders?'],
+    }),
+  },
+  // ── Promotions / active offers ────────────────────────────────────────────
+  {
+    test: q => /promot|discount.*code|coupon|promo.*code|offerta|sconto.*codice|active.*offer|offer.*active/i.test(q),
+    result: () => ({
+      sql: `SELECT code, discountPct, validFrom, validTo, active, (SELECT COUNT(*) FROM orders WHERE promo_code = p.code) AS uses FROM promotions p WHERE active = TRUE ORDER BY discountPct DESC`,
+      rows: [
+        { code: 'SUMMER30', discountPct: 0.30, validFrom: '2024-06-01', validTo: '2024-08-31', active: true, uses: 94  },
+        { code: 'LOYAL20',  discountPct: 0.20, validFrom: '2024-01-01', validTo: '2024-12-31', active: true, uses: 187 },
+        { code: 'SPORT15',  discountPct: 0.15, validFrom: '2024-07-01', validTo: '2024-09-30', active: true, uses: 63  },
+        { code: 'TECH10',   discountPct: 0.10, validFrom: '2024-05-01', validTo: '2024-10-31', active: true, uses: 241 },
+        { code: 'NEWCUST',  discountPct: 0.05, validFrom: '2024-01-01', validTo: '2024-12-31', active: true, uses: 312 },
+      ],
+      summary: '**5 active promotions** out of 32 total. LOYAL20 (20% off) has highest adoption (187 uses). TECH10 (10%) most used (241 uses) — broad category scope. SUMMER30 (30%) most aggressive discount, 94 orders. Total promo-driven orders: **897** (121% of baseline).',
+      interpreted_as: 'promotions WHERE active=TRUE · ORDER BY discountPct DESC',
+      sources: [
+        { id: 'pos', label: 'POS Database', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① promotions table: 32 total, 5 currently active',
+        '② Filter active=TRUE · ORDER BY discountPct DESC',
+        '③ Correlated subquery: count orders per promo code',
+        '④ LOYAL20 valid full-year — loyalty program staple',
+      ],
+      followUps: ['Show gold loyalty customers', 'Show the top 10 products by stock level', 'What is the total amount of paid orders?'],
+    }),
+  },
+  // ── Total revenue / orders paid ───────────────────────────────────────────
+  {
+    test: q => /total.*order|order.*total|paid.*order|revenue.*order|order.*revenue|order.*amount|amount.*order|fatturato.*ordine|ordine.*pagat/i.test(q),
+    result: () => ({
+      sql: `SELECT DATE_TRUNC('month', paidAt) AS month, COUNT(*) AS orders, SUM(total) AS revenue, AVG(total) AS avg_order FROM orders WHERE status = 'paid' GROUP BY 1 ORDER BY 1`,
+      rows: [
+        { month: '2024-04', orders: 112, revenue: 20944, avg_order: 186.8 },
+        { month: '2024-05', orders: 128, revenue: 24192, avg_order: 189.0 },
+        { month: '2024-06', orders: 141, revenue: 26169, avg_order: 185.6 },
+        { month: '2024-07', orders: 156, revenue: 28704, avg_order: 184.0 },
+        { month: '2024-08', orders: 134, revenue: 23478, avg_order: 175.2 },
+        { month: '2024-09', orders: 69,  revenue: 12042, avg_order: 174.5 },
+      ],
+      summary: '**740 paid orders** total, $138K revenue, avg order **$186.49**. Peak July (156 orders, $28.7K). Revenue growing +37% April→July, then seasonal dip in Sept (partial month). Checkout conversion: 740/920 started = **80.4%**.',
+      interpreted_as: "orders WHERE status='paid' · GROUP BY month · SUM(total) · AVG(total)",
+      chartData: {
+        type: 'line',
+        title: 'Monthly paid orders revenue',
+        labels: ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
+        values: [20944, 24192, 26169, 28704, 23478, 12042],
+        unit: '$',
+      },
+      sources: [
+        { id: 'pos', label: 'POS Database', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① orders: 740 with status=paid (of 920 checkouts started)',
+        '② GROUP BY DATE_TRUNC month',
+        '③ SUM(total) = revenue · AVG(total) = basket size',
+        '④ Trend: +37% Apr-Jul, Sept partial month explains dip',
+      ],
+      followUps: ['Show the top 10 products by stock level', 'Which promotions are active?', 'Show gold loyalty customers'],
+    }),
+  },
+  // ── Customer loyalty tiers ────────────────────────────────────────────────
+  {
+    test: q => /loyalt|loyalty.*tier|gold.*customer|silver.*customer|tier.*customer|customer.*tier|fidelty|fidelità|fedeltà/i.test(q),
+    result: () => ({
+      sql: `SELECT loyaltyTier, COUNT(*) AS customers, AVG(totalSpent) AS avg_lifetime_value, SUM(totalSpent) AS total_ltv FROM customers GROUP BY loyaltyTier ORDER BY avg_lifetime_value DESC`,
+      rows: [
+        { loyaltyTier: 'Gold',   customers: 312,  avg_lifetime_value: 892.4, total_ltv: 278429 },
+        { loyaltyTier: 'Silver', customers: 841,  avg_lifetime_value: 421.7, total_ltv: 354650 },
+        { loyaltyTier: 'Bronze', customers: 1847, avg_lifetime_value: 184.3, total_ltv: 340378 },
+        { loyaltyTier: 'None',   customers: 1520, avg_lifetime_value: 91.2,  total_ltv: 138624 },
+      ],
+      summary: '**4,520 customers** across 4 loyalty tiers. Gold (312 = 6.9%) generates $278K LTV at avg **$892 each**. Silver (841 = 18.6%) largest revenue contributor ($354K). Bronze+None = 74.5% of base, $479K total. Gold customers spend **9.8× more** than non-loyalty.',
+      interpreted_as: 'customers GROUP BY loyaltyTier · SUM(totalSpent) · AVG(totalSpent)',
+      chartData: {
+        type: 'bar',
+        title: 'Avg lifetime value by loyalty tier',
+        labels: ['Gold', 'Silver', 'Bronze', 'None'],
+        values: [892.4, 421.7, 184.3, 91.2],
+        unit: '$',
+      },
+      sources: [
+        { id: 'crm', label: 'CRM', bg: 'bg-violet-100', text: 'text-violet-700' },
+      ],
+      steps: [
+        '① customers: 4,520 total with loyaltyTier column',
+        '② GROUP BY loyaltyTier · COUNT · AVG/SUM(totalSpent)',
+        '③ Gold: 312 customers, avg $892 lifetime spend',
+        '④ Silver has highest total LTV ($354K) — largest high-value group',
+      ],
+      followUps: ['Show the top 10 products by stock level', 'Which promotions are active?', 'What is the total amount of paid orders?'],
+    }),
+  },
+  // ── Stock / inventory levels ──────────────────────────────────────────────
+  {
+    test: q => /stock|inventory|low.*stock|out.*of.*stock|scorta|magazzino|stock.*level|reorder/i.test(q),
+    result: () => ({
+      sql: `SELECT p.name, p.sku, i.quantity AS stock, i.reservedQty, (i.quantity - i.reservedQty) AS available, i.location FROM inventory i JOIN products p ON p.id = i.product_id WHERE i.quantity < 50 ORDER BY i.quantity ASC LIMIT 10`,
+      rows: [
+        { name: 'Smart Watch Series 5',    sku: 'TECH-008',  stock: 3,  reservedQty: 2, available: 1,  location: 'Warehouse-A' },
+        { name: 'Wireless Headphones Pro', sku: 'TECH-001',  stock: 8,  reservedQty: 5, available: 3,  location: 'Warehouse-A' },
+        { name: 'Running Shoes Elite',     sku: 'SPORT-021', stock: 12, reservedQty: 4, available: 8,  location: 'Warehouse-B' },
+        { name: 'Coffee Maker Deluxe',     sku: 'HOME-014',  stock: 21, reservedQty: 3, available: 18, location: 'Warehouse-A' },
+        { name: 'Yoga Mat Premium',        sku: 'SPORT-004', stock: 34, reservedQty: 8, available: 26, location: 'Warehouse-B' },
+        { name: 'Electric Kettle',         sku: 'HOME-003',  stock: 41, reservedQty: 6, available: 35, location: 'Warehouse-C' },
+      ],
+      summary: '**6 products below 50 units** — reorder alert. Smart Watch Series 5: **only 1 available** (3 stock − 2 reserved). Top sellers Headphones Pro and Running Shoes also at risk. Recommended: trigger PO for TECH-001, TECH-008, SPORT-021 immediately.',
+      interpreted_as: 'inventory JOIN products · WHERE quantity < 50 · ORDER BY quantity ASC',
+      sources: [
+        { id: 'wms',     label: 'Warehouse WMS',   bg: 'bg-amber-100', text: 'text-amber-700' },
+        { id: 'catalog', label: 'Product Catalog',  bg: 'bg-teal-100',  text: 'text-teal-700'  },
+      ],
+      steps: [
+        '① inventory: 2,840 rows (one per product)',
+        '② Filter quantity < 50 — low-stock threshold',
+        '③ JOIN products for name/SKU · available = quantity − reservedQty',
+        '④ Smart Watch: 3 total, 2 reserved = 1 available → critical',
+      ],
+      followUps: ['Show the top 10 products by stock level', 'Which promotions are active?', 'What is the total amount of paid orders?'],
+    }),
+  },
+]
+
+function tryRetailQuery(question: string): EngineResult | null {
+  for (const pattern of RETAIL_PATTERNS) {
+    if (pattern.test(question)) return pattern.result()
+  }
+  return null
+}
+
+// ── Healthcare canned responses ───────────────────────────────────────────────
+
+const HEALTHCARE_PATTERNS: Array<{
+  test: (q: string) => boolean
+  result: () => EngineResult
+}> = [
+  // ── Active patients / patient count ──────────────────────────────────────
+  {
+    test: q => /patient|active.*patient|patient.*count|pazient|how many.*patient|patient.*condition|chronic/i.test(q),
+    result: () => ({
+      sql: `SELECT chronicConditions AS condition, COUNT(*) AS patients, AVG(DATEDIFF(NOW(), birthDate)/365) AS avg_age FROM patients WHERE chronicConditions IS NOT NULL GROUP BY chronicConditions ORDER BY patients DESC LIMIT 8`,
+      rows: [
+        { condition: 'Hypertension',      patients: 284, avg_age: 58.3 },
+        { condition: 'Type 2 Diabetes',   patients: 231, avg_age: 54.7 },
+        { condition: 'Chronic Back Pain', patients: 178, avg_age: 47.2 },
+        { condition: 'Asthma',            patients: 142, avg_age: 38.1 },
+        { condition: 'Osteoarthritis',    patients: 98,  avg_age: 63.4 },
+        { condition: 'Anxiety Disorder',  patients: 87,  avg_age: 34.9 },
+        { condition: 'COPD',              patients: 63,  avg_age: 67.2 },
+        { condition: 'Heart Failure',     patients: 41,  avg_age: 71.8 },
+      ],
+      summary: '**1,240 registered patients**, 872 with documented chronic conditions. Hypertension most prevalent (284, avg age 58). Heart Failure cohort oldest (avg 71.8). 368 patients with no chronic condition on record — may require data completion.',
+      interpreted_as: 'patients GROUP BY chronicConditions · COUNT · AVG age · WHERE condition NOT NULL',
+      chartData: {
+        type: 'bar',
+        title: 'Patients by chronic condition',
+        labels: ['Hypertension', 'T2 Diabetes', 'Back Pain', 'Asthma', 'Osteoarthritis', 'Anxiety', 'COPD', 'Heart Failure'],
+        values: [284, 231, 178, 142, 98, 87, 63, 41],
+        unit: '',
+      },
+      sources: [
+        { id: 'ehr', label: 'EHR System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① patients: 1,240 registered in EHR',
+        '② Filter chronicConditions IS NOT NULL (872 have conditions)',
+        '③ GROUP BY condition · COUNT · AVG age from birthDate',
+        '④ 368 patients with no chronic condition — check data completeness',
+      ],
+      followUps: ['How many encounters per doctor?', 'Show prescriptions issued recently', 'Which treatments have no outcome recorded?'],
+    }),
+  },
+  // ── Prescriptions by doctor ───────────────────────────────────────────────
+  {
+    test: q => /prescription|prescri|doctor.*prescri|prescri.*doctor|medic.*issued|issued.*medic|ricett|farmac/i.test(q),
+    result: () => ({
+      sql: `SELECT d.name AS doctor, d.specialization, COUNT(p.id) AS prescriptions, COUNT(DISTINCT p.patientId) AS unique_patients, AVG(p.renewals) AS avg_renewals FROM prescriptions p JOIN doctors d ON d.id = p.doctorId GROUP BY d.id ORDER BY prescriptions DESC LIMIT 8`,
+      rows: [
+        { doctor: 'Dr. Sarah Chen',     specialization: 'Internal Medicine', prescriptions: 412, unique_patients: 189, avg_renewals: 2.3 },
+        { doctor: 'Dr. Marco Bianchi',  specialization: 'Cardiology',        prescriptions: 387, unique_patients: 201, avg_renewals: 3.1 },
+        { doctor: 'Dr. Amara Okafor',   specialization: 'Endocrinology',     prescriptions: 341, unique_patients: 163, avg_renewals: 4.2 },
+        { doctor: 'Dr. James Kovacs',   specialization: 'Pulmonology',       prescriptions: 298, unique_patients: 147, avg_renewals: 1.8 },
+        { doctor: 'Dr. Luisa Ferretti', specialization: 'General Practice',  prescriptions: 271, unique_patients: 231, avg_renewals: 1.2 },
+        { doctor: 'Dr. Raj Patel',      specialization: 'Orthopedics',       prescriptions: 184, unique_patients: 142, avg_renewals: 0.9 },
+      ],
+      summary: '**3,100 total prescriptions** across 142 doctors. Dr. Sarah Chen leads volume (412). Endocrinologist Dr. Okafor has highest avg renewals (4.2) — chronic condition management. Dr. Ferretti covers most unique patients (231) — broad GP practice.',
+      interpreted_as: 'prescriptions JOIN doctors · GROUP BY doctor · COUNT · AVG renewals',
+      chartData: {
+        type: 'bar',
+        title: 'Prescriptions by top doctor',
+        labels: ['S.Chen', 'M.Bianchi', 'A.Okafor', 'J.Kovacs', 'L.Ferretti', 'R.Patel'],
+        values: [412, 387, 341, 298, 271, 184],
+        unit: '',
+      },
+      sources: [
+        { id: 'ehr', label: 'EHR System',       bg: 'bg-blue-100', text: 'text-blue-700' },
+        { id: 'pms', label: 'Pharmacy System',   bg: 'bg-teal-100', text: 'text-teal-700' },
+      ],
+      steps: [
+        '① prescriptions: 3,100 issued in current period',
+        '② JOIN doctors on doctorId for name/specialization',
+        '③ COUNT(DISTINCT patientId) = patient breadth per doctor',
+        '④ AVG(renewals) measures chronic condition load',
+      ],
+      followUps: ['Show active patients', 'How many encounters per doctor?', 'Which treatments have no outcome recorded?'],
+    }),
+  },
+  // ── Encounters per doctor ─────────────────────────────────────────────────
+  {
+    test: q => /encounter|visit.*doctor|doctor.*visit|how many.*encounter|encounter.*count|visite.*medico|medico.*visite/i.test(q),
+    result: () => ({
+      sql: `SELECT d.name, d.specialization, COUNT(e.id) AS encounters, AVG(e.durationMin) AS avg_duration_min, SUM(e.durationMin)/60 AS total_hours FROM encounters e JOIN doctors d ON d.id = e.doctorId GROUP BY d.id ORDER BY encounters DESC LIMIT 8`,
+      rows: [
+        { name: 'Dr. Luisa Ferretti', specialization: 'General Practice',  encounters: 412, avg_duration_min: 18.4, total_hours: 126 },
+        { name: 'Dr. Sarah Chen',     specialization: 'Internal Medicine', encounters: 387, avg_duration_min: 24.1, total_hours: 156 },
+        { name: 'Dr. Marco Bianchi',  specialization: 'Cardiology',        encounters: 341, avg_duration_min: 31.7, total_hours: 180 },
+        { name: 'Dr. James Kovacs',   specialization: 'Pulmonology',       encounters: 298, avg_duration_min: 28.9, total_hours: 144 },
+        { name: 'Dr. Amara Okafor',   specialization: 'Endocrinology',     encounters: 271, avg_duration_min: 35.2, total_hours: 159 },
+        { name: 'Dr. Raj Patel',      specialization: 'Orthopedics',       encounters: 184, avg_duration_min: 22.1, total_hours: 68  },
+      ],
+      summary: '**4,200 encounters** total in the period. Dr. Ferretti (GP) highest volume (412) but shortest avg visit (18 min). Dr. Bianchi (Cardiology) most time per patient (31.7 min) = complex cases. Dr. Okafor: 35 min avg — longest consultations (endocrinology management).',
+      interpreted_as: 'encounters JOIN doctors · GROUP BY doctor · COUNT · AVG durationMin',
+      chartData: {
+        type: 'bar',
+        title: 'Encounters by doctor',
+        labels: ['Ferretti', 'Chen', 'Bianchi', 'Kovacs', 'Okafor', 'Patel'],
+        values: [412, 387, 341, 298, 271, 184],
+        unit: '',
+      },
+      sources: [
+        { id: 'ehr', label: 'EHR System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① encounters: 4,200 total across all providers and locations',
+        '② JOIN doctors on doctorId for name/specialization',
+        '③ COUNT(encounters) + AVG(durationMin) + SUM for total hours',
+        '④ GP highest volume but shortest time — specialist visits are longer',
+      ],
+      followUps: ['Show prescriptions issued recently', 'Show active patients', 'Which treatments have no outcome recorded?'],
+    }),
+  },
+  // ── Treatments without outcome ────────────────────────────────────────────
+  {
+    test: q => /treatment.*outcome|outcome.*treatment|no.*outcome|missing.*outcome|incomplete.*treatment|trattamenti.*senza|esito.*mancante/i.test(q),
+    result: () => ({
+      sql: `SELECT t.type, COUNT(*) AS treatments, COUNT(CASE WHEN t.outcome IS NULL THEN 1 END) AS no_outcome, ROUND(COUNT(CASE WHEN t.outcome IS NULL THEN 1 END)*100.0/COUNT(*),1) AS pct_missing FROM treatments t GROUP BY t.type ORDER BY pct_missing DESC`,
+      rows: [
+        { type: 'Physical Therapy',  treatments: 184, no_outcome: 74, pct_missing: '40.2%' },
+        { type: 'Chemotherapy',      treatments: 23,  no_outcome: 8,  pct_missing: '34.8%' },
+        { type: 'Surgery',           treatments: 89,  no_outcome: 21, pct_missing: '23.6%' },
+        { type: 'Medication Course', treatments: 341, no_outcome: 62, pct_missing: '18.2%' },
+        { type: 'Radiation',         treatments: 31,  no_outcome: 5,  pct_missing: '16.1%' },
+        { type: 'Psychotherapy',     treatments: 72,  no_outcome: 8,  pct_missing: '11.1%' },
+      ],
+      summary: '**178 treatments (24.7%) have no outcome recorded**. Physical Therapy worst (40.2% missing) — likely because outcomes documented at discharge, not start. Surgery 23.6% gap. Medication Course highest volume (341) with 62 missing. Action required: close outcome loop for 170 treatments.',
+      interpreted_as: 'treatments GROUP BY type · COUNT(outcome IS NULL) / COUNT(*)',
+      sources: [
+        { id: 'ehr', label: 'EHR System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① treatments: 720 total in the system',
+        '② GROUP BY type · conditional COUNT for NULL outcome',
+        '③ pct_missing = missing/total × 100',
+        '④ Physical Therapy 40% gap — outcome typically at discharge, check EHR workflow',
+      ],
+      followUps: ['Show active patients', 'How many encounters per doctor?', 'Show prescriptions issued recently'],
+    }),
+  },
+]
+
+function tryHealthcareQuery(question: string): EngineResult | null {
+  for (const pattern of HEALTHCARE_PATTERNS) {
+    if (pattern.test(question)) return pattern.result()
+  }
+  return null
+}
+
+// ── Finance canned responses ──────────────────────────────────────────────────
+
+const FINANCE_PATTERNS: Array<{
+  test: (q: string) => boolean
+  result: () => EngineResult
+}> = [
+  // ── Loan portfolio by status ──────────────────────────────────────────────
+  {
+    test: q => /loan.*portfolio|portfolio.*loan|loan.*status|status.*loan|prestit|loan.*amount|amount.*loan|loan.*breakdown/i.test(q),
+    result: () => ({
+      sql: `SELECT status, COUNT(*) AS loans, SUM(amount) AS total_amount, AVG(amount) AS avg_amount, AVG(rate) AS avg_rate FROM loans GROUP BY status ORDER BY total_amount DESC`,
+      rows: [
+        { status: 'Active',    loans: 89, total_amount: 2341800, avg_amount: 26312, avg_rate: 0.0612 },
+        { status: 'Disbursed', loans: 43, total_amount: 1131400, avg_amount: 26312, avg_rate: 0.0587 },
+        { status: 'Pending',   loans: 65, total_amount: 1710500, avg_amount: 26315, avg_rate: 0.0641 },
+        { status: 'Rejected',  loans: 87, total_amount: 2288700, avg_amount: 26307, avg_rate: 0.0698 },
+        { status: 'Closed',    loans: 36, total_amount: 946800,  avg_amount: 26300, avg_rate: 0.0554 },
+      ],
+      summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **45.3%** (145/320). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
+      interpreted_as: 'loans GROUP BY status · SUM(amount) · AVG(rate)',
+      chartData: {
+        type: 'bar',
+        title: 'Loan portfolio by status (€)',
+        labels: ['Active', 'Disbursed', 'Pending', 'Rejected', 'Closed'],
+        values: [2341800, 1131400, 1710500, 2288700, 946800],
+        unit: '€',
+      },
+      sources: [
+        { id: 'los', label: 'Loan Origination System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① loans: 320 applications in LOS across all statuses',
+        '② GROUP BY status · COUNT · SUM/AVG amount and rate',
+        '③ Approval = Active + Disbursed + Closed = 168/320 = 52.5%',
+        '④ Rejected avg rate 6.98% — higher-risk profiles priced out',
+      ],
+      followUps: ['What is the average risk score?', 'Which payments are overdue?', 'Show pending loan applications'],
+    }),
+  },
+  // ── Risk score distribution ───────────────────────────────────────────────
+  {
+    test: q => /risk.*score|score.*risk|risk.*profile|risk.*distribut|risk.*category|rischio|punteggio.*rischio/i.test(q),
+    result: () => ({
+      sql: `SELECT rp.category, COUNT(*) AS applicants, AVG(rp.score) AS avg_score, AVG(rp.pdRate)*100 AS avg_pd_pct, AVG(a.annualIncome) AS avg_income FROM risk_profiles rp JOIN applicants a ON a.id = rp.applicantId GROUP BY rp.category ORDER BY avg_score DESC`,
+      rows: [
+        { category: 'AAA – Prime',    applicants: 48, avg_score: 812, avg_pd_pct: 0.4,  avg_income: 94200 },
+        { category: 'AA – Standard',  applicants: 87, avg_score: 721, avg_pd_pct: 1.2,  avg_income: 71300 },
+        { category: 'A – Acceptable', applicants: 92, avg_score: 641, avg_pd_pct: 3.1,  avg_income: 58400 },
+        { category: 'BB – Watch',     applicants: 61, avg_score: 558, avg_pd_pct: 7.4,  avg_income: 42100 },
+        { category: 'B – Subprime',   applicants: 32, avg_score: 481, avg_pd_pct: 14.2, avg_income: 31800 },
+      ],
+      summary: '**320 applicants scored**. Prime/Standard (135 = 42.2%) have avg PD < 1.5% — low risk. BB Watch (61 = 19%) and Subprime (32 = 10%) elevate portfolio risk. Income clearly correlates: AAA avg $94K vs Subprime $31K. Blended portfolio PD: **3.8%**.',
+      interpreted_as: 'risk_profiles JOIN applicants · GROUP BY category · AVG score, PD rate, income',
+      chartData: {
+        type: 'bar',
+        title: 'Applicants by risk category',
+        labels: ['AAA', 'AA', 'A', 'BB', 'B'],
+        values: [48, 87, 92, 61, 32],
+        unit: '',
+      },
+      sources: [
+        { id: 'risk', label: 'Risk Engine',             bg: 'bg-red-100',  text: 'text-red-700'  },
+        { id: 'los',  label: 'Loan Origination System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① risk_profiles: 320 computed scores (one per applicant)',
+        '② JOIN applicants for income data',
+        '③ GROUP BY risk category · COUNT · AVG score, PD rate, income',
+        '④ PD (Probability of Default) ranges from 0.4% (AAA) to 14.2% (Subprime)',
+      ],
+      followUps: ['Show loan portfolio by status', 'Which payments are overdue?', 'Show pending loan applications'],
+    }),
+  },
+  // ── Overdue payments ──────────────────────────────────────────────────────
+  {
+    test: q => /overdue|late.*payment|payment.*late|payment.*miss|miss.*payment|scadut|pagament.*ritard|ritard.*pagament/i.test(q),
+    result: () => ({
+      sql: `SELECT l.id AS loan_id, a.name, p.dueDate, p.amount, p.lateFee, DATEDIFF(NOW(), p.dueDate) AS days_overdue FROM payments p JOIN loans l ON l.id = p.loan_id JOIN applicants a ON a.id = l.applicant_id WHERE p.paidAt IS NULL AND p.dueDate < NOW() ORDER BY days_overdue DESC LIMIT 10`,
+      rows: [
+        { loan_id: 'L-0041', name: 'Giovanni Marchetti', dueDate: '2024-06-15', amount: 1240, lateFee: 62,   days_overdue: 92 },
+        { loan_id: 'L-0028', name: 'Elena Russo',         dueDate: '2024-07-01', amount: 890,  lateFee: 44.5, days_overdue: 76 },
+        { loan_id: 'L-0093', name: 'David Müller',        dueDate: '2024-07-20', amount: 2100, lateFee: 105,  days_overdue: 57 },
+        { loan_id: 'L-0117', name: 'Fatima Al-Hassan',    dueDate: '2024-08-01', amount: 1560, lateFee: 78,   days_overdue: 45 },
+        { loan_id: 'L-0054', name: 'Marc Dupont',         dueDate: '2024-08-10', amount: 720,  lateFee: 36,   days_overdue: 36 },
+        { loan_id: 'L-0081', name: 'Sara Bianchi',        dueDate: '2024-08-25', amount: 980,  lateFee: 49,   days_overdue: 21 },
+      ],
+      summary: '**6 payments overdue** (of 1,840 installments). L-0041 most critical: 92 days overdue, $62 late fee accrued. Total overdue principal: **$7,490** · total late fees: **$374.5**. Action: escalate L-0041 and L-0028 to collections (>60 days).',
+      interpreted_as: 'payments WHERE paidAt IS NULL AND dueDate < NOW() · ORDER BY days_overdue DESC',
+      sources: [
+        { id: 'los', label: 'Loan Origination System', bg: 'bg-blue-100', text: 'text-blue-700' },
+      ],
+      steps: [
+        '① payments: 1,840 scheduled installments across all active loans',
+        '② Filter paidAt IS NULL AND dueDate < NOW() = unpaid past-due',
+        '③ JOIN loans and applicants for context',
+        '④ days_overdue = DATEDIFF(NOW(), dueDate) — L-0041 at 92 days',
+      ],
+      followUps: ['Show loan portfolio by status', 'What is the average risk score?', 'Show pending loan applications'],
+    }),
+  },
+  // ── Pending applications / KYC pipeline ──────────────────────────────────
+  {
+    test: q => /pending.*application|application.*pending|kyc|know.*your.*customer|verif.*pending|pipeline.*loan|loan.*pipeline|pending.*review/i.test(q),
+    result: () => ({
+      sql: `SELECT k.status, COUNT(*) AS applicants, AVG(DATEDIFF(NOW(), a.submittedAt)) AS avg_wait_days, SUM(l.amount) AS total_exposure FROM kyc_records k JOIN applicants a ON a.id = k.applicantId LEFT JOIN loans l ON l.applicant_id = a.id GROUP BY k.status ORDER BY applicants DESC`,
+      rows: [
+        { status: 'Completed',    applicants: 280, avg_wait_days: 2.1,  total_exposure: 7350000 },
+        { status: 'In Review',    applicants: 24,  avg_wait_days: 8.4,  total_exposure: 631200  },
+        { status: 'Pending Docs', applicants: 18,  avg_wait_days: 14.7, total_exposure: 473400  },
+        { status: 'Rejected',     applicants: 12,  avg_wait_days: 5.2,  total_exposure: 315600  },
+        { status: 'Escalated',    applicants: 6,   avg_wait_days: 21.3, total_exposure: 157800  },
+      ],
+      summary: '**280/320 (87.5%) KYC completed**. 24 in active review (avg 8.4 days wait). 18 awaiting documents (avg 14.7 days — risk of abandonment). 6 escalated cases avg **21 days** — likely PEP or AML flags. Total pipeline blocked: **$1.26M** exposure pending KYC clearance.',
+      interpreted_as: 'kyc_records GROUP BY status · COUNT · AVG wait · LEFT JOIN loans for exposure',
+      sources: [
+        { id: 'kyc', label: 'KYC System',              bg: 'bg-violet-100', text: 'text-violet-700' },
+        { id: 'los', label: 'Loan Origination System', bg: 'bg-blue-100',   text: 'text-blue-700'   },
+      ],
+      steps: [
+        '① kyc_records: 280 completed + 60 in various pipeline stages',
+        '② GROUP BY status · COUNT · AVG(DATEDIFF) for wait time',
+        '③ LEFT JOIN loans for $ exposure per KYC bucket',
+        '④ Escalated avg 21 days — likely AML/PEP enhanced due diligence',
+      ],
+      followUps: ['Show loan portfolio by status', 'What is the average risk score?', 'Which payments are overdue?'],
+    }),
+  },
+]
+
+function tryFinanceQuery(question: string): EngineResult | null {
+  for (const pattern of FINANCE_PATTERNS) {
+    if (pattern.test(question)) return pattern.result()
+  }
+  return null
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 export function executeQuery(question: string, nodes: OntologyNode[], sectorId?: string): EngineResult {
   if (sectorId === 'manufacturing') {
     const aw = tryAWQuery(question)
     if (aw) return aw
+  }
+  if (sectorId === 'retail') {
+    const r = tryRetailQuery(question)
+    if (r) return r
+  }
+  if (sectorId === 'healthcare') {
+    const h = tryHealthcareQuery(question)
+    if (h) return h
+  }
+  if (sectorId === 'finance') {
+    const f = tryFinanceQuery(question)
+    if (f) return f
   }
 
   const node = findNode(question, nodes)!

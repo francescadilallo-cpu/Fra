@@ -53,22 +53,23 @@ const SECTOR_QUESTIONS: Record<string, string[]> = {
     'What is our YoY revenue comparison — 2011 vs 2014?',
   ],
   retail: [
-    'Show the top 10 products by stock level',
+    'Show the top products by revenue',
     'Which promotions are active?',
     'What is the total amount of paid orders?',
     'Show gold loyalty customers',
+    'Show low stock inventory alerts',
   ],
   healthcare: [
-    'Show prescriptions issued recently',
+    'Show active patients by condition',
     'How many encounters per doctor?',
     'Which treatments have no outcome recorded?',
-    'Show active patients',
+    'Show prescriptions by doctor',
   ],
   finance: [
-    'Show the top 10 loans by amount',
-    'What is the average risk score?',
+    'Show loan portfolio by status',
+    'What is the risk score distribution?',
     'Which payments are overdue?',
-    'Show pending loan applications',
+    'Show pending KYC applications',
   ],
 }
 
@@ -201,6 +202,24 @@ function InlineLineChart({ chart }: { chart: ChartData }) {
 
 // ── Result table ───────────────────────────────────────────────────────────────
 
+const CURRENCY_COLS = /revenue|amount|total|price|cost|salary|value|ltv|fee|pay|stipendio|income|profit|margin|spend|budget|exposure/i
+const PERCENT_COLS  = /pct|percent|rate|ratio|margin_pct|avg_pd|pct_of/i
+
+function fmtCell(col: string, v: unknown): string {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  if (typeof v === 'number') {
+    if (PERCENT_COLS.test(col)) return `${v.toFixed(1)}%`
+    if (CURRENCY_COLS.test(col)) {
+      if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`
+      if (Math.abs(v) >= 1_000)     return `$${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+      return `$${v.toFixed(2)}`
+    }
+    return v.toLocaleString('en-US')
+  }
+  return String(v)
+}
+
 function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
   if (!rows.length) return <p className="text-sm text-slate-500 italic">No results found.</p>
 
@@ -222,14 +241,16 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
           {rows.map((row, i) => (
             <tr key={i} className="border-t border-slate-200 hover:bg-slate-50 transition-colors">
               {columns.map((col) => (
-                <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
-                  {row[col] === null || row[col] === undefined ? (
-                    <span className="text-slate-400 italic">null</span>
-                  ) : typeof row[col] === 'number' ? (
-                    (row[col] as number).toLocaleString('en-US')
-                  ) : (
-                    String(row[col])
-                  )}
+                <td key={col} className={`px-3 py-2 whitespace-nowrap ${
+                  row[col] === null || row[col] === undefined
+                    ? 'text-slate-300 italic'
+                    : CURRENCY_COLS.test(col) && typeof row[col] === 'number'
+                      ? 'text-teal-700 font-medium tabular-nums'
+                      : 'text-slate-700'
+                }`}>
+                  {row[col] === null || row[col] === undefined
+                    ? 'null'
+                    : fmtCell(col, row[col])}
                 </td>
               ))}
             </tr>
