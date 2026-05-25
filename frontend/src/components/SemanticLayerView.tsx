@@ -486,6 +486,63 @@ export default function SemanticLayerView() {
           />
         </section>
 
+        {/* 25 Golden Questions */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <MessageSquare className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">25 Golden Questions — Evaluation Test Set</h2>
+            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 rounded-full px-2 py-0.5 ml-1">pytest harness</span>
+          </div>
+          {[
+            { label: '🟢 Livello 1 — Single source', questions: [
+              { id:'Q1',  q:'Quanti dipendenti lavorano nel reparto "Engineering"?',                      src:'HR' },
+              { id:'Q2',  q:'Qual è il prezzo di listino della mountain bike "Mountain-200 Black, 38"?',  src:'PIM' },
+              { id:'Q3',  q:'Quanti ordini abbiamo nel sistema?',                                         src:'ERP' },
+              { id:'Q4',  q:'Elenco delle aziende clienti (B2B) attive.',                                 src:'CRM' },
+              { id:'Q5',  q:'Qual è la retribuzione oraria media nel reparto Production?',                src:'HR' },
+            ]},
+            { label: '🟡 Livello 2 — Cross-fonte semplice', questions: [
+              { id:'Q6',  q:'Chi è il venditore che ha gestito più ordini nel 2014?',                     src:'ERP + HR' },
+              { id:'Q7',  q:'Qual è il fatturato totale per territorio nel 2014?',                        src:'ERP' },
+              { id:'Q8',  q:'Qual è il cliente che ha speso di più in assoluto?',                         src:'ERP + CRM' },
+              { id:'Q9',  q:'Top 5 prodotti più venduti per quantità.',                                   src:'ERP + PIM' },
+              { id:'Q10', q:'In quale stato/provincia abita il cliente con maggior numero di ordini?',    src:'ERP + CRM' },
+              { id:'Q11', q:'Quanti dipendenti ci sono per gruppo di reparto?',                           src:'HR' },
+              { id:'Q12', q:'Quanti prodotti sono "make only" (prodotti internamente)?',                  src:'PIM' },
+              { id:'Q13', q:'Quali clienti hanno indirizzo in California?',                               src:'CRM' },
+            ]},
+            { label: '🟠 Livello 3 — Multi-fonte + filtri contestuali', questions: [
+              { id:'Q14', q:'Top 3 venditori per fatturato 2014 con il loro reparto.',                    src:'ERP + HR' },
+              { id:'Q15', q:'Per ogni venditore, qual è il margine commerciale 2014?',                    src:'ERP + PIM' },
+              { id:'Q16', q:'Qual è il fatturato medio per cliente B2B vs B2C?',                         src:'ERP + CRM' },
+              { id:'Q17', q:'Per ogni territorio, fatturato vs quota assegnata al venditore.',            src:'ERP' },
+              { id:'Q18', q:'Qual è la categoria prodotti con il margine % più alto?',                    src:'ERP + PIM' },
+              { id:'Q19', q:'Quanti ordini hanno applicato uno sconto da offerta speciale?',              src:'ERP' },
+              { id:'Q20', q:'Quanti clienti unici abbiamo, considerando i duplicati?',                   src:'CRM' },
+            ]},
+            { label: '🔴 Livello 4 — Ambiguità & governance', questions: [
+              { id:'Q21', q:'Qual è il "fatturato" del 2014?',                                           src:'ERP — ambiguo' },
+              { id:'Q22', q:'Mostrami il dipendente "Mary".',                                            src:'HR + CRM — ambiguo' },
+              { id:'Q23', q:'Da quale fonte arriva il dato del fatturato cliente XYZ, e quando è stato aggiornato?', src:'Metadata' },
+              { id:'Q24', q:'Cliente "Adventure Works Cycles" — ha più di un account?',                  src:'CRM — dedup' },
+              { id:'Q25', q:'Calcola il fatturato annualizzato del top venditore italiano.',              src:'Dato non disponibile' },
+            ]},
+          ].map(group => (
+            <div key={group.label} className="mb-5">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">{group.label}</p>
+              <div className="space-y-1.5">
+                {group.questions.map(q => (
+                  <div key={q.id} className="flex items-start gap-3 bg-white border border-slate-200 rounded-lg px-3 py-2 hover:border-slate-300 transition-colors">
+                    <span className="font-mono text-[10px] font-bold text-slate-400 shrink-0 mt-0.5 w-7">{q.id}</span>
+                    <span className="text-sm text-slate-700 flex-1">{q.q}</span>
+                    <span className="text-[10px] text-slate-400 shrink-0 mt-0.5">{q.src}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+
       </div>
     </div>
   )
