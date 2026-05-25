@@ -19,7 +19,7 @@ export const PROVIDERS: ProviderConfig[] = [
     id: 'groq',
     label: 'Groq',
     free: true,
-    badge: 'Gratuito · LLaMA 3.1 8b instant',
+    badge: 'Gratuito · LLaMA 3.3 70b',
     hint: 'console.groq.com → API Keys',
     keyUrl: 'https://console.groq.com/keys',
     keyPlaceholder: 'gsk_...',
@@ -46,38 +46,82 @@ export const PROVIDERS: ProviderConfig[] = [
 
 // ── AdventureWorks system prompt ──────────────────────────────────────────────
 
-const AW_SYSTEM_PROMPT = `You are a Query AI for AdventureWorks 2014. Answer in English or Italian. Output ONLY a JSON object — no other text.
+const AW_SYSTEM_PROMPT = `You are a semantic query engine for AdventureWorks 2014 (4-source data platform).
+Respond in the same language as the question (English or Italian).
+Output ONLY a single valid JSON object — no markdown, no explanation, no text outside the JSON.
 
-SCHEMA:
-- ERP: SalesOrder(orderId,orderDate,subtotalAmount,taxAmt,freight,totalDue,territoryId,customer_ref,salesPersonId) 31465 rows; SalesPerson(salesPersonId,salesYTD,salesLastYear,bonus,commissionPct,territoryId) 17 rows; SalesOrderLine(orderId,productId,quantity,unitPrice,lineTotal) 121317 rows; SalesTerritory(territoryId,name,countryRegion,salesYTD) 10 rows; Customer(customerId,territoryId) 19185 rows
-- CRM: accounts(accountId,companyName,creditLimit,country,segment) 19829 clean (372 legacy dupes excluded)
-- HR: dipendenti_hr(matricolaDip,cognome,nome,ruolo,stipendio,repartoId) 290 rows
-- PIM: product_catalog(internal_id,name,category,subcategory,listPrice,standardCost) 504 products
-BRIDGES: SOLD_BY ERP.salesPersonId↔HR.matricolaDip 100%; OF_PRODUCT ERP.productId↔PIM.internal_id 99.6%; PLACED_BY ERP.customer_ref↔CRM.accountId 93.2%
+## SCHEMA
 
-KEY FACTS (use exactly):
-Net revenue(subtotalAmount)=$20,127,070 | Gross(totalDue)=$22,410,568 | Orders=31,465 | Customers=19,829
-Top salesperson: Linda Mitchell #276 $4,251,368 YTD | Top territory: Southwest $10,510,853
-Q1=$4,121,485 Q2=$5,182,930 Q3=$5,847,621 Q4=$4,975,034
-Salespersons YTD: Mitchell$4.25M Reiter$4.12M Saraiva$3.76M Tsoflias$3.19M Vargas$3.12M Campbell$2.60M Valdez$2.46M Pak$2.32M
-Territories: Southwest$10.5M Northwest$7.9M Canada$6.8M Australia$6.0M UK$5.0M France$4.8M Germany$3.8M
+ERP (PostgreSQL):
+  SalesOrder: orderId, orderDate, shipDate, status, subtotalAmount, taxAmt, freight, totalDue, territoryId, customer_ref, salesPersonId, onlineOrderFlag — 31,465 rows
+  SalesPerson: salesPersonId, salesYTD, salesLastYear, bonus, commissionPct, territoryId — 17 rows
+  SalesOrderLine: orderId, productId, quantity, unitPrice, unitPriceDiscount, lineTotal — 121,317 rows
+  SalesTerritory: territoryId, name, countryRegion, group, salesYTD — 10 rows
+  Customer: customerId, accountNumber, territoryId — 19,185 rows
+CRM (SQLite): accounts: accountId, companyName, creditLimit, country, segment — 19,829 clean (372 dupes with accountId<0 excluded)
+HR (CSV): dipendenti_hr: matricolaDip, cognome, nome, ruolo, stipendio, repartoId — 290 rows
+PIM (JSON): product_catalog: internal_id, name, category, subcategory, listPrice, standardCost, color, size, weight — 504 products
 
-RULE: "revenue"/"fatturato" without qualifier → set isDisambiguation:true, explain both subtotalAmount($20.1M) and totalDue($22.4M)
+Bridges: ERP.salesPersonId ↔ HR.matricolaDip (100% match); ERP.productId ↔ PIM.internal_id (99.6%); ERP.customer_ref ↔ CRM.accountId (93.2%)
 
-JSON schema (all fields required, keep response under 800 tokens):
-{"sql":"SELECT ...","rows":[{"col":"val"}],"summary":"**bold** numbers","interpreted_as":"label","chartData":{"type":"bar","title":"","labels":[],"values":[],"unit":"$"},"sources":[{"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}],"steps":["① ...","② ..."],"followUps":["Q?","Q?"],"isDisambiguation":false}
-Source IDs: erp=bg-blue-100/text-blue-700 crm=bg-violet-100/text-violet-700 hr=bg-amber-100/text-amber-700 pim=bg-teal-100/text-teal-700`
+## KEY FACTS — use these exact numbers, never invent others
+
+Revenue 2014: subtotalAmount (net, excl tax+freight) = $20,127,070 | totalDue (gross) = $22,410,568
+Orders: 31,465 total | avg $639.65 | Customers (deduped): 19,829
+Quarterly net: Q1 $4,121,485 | Q2 $5,182,930 | Q3 $5,847,621 | Q4 $4,975,034
+
+Top salespersons by salesYTD:
+  1. Linda Mitchell #276 — $4,251,368 | bonus $2,000
+  2. Rachel Reiter #289 — $4,116,871 | bonus $5,150
+  3. José Saraiva #275 — $3,763,178 | bonus $4,100
+  4. Lynn Tsoflias #277 — $3,189,418 | bonus $2,500
+  5. Ranjit Vargas #290 — $3,121,616 | bonus $985
+  6. David Campbell #282 — $2,604,540 | bonus $5,000
+  7. Sonia Valdez #281 — $2,458,535 | bonus $3,550
+  8. Jae Pak #279 — $2,315,185 | bonus $6,700 ← highest bonus but NOT top revenue
+
+Territories by salesYTD: Southwest $10,510,853 (8,512 orders) | Northwest $7,887,186 | Canada $6,771,829 | Australia $5,977,814 | UK $5,012,905 | France $4,772,398 | Germany $3,805,202 | Central $3,072,175
+
+## SEMANTIC RULES
+
+- "revenue" / "fatturato" / "ricavi" without qualifier → isDisambiguation: true, explain both subtotalAmount ($20.1M net) and totalDue ($22.4M gross)
+- "subtotal" / "net revenue" / "subtotalAmount" → use $20,127,070, isDisambiguation: false
+- "total due" / "gross" / "billed" → use $22,410,568, isDisambiguation: false
+- Cross-source joins: mention the bridge used in steps
+
+## OUTPUT FORMAT
+
+Return exactly this JSON structure:
+{
+  "sql": "-- brief comment\nSELECT ... FROM ...",
+  "rows": [{"column": "value"}],
+  "summary": "Answer with **bold** key numbers. 1-2 sentences.",
+  "interpreted_as": "Short label e.g. Top salesperson by YTD revenue",
+  "chartData": {"type": "bar", "title": "Chart title", "labels": ["A","B"], "values": [100, 200], "unit": "$"},
+  "sources": [{"id": "erp", "label": "ERP OrionSales", "bg": "bg-blue-100", "text": "text-blue-700"}],
+  "steps": ["① Locate source table", "② Apply filter/join", "③ Return result"],
+  "followUps": ["Related question 1?", "Related question 2?", "Related question 3?"],
+  "isDisambiguation": false
+}
+
+Source badge values (copy exactly):
+  ERP:  {"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}
+  CRM:  {"id":"crm","label":"CRM ClientHub","bg":"bg-violet-100","text":"text-violet-700"}
+  HR:   {"id":"hr","label":"HR CSV","bg":"bg-amber-100","text":"text-amber-700"}
+  PIM:  {"id":"pim","label":"PIM JSON","bg":"bg-teal-100","text":"text-teal-700"}
+  KG:   {"id":"kg","label":"Knowledge Graph","bg":"bg-slate-100","text":"text-slate-600"}
+
+Rules: rows max 10 entries | steps 2-4 items | followUps exactly 3 | include chartData whenever a ranked list or comparison makes sense.`
 
 // ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
 function parseResult(text: string): EngineResult {
-  // Strip markdown fences first
   let clean = text
     .replace(/^```(?:json)?\s*/im, '')
     .replace(/\s*```\s*$/im, '')
     .trim()
 
-  // Extract the JSON object — LLaMA often adds preamble/postamble text
+  // Extract the outermost JSON object in case the model added preamble/postamble
   const start = clean.indexOf('{')
   const end = clean.lastIndexOf('}')
   if (start !== -1 && end > start) {
@@ -101,6 +145,10 @@ function parseResult(text: string): EngineResult {
     throw new Error(`LLM returned non-JSON: ${clean.slice(0, 300)}`)
   }
 }
+
+// ── Sleep helper ──────────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // ── Provider-specific callers ──────────────────────────────────────────────────
 
@@ -128,7 +176,7 @@ async function callAnthropic(question: string, apiKey: string): Promise<EngineRe
   return parseResult(data.content.find(c => c.type === 'text')?.text ?? '')
 }
 
-async function callGroq(question: string, apiKey: string): Promise<EngineResult> {
+async function callGroqOnce(question: string, apiKey: string, model: string): Promise<EngineResult> {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -136,8 +184,9 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
+      model,
       max_tokens: 2048,
+      temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: AW_SYSTEM_PROMPT },
@@ -148,11 +197,35 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
   if (!res.ok) {
     const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
     const msg = e.error?.message ?? `Groq ${res.status}`
-    if (res.status === 429) throw new Error(`Rate limit Groq — aspetta qualche secondo e riprova. (${msg.slice(0, 80)})`)
-    throw new Error(msg)
+    const err = new Error(msg)
+    ;(err as Error & { status?: number }).status = res.status
+    throw err
   }
   const data = await res.json() as { choices: Array<{ message: { content: string } }> }
   return parseResult(data.choices[0]?.message?.content ?? '')
+}
+
+async function callGroq(question: string, apiKey: string): Promise<EngineResult> {
+  // Try 70b first (higher quality), fall back to 8b-instant on rate limit
+  const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+  let lastError: Error = new Error('Groq unavailable')
+
+  for (const model of models) {
+    try {
+      return await callGroqOnce(question, apiKey, model)
+    } catch (e) {
+      lastError = e as Error
+      const status = (e as Error & { status?: number }).status
+      if (status === 429) {
+        // Rate limited on this model — wait briefly then try next
+        await sleep(1500)
+        continue
+      }
+      throw e
+    }
+  }
+  // Both models rate-limited — surface a clean message
+  throw new Error('Rate limit Groq: attendi qualche secondo e riprova. (' + lastError.message.slice(0, 100) + ')')
 }
 
 async function callGemini(question: string, apiKey: string): Promise<EngineResult> {
@@ -163,7 +236,11 @@ async function callGemini(question: string, apiKey: string): Promise<EngineResul
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: AW_SYSTEM_PROMPT }] },
       contents: [{ parts: [{ text: question }] }],
-      generationConfig: { maxOutputTokens: 4096, temperature: 0.2, responseMimeType: 'application/json' },
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
     }),
   })
   if (!res.ok) {
@@ -192,8 +269,8 @@ export async function executeLLMQuery(
 
 // ── Storage helpers ────────────────────────────────────────────────────────────
 
-const KEY_STORAGE   = 'aw-llm-api-key'
-const PROV_STORAGE  = 'aw-llm-provider'
+const KEY_STORAGE  = 'aw-llm-api-key'
+const PROV_STORAGE = 'aw-llm-provider'
 
 export function getStoredCredentials(): { key: string; provider: LLMProvider } {
   try {
