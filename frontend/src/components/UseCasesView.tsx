@@ -1,4 +1,4 @@
-import { ArrowRight, TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, Bot, Zap, MapPin, Users } from 'lucide-react'
+import { ArrowRight, TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, Bot, Zap, MapPin, Users, ExternalLink } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import type { NavTab } from '../types'
@@ -10,6 +10,8 @@ interface Props {
 interface Finding {
   severity: 'critical' | 'warning' | 'info'
   text: string
+  queryLink?: string   // pre-fills Query AI and navigates there
+  navLink?: NavTab     // direct tab navigation
 }
 
 interface ResultMetric {
@@ -35,40 +37,58 @@ interface UseCase {
   findings: Finding[]
   results: ResultMetric[]
   annualValue: string
+  demoQuery?: string   // CTA shortcut: "Try live →"
 }
 
 const USE_CASES: UseCase[] = [
   {
-    id: 'ferretti',
-    company: 'Ferretti Metalli S.r.l.',
+    id: 'adventureworks',
+    company: 'AdventureWorks Cycles',
     sector: 'manufacturing',
-    sectorIcon: '🏭',
-    industry: 'Metal processing · Brescia',
-    city: 'Brescia',
-    employees: '120 employees',
-    revenue: '€18M revenue',
-    tagline: 'From 3 disconnected ERPs to a self-managing factory',
-    problem: 'Three non-communicating ERP systems (Zucchetti + TeamSystem + Excel spreadsheets). The production manager only discovered bottlenecks on weekends, when delays were already irreversible.',
+    sectorIcon: '🚲',
+    industry: 'Bicycle manufacturing · US / Global',
+    city: 'Multiple territories',
+    employees: '290 employees · 14 sales reps',
+    revenue: '$20.1M net revenue 2014',
+    tagline: 'Four disconnected systems, one semantic layer — zero manual joins',
+    problem: 'Sales, CRM, HR and product data live in four incompatible systems. The word "revenue" returned different numbers to every team. The top salesperson changed depending on which metric you asked about. Nobody knew that 372 CRM accounts were duplicates.',
     painPoints: [
-      'OEE at 67% — 4 hours/day of unplanned downtime per machine',
-      'Average lead time 18 days (vs. 11 for competitors)',
-      'Defect rate 4.2% · €85K/year in rework',
-      'Production reports: 3 hours of Excel every Monday morning',
+      '"Fatturato" ambiguity — subtotal_amount $20.1M (net) vs total_due $22.4M (gross): $2.3M gap that corrupted every board report',
+      'CRM had 372 duplicate accounts (accountId < 0) inflating customer count by 1.9%',
+      'HR data in Italian schema (matricolaDip, cognome, nome) — impossible to join to ERP salesperson IDs',
+      '47 PIM products not matched to ERP orders — revenue attribution gap in product analytics',
     ],
-    agents: ['Anomaly Detection · Production', 'Production Scheduler', 'Supplier Risk Monitor'],
+    agents: ['Sales Performance Agent (ERP × HR)', 'CRM Dedup Agent', 'Revenue Disambiguator', 'Bridge Validator'],
     findings: [
-      { severity: 'critical', text: 'CNC-07: efficiency dropped to 43% in the last 72h — preventive maintenance within 3 days' },
-      { severity: 'critical', text: 'ORD-2024-389 at risk of 5-day delay — bottleneck in milling department (3 orders queued)' },
-      { severity: 'warning',  text: 'Supplier Acciai Lombardi: average lead time rose from 8 to 14 days in the last 30 days' },
-      { severity: 'info',     text: 'Batch LT-88 completed with zero defects — optimal CNC parameters documented' },
+      {
+        severity: 'critical',
+        text: '"Revenue / fatturato" maps to two fields: subtotal_amount = $20.1M (net) vs total_due = $22.4M (gross). Semantic layer now forces explicit choice at query time.',
+        queryLink: 'What is our total revenue — subtotal vs total due?',
+      },
+      {
+        severity: 'critical',
+        text: '372 CRM duplicate accounts with accountId < 0 detected and quarantined. True unique customer count: 19,829 (not 20,201).',
+        queryLink: 'How many unique customers after CRM deduplication?',
+      },
+      {
+        severity: 'warning',
+        text: 'Top salesperson ambiguity resolved: Linda Mitchell (#276) leads by salesYTD $4.25M. Jae Pak has highest bonus ($6,700) but ranks 8th in revenue.',
+        queryLink: 'Who is the top salesperson by revenue in 2014?',
+      },
+      {
+        severity: 'info',
+        text: 'All 3 cross-source bridges validated — product match 99.6% (47 orphans flagged), HR–salesperson 100%, customer bridge 93.2%.',
+        navLink: 'ontology',
+      },
     ],
     results: [
-      { metric: 'OEE',          before: '67%',      after: '83%',     positive: true },
-      { metric: 'Lead time',    before: '18 days',  after: '11 days', positive: true },
-      { metric: 'Defects',      before: '4.2%',     after: '1.4%',    positive: true },
-      { metric: 'Excel reports',before: '3h/week',  after: '0h',      positive: true },
+      { metric: 'Revenue definition', before: '2 versions',   after: '1 definition',  positive: true },
+      { metric: 'CRM accuracy',       before: '372 dupes',    after: '0 dupes',       positive: true },
+      { metric: 'Bridge match',        before: 'unknown',      after: '93.2–100%',     positive: true },
+      { metric: 'KG nodes built',      before: '0',            after: '193,062',       positive: true },
     ],
-    annualValue: '€240K',
+    annualValue: '$340K',
+    demoQuery: 'Who is the top salesperson by revenue in 2014?',
   },
   {
     id: 'modaverde',
@@ -174,15 +194,39 @@ const SEVERITY_CONFIG = {
   info:     { bg: 'bg-teal-50', border: 'border-teal-200', dot: 'bg-teal-500', text: 'text-teal-700', label: 'INFO' },
 }
 
-function FindingRow({ finding }: { finding: Finding }) {
+function FindingRow({ finding, onNavigate }: { finding: Finding; onNavigate?: (tab: NavTab) => void }) {
   const cfg = SEVERITY_CONFIG[finding.severity]
+
+  function handleLink() {
+    if (!onNavigate) return
+    if (finding.queryLink) {
+      sessionStorage.setItem('query-prefill', finding.queryLink)
+      onNavigate('query')
+    } else if (finding.navLink) {
+      onNavigate(finding.navLink)
+    }
+  }
+
+  const hasLink = !!(finding.queryLink || finding.navLink)
+
   return (
-    <div className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 border ${cfg.bg} ${cfg.border}`}>
-      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
-        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} flex-shrink-0`} />
-        <span className={`text-[9px] font-bold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</span>
+    <div className={`rounded-lg px-3 py-2.5 border ${cfg.bg} ${cfg.border}`}>
+      <div className="flex items-start gap-2.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} flex-shrink-0`} />
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${cfg.text}`}>{cfg.label}</span>
+        </div>
+        <p className={`text-xs leading-snug flex-1 ${cfg.text}`}>{finding.text}</p>
       </div>
-      <p className={`text-xs leading-snug ${cfg.text}`}>{finding.text}</p>
+      {hasLink && onNavigate && (
+        <button
+          onClick={handleLink}
+          className={`mt-1.5 ml-6 text-[10px] font-medium flex items-center gap-1 hover:underline ${cfg.text} opacity-70 hover:opacity-100`}
+        >
+          <ExternalLink className="w-3 h-3" />
+          {finding.queryLink ? 'Try in Query AI →' : 'Explore in Semantic Layer →'}
+        </button>
+      )}
     </div>
   )
 }
