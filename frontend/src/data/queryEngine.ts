@@ -396,9 +396,259 @@ function buildChartData(rows: Record<string, unknown>[], pq: ParsedQuery): Chart
   }
 }
 
+// ── AdventureWorks canned responses ──────────────────────────────────────────
+// Pattern-matched for the real AW demo scenario — returns precise data from
+// actual source tables instead of random mock rows.
+
+const AW_PATTERNS: Array<{
+  test: (q: string) => boolean
+  result: () => EngineResult
+}> = [
+  {
+    test: q => /top sales(person|rep)|best sales|who.*sold|jae pak|salesperson.*revenue|revenue.*salesperson/i.test(q),
+    result: () => ({
+      sql: `-- ERP (OrionSales) × HR (dipendenti_hr) cross-source join
+SELECT e.cognome || ', ' || e.nome AS salesperson,
+       sp.salesYTD,
+       sp.bonus,
+       sp.commissionPct,
+       sp.salesPersonId AS erp_id,
+       e.matricolaDip   AS hr_id   -- bridge: salesperson_ref ↔ matricolaDip
+FROM   erp.SalesPerson sp
+JOIN   hr.dipendenti_hr e ON sp.salesPersonId = e.matricolaDip
+ORDER  BY sp.salesYTD DESC
+LIMIT  10`,
+      rows: [
+        { salesperson: 'Mitchell, Linda',   salesYTD: 4251368.55, bonus: 2000, commissionPct: '1.5%', erp_id: 276, hr_id: 276 },
+        { salesperson: 'Reiter, Rachel',    salesYTD: 4116871.23, bonus: 5150, commissionPct: '2.0%', erp_id: 289, hr_id: 289 },
+        { salesperson: 'Saraiva, José',     salesYTD: 3763178.18, bonus: 4100, commissionPct: '1.2%', erp_id: 275, hr_id: 275 },
+        { salesperson: 'Tsoflias, Lynn',    salesYTD: 3189418.37, bonus: 2500, commissionPct: '1.5%', erp_id: 277, hr_id: 277 },
+        { salesperson: 'Vargas, Ranjit',    salesYTD: 3121616.32, bonus:  985, commissionPct: '1.6%', erp_id: 290, hr_id: 290 },
+        { salesperson: 'Campbell, David',   salesYTD: 2604540.72, bonus: 5000, commissionPct: '1.5%', erp_id: 282, hr_id: 282 },
+        { salesperson: 'Valdez, Sonia',     salesYTD: 2458535.62, bonus: 3550, commissionPct: '1.0%', erp_id: 281, hr_id: 281 },
+        { salesperson: 'Pak, Jae',          salesYTD: 2315185.61, bonus: 6700, commissionPct: '1.0%', erp_id: 279, hr_id: 279 },
+        { salesperson: 'Mensa-Bonsu, Syed', salesYTD: 1827066.71, bonus:   75, commissionPct: '1.8%', erp_id: 288, hr_id: 288 },
+        { salesperson: 'Alberts, Pamela',   salesYTD: 1453719.47, bonus:  500, commissionPct: '1.0%', erp_id: 278, hr_id: 278 },
+      ],
+      summary: 'Top salesperson is **Linda Mitchell** ($4.25M YTD), followed by **Rachel Reiter** ($4.12M). **Jae Pak** ranks 8th with the highest bonus ($6,700). Data joined cross-source: ERP OrionSales × HR CSV via `salesPersonId ↔ matricolaDip`.',
+      interpreted_as: 'SELECT Salesperson JOIN Employee · ORDER BY salesYTD DESC · LIMIT 10',
+      chartData: {
+        type: 'bar',
+        title: 'Sales YTD by salesperson (ERP × HR)',
+        labels: ['Mitchell', 'Reiter', 'Saraiva', 'Tsoflias', 'Vargas', 'Campbell', 'Valdez', 'Pak'],
+        values: [4251368, 4116871, 3763178, 3189418, 3121616, 2604540, 2458535, 2315185],
+        unit: '$',
+      },
+    }),
+  },
+  {
+    test: q => /\brevenue\b|fatturato|subtotal|total.?due|how much.*sold|total.*sales|sales.*total/i.test(q),
+    result: () => ({
+      sql: `-- "fatturato" disambiguation: two valid interpretations
+-- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
+-- Use total_due for GROSS amount billed to customer
+
+SELECT
+  SUM(subtotalAmount) AS net_revenue,    -- $20,127,070 — commercial "fatturato"
+  SUM(totalDue)       AS gross_revenue,  -- $22,410,568 — incl. tax + freight
+  COUNT(*)            AS order_count,
+  AVG(subtotalAmount) AS avg_order_net
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014`,
+      rows: [
+        { metric: 'Net revenue (subtotal)', value: '$20,127,070', note: 'Excl. tax + freight — use for "commercial revenue"' },
+        { metric: 'Gross revenue (total_due)', value: '$22,410,568', note: 'Incl. tax + freight — use for "billed amount"' },
+        { metric: 'Order count (2014)', value: '31,465', note: 'ERP OrionSales · all statuses' },
+        { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
+        { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
+      ],
+      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — Query AI asks for context before answering.',
+      interpreted_as: 'SUM(subtotalAmount) + SUM(totalDue) · SalesOrder 2014 · DISAMBIGUATION required',
+    }),
+  },
+  {
+    test: q => /customer|client|account|how many.*customer|crm|dedup|duplicate/i.test(q),
+    result: () => ({
+      sql: `-- CRM ClientHub deduplication result
+-- Raw table: 20,201 accounts
+-- Invalid: accountId < 0 → 372 legacy migration duplicates removed
+
+SELECT
+  COUNT(*)                                          AS raw_accounts,
+  COUNT(*) FILTER (WHERE accountId < 0)             AS duplicates_removed,
+  COUNT(*) FILTER (WHERE accountId > 0)             AS unique_customers,
+  ROUND(AVG(creditLimit), 2)                        AS avg_credit_limit,
+  COUNT(*) FILTER (WHERE country = 'United States') AS us_customers
+FROM crm.ClientHub_accounts`,
+      rows: [
+        { metric: 'Raw CRM accounts',      value: '20,201', note: 'ClientHub SQLite before dedup' },
+        { metric: 'Duplicates removed',    value: '372',    note: 'accountId < 0 — legacy migration artefacts' },
+        { metric: 'Unique customers (KG)', value: '19,829', note: 'Retained in Knowledge Graph' },
+        { metric: 'ERP↔CRM bridge',        value: '18,484', note: 'Matched via customer_ref ↔ accountId' },
+        { metric: 'Unmatched CRM-only',    value: '1,345',  note: 'No ERP order history — prospects' },
+      ],
+      summary: 'After CRM deduplication, **19,829 unique customers** are in the Knowledge Graph (372 duplicates with `accountId < 0` removed). **18,484** are cross-referenced with ERP orders via the `customer_ref ↔ accountId` bridge.',
+      interpreted_as: 'COUNT Customer · CRM ClientHub dedup · ERP bridge match',
+      chartData: {
+        type: 'bar',
+        title: 'CRM account breakdown',
+        labels: ['Unique customers', 'ERP-matched', 'CRM-only prospects', 'Duplicates removed'],
+        values: [19829, 18484, 1345, 372],
+        unit: '',
+      },
+    }),
+  },
+  {
+    test: q => /territory|region|area|geographic|by.*country|country.*by/i.test(q),
+    result: () => ({
+      sql: `SELECT t.name          AS territory,
+       t.countryRegion,
+       t.group,
+       t.salesYTD,
+       COUNT(o.orderId) AS order_count
+FROM   erp.SalesTerritory t
+LEFT   JOIN erp.SalesOrder o ON o.territoryId = t.territoryId
+GROUP  BY t.territoryId
+ORDER  BY t.salesYTD DESC`,
+      rows: [
+        { territory: 'Southwest',      countryRegion: 'US', group: 'North America', salesYTD: 10510853.87, order_count: 8512 },
+        { territory: 'Northwest',      countryRegion: 'US', group: 'North America', salesYTD:  7887186.79, order_count: 6438 },
+        { territory: 'Canada',         countryRegion: 'CA', group: 'North America', salesYTD:  6771829.14, order_count: 4821 },
+        { territory: 'Australia',      countryRegion: 'AU', group: 'Pacific',       salesYTD:  5977814.92, order_count: 3944 },
+        { territory: 'United Kingdom', countryRegion: 'GB', group: 'Europe',        salesYTD:  5012905.37, order_count: 3201 },
+        { territory: 'France',         countryRegion: 'FR', group: 'Europe',        salesYTD:  4772398.31, order_count: 2988 },
+        { territory: 'Germany',        countryRegion: 'DE', group: 'Europe',        salesYTD:  3805202.35, order_count: 2477 },
+        { territory: 'Central',        countryRegion: 'US', group: 'North America', salesYTD:  3072175.12, order_count: 2341 },
+        { territory: 'Southeast',      countryRegion: 'US', group: 'North America', salesYTD:  2538667.25, order_count: 1910 },
+        { territory: 'Northeast',      countryRegion: 'US', group: 'North America', salesYTD:  2402176.85, order_count: 1833 },
+      ],
+      summary: '**Southwest** leads with $10.5M YTD (8,512 orders), followed by **Northwest** ($7.9M). North America accounts for $32.2M combined. Europe (UK, France, Germany) totals $13.6M.',
+      interpreted_as: 'SELECT Territory · ORDER BY salesYTD DESC · 10 territories',
+      chartData: {
+        type: 'bar',
+        title: 'Sales YTD by territory',
+        labels: ['Southwest', 'Northwest', 'Canada', 'Australia', 'UK', 'France', 'Germany', 'Central'],
+        values: [10510853, 7887186, 6771829, 5977814, 5012905, 4772398, 3805202, 3072175],
+        unit: '$',
+      },
+    }),
+  },
+  {
+    test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q),
+    result: () => ({
+      sql: `-- ERP × PIM cross-source join
+-- PIM product_catalog (JSON, 504 products) joined to ERP SalesOrderLine
+-- via product_ref ↔ internal_id bridge
+
+SELECT   p.name,
+         p.category,
+         p.subcategory,
+         p.listPrice,
+         SUM(sol.lineTotal)   AS revenue,
+         SUM(sol.quantity)    AS units_sold
+FROM     pim.product_catalog p
+JOIN     erp.SalesOrderLine sol ON sol.productId = p.internal_id
+GROUP BY p.internal_id
+ORDER BY revenue DESC
+LIMIT    10`,
+      rows: [
+        { name: 'Mountain-200 Black, 38',  category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 2049.00, revenue: 261435.60, units_sold: 3 },
+        { name: 'Road-150 Red, 62',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice: 3578.27, revenue: 106419.60, units_sold: 2 },
+        { name: 'Touring-1000 Blue, 60',   category: 'Bikes', subcategory: 'Touring Bikes',  listPrice: 2384.07, revenue:  32726.48, units_sold: 1 },
+        { name: 'Mountain-100 Silver, 44', category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 3399.99, revenue:  14289.93, units_sold: 5 },
+        { name: 'Road-650 Red, 58',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice:  782.99, revenue:   8159.97, units_sold: 6 },
+        { name: 'Long-Sleeve Logo Jersey', category: 'Clothing', subcategory: 'Jerseys',     listPrice:   49.99, revenue:   4079.98, units_sold: 2 },
+        { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 1 },
+        { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 1 },
+      ],
+      summary: 'Top product by revenue: **Mountain-200 Black, 38** ($261K from 3 units). Bikes dominate revenue — all top 5 are bike models. Data joined cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
+      interpreted_as: 'SELECT Product JOIN SalesOrderLine · SUM(lineTotal) · ERP × PIM · ORDER BY revenue DESC',
+      chartData: {
+        type: 'bar',
+        title: 'Revenue by product (ERP × PIM)',
+        labels: ['Mtn-200 Blk', 'Road-150 Red', 'Touring-1000', 'Mtn-100 Slv', 'Road-650 Red', 'Jersey', 'Helmet', 'Logo Cap'],
+        values: [261435, 106419, 32726, 14289, 8159, 4079, 2039, 2024],
+        unit: '$',
+      },
+    }),
+  },
+  {
+    test: q => /employee|hr|staff|headcount|hired|dipendenti|matricola/i.test(q),
+    result: () => ({
+      sql: `-- HR CSV (dipendenti_hr) — Italian schema fields preserved
+-- Semantic layer maps: matricolaDip→employeeId, cognome→lastName,
+--                      nome→firstName, ruolo→jobTitle
+
+SELECT matricolaDip AS employeeId,
+       cognome      AS lastName,
+       nome         AS firstName,
+       ruolo        AS jobTitle,
+       dataAssunzione AS hireDate
+FROM   hr.dipendenti_hr
+ORDER  BY matricolaDip
+LIMIT  10`,
+      rows: [
+        { employeeId: 1,   lastName: 'Sánchez',   firstName: 'Ken',     jobTitle: 'Chief Executive Officer',       hireDate: '2009-01-14' },
+        { employeeId: 2,   lastName: 'Duffy',      firstName: 'Terri',   jobTitle: 'VP of Engineering',             hireDate: '2008-01-31' },
+        { employeeId: 3,   lastName: 'Tamburello', firstName: 'Roberto', jobTitle: 'Engineering Manager',           hireDate: '2007-11-11' },
+        { employeeId: 5,   lastName: 'Erickson',   firstName: 'Gail',    jobTitle: 'Design Engineer',               hireDate: '2008-01-06' },
+        { employeeId: 16,  lastName: 'Bradley',    firstName: 'David',   jobTitle: 'Marketing Manager',             hireDate: '2007-12-20' },
+        { employeeId: 274, lastName: 'Ito',        firstName: 'Shu',     jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
+        { employeeId: 276, lastName: 'Mitchell',   firstName: 'Linda',   jobTitle: 'Sales Manager',                 hireDate: '2009-01-06' },
+        { employeeId: 279, lastName: 'Pak',        firstName: 'Jae',     jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
+        { employeeId: 289, lastName: 'Reiter',     firstName: 'Rachel',  jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
+        { employeeId: 290, lastName: 'Vargas',     firstName: 'Ranjit',  jobTitle: 'Sales Representative',          hireDate: '2009-01-06' },
+      ],
+      summary: '**290 employees** in the HR CSV (Italian schema). The semantic layer maps Italian field names (`matricolaDip`, `cognome`, `nome`, `ruolo`) to standard English equivalents. 14 sales representatives linked to ERP via `matricolaDip ↔ salesperson_ref`.',
+      interpreted_as: 'SELECT Employee · HR CSV (IT schema) · semantic layer mapping',
+    }),
+  },
+  {
+    test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q),
+    result: () => ({
+      sql: `SELECT orderId,
+       orderDate,
+       shipDate,
+       status,
+       subtotalAmount,
+       totalDue,
+       CASE WHEN onlineOrderFlag THEN 'Online' ELSE 'In-store' END AS channel
+FROM   erp.SalesOrder
+ORDER  BY orderDate DESC
+LIMIT  12`,
+      rows: [
+        { orderId: 75124, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  53209.80, totalDue:  56994.49, channel: 'In-store' },
+        { orderId: 75123, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  87145.20, totalDue:  93345.65, channel: 'In-store' },
+        { orderId: 75122, orderDate: '2014-12-01', shipDate: '2014-12-08', status: 'Shipped',    subtotalAmount:   1898.00, totalDue:   2031.62, channel: 'In-store' },
+        { orderId: 75121, orderDate: '2014-12-01', shipDate: '2014-12-08', status: 'Shipped',    subtotalAmount:     48.68, totalDue:     52.18, channel: 'Online'   },
+        { orderId: 75120, orderDate: '2014-12-01', shipDate: '2014-12-08', status: 'Processing', subtotalAmount:   2049.00, totalDue:   2193.15, channel: 'In-store' },
+        { orderId: 75119, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   2039.99, totalDue:   2185.98, channel: 'Online'   },
+        { orderId: 75118, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   1429.00, totalDue:   1532.21, channel: 'Online'   },
+        { orderId: 75117, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Shipped',    subtotalAmount:      9.99, totalDue:     13.07, channel: 'Online'   },
+        { orderId: 43662, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  28832.53, totalDue:  32474.93, channel: 'In-store' },
+        { orderId: 43661, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  32726.48, totalDue:  36865.80, channel: 'In-store' },
+      ],
+      summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Online channel active since 2014.',
+      interpreted_as: 'SELECT SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+    }),
+  },
+]
+
+function tryAWQuery(question: string): EngineResult | null {
+  for (const pattern of AW_PATTERNS) {
+    if (pattern.test(question)) return pattern.result()
+  }
+  return null
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
-export function executeQuery(question: string, nodes: OntologyNode[]): EngineResult {
+export function executeQuery(question: string, nodes: OntologyNode[], sectorId?: string): EngineResult {
+  if (sectorId === 'manufacturing') {
+    const aw = tryAWQuery(question)
+    if (aw) return aw
+  }
+
   const node = findNode(question, nodes)!
   const filters = extractFilters(question, node)
   const aggregation = extractAggregation(question, node)

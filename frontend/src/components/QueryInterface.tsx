@@ -37,10 +37,11 @@ function saveToHistory(sectorId: string, query: string, current: string[]): stri
 
 const SECTOR_QUESTIONS: Record<string, string[]> = {
   manufacturing: [
-    'Show the 5 products with the highest unit price',
-    'Which suppliers have a reliability rating below 4.0?',
-    'What is the total value of confirmed orders?',
-    'Show active work orders',
+    'Who is the top salesperson by revenue in 2014?',
+    'What is our total revenue — subtotal vs total due?',
+    'How many unique customers after CRM deduplication?',
+    'Show orders by territory ranked by sales YTD',
+    'Which products generated the most revenue?',
   ],
   retail: [
     'Show the top 10 products by stock level',
@@ -327,7 +328,7 @@ export default function QueryInterface() {
     // Brief timeout for UX — engine is synchronous
     setTimeout(() => {
       try {
-        const result = executeQuery(question, ontology.nodes)
+        const result = executeQuery(question, ontology.nodes, sectorId)
         const entities = ontology.nodes
           .filter(n => n.data.db_table && result.sql.toLowerCase().includes(n.data.db_table.toLowerCase()))
           .map(n => n.data.label)
