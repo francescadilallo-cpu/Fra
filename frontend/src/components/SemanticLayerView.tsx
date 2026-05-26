@@ -1,17 +1,65 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X,
   Network, MessageSquare, ChevronDown, ChevronRight, ArrowRight,
-  BookOpen, FileCode, Play, Layers,
+  BookOpen, FileCode, Play, Layers, Server, Trash2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
-import { useExtendedOntology } from '../data/ontologyExtensions'
+import { useExtendedOntology, loadExtension, saveExtension } from '../data/ontologyExtensions'
+import type { OntologyProperty } from '../types'
 
 // ── Navigation helper ─────────────────────────────────────────────────────────
 
 function tryInQueryAI(question: string) {
   sessionStorage.setItem('query-prefill', question)
   window.dispatchEvent(new CustomEvent('navigate-to-query', { detail: { question } }))
+}
+
+// ── Persistent: data sources ──────────────────────────────────────────────────
+
+interface SourceDef {
+  id: string
+  name: string
+  type: string
+  description: string
+  tables: string
+}
+
+const SOURCE_TYPES = [
+  'PostgreSQL', 'MySQL', 'SQLite', 'SQL Server', 'Oracle',
+  'MongoDB', 'Snowflake', 'BigQuery', 'Redshift',
+  'CSV', 'JSON', 'REST API', 'Other',
+]
+
+const SOURCES_KEY = (s: string) => `semantic-sources-${s}`
+
+function loadSources(sectorId: string): SourceDef[] {
+  try { return JSON.parse(localStorage.getItem(SOURCES_KEY(sectorId)) ?? '[]') } catch { return [] }
+}
+function saveSources(sectorId: string, sources: SourceDef[]) {
+  localStorage.setItem(SOURCES_KEY(sectorId), JSON.stringify(sources))
+}
+
+// ── Persistent: disambiguation rules ─────────────────────────────────────────
+
+interface UserRule {
+  id: string
+  term: string
+  problem: string
+  opt1: string
+  opt1Desc: string
+  opt2: string
+  opt2Desc: string
+  resolution: string
+}
+
+const RULES_KEY = (s: string) => `semantic-rules-${s}`
+
+function loadUserRules(sectorId: string): UserRule[] {
+  try { return JSON.parse(localStorage.getItem(RULES_KEY(sectorId)) ?? '[]') } catch { return [] }
+}
+function saveUserRules(sectorId: string, rules: UserRule[]) {
+  localStorage.setItem(RULES_KEY(sectorId), JSON.stringify(rules))
 }
 
 // ── AdventureWorks static data ────────────────────────────────────────────────
@@ -59,7 +107,7 @@ const AW_BRIDGES = [
   {
     id: 1, label: 'PLACED_BY', cardinality: 'N:1', matchRate: 93.2,
     from: { source: 'ERP — OrionSales', entity: 'SalesOrder',     field: 'customer_ref : int' },
-    to:   { source: 'CRM — ClientHub', entity: 'accounts',        field: 'accountId : int' },
+    to:   { source: 'CRM — ClientHub',  entity: 'accounts',        field: 'accountId : int' },
     detail: '18,484 / 19,829 matched · 1,345 CRM-only prospects excluded',
     note: '19,829 unique customers after dedup (372 neg-ID removed)',
     impact: 'Enables: customer geography, segment, creditLimit on orders',
@@ -82,7 +130,6 @@ const AW_BRIDGES = [
   },
 ]
 
-// Field-level semantic → physical mapping per entity
 const AW_ENTITY_DETAIL: Record<string, {
   source: string
   semanticAlias?: string
@@ -91,42 +138,42 @@ const AW_ENTITY_DETAIL: Record<string, {
   SalesOrder: {
     source: 'erp.SalesOrder',
     fields: [
-      { semantic: 'orderId',         physical: 'orderId',        type: 'integer PK' },
-      { semantic: 'orderDate',       physical: 'orderDate',      type: 'date' },
-      { semantic: 'revenue.net',     physical: 'subtotalAmount', type: 'decimal', note: '⚠ "fatturato" disambiguation — net, excl. tax' },
-      { semantic: 'revenue.gross',   physical: 'totalDue',       type: 'decimal', note: '⚠ "fatturato" disambiguation — gross, incl. tax+freight' },
-      { semantic: 'taxAmt',          physical: 'taxAmt',         type: 'decimal' },
-      { semantic: 'freight',         physical: 'freight',        type: 'decimal' },
-      { semantic: 'channel',         physical: 'onlineOrderFlag',type: 'boolean', note: '1=Online (87.9%) / 0=In-store (12.1%)' },
-      { semantic: 'customer →',      physical: 'customer_ref',   type: 'FK int',  bridge: 'PLACED_BY → crm.accounts.accountId' },
-      { semantic: 'salesperson →',   physical: 'salesPersonId',  type: 'FK int',  bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
-      { semantic: 'territory →',     physical: 'territoryId',    type: 'FK int',  bridge: '→ erp.SalesTerritory.territoryId' },
+      { semantic: 'orderId',       physical: 'orderId',          type: 'integer PK' },
+      { semantic: 'orderDate',     physical: 'orderDate',        type: 'date' },
+      { semantic: 'revenue.net',   physical: 'subtotalAmount',   type: 'decimal', note: '⚠ "fatturato" disambiguation — net, excl. tax' },
+      { semantic: 'revenue.gross', physical: 'totalDue',         type: 'decimal', note: '⚠ "fatturato" disambiguation — gross, incl. tax+freight' },
+      { semantic: 'taxAmt',        physical: 'taxAmt',           type: 'decimal' },
+      { semantic: 'freight',       physical: 'freight',          type: 'decimal' },
+      { semantic: 'channel',       physical: 'onlineOrderFlag',  type: 'boolean', note: '1=Online (87.9%) / 0=In-store (12.1%)' },
+      { semantic: 'customer →',    physical: 'customer_ref',     type: 'FK int',  bridge: 'PLACED_BY → crm.accounts.accountId' },
+      { semantic: 'salesperson →', physical: 'salesPersonId',    type: 'FK int',  bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
+      { semantic: 'territory →',   physical: 'territoryId',      type: 'FK int',  bridge: '→ erp.SalesTerritory.territoryId' },
     ],
   },
   Customer: {
     source: 'crm.accounts',
     semanticAlias: 'Unified Customer (ERP + CRM)',
     fields: [
-      { semantic: 'customerId',   physical: 'accountId',   type: 'integer PK' },
-      { semantic: 'companyName',  physical: 'companyName', type: 'string' },
-      { semantic: 'country',      physical: 'country',     type: 'string' },
-      { semantic: 'segment',      physical: 'segment',     type: 'string' },
-      { semantic: 'creditLimit',  physical: 'creditLimit', type: 'decimal' },
-      { semantic: 'email',        physical: 'email',       type: 'string' },
-      { semantic: 'ordersIn →',   physical: 'accountId',   type: 'FK',      bridge: 'PLACED_BY ← erp.SalesOrder.customer_ref' },
+      { semantic: 'customerId',  physical: 'accountId',   type: 'integer PK' },
+      { semantic: 'companyName', physical: 'companyName', type: 'string' },
+      { semantic: 'country',     physical: 'country',     type: 'string' },
+      { semantic: 'segment',     physical: 'segment',     type: 'string' },
+      { semantic: 'creditLimit', physical: 'creditLimit', type: 'decimal' },
+      { semantic: 'email',       physical: 'email',       type: 'string' },
+      { semantic: 'ordersIn →',  physical: 'accountId',   type: 'FK',  bridge: 'PLACED_BY ← erp.SalesOrder.customer_ref' },
     ],
   },
   Employee: {
     source: 'hr.dipendenti_hr',
     semanticAlias: 'Employee — Italian schema translated',
     fields: [
-      { semantic: 'employeeId',  physical: 'matricolaDip', type: 'integer PK', note: 'Italian field → semantic employeeId' },
-      { semantic: 'lastName',    physical: 'cognome',      type: 'string',     note: 'Italian "cognome"' },
-      { semantic: 'firstName',   physical: 'nome',         type: 'string',     note: 'Italian "nome"' },
-      { semantic: 'role',        physical: 'ruolo',        type: 'string',     note: 'Italian "ruolo"' },
-      { semantic: 'salary',      physical: 'stipendio',    type: 'decimal',    note: 'Italian "stipendio"' },
-      { semantic: 'deptId',      physical: 'repartoId',    type: 'FK int',     note: 'Italian "repartoId"' },
-      { semantic: 'salesperson →', physical: 'matricolaDip', type: 'FK',      bridge: 'SOLD_BY ← erp.SalesOrder.salesPersonId' },
+      { semantic: 'employeeId', physical: 'matricolaDip', type: 'integer PK', note: 'Italian field → semantic employeeId' },
+      { semantic: 'lastName',   physical: 'cognome',      type: 'string',     note: 'Italian "cognome"' },
+      { semantic: 'firstName',  physical: 'nome',         type: 'string',     note: 'Italian "nome"' },
+      { semantic: 'role',       physical: 'ruolo',        type: 'string',     note: 'Italian "ruolo"' },
+      { semantic: 'salary',     physical: 'stipendio',    type: 'decimal',    note: 'Italian "stipendio"' },
+      { semantic: 'deptId',     physical: 'repartoId',    type: 'FK int',     note: 'Italian "repartoId"' },
+      { semantic: 'salesperson →', physical: 'matricolaDip', type: 'FK',     bridge: 'SOLD_BY ← erp.SalesOrder.salesPersonId' },
     ],
   },
   Product: {
@@ -144,13 +191,13 @@ const AW_ENTITY_DETAIL: Record<string, {
   SalesOrderLine: {
     source: 'erp.SalesOrderLine',
     fields: [
-      { semantic: 'lineId',     physical: 'lineId',            type: 'integer PK' },
-      { semantic: 'orderId →',  physical: 'orderId',           type: 'FK int',  bridge: '→ erp.SalesOrder.orderId' },
-      { semantic: 'product →',  physical: 'productId',         type: 'FK int',  bridge: 'OF_PRODUCT → pim.product_catalog.internal_id' },
-      { semantic: 'quantity',   physical: 'quantity',          type: 'integer' },
-      { semantic: 'unitPrice',  physical: 'unitPrice',         type: 'decimal' },
-      { semantic: 'discount',   physical: 'unitPriceDiscount', type: 'decimal', note: '>0 = discounted by SpecialOffer' },
-      { semantic: 'lineTotal',  physical: 'lineTotal',         type: 'decimal', note: '= quantity × (unitPrice − discount)' },
+      { semantic: 'lineId',    physical: 'lineId',            type: 'integer PK' },
+      { semantic: 'orderId →', physical: 'orderId',           type: 'FK int',  bridge: '→ erp.SalesOrder.orderId' },
+      { semantic: 'product →', physical: 'productId',         type: 'FK int',  bridge: 'OF_PRODUCT → pim.product_catalog.internal_id' },
+      { semantic: 'quantity',  physical: 'quantity',          type: 'integer' },
+      { semantic: 'unitPrice', physical: 'unitPrice',         type: 'decimal' },
+      { semantic: 'discount',  physical: 'unitPriceDiscount', type: 'decimal', note: '>0 = discounted by SpecialOffer' },
+      { semantic: 'lineTotal', physical: 'lineTotal',         type: 'decimal', note: '= quantity × (unitPrice − discount)' },
     ],
   },
   Salesperson: {
@@ -174,14 +221,14 @@ const AW_DISAMBIGUATION_RULES = [
       { label: 'subtotalAmount', value: '$20,127,070', desc: 'Net commercial revenue (excl. tax & freight)', semantic: 'revenue.net', recommended: true },
       { label: 'totalDue',       value: '$22,410,568', desc: 'Gross billed amount (incl. tax + freight)',    semantic: 'revenue.gross', recommended: false },
     ],
-    resolution: 'Query AI asks for explicit disambiguation before running — isDisambiguation: true',
+    resolution: 'Query AI asks for explicit disambiguation before running',
   },
   {
     term: '"dipendente" / "employee"',
     problem: 'Italian HR schema uses different field names from ERP schema',
     options: [
-      { label: 'matricolaDip', value: 'HR CSV', desc: 'Italian: unique employee ID in HR system', semantic: 'Employee.employeeId', recommended: false },
-      { label: 'salesPersonId', value: 'ERP',  desc: 'ERP: sales representative identifier',      semantic: 'Salesperson.salesPersonId', recommended: false },
+      { label: 'matricolaDip', value: 'HR CSV', desc: 'Italian: unique employee ID in HR system',  semantic: 'Employee.employeeId', recommended: false },
+      { label: 'salesPersonId', value: 'ERP',   desc: 'ERP: sales representative identifier',      semantic: 'Salesperson.salesPersonId', recommended: false },
     ],
     resolution: 'Resolved via SOLD_BY bridge (100% match rate) — semantic layer joins transparently',
   },
@@ -189,8 +236,8 @@ const AW_DISAMBIGUATION_RULES = [
     term: '"ordini" / "orders"',
     problem: 'Could mean SalesOrder (header) or SalesOrderLine (detail rows)',
     options: [
-      { label: 'SalesOrder',     value: '31,465 rows', desc: 'Order header — one per transaction', semantic: 'SalesOrder', recommended: true },
-      { label: 'SalesOrderLine', value: '121,317 rows', desc: 'Line items — one per product per order', semantic: 'SalesOrderLine', recommended: false },
+      { label: 'SalesOrder',     value: '31,465 rows',  desc: 'Order header — one per transaction',            semantic: 'SalesOrder', recommended: true },
+      { label: 'SalesOrderLine', value: '121,317 rows', desc: 'Line items — one per product per order',        semantic: 'SalesOrderLine', recommended: false },
     ],
     resolution: 'Default: SalesOrder for counts/revenue, SalesOrderLine for product-level analysis',
   },
@@ -325,14 +372,46 @@ function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
   )
 }
 
+function UserSourceCard({ source, onDelete }: { source: SourceDef; onDelete: () => void }) {
+  const typeColors: Record<string, string> = {
+    PostgreSQL: 'bg-blue-50 text-blue-700', MySQL: 'bg-orange-50 text-orange-700',
+    SQLite: 'bg-sky-50 text-sky-700', 'SQL Server': 'bg-slate-100 text-slate-600',
+    MongoDB: 'bg-green-50 text-green-700', Snowflake: 'bg-cyan-50 text-cyan-700',
+    BigQuery: 'bg-yellow-50 text-yellow-700', Redshift: 'bg-red-50 text-red-700',
+    CSV: 'bg-violet-50 text-violet-700', JSON: 'bg-amber-50 text-amber-700',
+    'REST API': 'bg-teal-50 text-teal-700',
+  }
+  const chip = typeColors[source.type] ?? 'bg-slate-100 text-slate-600'
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-start gap-3">
+      <Server className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold text-slate-900">{source.name}</span>
+          <span className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded-full ${chip}`}>{source.type}</span>
+        </div>
+        {source.description && <p className="text-xs text-slate-500 mt-0.5">{source.description}</p>}
+        {source.tables && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {source.tables.split(',').map(t => t.trim()).filter(Boolean).map(t => (
+              <span key={t} className="text-[10px] font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5">{t}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
+
 function BridgeCard({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
   const pct = bridge.matchRate
   const color = pct === 100 ? 'bg-teal-500' : pct >= 95 ? 'bg-blue-500' : 'bg-amber-500'
   const textColor = pct === 100 ? 'text-teal-700 bg-teal-100' : pct >= 95 ? 'text-blue-700 bg-blue-100' : 'text-amber-700 bg-amber-100'
-
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-      {/* Header row */}
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">From</p>
@@ -340,7 +419,6 @@ function BridgeCard({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
           <p className="text-[11px] font-mono text-slate-500">{bridge.from.source}</p>
           <p className="text-[10px] font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.from.field}</p>
         </div>
-
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0 px-2">
           <span className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1 whitespace-nowrap">
             ⚡ {bridge.label}
@@ -348,29 +426,23 @@ function BridgeCard({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
           <span className="text-[10px] text-slate-400">{bridge.cardinality}</span>
           <ArrowRight className="w-3.5 h-3.5 text-teal-500" />
         </div>
-
         <div className="flex-1 min-w-0 text-right">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">To</p>
           <p className="text-xs font-semibold text-slate-700 mt-0.5">{bridge.to.entity}</p>
           <p className="text-[11px] font-mono text-slate-500">{bridge.to.source}</p>
           <p className="text-[10px] font-mono text-teal-600 bg-teal-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.to.field}</p>
         </div>
-
         <div className="flex flex-col items-center gap-1 flex-shrink-0 ml-3">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${textColor}`}>{pct}%</span>
           <p className="text-[10px] text-slate-400">match</p>
         </div>
       </div>
-
-      {/* Match rate bar */}
       <div>
         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
         </div>
         <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{bridge.detail}</p>
       </div>
-
-      {/* Impact */}
       <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-0.5">Enables</p>
         <p className="text-[11px] text-slate-600">{bridge.impact}</p>
@@ -379,9 +451,25 @@ function BridgeCard({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
   )
 }
 
+// Property type colour chips
+function typeChip(t: string): string {
+  const map: Record<string, string> = {
+    integer:  'bg-blue-50 text-blue-700',
+    decimal:  'bg-violet-50 text-violet-700',
+    string:   'bg-slate-100 text-slate-600',
+    boolean:  'bg-amber-50 text-amber-700',
+    date:     'bg-teal-50 text-teal-700',
+    datetime: 'bg-teal-50 text-teal-700',
+    fk:       'bg-rose-50 text-rose-700',
+    uuid:     'bg-indigo-50 text-indigo-700',
+    text:     'bg-slate-100 text-slate-600',
+  }
+  return map[t] ?? 'bg-slate-100 text-slate-600'
+}
+
 function EntityCard({ nodeId, ontologyNode }: {
   nodeId: string
-  ontologyNode: { label: string; uri: string; db_table: string | null; row_count: number }
+  ontologyNode: { label: string; uri: string; db_table: string | null; row_count: number; properties: OntologyProperty[] }
 }) {
   const [open, setOpen] = useState(false)
   const detail = AW_ENTITY_DETAIL[nodeId]
@@ -406,46 +494,53 @@ function EntityCard({ nodeId, ontologyNode }: {
           {ontologyNode.db_table && (
             <span className="text-[10px] font-mono text-blue-600 bg-blue-50 rounded px-2 py-0.5">{ontologyNode.db_table}</span>
           )}
+          <span className="text-[10px] text-slate-400 tabular-nums">{ontologyNode.properties.length} fields</span>
           {ontologyNode.row_count > 0 && (
-            <span className="text-[11px] text-slate-400">{ontologyNode.row_count.toLocaleString('en-US')} rows</span>
+            <span className="text-[11px] text-slate-400 tabular-nums">{ontologyNode.row_count.toLocaleString('en-US')} rows</span>
           )}
         </div>
       </button>
 
-      {open && detail && (
+      {open && (
         <div className="border-t border-slate-100 px-4 py-3">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-2">
-            Field mapping — semantic concept → physical column
+            {detail ? 'Field mapping — semantic concept → physical column' : 'Field definitions'}
           </p>
           <div className="space-y-1">
-            {detail.fields.map((f, i) => (
-              <div key={i} className={`flex items-start gap-2 py-1.5 px-2 rounded-lg text-xs ${f.bridge ? 'bg-teal-50 border border-teal-100' : f.note?.startsWith('⚠') ? 'bg-amber-50 border border-amber-100' : 'hover:bg-slate-50'}`}>
-                <div className="w-36 flex-shrink-0">
-                  <span className={`font-mono font-semibold ${f.bridge ? 'text-teal-700' : 'text-slate-700'}`}>{f.semantic}</span>
+            {detail ? (
+              detail.fields.map((f, i) => (
+                <div key={i} className={`flex items-start gap-2 py-1.5 px-2 rounded-lg text-xs ${f.bridge ? 'bg-teal-50 border border-teal-100' : f.note?.startsWith('⚠') ? 'bg-amber-50 border border-amber-100' : 'hover:bg-slate-50'}`}>
+                  <div className="w-36 flex-shrink-0">
+                    <span className={`font-mono font-semibold ${f.bridge ? 'text-teal-700' : 'text-slate-700'}`}>{f.semantic}</span>
+                  </div>
+                  <ArrowRight className="w-3 h-3 text-slate-300 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-mono text-blue-600">{f.physical}</span>
+                    <span className="text-slate-400 ml-2 text-[10px]">{f.type}</span>
+                    {f.bridge && <span className="ml-2 text-[10px] font-semibold text-teal-600 bg-teal-100 rounded px-1.5 py-0.5">⚡ {f.bridge}</span>}
+                    {f.note && !f.note.startsWith('⚠') && <span className="ml-2 text-[10px] text-slate-400 italic">{f.note}</span>}
+                    {f.note?.startsWith('⚠') && <span className="ml-2 text-[10px] text-amber-700 font-medium">{f.note}</span>}
+                  </div>
                 </div>
-                <ArrowRight className="w-3 h-3 text-slate-300 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-mono text-blue-600">{f.physical}</span>
-                  <span className="text-slate-400 ml-2 text-[10px]">{f.type}</span>
-                  {f.bridge && (
-                    <span className="ml-2 text-[10px] font-semibold text-teal-600 bg-teal-100 rounded px-1.5 py-0.5">⚡ {f.bridge}</span>
-                  )}
-                  {f.note && !f.note.startsWith('⚠') && (
-                    <span className="ml-2 text-[10px] text-slate-400 italic">{f.note}</span>
-                  )}
-                  {f.note?.startsWith('⚠') && (
-                    <span className="ml-2 text-[10px] text-amber-700 font-medium">{f.note}</span>
-                  )}
+              ))
+            ) : (
+              // Generated from ontology properties — works for all sectors
+              ontologyNode.properties.map((prop, i) => (
+                <div key={i} className={`flex items-start gap-2 py-1.5 px-2 rounded-lg text-xs ${prop.fkTarget ? 'bg-teal-50 border border-teal-100' : 'hover:bg-slate-50'}`}>
+                  <div className="w-36 flex-shrink-0">
+                    <span className={`font-mono font-semibold ${prop.fkTarget ? 'text-teal-700' : 'text-slate-700'}`}>{prop.name}</span>
+                  </div>
+                  <ArrowRight className="w-3 h-3 text-slate-300 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium ${typeChip(prop.type)}`}>{prop.type}</span>
+                    {prop.required && <span className="text-[10px] text-red-500 font-semibold bg-red-50 rounded px-1 py-0.5">required</span>}
+                    {prop.unique  && <span className="text-[10px] text-violet-600 font-semibold bg-violet-50 rounded px-1 py-0.5">unique</span>}
+                    {prop.fkTarget && <span className="text-[10px] font-semibold text-teal-600 bg-teal-100 rounded px-1.5 py-0.5">→ {prop.fkTarget}</span>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
-        </div>
-      )}
-
-      {open && !detail && (
-        <div className="border-t border-slate-100 px-4 py-3">
-          <p className="text-[11px] text-slate-400 italic">No detailed field mapping available for this entity.</p>
         </div>
       )}
     </div>
@@ -481,6 +576,38 @@ function DisambiguationCard({ rule }: { rule: typeof AW_DISAMBIGUATION_RULES[0] 
   )
 }
 
+function UserRuleCard({ rule, onDelete }: { rule: UserRule; onDelete: () => void }) {
+  return (
+    <div className="bg-white border border-amber-200 rounded-xl p-4">
+      <div className="flex items-start gap-3 mb-2">
+        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-slate-900 font-mono">"{rule.term}"</p>
+          {rule.problem && <p className="text-xs text-slate-500 mt-0.5">{rule.problem}</p>}
+        </div>
+        <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        {[{ label: rule.opt1, desc: rule.opt1Desc, recommended: true }, { label: rule.opt2, desc: rule.opt2Desc, recommended: false }].map((opt, i) => (
+          <div key={i} className={`border rounded-lg p-2 ${opt.recommended ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
+            <p className="text-[10px] font-mono font-bold text-slate-700">{opt.label}</p>
+            {opt.desc && <p className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</p>}
+            {opt.recommended && <p className="text-[10px] text-teal-600 font-semibold mt-0.5">← option A</p>}
+          </div>
+        ))}
+      </div>
+      {rule.resolution && (
+        <div className="flex items-start gap-1.5 text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5">
+          <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <span>{rule.resolution}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function QueryExampleCard({ ex }: { ex: typeof AW_QUERY_EXAMPLES[0] }) {
   const [open, setOpen] = useState(false)
   return (
@@ -489,7 +616,6 @@ function QueryExampleCard({ ex }: { ex: typeof AW_QUERY_EXAMPLES[0] }) {
         <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-900">"{ex.question}"</p>
-          {/* Resolution path */}
           <div className="flex items-center gap-1 flex-wrap mt-2">
             {ex.path.map((step, i) => (
               <span key={i} className="flex items-center gap-1">
@@ -500,7 +626,6 @@ function QueryExampleCard({ ex }: { ex: typeof AW_QUERY_EXAMPLES[0] }) {
               </span>
             ))}
           </div>
-          {/* Bridges used */}
           {ex.bridges.length > 0 && (
             <div className="flex items-center gap-1 mt-2 flex-wrap">
               <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mr-1">Bridges:</span>
@@ -540,8 +665,6 @@ function QueryExampleCard({ ex }: { ex: typeof AW_QUERY_EXAMPLES[0] }) {
   )
 }
 
-// ── Generic sector view (Retail / Healthcare / Finance) ───────────────────────
-
 function GenericBridgeCard({ edge }: {
   edge: { id: string; source: string; target: string; label: string; cardinality?: string }
 }) {
@@ -558,80 +681,71 @@ function GenericBridgeCard({ edge }: {
   )
 }
 
-// ── KG Builder ────────────────────────────────────────────────────────────────
+// ── Bridges Builder ───────────────────────────────────────────────────────────
 
-interface CustomBridge { from: string; to: string; label: string }
-
-function KGBuilder({ bridges, onAdd, onRemove, entityOptions }: {
-  bridges: CustomBridge[]
-  onAdd: (b: CustomBridge) => void
-  onRemove: (i: number) => void
-  entityOptions: string[]
-}) {
+function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityOptions: string[] }) {
+  const [edges, setEdges] = useState(() => loadExtension(sectorId).edges)
   const [form, setForm] = useState({ from: '', to: '', label: '' })
 
-  function submit() {
+  useEffect(() => {
+    const refresh = () => setEdges(loadExtension(sectorId).edges)
+    window.addEventListener('ontology-builder-changed', refresh)
+    return () => window.removeEventListener('ontology-builder-changed', refresh)
+  }, [sectorId])
+
+  function add() {
     if (!form.from || !form.to || !form.label) return
-    onAdd({ ...form })
+    const ext = loadExtension(sectorId)
+    ext.edges.push({ id: `custom-${Date.now()}`, source: form.from, target: form.to, label: form.label })
+    saveExtension(sectorId, ext)
     setForm({ from: '', to: '', label: '' })
   }
 
+  function remove(id: string) {
+    const ext = loadExtension(sectorId)
+    ext.edges = ext.edges.filter(e => e.id !== id)
+    saveExtension(sectorId, ext)
+  }
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
-      <h3 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
-        <Plus className="w-4 h-4 text-teal-600" />
-        Add Custom Relationship
-      </h3>
-      <p className="text-xs text-slate-500 mb-4">Define a new cross-source bridge or custom relationship in the Knowledge Graph.</p>
-      <div className="grid grid-cols-3 gap-3 mb-3">
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
-          <select
-            value={form.from}
-            onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none"
-          >
+          <select value={form.from} onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none">
             <option value="">Select entity…</option>
             {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Relationship label</label>
-          <input
-            value={form.label}
-            onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Bridge label</label>
+          <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
             placeholder="e.g. MANAGED_BY"
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-mono"
-          />
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-mono uppercase" />
         </div>
         <div>
           <label className="text-[11px] font-medium text-slate-600 mb-1 block">To entity</label>
-          <select
-            value={form.to}
-            onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none"
-          >
+          <select value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none">
             <option value="">Select entity…</option>
             {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
           </select>
         </div>
       </div>
-      <button
-        onClick={submit}
-        disabled={!form.from || !form.to || !form.label}
-        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium"
-      >
-        Add to Knowledge Graph
+      <button onClick={add} disabled={!form.from || !form.to || !form.label}
+        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+        Add Bridge
       </button>
-      {bridges.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Custom relationships added</p>
-          {bridges.map((b, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
-              <span className="text-slate-600 font-mono truncate flex-1">{b.from}</span>
-              <span className="text-violet-600 font-bold whitespace-nowrap">— {b.label} →</span>
-              <span className="text-slate-600 font-mono truncate flex-1 text-right">{b.to}</span>
-              <button onClick={() => onRemove(i)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0">
+      {edges.length > 0 && (
+        <div className="space-y-2 mt-1">
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Custom bridges (persisted)</p>
+          {edges.map(e => (
+            <div key={e.id} className="flex items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+              <span className="text-slate-600 font-semibold flex-1">{e.source}</span>
+              <span className="text-violet-600 font-bold whitespace-nowrap font-mono">— {e.label} →</span>
+              <span className="text-slate-600 font-semibold flex-1 text-right">{e.target}</span>
+              <button onClick={() => remove(e.id)} className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0 ml-2">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -642,20 +756,142 @@ function KGBuilder({ bridges, onAdd, onRemove, entityOptions }: {
   )
 }
 
+// ── Rules Builder ─────────────────────────────────────────────────────────────
+
+const EMPTY_RULE_FORM = { term: '', problem: '', opt1: '', opt1Desc: '', opt2: '', opt2Desc: '', resolution: '' }
+
+function RulesBuilder({ sectorId }: { sectorId: string }) {
+  const [rules, setRules] = useState<UserRule[]>(() => loadUserRules(sectorId))
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(EMPTY_RULE_FORM)
+
+  function add() {
+    if (!form.term.trim() || !form.opt1.trim() || !form.opt2.trim()) return
+    const updated = [...rules, { id: `rule-${Date.now()}`, ...form }]
+    setRules(updated)
+    saveUserRules(sectorId, updated)
+    setForm(EMPTY_RULE_FORM)
+    setOpen(false)
+  }
+
+  function remove(id: string) {
+    const updated = rules.filter(r => r.id !== id)
+    setRules(updated)
+    saveUserRules(sectorId, updated)
+  }
+
+  return (
+    <div className="space-y-3">
+      {rules.length === 0 && !open && (
+        <p className="text-sm text-slate-400 italic">No custom rules defined yet. Add one to teach the AI which meaning to prefer for ambiguous business terms.</p>
+      )}
+      {rules.map(rule => (
+        <UserRuleCard key={rule.id} rule={rule} onDelete={() => remove(rule.id)} />
+      ))}
+      {!open ? (
+        <button onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+          <Plus className="w-3.5 h-3.5" />
+          Add disambiguation rule
+        </button>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-amber-800">New disambiguation rule</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-[11px] font-medium text-slate-600 mb-1 block">Ambiguous term <span className="text-red-400">*</span></label>
+              <input value={form.term} onChange={e => setForm(f => ({ ...f, term: e.target.value }))}
+                placeholder='e.g. "revenue" / "fatturato"'
+                className="w-full text-xs border border-amber-200 rounded-lg px-2 py-2 bg-white focus:border-amber-400 outline-none font-mono" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[11px] font-medium text-slate-600 mb-1 block">Problem description</label>
+              <input value={form.problem} onChange={e => setForm(f => ({ ...f, problem: e.target.value }))}
+                placeholder="Why is this ambiguous?"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none" />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-slate-600 mb-1 block">Option A label <span className="text-red-400">*</span></label>
+              <input value={form.opt1} onChange={e => setForm(f => ({ ...f, opt1: e.target.value }))}
+                placeholder="e.g. subtotalAmount"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono" />
+              <input value={form.opt1Desc} onChange={e => setForm(f => ({ ...f, opt1Desc: e.target.value }))}
+                placeholder="Short description"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none mt-1" />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-slate-600 mb-1 block">Option B label <span className="text-red-400">*</span></label>
+              <input value={form.opt2} onChange={e => setForm(f => ({ ...f, opt2: e.target.value }))}
+                placeholder="e.g. totalDue"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono" />
+              <input value={form.opt2Desc} onChange={e => setForm(f => ({ ...f, opt2Desc: e.target.value }))}
+                placeholder="Short description"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none mt-1" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[11px] font-medium text-slate-600 mb-1 block">Resolution strategy</label>
+              <input value={form.resolution} onChange={e => setForm(f => ({ ...f, resolution: e.target.value }))}
+                placeholder="How should the AI resolve this?"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={add} disabled={!form.term.trim() || !form.opt1.trim() || !form.opt2.trim()}
+              className="text-xs bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 disabled:opacity-40 transition-colors font-medium">
+              Save Rule
+            </button>
+            <button onClick={() => { setOpen(false); setForm(EMPTY_RULE_FORM) }}
+              className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
+
+type BuilderTab = 'bridges' | 'rules'
 
 export default function SemanticLayerView() {
   const { sectorId, sector } = useSector()
   const ontology = useExtendedOntology(sectorId)
-  const [customBridges, setCustomBridges] = useState<CustomBridge[]>([])
+
+  const [userSources, setUserSources] = useState<SourceDef[]>(() => loadSources(sectorId))
+  const [showAddSource, setShowAddSource] = useState(false)
+  const [sourceForm, setSourceForm] = useState({ name: '', type: 'PostgreSQL', description: '', tables: '' })
+  const [builderTab, setBuilderTab] = useState<BuilderTab>('bridges')
+
+  // Reload sources when sector changes
+  useEffect(() => {
+    setUserSources(loadSources(sectorId))
+  }, [sectorId])
 
   const isManufacturing = sectorId === 'manufacturing'
-
   const nodeCount = ontology.nodes.length
   const edgeCount = ontology.edges.length
   const totalRows = isManufacturing ? 193062 : ontology.nodes.reduce((sum, n) => sum + (n.data.row_count ?? 0), 0)
-
   const entityOptions = ontology.nodes.map(n => n.data.label)
+
+  function addSource() {
+    if (!sourceForm.name.trim()) return
+    const updated = [...userSources, { id: `src-${Date.now()}`, ...sourceForm }]
+    setUserSources(updated)
+    saveSources(sectorId, updated)
+    setSourceForm({ name: '', type: 'PostgreSQL', description: '', tables: '' })
+    setShowAddSource(false)
+  }
+
+  function deleteSource(id: string) {
+    const updated = userSources.filter(s => s.id !== id)
+    setUserSources(updated)
+    saveSources(sectorId, updated)
+  }
+
+  const TAB_CLASSES = (active: boolean) =>
+    `px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${active ? 'bg-teal-600 text-white' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -709,18 +945,90 @@ export default function SemanticLayerView() {
         </section>
 
         {/* ── SOURCE ARCHITECTURE ────────────────────────────────────── */}
-        {isManufacturing && (
-          <section>
-            <div className="flex items-center gap-2 mb-3">
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-slate-500" />
               <h2 className="font-semibold text-slate-900">Source Architecture</h2>
-              <span className="text-xs text-slate-400">— 4 heterogeneous systems integrated</span>
+              {isManufacturing
+                ? <span className="text-xs text-slate-400">— 4 heterogeneous systems integrated</span>
+                : <span className="text-xs text-slate-400">— define your physical data systems</span>
+              }
             </div>
+            {!isManufacturing && (
+              <button
+                onClick={() => setShowAddSource(v => !v)}
+                className="flex items-center gap-1.5 text-xs bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 px-3 py-1.5 rounded-lg font-medium transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add data source
+              </button>
+            )}
+          </div>
+
+          {isManufacturing ? (
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
               {AW_SOURCES.map(s => <SourceCard key={s.id} source={s} />)}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="space-y-3">
+              {userSources.length === 0 && !showAddSource && (
+                <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center">
+                  <Server className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">No data sources defined yet.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Add your databases, CSVs, and APIs to document your source architecture.</p>
+                  <button onClick={() => setShowAddSource(true)}
+                    className="mt-3 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors">
+                    + Add first source
+                  </button>
+                </div>
+              )}
+              {userSources.map(s => <UserSourceCard key={s.id} source={s} onDelete={() => deleteSource(s.id)} />)}
+              {showAddSource && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-blue-800">New data source</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-600 mb-1 block">Source name <span className="text-red-400">*</span></label>
+                      <input value={sourceForm.name} onChange={e => setSourceForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="e.g. ERP — SAP S/4HANA"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-blue-400 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-600 mb-1 block">Type</label>
+                      <select value={sourceForm.type} onChange={e => setSourceForm(f => ({ ...f, type: e.target.value }))}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-blue-400 outline-none">
+                        {SOURCE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-600 mb-1 block">Description</label>
+                      <input value={sourceForm.description} onChange={e => setSourceForm(f => ({ ...f, description: e.target.value }))}
+                        placeholder="What data does this source contain?"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-blue-400 outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-600 mb-1 block">Tables / collections</label>
+                      <input value={sourceForm.tables} onChange={e => setSourceForm(f => ({ ...f, tables: e.target.value }))}
+                        placeholder="orders, customers, products (comma-separated)"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-blue-400 outline-none font-mono" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={addSource} disabled={!sourceForm.name.trim()}
+                      className="text-xs bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors font-medium">
+                      Save Source
+                    </button>
+                    <button onClick={() => setShowAddSource(false)}
+                      className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         {/* ── CROSS-SOURCE BRIDGES ───────────────────────────────────── */}
         <section>
@@ -742,30 +1050,40 @@ export default function SemanticLayerView() {
                 <GenericBridgeCard key={e.id} edge={e} />
               ))}
               {ontology.edges.filter(e => e.animated).length === 0 && (
-                <p className="text-sm text-slate-400 italic">No animated (cross-source) bridges defined for this sector.</p>
+                <p className="text-sm text-slate-400 italic">No cross-source bridges defined. Add one in the builder below.</p>
               )}
             </div>
           )}
         </section>
 
         {/* ── DISAMBIGUATION RULES ──────────────────────────────────── */}
-        {isManufacturing && (
-          <section>
-            <div className="flex items-center gap-2 mb-1">
-              <BookOpen className="w-4 h-4 text-slate-500" />
-              <h2 className="font-semibold text-slate-900">Semantic Rules & Disambiguation</h2>
-              <span className="text-xs text-slate-400">— where language meets data ambiguity</span>
-            </div>
-            <p className="text-xs text-slate-400 mb-3">
-              Natural language terms that map to multiple physical fields require explicit disambiguation. These rules are applied at query time.
-            </p>
-            <div className="space-y-3">
-              {AW_DISAMBIGUATION_RULES.map((rule, i) => (
-                <DisambiguationCard key={i} rule={rule} />
-              ))}
-            </div>
-          </section>
-        )}
+        <section>
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen className="w-4 h-4 text-slate-500" />
+            <h2 className="font-semibold text-slate-900">Semantic Rules & Disambiguation</h2>
+            <span className="text-xs text-slate-400">— where language meets data ambiguity</span>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">
+            Natural language terms that map to multiple physical fields. These rules are applied at query time.
+          </p>
+          <div className="space-y-3">
+            {isManufacturing && AW_DISAMBIGUATION_RULES.map((rule, i) => (
+              <DisambiguationCard key={i} rule={rule} />
+            ))}
+            {/* User rules shown here in read-only view; editable in builder below */}
+            {loadUserRules(sectorId).map(rule => (
+              <UserRuleCard key={rule.id} rule={rule} onDelete={() => {
+                const updated = loadUserRules(sectorId).filter(r => r.id !== rule.id)
+                saveUserRules(sectorId, updated)
+                // Force re-render by using window event
+                window.dispatchEvent(new Event('storage'))
+              }} />
+            ))}
+            {!isManufacturing && loadUserRules(sectorId).length === 0 && (
+              <p className="text-sm text-slate-400 italic">No rules defined. Add them in the Semantic Layer Builder below.</p>
+            )}
+          </div>
+        </section>
 
         {/* ── DATA QUALITY ──────────────────────────────────────────── */}
         {isManufacturing && (
@@ -823,18 +1141,39 @@ export default function SemanticLayerView() {
           </section>
         )}
 
-        {/* ── KG BUILDER ────────────────────────────────────────────── */}
+        {/* ── SEMANTIC LAYER BUILDER ────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Plus className="w-4 h-4 text-slate-500" />
             <h2 className="font-semibold text-slate-900">Semantic Layer Builder</h2>
           </div>
-          <KGBuilder
-            bridges={customBridges}
-            onAdd={b => setCustomBridges(prev => [...prev, b])}
-            onRemove={i => setCustomBridges(prev => prev.filter((_, idx) => idx !== i))}
-            entityOptions={entityOptions}
-          />
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 px-4 pt-4 pb-3 border-b border-slate-100">
+              <button className={TAB_CLASSES(builderTab === 'bridges')} onClick={() => setBuilderTab('bridges')}>
+                Bridges
+              </button>
+              <button className={TAB_CLASSES(builderTab === 'rules')} onClick={() => setBuilderTab('rules')}>
+                Disambiguation Rules
+              </button>
+            </div>
+            <div className="p-4">
+              {builderTab === 'bridges' && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-3">Define a cross-source bridge: a semantic join between entities in different physical systems. Bridges are persisted and visible in the graph.</p>
+                  <BridgesBuilder sectorId={sectorId} entityOptions={entityOptions} />
+                </div>
+              )}
+              {builderTab === 'rules' && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Define disambiguation rules for terms that map to multiple physical fields. The Query AI uses these rules to ask the right follow-up question.
+                  </p>
+                  <RulesBuilder sectorId={sectorId} />
+                </div>
+              )}
+            </div>
+          </div>
         </section>
 
       </div>
