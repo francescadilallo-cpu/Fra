@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import {
@@ -23,6 +23,7 @@ interface Message {
 // ── Query history helpers ──────────────────────────────────────────────────────
 
 const HISTORY_MAX = 10
+const FAVORITES_MAX = 20
 
 function loadHistory(sectorId: string): string[] {
   try {
@@ -34,6 +35,21 @@ function loadHistory(sectorId: string): string[] {
 function saveToHistory(sectorId: string, query: string, current: string[]): string[] {
   const next = [query, ...current.filter(q => q !== query)].slice(0, HISTORY_MAX)
   localStorage.setItem(`query-history-${sectorId}`, JSON.stringify(next))
+  return next
+}
+
+function loadFavorites(sectorId: string): string[] {
+  try {
+    const raw = localStorage.getItem(`query-favorites-${sectorId}`)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch { return [] }
+}
+
+function toggleFavorite(sectorId: string, query: string, current: string[]): string[] {
+  const next = current.includes(query)
+    ? current.filter(q => q !== query)
+    : [query, ...current].slice(0, FAVORITES_MAX)
+  localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(next))
   return next
 }
 
@@ -200,10 +216,68 @@ function InlineLineChart({ chart }: { chart: ChartData }) {
   )
 }
 
+// ── Inline SVG pie/donut chart ────────────────────────────────────────────────
+
+const PIE_COLORS = ['#0d9488', '#7c3aed', '#2563eb', '#d97706', '#dc2626', '#059669', '#db2777', '#0891b2']
+
+function InlinePieChart({ chart }: { chart: ChartData }) {
+  const total = chart.values.reduce((a, b) => a + b, 0)
+  if (!total) return null
+
+  const cx = 80; const cy = 80; const R = 68; const r = 38
+
+  let cum = -Math.PI / 2
+  const slices = chart.values.map((val, i) => {
+    const angle = (val / total) * 2 * Math.PI
+    const s = cum; const e = cum + angle; cum += angle
+    const large = angle > Math.PI ? 1 : 0
+    const x1 = cx + R * Math.cos(s); const y1 = cy + R * Math.sin(s)
+    const x2 = cx + R * Math.cos(e); const y2 = cy + R * Math.sin(e)
+    const x3 = cx + r * Math.cos(e); const y3 = cy + r * Math.sin(e)
+    const x4 = cx + r * Math.cos(s); const y4 = cy + r * Math.sin(s)
+    return {
+      path: `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`,
+      color: PIE_COLORS[i % PIE_COLORS.length], val, label: chart.labels[i],
+      pct: ((val / total) * 100).toFixed(0),
+    }
+  })
+
+  return (
+    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <PieChart className="w-3.5 h-3.5 text-teal-500" />
+        <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <svg width={160} height={160} viewBox="0 0 160 160" className="flex-shrink-0">
+          {slices.map((s, i) => (
+            <path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth={1.5} />
+          ))}
+          <text x={cx} y={cy - 5} textAnchor="middle" fontSize={9} fill="#64748b">{chart.unit ?? 'Total'}</text>
+          <text x={cx} y={cy + 9} textAnchor="middle" fontSize={11} fill="#0f172a" fontWeight={700}>
+            {fmtVal(total, chart.unit)}
+          </text>
+        </svg>
+        <div className="flex-1 space-y-1.5 min-w-0">
+          {slices.map((s, i) => (
+            <div key={i} className="flex items-center gap-2 text-[10px]">
+              <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: s.color }} />
+              <span className="text-slate-600 flex-1 min-w-0 truncate">{s.label}</span>
+              <span className="font-mono text-slate-700 font-medium">{fmtVal(s.val, chart.unit)}</span>
+              <span className="text-slate-400 w-8 text-right">{s.pct}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Result table ───────────────────────────────────────────────────────────────
 
 const CURRENCY_COLS = /revenue|amount|total|price|cost|salary|value|ltv|fee|pay|stipendio|income|profit|margin|spend|budget|exposure/i
 const PERCENT_COLS  = /pct|percent|rate|ratio|margin_pct|avg_pd|pct_of/i
+const TABLE_PAGE = 10
 
 function fmtCell(col: string, v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -221,42 +295,118 @@ function fmtCell(col: string, v: unknown): string {
 }
 
 function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
-  if (!rows.length) return <p className="text-sm text-slate-500 italic">No results found.</p>
+  const [sortCol, setSortCol] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [showAll, setShowAll] = useState(false)
+  const [copied, setCopied] = useState(false)
 
+  if (!rows.length) return <p className="text-sm text-slate-500 italic">No results found.</p>
   const columns = Object.keys(rows[0])
 
+  function toggleSort(col: string) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  const sorted = sortCol
+    ? [...rows].sort((a, b) => {
+        const va = a[sortCol]; const vb = b[sortCol]
+        const num = typeof va === 'number' && typeof vb === 'number'
+        const cmp = num ? (va as number) - (vb as number) : String(va ?? '').localeCompare(String(vb ?? ''))
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    : rows
+
+  const visible = showAll ? sorted : sorted.slice(0, TABLE_PAGE)
+
+  function exportCsv() {
+    const header = columns.join(',')
+    const body = sorted.map(row => columns.map(c => {
+      const v = row[c]
+      const s = v === null || v === undefined ? '' : String(v)
+      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(',')).join('\n')
+    const blob = new Blob([`${header}\n${body}`], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = 'query-results.csv'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function copyCsv() {
+    const header = columns.join('\t')
+    const body = sorted.map(row => columns.map(c => row[c] ?? '').join('\t')).join('\n')
+    navigator.clipboard.writeText(`${header}\n${body}`).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="bg-slate-100">
-            {columns.map((col) => (
-              <th key={col} className="px-3 py-2 text-left text-slate-400 font-medium whitespace-nowrap">
-                {col}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="border-t border-slate-200 hover:bg-slate-50 transition-colors">
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-slate-400">{rows.length} rows · {columns.length} cols</span>
+        <div className="flex items-center gap-1">
+          <button onClick={copyCsv} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-500 transition-colors">
+            {copied ? <CheckCircle2 className="w-3 h-3 text-teal-500" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+          <button onClick={exportCsv} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 text-slate-500 transition-colors">
+            <Download className="w-3 h-3" />
+            CSV
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-slate-100">
               {columns.map((col) => (
-                <td key={col} className={`px-3 py-2 whitespace-nowrap ${
-                  row[col] === null || row[col] === undefined
-                    ? 'text-slate-300 italic'
-                    : CURRENCY_COLS.test(col) && typeof row[col] === 'number'
-                      ? 'text-teal-700 font-medium tabular-nums'
-                      : 'text-slate-700'
-                }`}>
-                  {row[col] === null || row[col] === undefined
-                    ? 'null'
-                    : fmtCell(col, row[col])}
-                </td>
+                <th
+                  key={col}
+                  onClick={() => toggleSort(col)}
+                  className="px-3 py-2 text-left text-slate-500 font-medium whitespace-nowrap cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                >
+                  <span className="flex items-center gap-1">
+                    {col}
+                    {sortCol === col
+                      ? sortDir === 'asc'
+                        ? <ArrowUp className="w-3 h-3 text-teal-600" />
+                        : <ArrowDown className="w-3 h-3 text-teal-600" />
+                      : <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    }
+                  </span>
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visible.map((row, i) => (
+              <tr key={i} className="border-t border-slate-200 hover:bg-slate-50 transition-colors">
+                {columns.map((col) => (
+                  <td key={col} className={`px-3 py-2 whitespace-nowrap ${
+                    row[col] === null || row[col] === undefined
+                      ? 'text-slate-300 italic'
+                      : CURRENCY_COLS.test(col) && typeof row[col] === 'number'
+                        ? 'text-teal-700 font-medium tabular-nums'
+                        : 'text-slate-700'
+                  }`}>
+                    {row[col] === null || row[col] === undefined
+                      ? 'null'
+                      : fmtCell(col, row[col])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!showAll && rows.length > TABLE_PAGE && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="text-[10px] text-teal-600 hover:text-teal-800 font-medium transition-colors"
+        >
+          Show all {rows.length} rows ↓
+        </button>
+      )}
     </div>
   )
 }
@@ -372,10 +522,26 @@ function SqlBlock({ sql }: { sql: string }) {
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?: (q: string) => void }) {
+function MessageBubble({ message, onFollowUp, isFavorite, onToggleFavorite }: {
+  message: Message
+  onFollowUp?: (q: string) => void
+  isFavorite?: boolean
+  onToggleFavorite?: (q: string) => void
+}) {
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end gap-3 items-start">
+      <div className="flex justify-end gap-3 items-start group">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onToggleFavorite && (
+            <button
+              onClick={() => onToggleFavorite(message.content)}
+              title={isFavorite ? 'Remove from favorites' : 'Save to favorites'}
+              className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+            </button>
+          )}
+        </div>
         <div className="max-w-[70%] bg-teal-600 rounded-2xl rounded-tr-sm px-4 py-3">
           <p className="text-sm text-white">{message.content}</p>
         </div>
@@ -438,9 +604,9 @@ function MessageBubble({ message, onFollowUp }: { message: Message; onFollowUp?:
 
         {/* Inline chart */}
         {r.chartData && (
-          r.chartData.type === 'line'
-            ? <InlineLineChart chart={r.chartData} />
-            : <InlineBarChart chart={r.chartData} />
+          r.chartData.type === 'line' ? <InlineLineChart chart={r.chartData} />
+          : r.chartData.type === 'pie' ? <InlinePieChart chart={r.chartData} />
+          : <InlineBarChart chart={r.chartData} />
         )}
 
         {/* Results table */}
@@ -605,13 +771,14 @@ export default function QueryInterface() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<string[]>(() => loadHistory(sectorId))
+  const [favorites, setFavorites] = useState<string[]>(() => loadFavorites(sectorId))
   const [showApiPanel, setShowApiPanel] = useState(false)
   const [creds, setCreds] = useState(getStoredCredentials)
   const queryCount = messages.filter(m => m.role === 'user').length
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const isLLMActive = !!creds.key && sectorId === 'manufacturing'
+  const isLLMActive = !!creds.key
 
   // Refresh creds from localStorage when panel closes
   function handleApiPanelClose() {
@@ -622,6 +789,7 @@ export default function QueryInterface() {
   useEffect(() => {
     setMessages([])
     setHistory(loadHistory(sectorId))
+    setFavorites(loadFavorites(sectorId))
     // Check for pre-fill from dashboard navigation
     const prefill = sessionStorage.getItem('query-prefill')
     if (prefill) {
@@ -722,23 +890,21 @@ export default function QueryInterface() {
                 Clear
               </button>
             )}
-          {sectorId === 'manufacturing' && (
-            <button
-              onClick={() => setShowApiPanel(v => !v)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${
-                isLLMActive
-                  ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
-                  : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
-              }`}
-            >
-              {isLLMActive
-                ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
-                : <><Key className="w-3.5 h-3.5" />Add API Key</>}
-            </button>
-          )}
+          <button
+            onClick={() => setShowApiPanel(v => !v)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${
+              isLLMActive
+                ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
+                : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+            }`}
+          >
+            {isLLMActive
+              ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
+              : <><Key className="w-3.5 h-3.5" />Add API Key</>}
+          </button>
           </div>
         </div>
-        {showApiPanel && sectorId === 'manufacturing' && (
+        {showApiPanel && (
           <div className="mt-3">
             <ApiKeyPanel onClose={handleApiPanelClose} />
           </div>
@@ -792,6 +958,39 @@ export default function QueryInterface() {
               </div>
             )}
 
+            {/* Saved favorites */}
+            {favorites.length > 0 && (
+              <div className="space-y-2 w-full max-w-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>Saved queries</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(`query-favorites-${sectorId}`)
+                      setFavorites([])
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                    Clear
+                  </button>
+                </div>
+                {favorites.slice(0, 5).map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => sendMessage(q)}
+                    disabled={loading}
+                    className="w-full text-left bg-amber-50 hover:bg-amber-100 border border-amber-200 hover:border-amber-300 rounded-xl px-4 py-2.5 text-sm text-slate-600 hover:text-slate-900 transition-all flex items-center gap-2.5"
+                  >
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />
+                    <span className="truncate">{q}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Suggested questions */}
             <div className="space-y-2 w-full max-w-lg">
               <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -813,7 +1012,13 @@ export default function QueryInterface() {
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} onFollowUp={sendMessage} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onFollowUp={sendMessage}
+            isFavorite={msg.role === 'user' ? favorites.includes(msg.content) : undefined}
+            onToggleFavorite={msg.role === 'user' ? (q) => setFavorites(toggleFavorite(sectorId, q, favorites)) : undefined}
+          />
         ))}
 
         {loading && (

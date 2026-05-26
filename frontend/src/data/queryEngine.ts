@@ -19,7 +19,7 @@ export interface ParsedQuery {
 }
 
 export interface ChartData {
-  type: 'bar' | 'line'
+  type: 'bar' | 'line' | 'pie'
   title: string
   labels: string[]
   values: number[]
@@ -931,7 +931,7 @@ ORDER BY orders DESC`,
       summary: '**87.9% of orders are online** (27,659) but in-store orders have **7.6× higher avg value** ($2,704 vs $356). In-store revenue ($10.3M) narrowly edges online ($9.8M) despite far fewer transactions.',
       interpreted_as: 'ERP.SalesOrder · GROUP BY onlineOrderFlag · 2014',
       chartData: {
-        type: 'bar',
+        type: 'pie',
         title: 'Net revenue by channel — 2014',
         labels: ['In-store', 'Online'],
         values: [10290918, 9836152],
@@ -1468,7 +1468,7 @@ const RETAIL_PATTERNS: Array<{
       summary: '**4,520 customers** across 4 loyalty tiers. Gold (312 = 6.9%) generates $278K LTV at avg **$892 each**. Silver (841 = 18.6%) largest revenue contributor ($354K). Bronze+None = 74.5% of base, $479K total. Gold customers spend **9.8× more** than non-loyalty.',
       interpreted_as: 'customers GROUP BY loyaltyTier · SUM(totalSpent) · AVG(totalSpent)',
       chartData: {
-        type: 'bar',
+        type: 'pie',
         title: 'Avg lifetime value by loyalty tier',
         labels: ['Gold', 'Silver', 'Bronze', 'None'],
         values: [892.4, 421.7, 184.3, 91.2],
@@ -1691,7 +1691,7 @@ const FINANCE_PATTERNS: Array<{
       summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **45.3%** (145/320). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
       interpreted_as: 'loans GROUP BY status · SUM(amount) · AVG(rate)',
       chartData: {
-        type: 'bar',
+        type: 'pie',
         title: 'Loan portfolio by status (€)',
         labels: ['Active', 'Disbursed', 'Pending', 'Rejected', 'Closed'],
         values: [2341800, 1131400, 1710500, 2288700, 946800],
