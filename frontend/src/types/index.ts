@@ -49,6 +49,7 @@ export type PropertyType = 'string' | 'integer' | 'decimal' | 'boolean' | 'date'
 
 export interface OntologyProperty {
   name: string
+  physicalName?: string
   type: PropertyType
   required?: boolean
   unique?: boolean

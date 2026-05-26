@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Any, Optional
 from datetime import date
+import json
 
 
 # ── Request / Response models ──────────────────────────────────────────────────
@@ -89,3 +90,64 @@ class PaginatedData(BaseModel):
     page: int
     page_size: int
     data: list[dict[str, Any]]
+
+
+# ── Semantic definitions ───────────────────────────────────────────────────────
+
+class MetricCreate(BaseModel):
+    sector_id: str = "manufacturing"
+    name: str
+    description: str = ""
+    type: str = "sum"
+    entity: str = ""
+    field: str = ""
+    numerator: str = ""
+    denominator: str = ""
+    expression: str = ""
+    filters: list[str] = []
+    time_dimension: str = ""
+    grains: list[str] = ["month", "quarter", "year"]
+    format: str = "number"
+    status: str = "draft"
+    owner: str = ""
+    tags: list[str] = []
+
+
+class HierarchyCreate(BaseModel):
+    sector_id: str = "manufacturing"
+    name: str
+    entity: str = ""
+    description: str = ""
+    type: str = "categorical"
+    levels: list[dict] = []
+
+
+class SegmentCreate(BaseModel):
+    sector_id: str = "manufacturing"
+    name: str
+    description: str = ""
+    entity: str = ""
+    conditions: list[dict] = []
+    tags: list[str] = []
+    used_by: list[str] = []
+
+
+class AskRequest(BaseModel):
+    question: str
+    sector_id: str = "manufacturing"
+
+
+class AskResult(BaseModel):
+    question: str
+    interpreted_as: str
+    sql_used: Optional[str] = None
+    rows: list[dict[str, Any]] = []
+    total_rows: int = 0
+    summary: str = ""
+    sources_touched: list[str] = []
+    provenance: dict[str, Any] = {}
+    latency_ms: float = 0.0
+    disambiguation_required: bool = False
+    candidates: list[str] = []
+    ambiguity_error: bool = False
+    chart_hint: Optional[dict[str, Any]] = None

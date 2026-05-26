@@ -3,7 +3,7 @@ SQLite mock ERP database with realistic Italian manufacturing data.
 Generation is idempotent: skips creation if the DB already exists and is
 populated.
 """
-import os
+import json
 import sqlite3
 import random
 from pathlib import Path
@@ -76,6 +76,53 @@ CREATE TABLE IF NOT EXISTS order_lines (
     unit_price  REAL NOT NULL,
     line_total  REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sl_metrics (
+    id TEXT PRIMARY KEY,
+    sector_id TEXT NOT NULL DEFAULT 'manufacturing',
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'sum',
+    entity TEXT NOT NULL DEFAULT '',
+    field TEXT DEFAULT '',
+    numerator TEXT DEFAULT '',
+    denominator TEXT DEFAULT '',
+    expression TEXT DEFAULT '',
+    filters_json TEXT DEFAULT '[]',
+    time_dimension TEXT DEFAULT '',
+    grains_json TEXT DEFAULT '["month","quarter","year"]',
+    format TEXT DEFAULT 'number',
+    status TEXT DEFAULT 'draft',
+    owner TEXT DEFAULT '',
+    tags_json TEXT DEFAULT '[]',
+    is_builtin INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sl_hierarchies (
+    id TEXT PRIMARY KEY,
+    sector_id TEXT NOT NULL DEFAULT 'manufacturing',
+    name TEXT NOT NULL,
+    entity TEXT NOT NULL DEFAULT '',
+    description TEXT DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'categorical',
+    levels_json TEXT DEFAULT '[]',
+    is_builtin INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sl_segments (
+    id TEXT PRIMARY KEY,
+    sector_id TEXT NOT NULL DEFAULT 'manufacturing',
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    entity TEXT NOT NULL DEFAULT '',
+    conditions_json TEXT DEFAULT '[]',
+    tags_json TEXT DEFAULT '[]',
+    used_by_json TEXT DEFAULT '[]',
+    is_builtin INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 # ── Seed data helpers ──────────────────────────────────────────────────────────
@@ -145,20 +192,22 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         conn.commit()
 
-        # Idempotency check
+        # Idempotency check for mock data only
         count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
-        if count > 0:
-            return
+        if count == 0:
+            _seed_customers(conn)
+            _seed_products(conn)
+            customer_ids = [r[0] for r in conn.execute("SELECT id FROM customers")]
+            product_ids = [r[0] for r in conn.execute("SELECT id FROM products")]
+            _seed_quotes(conn, customer_ids, product_ids)
+            quote_rows = conn.execute(
+                "SELECT id, customer_id, total_value FROM quotes WHERE status='accepted'"
+            ).fetchall()
+            _seed_orders(conn, quote_rows, product_ids)
+            conn.commit()
 
-        _seed_customers(conn)
-        _seed_products(conn)
-        customer_ids = [r[0] for r in conn.execute("SELECT id FROM customers")]
-        product_ids = [r[0] for r in conn.execute("SELECT id FROM products")]
-        _seed_quotes(conn, customer_ids, product_ids)
-        quote_rows = conn.execute(
-            "SELECT id, customer_id, total_value FROM quotes WHERE status='accepted'"
-        ).fetchall()
-        _seed_orders(conn, quote_rows, product_ids)
+        # Always seed semantic definitions (idempotent per-row checks inside)
+        _seed_semantic_definitions(conn)
         conn.commit()
     finally:
         conn.close()
@@ -252,6 +301,222 @@ def _seed_orders(conn: sqlite3.Connection, quote_rows: list, product_ids: list) 
             conn.execute(
                 "INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total) VALUES (?,?,?,?,?)",
                 (oid, pid, qty, price, total),
+            )
+
+
+def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
+    """Insert built-in semantic definitions if they don't already exist."""
+
+    # ── Metrics ──────────────────────────────────────────────────────────────
+    metrics = [
+        {
+            "id": "revenue",
+            "name": "Revenue",
+            "description": "Net revenue — subtotal before tax and freight.",
+            "type": "sum",
+            "entity": "SalesOrder",
+            "field": "subtotal_amount",
+            "numerator": "",
+            "denominator": "",
+            "expression": "",
+            "filters_json": "[]",
+            "time_dimension": "",
+            "grains_json": '["day","month","quarter","year"]',
+            "format": "currency",
+            "status": "verified",
+            "owner": "Finance",
+            "tags_json": '["sales","core"]',
+        },
+        {
+            "id": "gross_revenue",
+            "name": "Gross Revenue",
+            "description": "Total billed including tax and freight.",
+            "type": "sum",
+            "entity": "SalesOrder",
+            "field": "total_due",
+            "numerator": "",
+            "denominator": "",
+            "expression": "",
+            "filters_json": "[]",
+            "time_dimension": "",
+            "grains_json": '["day","month","quarter","year"]',
+            "format": "currency",
+            "status": "verified",
+            "owner": "Finance",
+            "tags_json": '["billing"]',
+        },
+        {
+            "id": "order_count",
+            "name": "Order Count",
+            "description": "Number of sales orders placed.",
+            "type": "count",
+            "entity": "SalesOrder",
+            "field": "order_id",
+            "numerator": "",
+            "denominator": "",
+            "expression": "",
+            "filters_json": "[]",
+            "time_dimension": "",
+            "grains_json": '["day","week","month","quarter","year"]',
+            "format": "number",
+            "status": "verified",
+            "owner": "Sales",
+            "tags_json": '["sales","core"]',
+        },
+        {
+            "id": "aov",
+            "name": "Avg Order Value",
+            "description": "Average net revenue per order. Revenue ÷ Order Count.",
+            "type": "ratio",
+            "entity": "SalesOrder",
+            "field": "",
+            "numerator": "Revenue",
+            "denominator": "Order Count",
+            "expression": "",
+            "filters_json": "[]",
+            "time_dimension": "",
+            "grains_json": '["month","quarter","year"]',
+            "format": "currency",
+            "status": "verified",
+            "owner": "Sales",
+            "tags_json": '["efficiency"]',
+        },
+        {
+            "id": "unique_customers",
+            "name": "Unique Customers",
+            "description": "Count of distinct customers with at least one order.",
+            "type": "count_distinct",
+            "entity": "SalesOrder",
+            "field": "customer_ref",
+            "numerator": "",
+            "denominator": "",
+            "expression": "",
+            "filters_json": "[]",
+            "time_dimension": "",
+            "grains_json": '["month","quarter","year"]',
+            "format": "number",
+            "status": "verified",
+            "owner": "Sales",
+            "tags_json": '["customers"]',
+        },
+    ]
+
+    for m in metrics:
+        existing = conn.execute(
+            "SELECT id FROM sl_metrics WHERE id = ?", (m["id"],)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                """INSERT INTO sl_metrics
+                   (id, sector_id, name, description, type, entity, field,
+                    numerator, denominator, expression, filters_json,
+                    time_dimension, grains_json, format, status, owner,
+                    tags_json, is_builtin)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+                (
+                    m["id"], "manufacturing", m["name"], m["description"],
+                    m["type"], m["entity"], m["field"],
+                    m["numerator"], m["denominator"], m["expression"],
+                    m["filters_json"], m["time_dimension"], m["grains_json"],
+                    m["format"], m["status"], m["owner"], m["tags_json"],
+                ),
+            )
+
+    # ── Hierarchies ───────────────────────────────────────────────────────────
+    hierarchies = [
+        {
+            "id": "date",
+            "name": "Date",
+            "entity": "SalesOrder",
+            "description": "Drill-down from year to day on order date.",
+            "type": "time",
+            "levels_json": json.dumps([
+                {"name": "Year", "field": "YEAR(order_date)"},
+                {"name": "Quarter", "field": "QUARTER(order_date)"},
+                {"name": "Month", "field": "MONTH(order_date)"},
+                {"name": "Week", "field": "WEEK(order_date)"},
+                {"name": "Day", "field": "DATE(order_date)"},
+            ]),
+        },
+        {
+            "id": "territory",
+            "name": "Territory",
+            "entity": "territory",
+            "description": "Geographic drill-down.",
+            "type": "categorical",
+            "levels_json": json.dumps([
+                {"name": "Group", "field": "region_group"},
+                {"name": "Territory", "field": "territory_name"},
+            ]),
+        },
+        {
+            "id": "product",
+            "name": "Product",
+            "entity": "product",
+            "description": "Product catalog drill-down.",
+            "type": "categorical",
+            "levels_json": json.dumps([
+                {"name": "Category", "field": "category"},
+                {"name": "Name", "field": "name"},
+            ]),
+        },
+    ]
+
+    for h in hierarchies:
+        existing = conn.execute(
+            "SELECT id FROM sl_hierarchies WHERE id = ?", (h["id"],)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                """INSERT INTO sl_hierarchies
+                   (id, sector_id, name, entity, description, type, levels_json, is_builtin)
+                   VALUES (?,?,?,?,?,?,?,1)""",
+                (
+                    h["id"], "manufacturing", h["name"], h["entity"],
+                    h["description"], h["type"], h["levels_json"],
+                ),
+            )
+
+    # ── Segments ──────────────────────────────────────────────────────────────
+    segments = [
+        {
+            "id": "online",
+            "name": "Online Orders",
+            "description": "Self-service orders via e-commerce.",
+            "entity": "SalesOrder",
+            "conditions_json": json.dumps([
+                {"field": "online_order_flag", "operator": "=", "value": "1"}
+            ]),
+            "tags_json": '["channel","digital"]',
+            "used_by_json": '["Order Count"]',
+        },
+        {
+            "id": "high_value",
+            "name": "High-Value Orders",
+            "description": "Orders with net revenue ≥ $1,000.",
+            "entity": "SalesOrder",
+            "conditions_json": json.dumps([
+                {"field": "subtotal_amount", "operator": ">=", "value": "1000"}
+            ]),
+            "tags_json": '["tier"]',
+            "used_by_json": '["Revenue"]',
+        },
+    ]
+
+    for s in segments:
+        existing = conn.execute(
+            "SELECT id FROM sl_segments WHERE id = ?", (s["id"],)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                """INSERT INTO sl_segments
+                   (id, sector_id, name, description, entity,
+                    conditions_json, tags_json, used_by_json, is_builtin)
+                   VALUES (?,?,?,?,?,?,?,?,1)""",
+                (
+                    s["id"], "manufacturing", s["name"], s["description"],
+                    s["entity"], s["conditions_json"], s["tags_json"], s["used_by_json"],
+                ),
             )
 
 

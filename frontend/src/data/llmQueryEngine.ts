@@ -1,125 +1,164 @@
 import type { EngineResult } from './queryEngine'
 
-// ── AdventureWorks system prompt ──────────────────────────────────────────────
-// Full schema + bridge context injected as system prompt for the LLM.
+// ── Provider definitions ──────────────────────────────────────────────────────
 
-const AW_SYSTEM_PROMPT = `You are the Query AI engine for the AdventureWorks Semantic Intelligence platform.
-You answer questions about AdventureWorks 2014 data, which spans 4 source systems connected by a semantic layer and Knowledge Graph.
-You understand English and Italian.
+export type LLMProvider = 'anthropic' | 'groq' | 'gemini'
 
-## Data Sources
+export interface ProviderConfig {
+  id: LLMProvider
+  label: string
+  free: boolean
+  badge: string
+  hint: string
+  keyUrl: string
+  keyPlaceholder: string
+}
 
-### 1. ERP OrionSales (PostgreSQL / DuckDB) — 153,225 rows
-- SalesOrder(orderId, orderDate, shipDate, dueDate, status, subtotalAmount, taxAmt, freight, totalDue, territoryId, customer_ref, salesPersonId, onlineOrderFlag) — 31,465 rows
-- SalesPerson(salesPersonId, salesYTD, salesLastYear, bonus, commissionPct, territoryId) — 17 rows
-- SalesOrderLine(orderLineId, orderId, productId, quantity, unitPrice, unitPriceDiscount, lineTotal) — 121,317 rows
-- SalesTerritory(territoryId, name, countryRegion, group, salesYTD, salesLastYear) — 10 rows
-- Customer(customerId, accountNumber, territoryId) — 19,185 rows
-
-### 2. CRM ClientHub (SQLite) — 20,201 raw → 19,829 clean
-- accounts(accountId, companyName, creditLimit, country, email, phone, segment)
-- 372 rows with accountId < 0 are legacy migration duplicates → excluded
-
-### 3. HR CSV dipendenti_hr — 290 rows (Italian schema)
-- Columns: matricolaDip, cognome, nome, dataNascita, dataAssunzione, ruolo, stipendio, repartoId
-- Mapping: matricolaDip→employeeId, cognome→lastName, nome→firstName, ruolo→jobTitle
-
-### 4. PIM JSON product_catalog — 504 products
-- Fields: internal_id, name, category, subcategory, listPrice, standardCost, color, size, weight
-
-## Cross-source Bridges
-- SOLD_BY: ERP.salesPersonId ↔ HR.matricolaDip — 14/14 (100%)
-- OF_PRODUCT: ERP.productId ↔ PIM.internal_id — 457/504 (99.6%, 47 orphans)
-- PLACED_BY: ERP.customer_ref ↔ CRM.accountId — 18,484/19,829 (93.2%)
-
-## Knowledge Graph
-193,062 nodes, 313,193 edges
-
-## Key Facts — use these EXACT numbers
-- Net revenue 2014 (subtotalAmount): $20,127,070
-- Gross revenue 2014 (totalDue): $22,410,568
-- Tax + freight: $2,283,498 (11.3% of net)
-- Total orders 2014: 31,465
-- Average net order value: $639.65
-- Unique customers (after dedup): 19,829
-- Top salesperson by salesYTD: Linda Mitchell (#276) $4,251,368.55
-- Jae Pak (#279) has highest bonus ($6,700) but ranks 8th by salesYTD ($2,315,185)
-- Top territory: Southwest $10,510,853.87 (8,512 orders)
-- Quarterly net revenue: Q1 $4,121,485 · Q2 $5,182,930 · Q3 $5,847,621 · Q4 $4,975,034
-- KG nodes: 193,062 · edges: 313,193
-
-## Top Salespersons (salesYTD)
-1. Mitchell, Linda #276 — $4,251,368.55 · bonus $2,000
-2. Reiter, Rachel #289 — $4,116,871.23 · bonus $5,150
-3. Saraiva, José #275 — $3,763,178.18 · bonus $4,100
-4. Tsoflias, Lynn #277 — $3,189,418.37 · bonus $2,500
-5. Vargas, Ranjit #290 — $3,121,616.32 · bonus $985
-6. Campbell, David #282 — $2,604,540.72 · bonus $5,000
-7. Valdez, Sonia #281 — $2,458,535.62 · bonus $3,550
-8. Pak, Jae #279 — $2,315,185.61 · bonus $6,700 ← highest bonus but NOT top revenue
-
-## Territory Rankings (salesYTD)
-1. Southwest (US) — $10,510,853 · 8,512 orders
-2. Northwest (US) — $7,887,186 · 6,438 orders
-3. Canada — $6,771,829 · 4,821 orders
-4. Australia — $5,977,814 · 3,944 orders
-5. United Kingdom — $5,012,905 · 3,201 orders
-6. France — $4,772,398 · 2,988 orders
-7. Germany — $3,805,202 · 2,477 orders
-
-## Top Products by Revenue
-1. Mountain-200 Black, 38 (Bikes) — $261,435 · list $2,049
-2. Road-150 Red, 62 (Bikes) — $106,419 · list $3,578
-3. Touring-1000 Blue, 60 (Bikes) — $32,726 · list $2,384
-
-## SEMANTIC RULE — Revenue Ambiguity
-"fatturato" / "revenue" / "ricavi" / "vendite" are AMBIGUOUS:
-- subtotalAmount = net commercial revenue (excl. tax+freight) → $20.1M
-- totalDue = gross billed amount (incl. tax+freight) → $22.4M
-If the question does not specify which, set isDisambiguation: true.
-
-## Response Format
-Respond ONLY with valid JSON. No markdown fences. No text outside the JSON object.
-
-{
-  "sql": "-- SQL comment explaining source\nSELECT ...",
-  "rows": [{"col": "value"}],
-  "summary": "Summary with **bold** for key numbers. Use real AW data.",
-  "interpreted_as": "Brief SQL-style query description",
-  "chartData": {
-    "type": "bar",
-    "title": "Chart title",
-    "labels": ["A", "B"],
-    "values": [100, 200],
-    "unit": "$"
+export const PROVIDERS: ProviderConfig[] = [
+  {
+    id: 'groq',
+    label: 'Groq',
+    free: true,
+    badge: 'Gratuito · LLaMA 3.3 70b → 8b fallback',
+    hint: 'console.groq.com → API Keys',
+    keyUrl: 'https://console.groq.com/keys',
+    keyPlaceholder: 'gsk_...',
   },
-  "sources": [
-    {"id": "erp", "label": "ERP OrionSales", "bg": "bg-blue-100", "text": "text-blue-700"}
-  ],
-  "steps": ["① Step one", "② Step two", "③ Step three"],
-  "followUps": ["Question 1?", "Question 2?", "Question 3?"],
+  {
+    id: 'gemini',
+    label: 'Google Gemini Flash',
+    free: true,
+    badge: 'Gratuito · Gemini 2.0 Flash',
+    hint: 'aistudio.google.com → Get API Key',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    keyPlaceholder: 'AIza...',
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic Claude',
+    free: false,
+    badge: 'A pagamento · Haiku $0.001/query',
+    hint: 'console.anthropic.com → API Keys',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    keyPlaceholder: 'sk-ant-api03-...',
+  },
+]
+
+// ── AdventureWorks system prompt ──────────────────────────────────────────────
+
+const AW_SYSTEM_PROMPT = `You are a semantic query engine for AdventureWorks 2014 (4-source data platform).
+Respond in the same language as the question (English or Italian).
+Output ONLY a single valid JSON object — no markdown, no explanation, no text outside the JSON.
+
+## SCHEMA
+
+ERP (PostgreSQL):
+  SalesOrder: orderId, orderDate, shipDate, status, subtotalAmount, taxAmt, freight, totalDue, territoryId, customer_ref, salesPersonId, onlineOrderFlag — 31,465 rows
+  SalesPerson: salesPersonId, salesYTD, salesLastYear, bonus, commissionPct, territoryId — 17 rows
+  SalesOrderLine: orderId, productId, quantity, unitPrice, unitPriceDiscount, lineTotal — 121,317 rows
+  SalesTerritory: territoryId, name, countryRegion, group, salesYTD — 10 rows
+  Customer: customerId, accountNumber, territoryId — 19,185 rows
+CRM (SQLite): accounts: accountId, companyName, creditLimit, country, segment — 19,829 clean (372 dupes with accountId<0 excluded)
+HR (CSV): dipendenti_hr: matricolaDip, cognome, nome, ruolo, stipendio, repartoId — 290 rows
+PIM (JSON): product_catalog: internal_id, name, category, subcategory, listPrice, standardCost, color, size, weight — 504 products
+
+Bridges: ERP.salesPersonId ↔ HR.matricolaDip (100% match); ERP.productId ↔ PIM.internal_id (99.6%); ERP.customer_ref ↔ CRM.accountId (93.2%)
+
+## KEY FACTS — use these exact numbers, never invent others
+
+Revenue 2014: subtotalAmount (net) = $20,127,070 | totalDue (gross) = $22,410,568 | tax+freight = $2,283,498 (11.3%)
+Orders: 31,465 total | avg net $639.65 | Online: 27,659 (87.9%, avg $356) | In-store: 3,806 (12.1%, avg $2,704)
+Customers (deduped CRM): 19,829 | ERP-matched: 18,484 (93.2%) | CRM-only prospects: 1,345
+Quarterly net: Q1 $4,121,485 (7,312 orders) | Q2 $5,182,930 (8,204) | Q3 $5,847,621 (8,847) | Q4 $4,975,034 (7,102)
+YoY: 2011 had 1,607 orders avg $7,868 net $12,646,110 | 2014 had 31,465 orders avg $640 net $20,127,070
+
+Product categories (ERP×PIM): Bikes 97 SKUs $19,791,723 (98% of revenue) | Components 189 SKUs $931,644 | Clothing 35 SKUs $339,772 | Accessories 36 SKUs $231,521
+Top products: Mountain-200 Black,38 $261,436 | Road-150 Red,62 $106,420 | Touring-1000 Blue,60 $32,726
+
+Top salespersons by salesYTD:
+  1. Linda Mitchell #276 — $4,251,368 | bonus $2,000 | comm 1.5%
+  2. Rachel Reiter #289 — $4,116,871 | bonus $5,150 | comm 2.0% ← highest est. total comp
+  3. José Saraiva #275 — $3,763,178 | bonus $4,100 | comm 1.2%
+  4. Lynn Tsoflias #277 — $3,189,418 | bonus $2,500 | comm 1.5%
+  5. Ranjit Vargas #290 — $3,121,616 | bonus $985  | comm 1.6%
+  6. David Campbell #282 — $2,604,540 | bonus $5,000 | comm 1.5%
+  7. Sonia Valdez #281 — $2,458,535 | bonus $3,550 | comm 1.0%
+  8. Jae Pak #279 — $2,315,185 | bonus $6,700 ← highest bonus but ranks 8th by revenue
+
+Territories by salesYTD: Southwest $10,510,853 (8,512 orders) | Northwest $7,887,186 | Canada $6,771,829 | Australia $5,977,814 | UK $5,012,905 | France $4,772,398 | Germany $3,805,202 | Central $3,072,175
+
+## SEMANTIC RULES
+
+- "revenue" / "fatturato" / "ricavi" without qualifier → isDisambiguation: true, explain both subtotalAmount ($20.1M net) and totalDue ($22.4M gross)
+- "subtotal" / "net revenue" / "subtotalAmount" → use $20,127,070, isDisambiguation: false
+- "total due" / "gross" / "billed" → use $22,410,568, isDisambiguation: false
+- Cross-source joins: mention the bridge used in steps
+
+## OUTPUT FORMAT
+
+Return exactly this JSON structure:
+{
+  "sql": "-- brief comment\nSELECT ... FROM ...",
+  "rows": [{"column": "value"}],
+  "summary": "Answer with **bold** key numbers. 1-2 sentences.",
+  "interpreted_as": "Short label e.g. Top salesperson by YTD revenue",
+  "chartData": {"type": "bar", "title": "Chart title", "labels": ["A","B"], "values": [100, 200], "unit": "$"},
+  "sources": [{"id": "erp", "label": "ERP OrionSales", "bg": "bg-blue-100", "text": "text-blue-700"}],
+  "steps": ["① Locate source table", "② Apply filter/join", "③ Return result"],
+  "followUps": ["Related question 1?", "Related question 2?", "Related question 3?"],
   "isDisambiguation": false
 }
 
 Source badge values (copy exactly):
-- ERP: {"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}
-- CRM: {"id":"crm","label":"CRM ClientHub","bg":"bg-violet-100","text":"text-violet-700"}
-- HR:  {"id":"hr","label":"HR CSV","bg":"bg-amber-100","text":"text-amber-700"}
-- PIM: {"id":"pim","label":"PIM JSON","bg":"bg-teal-100","text":"text-teal-700"}
-- KG:  {"id":"kg","label":"Knowledge Graph","bg":"bg-slate-100","text":"text-slate-600"}
+  ERP:  {"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}
+  CRM:  {"id":"crm","label":"CRM ClientHub","bg":"bg-violet-100","text":"text-violet-700"}
+  HR:   {"id":"hr","label":"HR CSV","bg":"bg-amber-100","text":"text-amber-700"}
+  PIM:  {"id":"pim","label":"PIM JSON","bg":"bg-teal-100","text":"text-teal-700"}
+  KG:   {"id":"kg","label":"Knowledge Graph","bg":"bg-slate-100","text":"text-slate-600"}
 
-Rules:
-- Always include 3-5 resolution steps.
-- Always include 3 relevant follow-up questions.
-- Include chartData whenever a bar chart would add value (ranked lists, comparisons, time series).
-- rows should contain at most 12 rows with realistic AW data.
-- Use real numbers from the Key Facts section.
-- Write SQL that references the actual schema (erp.SalesOrder, hr.dipendenti_hr, etc.).`
+Rules: rows max 10 entries | steps 2-4 items | followUps exactly 3 | include chartData whenever a ranked list or comparison makes sense.`
 
-// ── LLM execution ─────────────────────────────────────────────────────────────
+// ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
-export async function executeLLMQuery(question: string, apiKey: string): Promise<EngineResult> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+function parseResult(text: string): EngineResult {
+  let clean = text
+    .replace(/^```(?:json)?\s*/im, '')
+    .replace(/\s*```\s*$/im, '')
+    .trim()
+
+  // Extract the outermost JSON object in case the model added preamble/postamble
+  const start = clean.indexOf('{')
+  const end = clean.lastIndexOf('}')
+  if (start !== -1 && end > start) {
+    clean = clean.slice(start, end + 1)
+  }
+
+  try {
+    const parsed = JSON.parse(clean) as Partial<EngineResult>
+    return {
+      sql: parsed.sql ?? '-- query',
+      rows: parsed.rows ?? [],
+      summary: parsed.summary ?? '',
+      interpreted_as: parsed.interpreted_as ?? '',
+      chartData: parsed.chartData,
+      sources: parsed.sources,
+      steps: parsed.steps,
+      followUps: parsed.followUps,
+      isDisambiguation: parsed.isDisambiguation ?? false,
+    }
+  } catch {
+    throw new Error(`LLM returned non-JSON: ${clean.slice(0, 300)}`)
+  }
+}
+
+// ── Sleep helper ──────────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// ── Provider-specific callers ──────────────────────────────────────────────────
+
+async function callAnthropic(question: string, apiKey: string): Promise<EngineResult> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -134,40 +173,144 @@ export async function executeLLMQuery(question: string, apiKey: string): Promise
       messages: [{ role: 'user', content: question }],
     }),
   })
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    const msg = (err as { error?: { message?: string } }).error?.message
-    throw new Error(msg ?? `Anthropic API error ${response.status}`)
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(e.error?.message ?? `Anthropic ${res.status}`)
   }
+  const data = await res.json() as { content: Array<{ type: string; text: string }> }
+  return parseResult(data.content.find(c => c.type === 'text')?.text ?? '')
+}
 
-  const data = await response.json() as {
-    content: Array<{ type: string; text: string }>
+async function callGroqOnce(question: string, apiKey: string, model: string): Promise<EngineResult> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2048,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: AW_SYSTEM_PROMPT },
+        { role: 'user', content: question },
+      ],
+    }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    const msg = e.error?.message ?? `Groq ${res.status}`
+    const err = new Error(msg)
+    ;(err as Error & { status?: number }).status = res.status
+    throw err
   }
-  const text = data.content.find(c => c.type === 'text')?.text ?? ''
+  const data = await res.json() as { choices: Array<{ message: { content: string } }> }
+  return parseResult(data.choices[0]?.message?.content ?? '')
+}
 
-  // Strip accidental markdown fences if the model wrapped the JSON
-  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+async function callGroq(question: string, apiKey: string): Promise<EngineResult> {
+  // Try 70b first (higher quality), fall back to 8b-instant on rate limit
+  const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+  let lastError: Error = new Error('Groq unavailable')
 
+  for (const model of models) {
+    try {
+      return await callGroqOnce(question, apiKey, model)
+    } catch (e) {
+      lastError = e as Error
+      const status = (e as Error & { status?: number }).status
+      if (status === 429) {
+        // Rate limited on this model — wait briefly then try next
+        await sleep(1500)
+        continue
+      }
+      throw e
+    }
+  }
+  // Both models rate-limited — surface a clean message
+  throw new Error('Rate limit Groq: attendi qualche secondo e riprova. (' + lastError.message.slice(0, 100) + ')')
+}
+
+async function callGemini(question: string, apiKey: string): Promise<EngineResult> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: AW_SYSTEM_PROMPT }] },
+      contents: [{ parts: [{ text: question }] }],
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(e.error?.message ?? `Gemini ${res.status}`)
+  }
+  const data = await res.json() as {
+    candidates: Array<{ content: { parts: Array<{ text: string }> } }>
+  }
+  return parseResult(data.candidates[0]?.content?.parts[0]?.text ?? '')
+}
+
+// ── Main entry ────────────────────────────────────────────────────────────────
+
+function validateKey(key: string, provider: LLMProvider): void {
+  if (!key) throw new Error('API key is empty — open the LLM panel and enter your key.')
+  if (provider === 'groq' && !key.startsWith('gsk_'))
+    throw new Error('Groq key must start with "gsk_". Get one free at console.groq.com/keys')
+  if (provider === 'anthropic' && !key.startsWith('sk-ant'))
+    throw new Error('Anthropic key must start with "sk-ant-". Get one at console.anthropic.com/settings/keys')
+  if (provider === 'gemini' && !key.startsWith('AIza'))
+    throw new Error('Gemini key must start with "AIza". Get one free at aistudio.google.com/app/apikey')
+}
+
+export async function executeLLMQuery(
+  question: string,
+  apiKey: string,
+  provider: LLMProvider,
+): Promise<EngineResult> {
+  validateKey(apiKey, provider)
+  switch (provider) {
+    case 'anthropic': return callAnthropic(question, apiKey)
+    case 'groq':      return callGroq(question, apiKey)
+    case 'gemini':    return callGemini(question, apiKey)
+  }
+}
+
+// ── Storage helpers ────────────────────────────────────────────────────────────
+
+const KEY_STORAGE  = 'aw-llm-api-key'
+const PROV_STORAGE = 'aw-llm-provider'
+
+export function getStoredCredentials(): { key: string; provider: LLMProvider } {
   try {
-    return JSON.parse(clean) as EngineResult
-  } catch {
-    throw new Error(`LLM returned non-JSON response: ${clean.slice(0, 200)}`)
-  }
+    const key = localStorage.getItem(KEY_STORAGE) ?? ''
+    const provider = (localStorage.getItem(PROV_STORAGE) ?? 'groq') as LLMProvider
+    return { key, provider }
+  } catch { return { key: '', provider: 'groq' } }
 }
 
-// ── API key helpers ────────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'aw-anthropic-api-key'
-
-export function getStoredApiKey(): string {
-  try { return localStorage.getItem(STORAGE_KEY) ?? '' } catch { return '' }
+export function saveCredentials(key: string, provider: LLMProvider): void {
+  try {
+    localStorage.setItem(KEY_STORAGE, key)
+    localStorage.setItem(PROV_STORAGE, provider)
+  } catch { /* ignore */ }
 }
 
-export function saveApiKey(key: string): void {
-  try { localStorage.setItem(STORAGE_KEY, key) } catch { /* ignore */ }
+export function clearCredentials(): void {
+  try {
+    localStorage.removeItem(KEY_STORAGE)
+    localStorage.removeItem(PROV_STORAGE)
+  } catch { /* ignore */ }
 }
 
-export function clearApiKey(): void {
-  try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
-}
+// Legacy compat
+export function getStoredApiKey(): string { return getStoredCredentials().key }
+export function saveApiKey(key: string): void { saveCredentials(key, getStoredCredentials().provider) }
+export function clearApiKey(): void { clearCredentials() }

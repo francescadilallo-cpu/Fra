@@ -19,7 +19,7 @@ export interface ParsedQuery {
 }
 
 export interface ChartData {
-  type: 'bar' | 'line'
+  type: 'bar' | 'line' | 'pie'
   title: string
   labels: string[]
   values: number[]
