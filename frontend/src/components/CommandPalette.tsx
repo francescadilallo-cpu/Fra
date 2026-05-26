@@ -100,7 +100,7 @@ export default function CommandPalette({ onNavigate }: Props) {
       { tab: 'sources',   label: 'Data Sources',    icon: Plug,              kw: 'connect csv upload teamsystem shopify integrations' },
       { tab: 'data',      label: 'Data Explorer',   icon: Table2,            kw: 'browse table records' },
       { tab: 'query',     label: 'Query AI',        icon: MessageSquare,     kw: 'ask question nlp sql chat' },
-      { tab: 'mappings',  label: 'Mappings',        icon: Table2,            kw: 'erp field mapping' },
+      { tab: 'sembuilder', label: 'Field Definitions', icon: Table2,           kw: 'erp field mapping semantic layer definitions' },
       { tab: 'process',   label: 'Process',         icon: Workflow,          kw: 'pipeline lifecycle funnel' },
       { tab: 'config',    label: 'Configuration',   icon: Settings,          kw: 'settings admin users tokens' },
     ]

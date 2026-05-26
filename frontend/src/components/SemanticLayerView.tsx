@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X,
   Network, MessageSquare, ChevronDown, ChevronRight, ArrowRight,
   BookOpen, FileCode, Play, Layers, Server, Trash2, Edit3, Save,
+  Table2, Pencil, Check, Search, Tag,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
-import type { OntologyProperty, PropertyType } from '../types'
+import type { OntologyProperty, PropertyType, OntologyNode } from '../types'
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
@@ -1056,16 +1057,344 @@ function SectionHeader({ icon: Icon, title, desc, action }: {
   )
 }
 
+// ── Definitions data (from Semantic Layer / MappingView) ─────────────────────
+
+interface SemanticDef {
+  entity: string
+  field: string
+  definition: string
+  status: 'ok' | 'ambiguous' | 'todo'
+}
+
+const INITIAL_DEFS: SemanticDef[] = [
+  { entity: 'SalesOrder',     field: 'subtotalAmount',  definition: 'Net order amount before taxes and shipping costs. Canonical "commercial revenue" — use for sales metrics ($20.1M total 2014).', status: 'ok' },
+  { entity: 'SalesOrder',     field: 'totalDue',        definition: 'Gross amount billed to customer — includes taxes and freight. Use for finance/accounting contexts ($22.4M total 2014, +$2.3M vs subtotal).', status: 'ambiguous' },
+  { entity: 'SalesOrder',     field: 'onlineOrderFlag', definition: 'TRUE = online B2C order (self-service). FALSE = offline B2B order placed through a sales representative.', status: 'ok' },
+  { entity: 'SalesOrder',     field: 'status',          definition: 'Order lifecycle status: Confirmed, Processing, Shipped, Delivered.', status: 'ok' },
+  { entity: 'SalesOrder',     field: 'orderDate',       definition: 'Date the order was placed. Reference date for all revenue period calculations.', status: 'ok' },
+  { entity: 'Customer',       field: 'accountId',       definition: 'CRM primary key. Values < 0 are duplicates from a legacy migration — 372 such records removed.', status: 'ok' },
+  { entity: 'Customer',       field: 'accountNumber',   definition: 'Human-readable customer code. Stable across system migrations.', status: 'ok' },
+  { entity: 'Customer',       field: 'customerType',    definition: 'Customer classification: "Company" (B2B) or "Individual" (B2C).', status: 'todo' },
+  { entity: 'Salesperson',    field: 'salesPersonId',   definition: 'ERP primary key for the salesperson. Bridges to HR.matricolaDip for cross-source ERP↔HR join.', status: 'ok' },
+  { entity: 'Salesperson',    field: 'salesYTD',        definition: 'Year-to-date sales revenue attributed to this rep. Top: Linda Mitchell $4.25M (2014).', status: 'ok' },
+  { entity: 'Salesperson',    field: 'bonus',           definition: 'Annual bonus paid. Not proportional to revenue — Jae Pak highest bonus ($6,700) but ranks 8th in YTD.', status: 'ambiguous' },
+  { entity: 'Salesperson',    field: 'commissionPct',   definition: 'Commission rate applied to net sales (subtotalAmount). Ranges from 1.0% to 2.0%.', status: 'ok' },
+  { entity: 'Employee',       field: 'matricolaDip',    definition: 'HR employee ID (Italian schema). ERP↔HR bridge key — maps to Salesperson.salesPersonId.', status: 'ok' },
+  { entity: 'Employee',       field: 'cognome',         definition: 'Employee last name (Italian schema). Maps to Employee.lastName in queries.', status: 'ok' },
+  { entity: 'Employee',       field: 'nome',            definition: 'Employee first name (Italian schema). Maps to Employee.firstName in queries.', status: 'ok' },
+  { entity: 'Employee',       field: 'ruolo',           definition: 'Job title (Italian: "ruolo"). Maps to Employee.jobTitle.', status: 'ok' },
+  { entity: 'Employee',       field: 'dataAssunzione',  definition: 'Hire date (Italian). All sales staff hired 2007–2009.', status: 'ok' },
+  { entity: 'Product',        field: 'internalId',      definition: 'PIM product identifier. ERP↔PIM bridge key — maps to SalesOrderLine.product_ref.', status: 'ok' },
+  { entity: 'Product',        field: 'listPrice',       definition: 'Published catalog price. Not the actual sale price — discounts applied at SalesOrderLine level.', status: 'ok' },
+  { entity: 'Product',        field: 'category',        definition: 'Top-level category: Bikes (~85% revenue), Accessories, Clothing, Components.', status: 'ok' },
+  { entity: 'Territory',      field: 'salesYTD',        definition: 'Territory year-to-date revenue. Southwest leads at $10.5M, Northwest $7.9M, Canada $6.8M.', status: 'ok' },
+  { entity: 'Territory',      field: 'group',           definition: 'Geographic group: "North America" (5), "Europe" (3), "Pacific" (Australia).', status: 'ok' },
+  { entity: 'SalesOrderLine', field: 'unitPrice',       definition: 'Actual unit sale price after any list price adjustments.', status: 'ok' },
+  { entity: 'SalesOrderLine', field: 'offerRef',        definition: 'Foreign key to applied discount. offerRef=1 = No Discount; higher values = up to 50% off.', status: 'ok' },
+]
+
+const DEF_AMBIGUITIES = [
+  {
+    term: 'fatturato / revenue',
+    context: 'SalesOrder (ERP — OrionSales)',
+    candidates: [
+      { label: 'subtotalAmount — $20,127,070', desc: 'Net commercial revenue, excl. taxes and freight. Use for sales performance, rep KPIs, territory ranking.', recommended: true },
+      { label: 'totalDue — $22,410,568',       desc: 'Gross billed amount including taxes + freight. Use for finance, AR, billing reconciliation.', recommended: false },
+    ],
+    resolution: '"commercial revenue" → subtotalAmount. "billed" / "total due" / "invoiced" → totalDue. When ambiguous, shows both and asks.',
+  },
+  {
+    term: 'customer count / clienti',
+    context: 'CRM — ClientHub (SQLite)',
+    candidates: [
+      { label: 'CRM raw — 20,201 accounts', desc: 'Includes 372 duplicates with accountId < 0 from legacy migration.', recommended: false },
+      { label: 'CRM dedup — 19,829 accounts', desc: 'Clean unique accounts after removing negative-ID duplicates.', recommended: true },
+    ],
+    resolution: 'Knowledge Graph always uses 19,829 unique accounts. Raw count only shown in audit/data quality views.',
+  },
+  {
+    term: 'bonus vs commissionPct',
+    context: 'Salesperson (ERP)',
+    candidates: [
+      { label: 'bonus — fixed annual ($75–$6,700)', desc: 'Discretionary annual bonus. Not performance-proportional.', recommended: false },
+      { label: 'commissionPct × salesYTD', desc: 'Variable commission proportional to net sales (1.0%–2.0%).', recommended: true },
+    ],
+    resolution: 'Use commissionPct × salesYTD to compare rep economic outcomes. Bonus is a separate discretionary component.',
+  },
+  {
+    term: 'top salesperson',
+    context: 'Salesperson × Employee (ERP × HR)',
+    candidates: [
+      { label: 'By salesYTD — Linda Mitchell ($4.25M)', desc: 'Highest revenue producer 2014.', recommended: true },
+      { label: 'By bonus — Jae Pak ($6,700)', desc: 'Highest bonus but 8th in revenue. Bonus not revenue-correlated.', recommended: false },
+    ],
+    resolution: '"Top salesperson" defaults to highest salesYTD = Linda Mitchell. Only use bonus ranking when explicitly asked.',
+  },
+]
+
+const DEF_STATUS_BADGE: Record<SemanticDef['status'], string> = {
+  ok:        'bg-teal-50 text-teal-700 border border-teal-200',
+  ambiguous: 'bg-amber-50 text-amber-700 border border-amber-200',
+  todo:      'bg-slate-100 text-slate-500',
+}
+
+const DEF_TYPE_COLORS: Record<string, string> = {
+  uuid:     'bg-orange-50 text-orange-600 border border-orange-200',
+  string:   'bg-slate-100 text-slate-600',
+  integer:  'bg-blue-50 text-blue-600',
+  decimal:  'bg-purple-50 text-purple-600',
+  boolean:  'bg-amber-50 text-amber-600',
+  date:     'bg-green-50 text-green-700',
+  datetime: 'bg-teal-50 text-teal-700',
+  text:     'bg-slate-100 text-slate-500',
+}
+
+interface MappingRow {
+  table: string
+  field: string
+  ontologyClass: string
+  ontologyProperty: string
+  fieldType: string
+  uri: string
+}
+
+function toSnakeCase(name: string): string {
+  return name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '')
+}
+
+function generateMappings(nodes: OntologyNode[]): MappingRow[] {
+  const rows: MappingRow[] = []
+  for (const node of nodes) {
+    const table = node.data.db_table
+    if (!table) continue
+    for (const prop of node.data.properties) {
+      if (prop.type === 'fk') continue
+      rows.push({
+        table,
+        field: toSnakeCase(prop.name),
+        ontologyClass: node.data.label,
+        ontologyProperty: prop.name,
+        fieldType: prop.type,
+        uri: `${node.data.uri}.${prop.name}`,
+      })
+    }
+  }
+  return rows
+}
+
+function DefTypeBadge({ type }: { type: string }) {
+  return (
+    <span className={`inline-block text-[10px] font-mono px-1.5 py-0.5 rounded leading-none ${DEF_TYPE_COLORS[type] ?? 'bg-slate-100 text-slate-500'}`}>
+      {type}
+    </span>
+  )
+}
+
+function DefEditableCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  function commit() { onSave(draft); setEditing(false) }
+  function cancel() { setDraft(value); setEditing(false) }
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
+          className="flex-1 bg-white border border-teal-400 rounded px-2 py-0.5 text-xs text-slate-900 outline-none min-w-0 font-mono" />
+        <button onClick={commit} className="text-teal-500 hover:text-teal-700"><Check className="w-3.5 h-3.5" /></button>
+        <button onClick={cancel} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+      </div>
+    )
+  }
+  return (
+    <div className="group flex items-center gap-1.5 cursor-pointer" onClick={() => setEditing(true)}>
+      <span className="text-xs font-mono text-teal-700">{value}</span>
+      <Pencil className="w-3 h-3 text-slate-300 group-hover:text-teal-400 opacity-0 group-hover:opacity-100 transition-all" />
+    </div>
+  )
+}
+
+function MappingTableGroup({ table, rows, savedEdits, onSave }: {
+  table: string; rows: MappingRow[]; savedEdits: Record<string, string>; onSave: (k: string, v: string) => void
+}) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200">
+        <div className="flex items-center gap-2.5">
+          <Table2 className="w-4 h-4 text-teal-500" />
+          <span className="font-semibold text-slate-900 font-mono text-sm">{table}</span>
+          <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded">{rows.length} fields</span>
+        </div>
+        {open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+      </button>
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-white">
+                {['DB Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-left text-[10px] text-slate-400 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => {
+                const editKey = `${row.table}.${row.field}`
+                const currentVal = savedEdits[editKey] ?? `${row.ontologyClass}.${row.ontologyProperty}`
+                return (
+                  <tr key={editKey} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="px-4 py-2.5"><span className="font-mono text-xs text-amber-600">{row.field}</span></td>
+                    <td className="px-4 py-2.5">
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <GitBranch className="w-3 h-3 text-teal-400 flex-shrink-0" />{row.ontologyClass}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <DefEditableCell value={currentVal} onSave={v => onSave(editKey, v)} />
+                    </td>
+                    <td className="px-4 py-2.5"><DefTypeBadge type={row.fieldType} /></td>
+                    <td className="px-4 py-2.5"><span className="text-[10px] font-mono text-slate-400">{row.uri}</span></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SemanticDefsPanel() {
+  const [defs, setDefs] = useState<SemanticDef[]>(INITIAL_DEFS)
+  const [editing, setEditing] = useState<number | null>(null)
+  const [editText, setEditText] = useState('')
+  const [newForm, setNewForm] = useState({ entity: '', field: '', definition: '' })
+  const [showAdd, setShowAdd] = useState(false)
+
+  function startEdit(i: number) { setEditing(i); setEditText(defs[i].definition) }
+  function saveEdit(i: number) {
+    setDefs(prev => prev.map((d, idx) => idx === i ? { ...d, definition: editText } : d))
+    setEditing(null)
+  }
+  function addDef() {
+    if (!newForm.entity || !newForm.field || !newForm.definition) return
+    setDefs(prev => [...prev, { ...newForm, status: 'todo' as const }])
+    setNewForm({ entity: '', field: '', definition: '' }); setShowAdd(false)
+  }
+  const grouped = defs.reduce<Record<string, SemanticDef[]>>((acc, d) => { (acc[d.entity] ??= []).push(d); return acc }, {})
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-500">{defs.length} definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
+        <button onClick={() => setShowAdd(v => !v)}
+          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+          <Plus className="w-3.5 h-3.5" />Add definition
+        </button>
+      </div>
+      {showAdd && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-slate-700">New semantic definition</p>
+          <div className="grid grid-cols-3 gap-3">
+            {(['entity', 'field', 'definition'] as const).map(f => (
+              <div key={f}>
+                <label className="text-[11px] text-slate-500 mb-1 block capitalize">{f}</label>
+                <input value={newForm[f]} onChange={e => setNewForm(p => ({ ...p, [f]: e.target.value }))}
+                  placeholder={f === 'entity' ? 'e.g. SalesOrder' : f === 'field' ? 'e.g. subtotal_amount' : 'What does this field mean?'}
+                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
+              </div>
+            ))}
+          </div>
+          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+        </div>
+      )}
+      {Object.entries(grouped).map(([entity, entityDefs]) => (
+        <div key={entity} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+            <Tag className="w-3.5 h-3.5 text-teal-600" />
+            <span className="text-sm font-semibold text-slate-800">{entity}</span>
+            <span className="text-[11px] text-slate-400">· {entityDefs.length} fields</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {entityDefs.map((def) => {
+              const globalIdx = defs.indexOf(def)
+              const isEditing = editing === globalIdx
+              return (
+                <div key={globalIdx} className="px-4 py-3 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <code className="text-[11px] font-mono text-teal-700 bg-teal-50 px-2 py-0.5 rounded mt-0.5 flex-shrink-0">{def.field}</code>
+                    <div className="flex-1 min-w-0">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
+                            className="flex-1 text-xs border border-teal-300 rounded px-2 py-1 outline-none" />
+                          <button onClick={() => saveEdit(globalIdx)} className="text-teal-600 hover:text-teal-700"><Check className="w-4 h-4" /></button>
+                          <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900" onClick={() => startEdit(globalIdx)}>{def.definition}</p>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${DEF_STATUS_BADGE[def.status]}`}>{def.status}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AmbiguityLogPanel() {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">{DEF_AMBIGUITIES.length} documented ambiguities — resolved at query time by the semantic layer</p>
+      {DEF_AMBIGUITIES.map((amb, i) => (
+        <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-bold text-slate-900">"{amb.term}"</span>
+            <span className="text-xs text-slate-500">· {amb.context}</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="space-y-2">
+              {amb.candidates.map((c, j) => (
+                <div key={j} className={`flex items-start gap-3 rounded-lg border p-3 ${c.recommended ? 'border-teal-200 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
+                  {c.recommended ? <Check className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" /> : <X className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />}
+                  <div>
+                    <code className="text-[11px] font-mono font-semibold text-slate-800">{c.label}</code>
+                    <p className="text-xs text-slate-500 mt-0.5">{c.desc}</p>
+                    {c.recommended && <span className="text-[10px] font-bold text-teal-600 uppercase">Recommended</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <strong>Resolution:</strong> {amb.resolution}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules'
+type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'definitions'
 
 const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ className?: string }>; desc: string }[] = [
-  { id: 'overview',  label: 'Overview',  Icon: Layers,    desc: 'Stats & examples' },
-  { id: 'sources',   label: 'Sources',   Icon: Database,  desc: 'Data systems' },
-  { id: 'entities',  label: 'Entities',  Icon: Network,   desc: 'Semantic concepts' },
-  { id: 'bridges',   label: 'Bridges',   Icon: GitBranch, desc: 'Cross-system joins' },
-  { id: 'rules',     label: 'Rules',     Icon: BookOpen,  desc: 'Disambiguation' },
+  { id: 'overview',     label: 'Overview',    Icon: Layers,    desc: 'Stats & examples' },
+  { id: 'sources',      label: 'Sources',     Icon: Database,  desc: 'Data systems' },
+  { id: 'entities',     label: 'Entities',    Icon: Network,   desc: 'Semantic concepts' },
+  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch, desc: 'Cross-system joins' },
+  { id: 'rules',        label: 'Rules',       Icon: BookOpen,  desc: 'Disambiguation' },
+  { id: 'definitions',  label: 'Definitions', Icon: Tag,       desc: 'Field glossary' },
 ]
 
 export default function SemanticLayerView() {
@@ -1076,12 +1405,19 @@ export default function SemanticLayerView() {
   const [showAddSource, setShowAddSource] = useState(false)
   const [sourceForm, setSourceForm] = useState({ name: '', type: 'PostgreSQL', description: '', tables: '' })
   const [showAddEntity, setShowAddEntity] = useState(false)
+  const [defTab, setDefTab] = useState<'mappings' | 'definitions' | 'ambiguity'>('mappings')
+  const [savedEdits, setSavedEdits] = useState<Record<string, string>>({})
+  const [editCount, setEditCount] = useState(0)
+  const [defSearch, setDefSearch] = useState('')
 
   useEffect(() => {
     setUserSources(loadSources(sectorId))
     setSection('overview')
     setShowAddSource(false)
     setShowAddEntity(false)
+    setSavedEdits({})
+    setEditCount(0)
+    setDefSearch('')
   }, [sectorId])
 
   const isManufacturing = sectorId === 'manufacturing'
@@ -1097,6 +1433,20 @@ export default function SemanticLayerView() {
   const bridgesCount = isManufacturing ? 3 + userBridgesCount : userBridgesCount
   const rulesCount = isManufacturing ? 3 + userRulesCount : userRulesCount
 
+  const allMappings = useMemo(() => generateMappings(ontology.nodes), [ontology.nodes])
+  const filteredMappings = useMemo(() => {
+    if (!defSearch.trim()) return allMappings
+    const q = defSearch.toLowerCase()
+    return allMappings.filter(r =>
+      r.field.includes(q) || r.table.includes(q) ||
+      r.ontologyClass.toLowerCase().includes(q) || r.ontologyProperty.toLowerCase().includes(q)
+    )
+  }, [allMappings, defSearch])
+  const groupedMappings = useMemo(() =>
+    filteredMappings.reduce<Record<string, MappingRow[]>>((acc, row) => { (acc[row.table] ??= []).push(row); return acc }, {})
+  , [filteredMappings])
+  function handleMappingSave(key: string, value: string) { setSavedEdits(p => ({ ...p, [key]: value })); setEditCount(c => c + 1) }
+
   const progressItems = [
     { label: 'Sources defined',    done: sourcesCount > 0,              section: 'sources'   as SLSection },
     { label: 'Entities mapped',    done: nodeCount > 0,                  section: 'entities'  as SLSection },
@@ -1107,9 +1457,10 @@ export default function SemanticLayerView() {
 
   function getBadge(id: SLSection): number {
     if (id === 'sources')  return sourcesCount
-    if (id === 'entities') return nodeCount
-    if (id === 'bridges')  return bridgesCount
-    if (id === 'rules')    return rulesCount
+    if (id === 'entities')    return nodeCount
+    if (id === 'bridges')     return bridgesCount
+    if (id === 'rules')       return rulesCount
+    if (id === 'definitions') return allMappings.length
     return 0
   }
 
@@ -1474,6 +1825,67 @@ export default function SemanticLayerView() {
               )}
               <RulesBuilder sectorId={sectorId} />
             </div>
+          </div>
+        )}
+
+        {/* ── DEFINITIONS ── */}
+        {section === 'definitions' && (
+          <div className="px-8 py-7 space-y-5">
+            <SectionHeader icon={Tag} title="Field Definitions"
+              desc="Semantic glossary, field-to-ontology mappings, and ambiguity resolutions"
+              action={editCount > 0 ? (
+                <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-3 py-1 font-medium">
+                  {editCount} edit{editCount !== 1 ? 's' : ''} saved
+                </span>
+              ) : undefined}
+            />
+
+            {/* Sub-tab selector */}
+            <div className="flex items-center gap-1 border-b border-slate-200">
+              {([
+                { id: 'mappings'    as const, label: 'Field Mappings',       Icon: Table2       },
+                { id: 'definitions' as const, label: 'Semantic Definitions', Icon: BookOpen     },
+                { id: 'ambiguity'   as const, label: 'Ambiguity Log',        Icon: AlertTriangle },
+              ]).map(({ id, label, Icon }) => (
+                <button key={id} onClick={() => setDefTab(id)}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                    defTab === id ? 'border-teal-500 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" />{label}
+                </button>
+              ))}
+            </div>
+
+            {/* Field Mappings tab */}
+            {defTab === 'mappings' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input value={defSearch} onChange={e => setDefSearch(e.target.value)}
+                      placeholder="Search fields, classes, tables…"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 focus:border-teal-400 rounded-lg outline-none transition-colors" />
+                  </div>
+                  <p className="text-xs text-slate-500">{allMappings.length} fields · {new Set(allMappings.map(r => r.table)).size} tables</p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] text-slate-400">Types:</span>
+                  {Object.keys(DEF_TYPE_COLORS).map(t => <DefTypeBadge key={t} type={t} />)}
+                </div>
+                {Object.keys(groupedMappings).length === 0
+                  ? <div className="text-center py-12 text-slate-400 text-sm">No mappings match your search.</div>
+                  : Object.entries(groupedMappings).map(([table, rows]) => (
+                    <MappingTableGroup key={table} table={table} rows={rows} savedEdits={savedEdits} onSave={handleMappingSave} />
+                  ))
+                }
+              </div>
+            )}
+
+            {/* Semantic Definitions tab */}
+            {defTab === 'definitions' && <SemanticDefsPanel />}
+
+            {/* Ambiguity Log tab */}
+            {defTab === 'ambiguity' && <AmbiguityLogPanel />}
           </div>
         )}
 

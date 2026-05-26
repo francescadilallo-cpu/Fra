@@ -6,7 +6,6 @@ import Dashboard from './components/Dashboard'
 import OntologyGraph from './components/OntologyGraph'
 import OntologyBuilder from './components/OntologyBuilder'
 import QueryInterface from './components/QueryInterface'
-import MappingView from './components/MappingView'
 import ProcessView from './components/ProcessView'
 import ConfigurationView from './components/ConfigurationView'
 import AgentsView from './components/AgentsView'
@@ -184,7 +183,6 @@ export default function App() {
         {activeTab === 'sources' && <DataSourcesView />}
         {activeTab === 'data' && <DataExplorer />}
         {activeTab === 'query' && <QueryInterface />}
-        {activeTab === 'mappings' && <MappingView />}
         {activeTab === 'process' && <ProcessView />}
         {activeTab === 'compliance' && <ComplianceView />}
         {activeTab === 'config' && <ConfigurationView />}

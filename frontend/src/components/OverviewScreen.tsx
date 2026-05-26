@@ -36,7 +36,7 @@ const JOURNEY: {
   },
   {
     step: 4, section: 'BUILD',
-    tab: 'mappings',     icon: BookOpen,       title: 'Semantic Layer',
+    tab: 'sembuilder',   icon: BookOpen,       title: 'Semantic Layer',
     desc: 'Define the meaning of fields. Document ambiguities ("fatturato"), map the Italian HR schema.',
     aw: '47 semantic definitions · 2 documented ambiguities · cross-source bridges',
   },
