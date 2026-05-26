@@ -3,7 +3,7 @@ import {
   Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X,
   Network, MessageSquare, ChevronDown, ChevronRight, ArrowRight,
   BookOpen, FileCode, Play, Layers, Server, Trash2, Edit3, Save,
-  Table2, Pencil, Check, Search, Tag,
+  Table2, Pencil, Check, Search, Tag, BarChart2, Filter, SlidersHorizontal, TrendingUp, Sigma,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
@@ -868,6 +868,10 @@ function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
         <div className="text-right">
           <p className="text-lg font-bold text-slate-800">{source.total.toLocaleString('en-US')}</p>
           <p className="text-[11px] text-slate-400">total rows</p>
+          {AW_SOURCE_FRESHNESS[source.id] && (
+            <FreshnessBadge status={AW_SOURCE_FRESHNESS[source.id].status}
+              lastSync={AW_SOURCE_FRESHNESS[source.id].lastSync} sla={AW_SOURCE_FRESHNESS[source.id].sla} />
+          )}
         </div>
       </div>
       <div className="space-y-1.5">
@@ -1053,6 +1057,361 @@ function SectionHeader({ icon: Icon, title, desc, action }: {
         </div>
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
+    </div>
+  )
+}
+
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+type MetricType = 'sum' | 'count' | 'count_distinct' | 'avg' | 'ratio' | 'derived'
+type MetricFormat = 'number' | 'currency' | 'percentage'
+type MetricStatus = 'verified' | 'draft'
+type TimeGrain = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+interface Metric {
+  id: string
+  name: string
+  description: string
+  type: MetricType
+  entity: string
+  field?: string
+  numerator?: string
+  denominator?: string
+  expression?: string
+  filters: string[]
+  timeDimension?: string
+  grains: TimeGrain[]
+  format: MetricFormat
+  status: MetricStatus
+  owner?: string
+  tags: string[]
+}
+
+const AW_METRICS: Metric[] = [
+  {
+    id: 'revenue', name: 'Revenue', description: 'Net commercial revenue — subtotal before taxes and freight. Canonical sales metric.',
+    type: 'sum', entity: 'SalesOrder', field: 'subtotalAmount', filters: [], timeDimension: 'SalesOrder.orderDate',
+    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['sales', 'core'],
+  },
+  {
+    id: 'gross_revenue', name: 'Gross Revenue', description: 'Total billed including taxes and freight. Use for AR and billing reconciliation.',
+    type: 'sum', entity: 'SalesOrder', field: 'totalDue', filters: [], timeDimension: 'SalesOrder.orderDate',
+    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['billing'],
+  },
+  {
+    id: 'order_count', name: 'Order Count', description: 'Number of sales orders placed.',
+    type: 'count', entity: 'SalesOrder', field: 'salesOrderId', filters: [], timeDimension: 'SalesOrder.orderDate',
+    grains: ['day', 'week', 'month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['sales', 'core'],
+  },
+  {
+    id: 'aov', name: 'Avg Order Value', description: 'Average net revenue per order. Revenue ÷ Order Count.',
+    type: 'ratio', entity: 'SalesOrder', numerator: 'Revenue', denominator: 'Order Count', filters: [], timeDimension: 'SalesOrder.orderDate',
+    grains: ['month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Sales', tags: ['efficiency'],
+  },
+  {
+    id: 'unique_customers', name: 'Unique Customers', description: 'Count of distinct customers with at least one order.',
+    type: 'count_distinct', entity: 'SalesOrder', field: 'customerId', filters: [], timeDimension: 'SalesOrder.orderDate',
+    grains: ['month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['customers'],
+  },
+  {
+    id: 'online_rate', name: 'Online Order Rate', description: 'Share of orders placed online vs. via sales reps.',
+    type: 'ratio', entity: 'SalesOrder', numerator: 'Online orders', denominator: 'Order Count',
+    filters: ["onlineOrderFlag = TRUE for numerator"], timeDimension: 'SalesOrder.orderDate',
+    grains: ['month', 'quarter'], format: 'percentage', status: 'draft', owner: 'Digital', tags: ['channel'],
+  },
+]
+
+const METRIC_TYPE_LABEL: Record<MetricType, string> = {
+  sum: 'SUM', count: 'COUNT', count_distinct: 'COUNT DISTINCT', avg: 'AVG', ratio: 'RATIO', derived: 'DERIVED',
+}
+
+const METRIC_TYPE_COLOR: Record<MetricType, string> = {
+  sum:            'bg-blue-50 text-blue-700 border border-blue-200',
+  count:          'bg-slate-100 text-slate-600',
+  count_distinct: 'bg-purple-50 text-purple-700 border border-purple-200',
+  avg:            'bg-amber-50 text-amber-700 border border-amber-200',
+  ratio:          'bg-teal-50 text-teal-700 border border-teal-200',
+  derived:        'bg-orange-50 text-orange-700 border border-orange-200',
+}
+
+const METRIC_GRAIN_LABEL: Record<TimeGrain, string> = {
+  day: 'D', week: 'W', month: 'M', quarter: 'Q', year: 'Y',
+}
+
+function loadMetrics(sid: string): Metric[] {
+  try { return JSON.parse(localStorage.getItem(`semantic-metrics-${sid}`) ?? '[]') } catch { return [] }
+}
+function saveMetrics(sid: string, m: Metric[]) {
+  localStorage.setItem(`semantic-metrics-${sid}`, JSON.stringify(m))
+}
+
+function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <button className="w-full text-left" onClick={() => setOpen(v => !v)}>
+        <div className="px-4 py-3 flex items-start gap-3">
+          <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Sigma className="w-4 h-4 text-teal-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-sm font-bold text-slate-900">{metric.name}</span>
+              {metric.status === 'verified'
+                ? <span className="flex items-center gap-1 text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5"><CheckCircle className="w-2.5 h-2.5" />Verified</span>
+                : <span className="text-[10px] font-bold text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Draft</span>
+              }
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${METRIC_TYPE_COLOR[metric.type]}`}>{METRIC_TYPE_LABEL[metric.type]}</span>
+            </div>
+            <p className="text-xs text-slate-500 leading-snug">{metric.description}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onDelete && <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-slate-300 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
+            {open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+          </div>
+        </div>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-0 border-t border-slate-100 bg-slate-50 space-y-3">
+          {/* Expression */}
+          <div className="mt-3">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Expression</p>
+            <code className="text-xs font-mono text-violet-700 bg-white border border-slate-200 rounded-lg px-3 py-2 block">
+              {metric.type === 'sum' && `SUM(${metric.entity}.${metric.field})`}
+              {metric.type === 'count' && `COUNT(${metric.entity}.${metric.field})`}
+              {metric.type === 'count_distinct' && `COUNT(DISTINCT ${metric.entity}.${metric.field})`}
+              {metric.type === 'avg' && `AVG(${metric.entity}.${metric.field})`}
+              {metric.type === 'ratio' && `${metric.numerator} / ${metric.denominator}`}
+              {metric.type === 'derived' && (metric.expression ?? '—')}
+            </code>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {metric.filters.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Filters</p>
+                {metric.filters.map((f, i) => <code key={i} className="text-[11px] font-mono text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 block mb-0.5">{f}</code>)}
+              </div>
+            )}
+            {metric.timeDimension && (
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Time Dimension</p>
+                <code className="text-[11px] font-mono text-blue-600">{metric.timeDimension}</code>
+              </div>
+            )}
+            <div>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Grains</p>
+              <div className="flex gap-1 flex-wrap">
+                {metric.grains.map(g => (
+                  <span key={g} className="text-[10px] font-bold bg-blue-100 text-blue-700 rounded px-1.5 py-0.5">{METRIC_GRAIN_LABEL[g]}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[10px] font-semibold text-slate-500">Format: <span className="font-bold text-slate-700">{metric.format}</span></span>
+            {metric.owner && <span className="text-[10px] font-semibold text-slate-500">Owner: <span className="font-bold text-slate-700">{metric.owner}</span></span>}
+            {metric.tags.map(t => <span key={t} className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">#{t}</span>)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Hierarchies ───────────────────────────────────────────────────────────────
+
+interface HierarchyLevel { name: string; field: string }
+interface DimHierarchy {
+  id: string
+  name: string
+  entity: string
+  description: string
+  type: 'time' | 'categorical'
+  levels: HierarchyLevel[]
+  isBuiltin?: boolean
+}
+
+const AW_HIERARCHIES: DimHierarchy[] = [
+  {
+    id: 'date', name: 'Date', entity: 'SalesOrder', description: 'Drill-down from year to day on order date.',
+    type: 'time', isBuiltin: true,
+    levels: [
+      { name: 'Year',    field: 'YEAR(SalesOrder.orderDate)' },
+      { name: 'Quarter', field: "CONCAT('Q', QUARTER(SalesOrder.orderDate), ' ', YEAR(...))" },
+      { name: 'Month',   field: 'MONTH(SalesOrder.orderDate)' },
+      { name: 'Week',    field: 'WEEK(SalesOrder.orderDate)' },
+      { name: 'Day',     field: 'DATE(SalesOrder.orderDate)' },
+    ],
+  },
+  {
+    id: 'territory', name: 'Territory', entity: 'Territory', description: 'Geographic drill-down from global region to named territory.',
+    type: 'categorical', isBuiltin: true,
+    levels: [
+      { name: 'Group',     field: 'Territory.group' },
+      { name: 'Territory', field: 'Territory.name' },
+    ],
+  },
+  {
+    id: 'product', name: 'Product', entity: 'Product', description: 'Product catalog drill-down from category to individual SKU.',
+    type: 'categorical', isBuiltin: true,
+    levels: [
+      { name: 'Category',    field: 'Product.category' },
+      { name: 'Sub-category',field: 'Product.subCategory' },
+      { name: 'Product',     field: 'Product.name' },
+    ],
+  },
+]
+
+function loadHierarchies(sid: string): DimHierarchy[] {
+  try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${sid}`) ?? '[]') } catch { return [] }
+}
+function saveHierarchies(sid: string, h: DimHierarchy[]) {
+  localStorage.setItem(`semantic-hierarchies-${sid}`, JSON.stringify(h))
+}
+
+function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${h.type === 'time' ? 'bg-blue-50 border border-blue-200' : 'bg-violet-50 border border-violet-200'}`}>
+          {h.type === 'time'
+            ? <TrendingUp className="w-4 h-4 text-blue-600" />
+            : <SlidersHorizontal className="w-4 h-4 text-violet-600" />
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-bold text-slate-900">{h.name}</span>
+            <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${h.type === 'time' ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>{h.type}</span>
+            {h.isBuiltin && <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5"><CheckCircle className="w-2.5 h-2.5 inline mr-0.5" />Built-in</span>}
+          </div>
+          <p className="text-xs text-slate-500 mb-2">{h.description}</p>
+          <div className="flex items-center gap-1 flex-wrap">
+            {h.levels.map((lvl, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className="text-[11px] font-semibold bg-slate-100 text-slate-700 rounded-md px-2 py-0.5">{lvl.name}</span>
+                {i < h.levels.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+              </span>
+            ))}
+          </div>
+        </div>
+        {onDelete && (
+          <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Segments ──────────────────────────────────────────────────────────────────
+
+type SegmentOperator = '=' | '!=' | 'IN' | 'NOT IN' | '>' | '<' | '>=' | '<='
+interface SegmentCondition { field: string; operator: SegmentOperator; value: string }
+interface Segment {
+  id: string
+  name: string
+  description: string
+  entity: string
+  conditions: SegmentCondition[]
+  tags: string[]
+  usedBy: string[]
+  isBuiltin?: boolean
+}
+
+const AW_SEGMENTS: Segment[] = [
+  {
+    id: 'b2b', name: 'B2B Customers', description: 'Corporate accounts — resellers and retailers only.',
+    entity: 'Customer', conditions: [{ field: 'Customer.customerType', operator: '=', value: "'Company'" }],
+    tags: ['channel'], usedBy: ['Revenue', 'Unique Customers'], isBuiltin: true,
+  },
+  {
+    id: 'online', name: 'Online Orders', description: 'Self-service orders placed through the e-commerce channel.',
+    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.onlineOrderFlag', operator: '=', value: 'TRUE' }],
+    tags: ['channel', 'digital'], usedBy: ['Order Count', 'Online Order Rate'], isBuiltin: true,
+  },
+  {
+    id: 'high_value', name: 'High-Value Orders', description: 'Orders with net revenue ≥ $1,000.',
+    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.subtotalAmount', operator: '>=', value: '1000' }],
+    tags: ['tier'], usedBy: ['Revenue'], isBuiltin: true,
+  },
+  {
+    id: 'north_america', name: 'North America', description: 'Orders from the North America territory group.',
+    entity: 'Territory', conditions: [{ field: 'Territory.group', operator: '=', value: "'North America'" }],
+    tags: ['geo'], usedBy: ['Revenue', 'Order Count'], isBuiltin: true,
+  },
+  {
+    id: 'q4', name: 'Q4 Orders', description: 'Orders placed in the fourth quarter (October–December).',
+    entity: 'SalesOrder', conditions: [{ field: 'MONTH(SalesOrder.orderDate)', operator: 'IN', value: '10, 11, 12' }],
+    tags: ['time'], usedBy: ['Revenue'], isBuiltin: true,
+  },
+]
+
+const OPERATOR_LABELS: Record<SegmentOperator, string> = {
+  '=': '=', '!=': '≠', 'IN': 'IN', 'NOT IN': 'NOT IN', '>': '>', '<': '<', '>=': '≥', '<=': '≤',
+}
+
+function loadSegments(sid: string): Segment[] {
+  try { return JSON.parse(localStorage.getItem(`semantic-segments-${sid}`) ?? '[]') } catch { return [] }
+}
+function saveSegments(sid: string, s: Segment[]) {
+  localStorage.setItem(`semantic-segments-${sid}`, JSON.stringify(s))
+}
+
+function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Filter className="w-4 h-4 text-orange-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-bold text-slate-900">{seg.name}</span>
+            {seg.isBuiltin && <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5"><CheckCircle className="w-2.5 h-2.5 inline mr-0.5" />Built-in</span>}
+            <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-mono">{seg.entity}</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-2">{seg.description}</p>
+          <div className="flex flex-col gap-1">
+            {seg.conditions.map((c, i) => (
+              <code key={i} className="text-[11px] font-mono">
+                <span className="text-amber-700">{c.field}</span>{' '}
+                <span className="text-violet-600 font-bold">{OPERATOR_LABELS[c.operator]}</span>{' '}
+                <span className="text-teal-700">{c.value}</span>
+              </code>
+            ))}
+          </div>
+          {seg.usedBy.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <span className="text-[10px] text-slate-400 font-semibold">Used by:</span>
+              {seg.usedBy.map(m => <span key={m} className="text-[10px] bg-teal-50 text-teal-700 border border-teal-200 rounded px-1.5 py-0.5 font-medium">{m}</span>)}
+            </div>
+          )}
+        </div>
+        {onDelete && (
+          <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Source freshness (manufacturing) ──────────────────────────────────────────
+
+const AW_SOURCE_FRESHNESS: Record<string, { lastSync: string; sla: string; quality: number; status: 'fresh' | 'stale' | 'warning'; label: string }> = {
+  erp: { lastSync: '2026-05-26 02:00', sla: 'Daily',  quality: 97, status: 'fresh',   label: 'ERP (OrionSales)' },
+  crm: { lastSync: '2026-05-26 01:30', sla: 'Daily',  quality: 94, status: 'fresh',   label: 'CRM (ClientHub)' },
+  hr:  { lastSync: '2026-05-20 09:00', sla: 'Weekly', quality: 99, status: 'warning', label: 'HR CSV' },
+  pim: { lastSync: '2026-05-25 18:00', sla: 'Daily',  quality: 91, status: 'fresh',   label: 'PIM JSON' },
+}
+
+function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' | 'warning'; lastSync: string; sla: string }) {
+  const colors = { fresh: 'bg-teal-50 text-teal-700 border-teal-200', stale: 'bg-red-50 text-red-600 border-red-200', warning: 'bg-amber-50 text-amber-700 border-amber-200' }
+  const labels = { fresh: '● Fresh', stale: '● Stale', warning: '⚠ Delayed' }
+  return (
+    <div className="text-right">
+      <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${colors[status]}`}>{labels[status]}</span>
+      <p className="text-[10px] text-slate-400 mt-0.5">sync {lastSync.split(' ')[1]} · SLA {sla}</p>
     </div>
   )
 }
@@ -1386,15 +1745,18 @@ function AmbiguityLogPanel() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'definitions'
+type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'metrics' | 'hierarchies' | 'segments' | 'definitions'
 
-const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ className?: string }>; desc: string }[] = [
-  { id: 'overview',     label: 'Overview',    Icon: Layers,    desc: 'Stats & examples' },
-  { id: 'sources',      label: 'Sources',     Icon: Database,  desc: 'Data systems' },
-  { id: 'entities',     label: 'Entities',    Icon: Network,   desc: 'Semantic concepts' },
-  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch, desc: 'Cross-system joins' },
-  { id: 'rules',        label: 'Rules',       Icon: BookOpen,  desc: 'Disambiguation' },
-  { id: 'definitions',  label: 'Definitions', Icon: Tag,       desc: 'Field glossary' },
+const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ className?: string }>; desc: string; group?: string }[] = [
+  { id: 'overview',     label: 'Overview',    Icon: Layers,           desc: 'Stats & quality' },
+  { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
+  { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
+  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
+  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Disambiguation', group: 'Semantics' },
+  { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
+  { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },
+  { id: 'segments',     label: 'Segments',    Icon: Filter,           desc: 'Saved filters' },
+  { id: 'definitions',  label: 'Definitions', Icon: Tag,              desc: 'Field glossary' },
 ]
 
 export default function SemanticLayerView() {
@@ -1409,15 +1771,30 @@ export default function SemanticLayerView() {
   const [savedEdits, setSavedEdits] = useState<Record<string, string>>({})
   const [editCount, setEditCount] = useState(0)
   const [defSearch, setDefSearch] = useState('')
+  const [userMetrics, setUserMetrics] = useState<Metric[]>(() => loadMetrics(sectorId))
+  const [userHierarchies, setUserHierarchies] = useState<DimHierarchy[]>(() => loadHierarchies(sectorId))
+  const [userSegments, setUserSegments] = useState<Segment[]>(() => loadSegments(sectorId))
+  const [metricForm, setMetricForm] = useState({ name: '', description: '', type: 'sum' as MetricType, entity: '', field: '', format: 'number' as MetricFormat })
+  const [showAddMetric, setShowAddMetric] = useState(false)
+  const [hierarchyForm, setHierarchyForm] = useState({ name: '', entity: '', description: '', type: 'categorical' as 'time' | 'categorical', levels: '' })
+  const [showAddHierarchy, setShowAddHierarchy] = useState(false)
+  const [segmentForm, setSegmentForm] = useState({ name: '', description: '', entity: '', field: '', operator: '=' as SegmentOperator, value: '' })
+  const [showAddSegment, setShowAddSegment] = useState(false)
 
   useEffect(() => {
     setUserSources(loadSources(sectorId))
+    setUserMetrics(loadMetrics(sectorId))
+    setUserHierarchies(loadHierarchies(sectorId))
+    setUserSegments(loadSegments(sectorId))
     setSection('overview')
     setShowAddSource(false)
     setShowAddEntity(false)
     setSavedEdits({})
     setEditCount(0)
     setDefSearch('')
+    setShowAddMetric(false)
+    setShowAddHierarchy(false)
+    setShowAddSegment(false)
   }, [sectorId])
 
   const isManufacturing = sectorId === 'manufacturing'
@@ -1455,14 +1832,53 @@ export default function SemanticLayerView() {
   ]
   const progressPct = Math.round((progressItems.filter(p => p.done).length / progressItems.length) * 100)
 
+  const builtinMetrics = isManufacturing ? AW_METRICS : []
+  const builtinHierarchies = isManufacturing ? AW_HIERARCHIES : []
+  const builtinSegments = isManufacturing ? AW_SEGMENTS : []
+  const metricsCount = builtinMetrics.length + userMetrics.length
+  const hierarchiesCount = builtinHierarchies.length + userHierarchies.length
+  const segmentsCount = builtinSegments.length + userSegments.length
+
   function getBadge(id: SLSection): number {
-    if (id === 'sources')  return sourcesCount
+    if (id === 'sources')     return sourcesCount
     if (id === 'entities')    return nodeCount
     if (id === 'bridges')     return bridgesCount
     if (id === 'rules')       return rulesCount
     if (id === 'definitions') return allMappings.length
+    if (id === 'metrics')     return metricsCount
+    if (id === 'hierarchies') return hierarchiesCount
+    if (id === 'segments')    return segmentsCount
     return 0
   }
+
+  function addMetric() {
+    if (!metricForm.name.trim() || !metricForm.entity.trim()) return
+    const m: Metric = { id: `m-${Date.now()}`, ...metricForm, filters: [], grains: ['month', 'quarter', 'year'], status: 'draft', tags: [] }
+    const updated = [...userMetrics, m]; setUserMetrics(updated); saveMetrics(sectorId, updated)
+    setMetricForm({ name: '', description: '', type: 'sum', entity: '', field: '', format: 'number' }); setShowAddMetric(false)
+  }
+  function removeMetric(id: string) { const u = userMetrics.filter(m => m.id !== id); setUserMetrics(u); saveMetrics(sectorId, u) }
+
+  function addHierarchy() {
+    if (!hierarchyForm.name.trim() || !hierarchyForm.entity.trim()) return
+    const levels = hierarchyForm.levels.split(',').map(l => l.trim()).filter(Boolean).map(l => ({ name: l, field: `${hierarchyForm.entity}.${l.toLowerCase()}` }))
+    const h: DimHierarchy = { id: `h-${Date.now()}`, ...hierarchyForm, levels }
+    const updated = [...userHierarchies, h]; setUserHierarchies(updated); saveHierarchies(sectorId, updated)
+    setHierarchyForm({ name: '', entity: '', description: '', type: 'categorical', levels: '' }); setShowAddHierarchy(false)
+  }
+  function removeHierarchy(id: string) { const u = userHierarchies.filter(h => h.id !== id); setUserHierarchies(u); saveHierarchies(sectorId, u) }
+
+  function addSegment() {
+    if (!segmentForm.name.trim() || !segmentForm.entity.trim() || !segmentForm.field.trim()) return
+    const s: Segment = {
+      id: `seg-${Date.now()}`, name: segmentForm.name, description: segmentForm.description,
+      entity: segmentForm.entity, conditions: [{ field: segmentForm.field, operator: segmentForm.operator, value: segmentForm.value }],
+      tags: [], usedBy: [],
+    }
+    const updated = [...userSegments, s]; setUserSegments(updated); saveSegments(sectorId, updated)
+    setSegmentForm({ name: '', description: '', entity: '', field: '', operator: '=', value: '' }); setShowAddSegment(false)
+  }
+  function removeSegment(id: string) { const u = userSegments.filter(s => s.id !== id); setUserSegments(u); saveSegments(sectorId, u) }
 
   function addSource() {
     if (!sourceForm.name.trim()) return
@@ -1486,31 +1902,36 @@ export default function SemanticLayerView() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-          {SECTION_NAV.map(({ id, label, Icon, desc }) => {
+        <nav className="flex-1 p-2 overflow-y-auto">
+          {SECTION_NAV.map(({ id, label, Icon, desc, group }, idx) => {
             const badge = getBadge(id)
             const active = section === id
+            const showDivider = group && (idx === 0 || SECTION_NAV[idx - 1].group !== group)
             return (
-              <button
-                key={id}
-                onClick={() => setSection(id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
-                  active ? 'bg-teal-600 text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-slate-700'
-                }`}
-              >
-                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-teal-200' : 'text-slate-400'}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold leading-none mb-0.5">{label}</p>
-                  <p className={`text-[10px] truncate ${active ? 'text-teal-200' : 'text-slate-400'}`}>{desc}</p>
-                </div>
-                {badge > 0 && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                    active ? 'bg-white/25 text-white' : 'bg-teal-100 text-teal-700'
-                  }`}>
-                    {badge}
-                  </span>
+              <div key={id}>
+                {showDivider && (
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-3 pt-3 pb-1">{group}</p>
                 )}
-              </button>
+                <button
+                  onClick={() => setSection(id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all mb-0.5 ${
+                    active ? 'bg-teal-600 text-white shadow-sm' : 'hover:bg-white hover:shadow-sm text-slate-700'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-teal-200' : 'text-slate-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold leading-none mb-0.5">{label}</p>
+                    <p className={`text-[10px] truncate ${active ? 'text-teal-200' : 'text-slate-400'}`}>{desc}</p>
+                  </div>
+                  {badge > 0 && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                      active ? 'bg-white/25 text-white' : 'bg-teal-100 text-teal-700'
+                    }`}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              </div>
             )
           })}
         </nav>
@@ -1559,10 +1980,38 @@ export default function SemanticLayerView() {
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
               <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
-              <StatCard label="Relationships"       value={edgeCount.toString()} sub="edges in ontology" />
+              <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
               <StatCard label="KG Nodes"            value={isManufacturing ? '193,062' : totalRows.toLocaleString()} sub="entity instances" accent />
               <StatCard label="KG Edges"            value={isManufacturing ? '313,193' : (edgeCount * 8).toLocaleString()} sub="semantic relations" accent />
             </div>
+
+            {/* Quality summary */}
+            {isManufacturing && (
+              <div className="grid grid-cols-4 gap-3">
+                {Object.entries(AW_SOURCE_FRESHNESS).map(([, f]) => (
+                  <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="text-xs font-bold text-slate-800">{f.label}</p>
+                      <FreshnessBadge status={f.status} lastSync={f.lastSync} sla={f.sla} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${f.quality >= 95 ? 'bg-teal-400' : f.quality >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${f.quality}%` }} />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-600">{f.quality}%</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${f.quality >= 95 ? 'bg-teal-400' : f.quality >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${f.quality}%` }} />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-600">{f.quality}% quality</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Non-manufacturing: setup guide */}
             {!isManufacturing && (
@@ -1825,6 +2274,233 @@ export default function SemanticLayerView() {
               )}
               <RulesBuilder sectorId={sectorId} />
             </div>
+          </div>
+        )}
+
+        {/* ── METRICS ── */}
+        {section === 'metrics' && (
+          <div className="px-8 py-7 space-y-5">
+            <SectionHeader icon={BarChart2} title="Metrics Catalog"
+              desc="Reusable business measures — certified, versioned, and referenced by Query AI"
+              action={
+                <button onClick={() => setShowAddMetric(v => !v)}
+                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  <Plus className="w-3.5 h-3.5" />Define metric
+                </button>
+              }
+            />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              A metric is a named, reusable aggregation — <code className="font-mono bg-slate-100 px-1 rounded">SUM</code>, <code className="font-mono bg-slate-100 px-1 rounded">COUNT</code>, <code className="font-mono bg-slate-100 px-1 rounded">RATIO</code>, etc. — that the Query AI treats as a <em>certified answer</em> rather than
+              recomputing from scratch each time. Define it once; use it everywhere.
+            </p>
+
+            {showAddMetric && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-700">New metric</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
+                    <input value={metricForm.name} onChange={e => setMetricForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Monthly Revenue" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Type</label>
+                    <select value={metricForm.type} onChange={e => setMetricForm(f => ({ ...f, type: e.target.value as MetricType }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      {(['sum','count','count_distinct','avg','ratio','derived'] as MetricType[]).map(t => <option key={t} value={t}>{METRIC_TYPE_LABEL[t]}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
+                    <select value={metricForm.entity} onChange={e => setMetricForm(f => ({ ...f, entity: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      <option value="">Select entity…</option>
+                      {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Field</label>
+                    <input value={metricForm.field} onChange={e => setMetricForm(f => ({ ...f, field: e.target.value }))}
+                      placeholder="e.g. subtotalAmount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Format</label>
+                    <select value={metricForm.format} onChange={e => setMetricForm(f => ({ ...f, format: e.target.value as MetricFormat }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      {(['number','currency','percentage'] as MetricFormat[]).map(f => <option key={f} value={f}>{f}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Description</label>
+                    <input value={metricForm.description} onChange={e => setMetricForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="What does this measure?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={addMetric} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={() => setShowAddMetric(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {isManufacturing && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Verified · AdventureWorks</p>
+                {AW_METRICS.map(m => <MetricCard key={m.id} metric={m} />)}
+              </div>
+            )}
+
+            {userMetrics.length > 0 && (
+              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
+                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom metrics</p>}
+                {userMetrics.map(m => <MetricCard key={m.id} metric={m} onDelete={() => removeMetric(m.id)} />)}
+              </div>
+            )}
+
+            {metricsCount === 0 && (
+              <div className="text-center py-12 text-slate-400">
+                <BarChart2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No metrics defined yet</p>
+                <p className="text-xs mt-1">Click "Define metric" to add your first business measure.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── HIERARCHIES ── */}
+        {section === 'hierarchies' && (
+          <div className="px-8 py-7 space-y-5">
+            <SectionHeader icon={SlidersHorizontal} title="Dimension Hierarchies"
+              desc="Structured drill-down paths — Year → Quarter → Month → Day, Category → Product"
+              action={
+                <button onClick={() => setShowAddHierarchy(v => !v)}
+                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  <Plus className="w-3.5 h-3.5" />Add hierarchy
+                </button>
+              }
+            />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              A hierarchy tells the Query AI which drill-down paths are valid. "Break revenue down by quarter" becomes an exact
+              traversal of the Date hierarchy — no guessing, no incorrect groupings.
+            </p>
+
+            {showAddHierarchy && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-700">New hierarchy</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
+                    <input value={hierarchyForm.name} onChange={e => setHierarchyForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Date" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
+                    <select value={hierarchyForm.entity} onChange={e => setHierarchyForm(f => ({ ...f, entity: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      <option value="">Select entity…</option>
+                      {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Type</label>
+                    <select value={hierarchyForm.type} onChange={e => setHierarchyForm(f => ({ ...f, type: e.target.value as 'time' | 'categorical' }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      <option value="time">Time</option><option value="categorical">Categorical</option>
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Levels (comma-separated)</label>
+                    <input value={hierarchyForm.levels} onChange={e => setHierarchyForm(f => ({ ...f, levels: e.target.value }))}
+                      placeholder="e.g. Year, Quarter, Month, Day" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                  <div className="col-span-2"><label className="text-[11px] text-slate-500 mb-1 block">Description</label>
+                    <input value={hierarchyForm.description} onChange={e => setHierarchyForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="What does this hierarchy represent?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={addHierarchy} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={() => setShowAddHierarchy(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {isManufacturing && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in · AdventureWorks</p>
+                {AW_HIERARCHIES.map(h => <HierarchyCard key={h.id} h={h} />)}
+              </div>
+            )}
+
+            {userHierarchies.length > 0 && (
+              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
+                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom hierarchies</p>}
+                {userHierarchies.map(h => <HierarchyCard key={h.id} h={h} onDelete={() => removeHierarchy(h.id)} />)}
+              </div>
+            )}
+
+            {hierarchiesCount === 0 && (
+              <div className="text-center py-12 text-slate-400">
+                <SlidersHorizontal className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No hierarchies defined yet</p>
+                <p className="text-xs mt-1">Click "Add hierarchy" to define a drill-down path.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SEGMENTS ── */}
+        {section === 'segments' && (
+          <div className="px-8 py-7 space-y-5">
+            <SectionHeader icon={Filter} title="Saved Segments"
+              desc="Named filter conditions — reused by metrics and referenced by Query AI"
+              action={
+                <button onClick={() => setShowAddSegment(v => !v)}
+                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  <Plus className="w-3.5 h-3.5" />Add segment
+                </button>
+              }
+            />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              A segment is a <em>reusable</em> WHERE clause. Instead of typing <code className="font-mono bg-slate-100 px-1 rounded">customerType = 'Company'</code> in every metric,
+              you define a "B2B Customers" segment once and reference it by name.
+            </p>
+
+            {showAddSegment && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-700">New segment</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
+                    <input value={segmentForm.name} onChange={e => setSegmentForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. B2B Customers" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
+                    <select value={segmentForm.entity} onChange={e => setSegmentForm(f => ({ ...f, entity: e.target.value }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      <option value="">Select entity…</option>
+                      {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Description</label>
+                    <input value={segmentForm.description} onChange={e => setSegmentForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="What does this filter select?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Field</label>
+                    <input value={segmentForm.field} onChange={e => setSegmentForm(f => ({ ...f, field: e.target.value }))}
+                      placeholder="e.g. Customer.customerType" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Operator</label>
+                    <select value={segmentForm.operator} onChange={e => setSegmentForm(f => ({ ...f, operator: e.target.value as SegmentOperator }))}
+                      className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">
+                      {(['=','!=','IN','NOT IN','>','<','>=','<='] as SegmentOperator[]).map(op => <option key={op} value={op}>{OPERATOR_LABELS[op]}</option>)}
+                    </select></div>
+                  <div><label className="text-[11px] text-slate-500 mb-1 block">Value</label>
+                    <input value={segmentForm.value} onChange={e => setSegmentForm(f => ({ ...f, value: e.target.value }))}
+                      placeholder="e.g. 'Company'" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={addSegment} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={() => setShowAddSegment(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {isManufacturing && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in · AdventureWorks</p>
+                {AW_SEGMENTS.map(s => <SegmentCard key={s.id} seg={s} />)}
+              </div>
+            )}
+
+            {userSegments.length > 0 && (
+              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
+                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom segments</p>}
+                {userSegments.map(s => <SegmentCard key={s.id} seg={s} onDelete={() => removeSegment(s.id)} />)}
+              </div>
+            )}
+
+            {segmentsCount === 0 && (
+              <div className="text-center py-12 text-slate-400">
+                <Filter className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">No segments defined yet</p>
+                <p className="text-xs mt-1">Click "Add segment" to define a reusable filter condition.</p>
+              </div>
+            )}
           </div>
         )}
 
