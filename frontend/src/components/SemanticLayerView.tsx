@@ -1416,6 +1416,151 @@ function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' |
   )
 }
 
+// ── Query Playground ─────────────────────────────────────────────────────────
+
+interface PlaygroundResolution {
+  metrics: string[]
+  dimensions: { name: string; grain?: string }[]
+  segments: string[]
+}
+
+interface PlaygroundScenario {
+  id: string
+  question: string
+  keywords: string[]
+  resolution: PlaygroundResolution
+  sql: string
+  columns: string[]
+  rows: Record<string, string>[]
+}
+
+const AW_PLAYGROUND: PlaygroundScenario[] = [
+  {
+    id: 'rev-month',
+    question: 'Total revenue by month this year',
+    keywords: ['revenue', 'month', 'monthly'],
+    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: [] },
+    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\nWHERE o.order_date >= '2026-01-01'\nGROUP BY 1\nORDER BY 1`,
+    columns: ['Month', 'Revenue'],
+    rows: [
+      { Month: 'Jan 2026', Revenue: '$3,142,890' },
+      { Month: 'Feb 2026', Revenue: '$2,987,450' },
+      { Month: 'Mar 2026', Revenue: '$3,654,320' },
+      { Month: 'Apr 2026', Revenue: '$4,238,790' },
+    ],
+  },
+  {
+    id: 'rev-territory',
+    question: 'Revenue by territory',
+    keywords: ['territory', 'region', 'geo', 'location'],
+    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Territory' }], segments: [] },
+    sql: `SELECT\n  t.group                    AS territory_group,\n  t.name                     AS territory,\n  SUM(o.subtotal_amount)     AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nGROUP BY 1, 2\nORDER BY revenue DESC`,
+    columns: ['Group', 'Territory', 'Revenue'],
+    rows: [
+      { Group: 'North America', Territory: 'Northwest',  Revenue: '$5,432,890' },
+      { Group: 'North America', Territory: 'Southwest',  Revenue: '$4,198,450' },
+      { Group: 'Europe',        Territory: 'France',     Revenue: '$2,892,310' },
+      { Group: 'Europe',        Territory: 'Germany',    Revenue: '$2,644,180' },
+    ],
+  },
+  {
+    id: 'channel-split',
+    question: 'Online vs offline order split',
+    keywords: ['online', 'offline', 'channel', 'digital'],
+    resolution: { metrics: ['Order Count', 'Revenue'], dimensions: [], segments: ['Online Orders', 'Offline Orders'] },
+    sql: `SELECT\n  CASE WHEN o.online_order_flag THEN 'Online'\n       ELSE 'Offline' END    AS channel,\n  COUNT(*)                     AS order_count,\n  SUM(o.subtotal_amount)       AS revenue\nFROM sales_order o\nGROUP BY 1\nORDER BY revenue DESC`,
+    columns: ['Channel', 'Orders', 'Revenue', 'Share'],
+    rows: [
+      { Channel: 'Online',  Orders: '27,659', Revenue: '$8,432,190', Share: '58%' },
+      { Channel: 'Offline', Orders: '3,291',  Revenue: '$6,098,450', Share: '42%' },
+    ],
+  },
+  {
+    id: 'top-customers',
+    question: 'Top 10 B2B customers by revenue',
+    keywords: ['top', 'customer', 'best', 'largest', 'biggest', 'b2b'],
+    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Customer' }], segments: ['B2B Customers'] },
+    sql: `SELECT\n  c.company_name             AS customer,\n  COUNT(DISTINCT o.id)       AS orders,\n  SUM(o.subtotal_amount)     AS revenue\nFROM customer c\n  JOIN sales_order o ON o.customer_id = c.customer_id\nWHERE c.customer_type = 'Company'\nGROUP BY 1\nORDER BY revenue DESC\nLIMIT 10`,
+    columns: ['Customer', 'Orders', 'Revenue'],
+    rows: [
+      { Customer: 'Action Bicycle Specialists',   Orders: '29', Revenue: '$934,219' },
+      { Customer: 'Professional Sales & Service', Orders: '24', Revenue: '$812,450' },
+      { Customer: 'Thrifty Parts & Supply',       Orders: '18', Revenue: '$699,120' },
+      { Customer: 'Thorough Parts & Supply Co.',  Orders: '21', Revenue: '$623,890' },
+    ],
+  },
+  {
+    id: 'aov-quarter',
+    question: 'Average order value by quarter',
+    keywords: ['average', 'aov', 'basket', 'quarter', 'quarterly'],
+    resolution: { metrics: ['Avg Order Value', 'Revenue', 'Order Count'], dimensions: [{ name: 'Date', grain: 'quarter' }], segments: [] },
+    sql: `SELECT\n  DATE_TRUNC('quarter', o.order_date)        AS quarter,\n  COUNT(*)                                   AS orders,\n  SUM(o.subtotal_amount) / COUNT(*)          AS avg_order_value\nFROM sales_order o\nGROUP BY 1\nORDER BY 1 DESC\nLIMIT 6`,
+    columns: ['Quarter', 'Orders', 'AOV'],
+    rows: [
+      { Quarter: 'Q1 2026', Orders: '7,832', AOV: '$1,249' },
+      { Quarter: 'Q4 2025', Orders: '8,123', AOV: '$1,260' },
+      { Quarter: 'Q3 2025', Orders: '7,450', AOV: '$1,199' },
+      { Quarter: 'Q2 2025', Orders: '7,210', AOV: '$1,185' },
+    ],
+  },
+  {
+    id: 'product-category',
+    question: 'Revenue by product category',
+    keywords: ['product', 'category', 'sku', 'item', 'bike', 'accessory'],
+    resolution: { metrics: ['Revenue', 'Order Count'], dimensions: [{ name: 'Product' }], segments: [] },
+    sql: `SELECT\n  p.category                            AS category,\n  COUNT(DISTINCT ol.sales_order_id)     AS orders,\n  SUM(ol.unit_price * ol.order_qty)     AS revenue\nFROM sales_order_line ol\n  JOIN product p ON ol.product_id = p.product_id\nGROUP BY 1\nORDER BY revenue DESC`,
+    columns: ['Category', 'Orders', 'Revenue'],
+    rows: [
+      { Category: 'Bikes',       Orders: '18,432', Revenue: '$22,431,890' },
+      { Category: 'Components',  Orders: '27,891', Revenue: '$5,432,100' },
+      { Category: 'Accessories', Orders: '35,120', Revenue: '$1,987,450' },
+      { Category: 'Clothing',    Orders: '8,930',  Revenue: '$892,310' },
+    ],
+  },
+  {
+    id: 'q4-na',
+    question: 'Q4 revenue — North America only',
+    keywords: ['q4', 'fourth quarter', 'north america', 'q4 north'],
+    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: ['Q4 Orders', 'North America'] },
+    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nWHERE t.group = 'North America'\n  AND MONTH(o.order_date) IN (10, 11, 12)\nGROUP BY 1\nORDER BY 1`,
+    columns: ['Month', 'Revenue'],
+    rows: [
+      { Month: 'Oct 2025', Revenue: '$2,891,340' },
+      { Month: 'Nov 2025', Revenue: '$3,124,780' },
+      { Month: 'Dec 2025', Revenue: '$4,218,020' },
+    ],
+  },
+]
+
+function resolveQuery(query: string): PlaygroundScenario | null {
+  const q = query.toLowerCase()
+  return AW_PLAYGROUND.find(s => s.keywords.some(k => q.includes(k))) ?? null
+}
+
+interface SearchResult { section: SLSection; type: string; label: string; sub: string }
+
+function buildSearchIndex(
+  ontologyNodes: { data: { label: string; description?: string } }[],
+  metrics: Metric[],
+  hierarchies: DimHierarchy[],
+  segments: Segment[],
+): SearchResult[] {
+  return [
+    ...ontologyNodes.map(n => ({ section: 'entities' as SLSection, type: 'Entity', label: n.data.label, sub: n.data.description ?? '' })),
+    ...metrics.map(m  => ({ section: 'metrics'    as SLSection, type: 'Metric',    label: m.name,  sub: m.description })),
+    ...hierarchies.map(h => ({ section: 'hierarchies' as SLSection, type: 'Hierarchy', label: h.name, sub: h.description })),
+    ...segments.map(s => ({ section: 'segments' as SLSection, type: 'Segment',   label: s.name,  sub: s.description })),
+  ]
+}
+
+function scoreSearch(item: SearchResult, q: string): number {
+  const lq = q.toLowerCase()
+  if (item.label.toLowerCase() === lq) return 3
+  if (item.label.toLowerCase().startsWith(lq)) return 2
+  if (item.label.toLowerCase().includes(lq) || item.sub.toLowerCase().includes(lq)) return 1
+  return 0
+}
+
 // ── Definitions data (from Semantic Layer / MappingView) ─────────────────────
 
 interface SemanticDef {
@@ -1745,10 +1890,11 @@ function AmbiguityLogPanel() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'metrics' | 'hierarchies' | 'segments' | 'definitions'
+type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'metrics' | 'hierarchies' | 'segments' | 'definitions' | 'playground'
 
 const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ className?: string }>; desc: string; group?: string }[] = [
   { id: 'overview',     label: 'Overview',    Icon: Layers,           desc: 'Stats & quality' },
+  { id: 'playground',   label: 'Playground',  Icon: Play,             desc: 'Test NL queries', group: 'Tools' },
   { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
   { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
   { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
@@ -1780,6 +1926,12 @@ export default function SemanticLayerView() {
   const [showAddHierarchy, setShowAddHierarchy] = useState(false)
   const [segmentForm, setSegmentForm] = useState({ name: '', description: '', entity: '', field: '', operator: '=' as SegmentOperator, value: '' })
   const [showAddSegment, setShowAddSegment] = useState(false)
+  const [pgQuery, setPgQuery] = useState('')
+  const [pgRunning, setPgRunning] = useState(false)
+  const [pgResult, setPgResult] = useState<PlaygroundScenario | null>(null)
+  const [pgNoMatch, setPgNoMatch] = useState(false)
+  const [sidebarSearch, setSidebarSearch] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
 
   useEffect(() => {
     setUserSources(loadSources(sectorId))
@@ -1795,6 +1947,8 @@ export default function SemanticLayerView() {
     setShowAddMetric(false)
     setShowAddHierarchy(false)
     setShowAddSegment(false)
+    setPgQuery(''); setPgResult(null); setPgNoMatch(false); setPgRunning(false)
+    setSidebarSearch(''); setSearchFocused(false)
   }, [sectorId])
 
   const isManufacturing = sectorId === 'manufacturing'
@@ -1880,6 +2034,88 @@ export default function SemanticLayerView() {
   }
   function removeSegment(id: string) { const u = userSegments.filter(s => s.id !== id); setUserSegments(u); saveSegments(sectorId, u) }
 
+  const allMetricsData = [...builtinMetrics, ...userMetrics]
+  const allHierarchiesData = [...builtinHierarchies, ...userHierarchies]
+  const allSegmentsData = [...builtinSegments, ...userSegments]
+
+  const searchIndex = useMemo(
+    () => buildSearchIndex(ontology.nodes, allMetricsData, allHierarchiesData, allSegmentsData),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ontology.nodes.length, metricsCount, hierarchiesCount, segmentsCount],
+  )
+
+  const searchResults = useMemo(() => {
+    if (!sidebarSearch.trim()) return []
+    return searchIndex
+      .map(item => ({ item, score: scoreSearch(item, sidebarSearch) }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(x => x.item)
+  }, [searchIndex, sidebarSearch])
+
+  function runPlayground() {
+    if (!pgQuery.trim()) return
+    setPgRunning(true); setPgNoMatch(false); setPgResult(null)
+    setTimeout(() => {
+      if (isManufacturing) {
+        const match = resolveQuery(pgQuery)
+        if (match) { setPgResult(match) } else { setPgNoMatch(true) }
+      } else {
+        setPgNoMatch(true)
+      }
+      setPgRunning(false)
+    }, 700)
+  }
+
+  function exportYAML() {
+    const layer = {
+      semantic_layer: {
+        version: 1,
+        sector: sector.name,
+        sources: isManufacturing ? [
+          { id: 'erp', name: 'ERP — OrionSales', type: 'PostgreSQL' },
+          { id: 'crm', name: 'CRM — ClientHub',  type: 'SQLite' },
+          { id: 'hr',  name: 'HR CSV',           type: 'CSV' },
+          { id: 'pim', name: 'PIM JSON',         type: 'JSON' },
+        ] : userSources.map(s => ({ id: s.id, name: s.name, type: s.type })),
+        entities: ontology.nodes.map(n => ({ id: n.id, label: n.data.label })),
+        metrics: allMetricsData.map(m => ({
+          id: m.id, name: m.name, type: m.type, entity: m.entity,
+          ...(m.field && { field: m.field }),
+          ...(m.numerator && { numerator: m.numerator }),
+          ...(m.denominator && { denominator: m.denominator }),
+          format: m.format, status: m.status,
+        })),
+        hierarchies: allHierarchiesData.map(h => ({
+          id: h.id, name: h.name, entity: h.entity, type: h.type,
+          levels: h.levels.map(l => l.name),
+        })),
+        segments: allSegmentsData.map(s => ({
+          id: s.id, name: s.name, entity: s.entity,
+          conditions: s.conditions,
+        })),
+      },
+    }
+    const json = JSON.stringify(layer, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `semantic-layer-${sectorId}.json`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const coverageItems = [
+    { label: 'Sources connected',   done: sourcesCount > 0,     pct: sourcesCount > 0 ? 100 : 0 },
+    { label: 'Entities modelled',   done: nodeCount > 0,         pct: Math.min(100, nodeCount * 10) },
+    { label: 'Bridges defined',     done: bridgesCount > 0,     pct: bridgesCount > 0 ? 100 : 0 },
+    { label: 'Rules set',           done: rulesCount > 0,       pct: rulesCount > 0 ? 100 : 0 },
+    { label: 'Metrics certified',   done: metricsCount > 0,     pct: Math.min(100, metricsCount * 17) },
+    { label: 'Hierarchies defined', done: hierarchiesCount > 0, pct: Math.min(100, hierarchiesCount * 34) },
+    { label: 'Segments saved',      done: segmentsCount > 0,    pct: Math.min(100, segmentsCount * 20) },
+  ]
+  const coverageScore = Math.round(coverageItems.reduce((s, i) => s + i.pct, 0) / coverageItems.length)
+
   function addSource() {
     if (!sourceForm.name.trim()) return
     const updated = [...userSources, { id: `src-${Date.now()}`, ...sourceForm }]
@@ -1893,12 +2129,52 @@ export default function SemanticLayerView() {
       {/* ── Sidebar ── */}
       <aside className="w-52 flex-shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col overflow-hidden">
         {/* Title */}
-        <div className="px-4 py-4 border-b border-slate-200 flex-shrink-0">
-          <div className="flex items-center gap-2 mb-0.5">
+        <div className="px-4 pt-4 pb-3 border-b border-slate-200 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
             <Network className="w-4 h-4 text-teal-600" />
             <span className="text-sm font-bold text-slate-900">Semantic Layer</span>
           </div>
-          <span className="text-[11px] text-slate-400">{sector.name}</span>
+          {/* Global search */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+            <input
+              value={sidebarSearch}
+              onChange={e => setSidebarSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              placeholder="Search metrics, entities…"
+              className="w-full text-[11px] pl-6 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg outline-none focus:border-teal-400 text-slate-700 placeholder-slate-400"
+            />
+            {sidebarSearch && (
+              <button onClick={() => setSidebarSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          {/* Search results dropdown */}
+          {searchFocused && sidebarSearch && searchResults.length > 0 && (
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+              {searchResults.map((r, i) => (
+                <button key={i} onMouseDown={() => { setSection(r.section); setSidebarSearch('') }}
+                  className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[9px] font-bold rounded px-1 py-0.5 ${
+                      r.type === 'Metric'    ? 'bg-blue-100 text-blue-700' :
+                      r.type === 'Hierarchy' ? 'bg-violet-100 text-violet-700' :
+                      r.type === 'Segment'   ? 'bg-orange-100 text-orange-700' :
+                                               'bg-slate-100 text-slate-600'
+                    }`}>{r.type}</span>
+                    <span className="text-[11px] font-medium text-slate-800 truncate">{r.label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {searchFocused && sidebarSearch && searchResults.length === 0 && (
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 px-3 py-2 text-[11px] text-slate-400">
+              No results for "{sidebarSearch}"
+            </div>
+          )}
         </div>
 
         {/* Nav */}
@@ -1975,7 +2251,14 @@ export default function SemanticLayerView() {
         {section === 'overview' && (
           <div className="px-8 py-7 space-y-7">
             <SectionHeader icon={Layers} title="Overview"
-              desc="Semantic layer status, key metrics, and resolution examples" />
+              desc="Semantic layer status, coverage score, and data quality"
+              action={
+                <button onClick={exportYAML}
+                  className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm">
+                  <FileCode className="w-3.5 h-3.5" />Export JSON
+                </button>
+              }
+            />
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
@@ -1983,6 +2266,34 @@ export default function SemanticLayerView() {
               <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
               <StatCard label="KG Nodes"            value={isManufacturing ? '193,062' : totalRows.toLocaleString()} sub="entity instances" accent />
               <StatCard label="KG Edges"            value={isManufacturing ? '313,193' : (edgeCount * 8).toLocaleString()} sub="semantic relations" accent />
+            </div>
+
+            {/* Completeness score */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Semantic Coverage</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">How well your data layer is defined for AI query resolution</p>
+                </div>
+                <div className="text-right">
+                  <div className={`text-3xl font-black ${coverageScore >= 80 ? 'text-teal-600' : coverageScore >= 50 ? 'text-amber-500' : 'text-slate-400'}`}>{coverageScore}%</div>
+                  <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">coverage</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                {coverageItems.map((item, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-[11px] font-medium ${item.done ? 'text-slate-700' : 'text-slate-400'}`}>{item.label}</span>
+                      <span className={`text-[11px] font-bold ${item.done ? 'text-teal-600' : 'text-slate-300'}`}>{item.pct}%</span>
+                    </div>
+                    <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${item.pct >= 80 ? 'bg-teal-400' : item.pct >= 40 ? 'bg-amber-400' : item.pct > 0 ? 'bg-slate-300' : 'bg-transparent'}`}
+                        style={{ width: `${item.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Quality summary */}
@@ -2096,6 +2407,179 @@ export default function SemanticLayerView() {
                 <div className="space-y-3">
                   {AW_QUERY_EXAMPLES.map((ex, i) => <QueryExampleCard key={i} ex={ex} />)}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── PLAYGROUND ── */}
+        {section === 'playground' && (
+          <div className="px-8 py-7 space-y-5">
+            <SectionHeader icon={Play} title="Query Playground"
+              desc="Type a natural language question — see how the semantic layer resolves it into metrics, dimensions, segments, and SQL"
+            />
+
+            {/* Info banner */}
+            <div className="bg-gradient-to-r from-violet-50 to-teal-50 border border-violet-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <Info className="w-4 h-4 text-violet-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-600">
+                The Query AI uses your <strong>Metrics</strong>, <strong>Hierarchies</strong>, and <strong>Segments</strong> as
+                a certified resolution layer — instead of guessing column names, it maps intent to verified measures. Below you
+                can see exactly what happens when a question arrives.
+              </p>
+            </div>
+
+            {/* Query input */}
+            <div className="flex gap-2">
+              <input
+                value={pgQuery}
+                onChange={e => setPgQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && runPlayground()}
+                placeholder={isManufacturing
+                  ? 'e.g. "Revenue by territory last quarter" or "Top B2B customers"'
+                  : 'Connect sources and define metrics first to use the playground'}
+                className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
+                disabled={!isManufacturing}
+              />
+              <button onClick={runPlayground} disabled={pgRunning || !isManufacturing}
+                className="px-5 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
+                {pgRunning
+                  ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Play className="w-4 h-4" />}
+                Resolve
+              </button>
+            </div>
+
+            {/* Quick examples */}
+            {!pgResult && !pgRunning && isManufacturing && (
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Try an example</p>
+                <div className="flex flex-wrap gap-2">
+                  {AW_PLAYGROUND.map(s => (
+                    <button key={s.id}
+                      onClick={() => { setPgQuery(s.question); setPgResult(null); setPgNoMatch(false) }}
+                      className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1.5 hover:bg-teal-100 transition-colors font-medium">
+                      {s.question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Result */}
+            {pgResult && !pgRunning && (
+              <div className="space-y-4">
+                {/* Question echo */}
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <span className="text-sm font-semibold text-slate-700">"{pgQuery}"</span>
+                </div>
+
+                {/* Resolution cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                      <BarChart2 className="w-3.5 h-3.5" />Metrics resolved
+                    </p>
+                    {pgResult.resolution.metrics.map(m => (
+                      <div key={m} className="flex items-center gap-2 mb-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                        <span className="text-xs font-semibold text-slate-800">{m}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                    <p className="text-[10px] font-bold text-violet-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5" />Dimensions
+                    </p>
+                    {pgResult.resolution.dimensions.length > 0
+                      ? pgResult.resolution.dimensions.map(d => (
+                          <div key={d.name} className="flex items-center gap-2 mb-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800">{d.name}{d.grain ? <span className="font-normal text-slate-500"> ({d.grain})</span> : null}</span>
+                          </div>
+                        ))
+                      : <span className="text-xs text-slate-400 italic">None needed</span>
+                    }
+                  </div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                    <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5" />Segments applied
+                    </p>
+                    {pgResult.resolution.segments.length > 0
+                      ? pgResult.resolution.segments.map(s => (
+                          <div key={s} className="flex items-center gap-2 mb-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800">{s}</span>
+                          </div>
+                        ))
+                      : <span className="text-xs text-slate-400 italic">None applied</span>
+                    }
+                  </div>
+                </div>
+
+                {/* Generated SQL */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">Generated SQL</p>
+                    <button onClick={() => navigator.clipboard.writeText(pgResult.sql)}
+                      className="flex items-center gap-1.5 text-[11px] text-teal-600 hover:text-teal-700 font-medium">
+                      <FileCode className="w-3 h-3" />Copy
+                    </button>
+                  </div>
+                  <pre className="text-xs font-mono bg-slate-900 text-slate-100 rounded-xl px-5 py-4 overflow-x-auto leading-relaxed whitespace-pre">{pgResult.sql}</pre>
+                </div>
+
+                {/* Sample results table */}
+                <div>
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Sample Results</p>
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>{pgResult.columns.map(c => (
+                          <th key={c} className="px-4 py-2.5 text-left font-bold text-slate-600 text-[11px]">{c}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {pgResult.rows.map((row, i) => (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            {pgResult.columns.map(c => (
+                              <td key={c} className="px-4 py-2.5 text-slate-700">{row[c]}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Try another */}
+                <button onClick={() => { setPgResult(null); setPgQuery('') }}
+                  className="text-xs text-slate-500 hover:text-teal-600 font-medium flex items-center gap-1 transition-colors">
+                  <ArrowRight className="w-3 h-3" />Try another query
+                </button>
+              </div>
+            )}
+
+            {/* No match */}
+            {pgNoMatch && !pgRunning && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 mb-1">No semantic match found</p>
+                  <p className="text-xs text-amber-700">
+                    No metric, hierarchy, or segment matched your query. Try one of the examples above,
+                    or define new metrics and segments in the Semantics section.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isManufacturing && (
+              <div className="text-center py-12 text-slate-400">
+                <Play className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-semibold">No semantic layer to query yet</p>
+                <p className="text-xs mt-1">Connect sources, model entities, and define metrics first.</p>
               </div>
             )}
           </div>
