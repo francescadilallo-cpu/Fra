@@ -1,24 +1,30 @@
 import { useState } from 'react'
 import { Brain, Eye, EyeOff, Lock } from 'lucide-react'
+import { login } from '../api/client'
 
-// ── Change this to set the access password ───────────────────────────────────
-const ACCESS_CODE = 'semantic25'
 export const SESSION_KEY = 'si-access-granted'
 
 export default function AccessGate({ onGrant }: { onGrant: () => void }) {
-  const [input, setInput] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [show, setShow] = useState(false)
   const [shake, setShake] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  function submit() {
-    if (input.trim() === ACCESS_CODE) {
+  async function submit() {
+    if (!username.trim() || !password.trim()) return
+    setLoading(true)
+    try {
+      await login(username.trim(), password)
       onGrant()
-    } else {
+    } catch {
       setShake(true)
-      setError(true)
-      setInput('')
+      setError('Invalid credentials or authentication service unavailable.')
+      setPassword('')
       setTimeout(() => setShake(false), 500)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -43,20 +49,32 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
         >
           <div className="flex items-center gap-2 mb-5">
             <Lock className="w-4 h-4 text-slate-400" />
-            <p className="text-sm font-semibold text-slate-700">Private Demo Access</p>
+            <p className="text-sm font-semibold text-slate-700">Secure Access</p>
           </div>
 
           <label className="block text-xs font-medium text-slate-500 mb-1.5">
-            Access code
+            Username
+          </label>
+          <input
+            type="text"
+            value={username}
+            onChange={e => { setUsername(e.target.value); setError(null) }}
+            onKeyDown={e => e.key === 'Enter' && void submit()}
+            placeholder="Username"
+            autoFocus
+            className="w-full px-4 py-2.5 rounded-lg border text-sm outline-none transition-colors border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:border-teal-400 focus:bg-white"
+          />
+
+          <label className="block text-xs font-medium text-slate-500 mb-1.5 mt-3">
+            Password
           </label>
           <div className="relative">
             <input
               type={show ? 'text' : 'password'}
-              value={input}
-              onChange={e => { setInput(e.target.value); setError(false) }}
-              onKeyDown={e => e.key === 'Enter' && submit()}
-              placeholder="Enter code…"
-              autoFocus
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(null) }}
+              onKeyDown={e => e.key === 'Enter' && void submit()}
+              placeholder="Password"
               className={`w-full px-4 py-2.5 pr-10 rounded-lg border text-sm outline-none transition-colors ${
                 error
                   ? 'border-red-300 bg-red-50 text-red-900 placeholder-red-400'
@@ -74,19 +92,20 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
           </div>
 
           {error && (
-            <p className="text-xs text-red-500 mt-1.5">Incorrect code — try again.</p>
+            <p className="text-xs text-red-500 mt-1.5">{error}</p>
           )}
 
           <button
-            onClick={submit}
-            className="w-full mt-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
+            onClick={() => void submit()}
+            disabled={loading || !username.trim() || !password.trim()}
+            className="w-full mt-4 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
           >
-            Access Demo
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          Authorized access only · Private demo
+          Authorized access only
         </p>
       </div>
 

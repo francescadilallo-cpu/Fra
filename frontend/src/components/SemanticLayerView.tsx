@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X, Network, MessageSquare } from 'lucide-react'
+import { fetchSemanticStatus } from '../api/client'
+import type { SemanticStatusResponse } from '../types'
 
 // ── AdventureWorks Knowledge Graph — static data ───────────────────────────────
 
-const KG_STATS = [
-  { label: 'KG Nodes',          value: '193,062', sub: 'entity instances' },
-  { label: 'KG Edges',          value: '313,193', sub: 'relationships' },
-  { label: 'Sources Integrated',value: '4',        sub: 'ERP · CRM · HR · PIM' },
-  { label: 'Dedup Removed',     value: '372',      sub: 'CRM duplicate accounts' },
+const KG_STATS_FALLBACK = [
+  { label: 'KG Nodes', value: '193,062', sub: 'entity instances' },
+  { label: 'KG Edges', value: '313,193', sub: 'relationships' },
+  { label: 'Sources Integrated', value: '4', sub: 'ERP · CRM · HR · PIM' },
+  { label: 'Dedup Removed', value: '372', sub: 'CRM duplicate accounts' },
 ]
 
 const AW_SOURCES = [
@@ -351,6 +353,52 @@ function KGBuilder({ bridges, onAdd, onRemove }: {
 
 export default function SemanticLayerView() {
   const [customBridges, setCustomBridges] = useState<CustomBridge[]>([])
+  const [status, setStatus] = useState<SemanticStatusResponse | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let isMounted = true
+    const load = async () => {
+      try {
+        const next = await fetchSemanticStatus()
+        if (!isMounted) return
+        setStatus(next)
+        setStatusError(null)
+      } catch {
+        if (!isMounted) return
+        setStatusError('Semantic status unavailable')
+      }
+    }
+    void load()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const stats = useMemo(() => {
+    if (!status) return KG_STATS_FALLBACK
+    return [
+      { label: 'KG Nodes', value: status.kg_nodes.toLocaleString('en-US'), sub: 'entity instances' },
+      { label: 'KG Edges', value: status.kg_edges.toLocaleString('en-US'), sub: 'relationships' },
+      {
+        label: 'Sources Integrated',
+        value: String(status.sources.length),
+        sub: status.sources.length > 0 ? status.sources.join(' · ') : 'no sources loaded',
+      },
+      {
+        label: 'Dedup Removed',
+        value: status.dedup_count.toLocaleString('en-US'),
+        sub: 'CRM duplicate accounts',
+      },
+    ]
+  }, [status])
+
+  const headerNodes = status?.kg_nodes ?? 193062
+  const headerEdges = status?.kg_edges ?? 313193
+  const sourcesCount = status?.sources.length ?? 4
+  const isLayerLoaded = status?.loaded ?? false
+  const entitiesCount = status?.entities.length ?? 0
+  const metadataRows = status?.metadata_rows ?? 0
 
   return (
     <div className="flex flex-col h-full overflow-auto">
@@ -363,8 +411,14 @@ export default function SemanticLayerView() {
               <h1 className="text-2xl font-bold text-slate-900">Knowledge Graph</h1>
             </div>
             <p className="text-slate-400 text-sm">
-              AdventureWorks · 4 integrated sources · {(193062 + customBridges.length).toLocaleString('en-US')} nodes · 313,193 edges
+              AdventureWorks · {sourcesCount} integrated sources · {(headerNodes + customBridges.length).toLocaleString('en-US')} nodes · {headerEdges.toLocaleString('en-US')} edges
             </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Semantic layer: {isLayerLoaded ? 'loaded' : 'not loaded'} · entities: {entitiesCount} · metadata rows: {metadataRows.toLocaleString('en-US')}
+            </p>
+            {statusError && (
+              <p className="text-xs text-amber-600 mt-1">{statusError}</p>
+            )}
           </div>
           <div className="flex items-center gap-2 text-xs bg-teal-50 border border-teal-200 text-teal-700 rounded-full px-3 py-1.5 font-medium">
             <Zap className="w-3.5 h-3.5" />
@@ -377,7 +431,7 @@ export default function SemanticLayerView() {
 
         {/* KG Stats */}
         <div className="grid grid-cols-4 gap-4">
-          {KG_STATS.map(s => <StatCard key={s.label} {...s} />)}
+          {stats.map(s => <StatCard key={s.label} {...s} />)}
         </div>
 
         {/* Source Architecture */}

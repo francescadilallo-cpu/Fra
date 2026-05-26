@@ -290,15 +290,11 @@ const TOKEN_SCOPES = [
   { key: 'admin',          label: 'Administrative' },
 ]
 
-const INITIAL_TOKENS: ApiToken[] = [
-  { id:'t1', name:'Production CI/CD',    tokenPreview:'sk_live_••••••a3f2', fullToken:'sk_live_8f4d2c91b6a3f2', scopes:['read:ontology','read:agents'],  createdAt:'12 Mar 2026', lastUsed:'12m ago',  status:'active'   },
-  { id:'t2', name:'Datadog integration', tokenPreview:'sk_live_••••••b7e1', fullToken:'sk_live_a219e83c47b7e1', scopes:['read:agents','read:metrics'],   createdAt:'05 Jan 2026', lastUsed:'just now', status:'active'   },
-  { id:'t3', name:'Internal admin',      tokenPreview:'sk_live_••••••c8d3', fullToken:'sk_live_71f9b045a2c8d3', scopes:['admin'],                         createdAt:'20 Nov 2025', lastUsed:'3h ago',   status:'expiring' },
-]
+const INITIAL_TOKENS: ApiToken[] = []
 
 function randomToken(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let s = 'sk_live_'
+  let s = 'demo_token_'
   for (let i = 0; i < 24; i++) s += chars[Math.floor(Math.random() * chars.length)]
   return s
 }
@@ -518,6 +514,12 @@ export function ApiTokensSection() {
             </div>
           )
         })}
+
+        {tokens.length === 0 && (
+          <div className="border border-dashed border-slate-300 rounded-xl p-6 text-center text-xs text-slate-500 bg-slate-50">
+            No API tokens configured. Generate a token to grant programmatic access.
+          </div>
+        )}
       </div>
     </section>
   )
@@ -734,12 +736,12 @@ const INITIAL_AUDIT: AuditEntry[] = [
   { id:'a1',  ts:'just now',   user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Generated executive report', resource:'manufacturing · 20 May 2026', ip:'94.32.118.4',  category:'reports' },
   { id:'a2',  ts:'2m ago',     user:'Marco Rossi',         avatar:'MR', avatarColor:'bg-blue-500',   action:'Triggered pipeline run',     resource:'pipeline · manufacturing',     ip:'94.32.118.7',  category:'data'    },
   { id:'a3',  ts:'12m ago',    user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Updated governance rule',    resource:'Human-in-the-loop · enabled',  ip:'94.32.118.4',  category:'config'  },
-  { id:'a4',  ts:'34m ago',    user:'API · Datadog',       avatar:'DD', avatarColor:'bg-slate-500',  action:'Token used',                 resource:'sk_live_••••b7e1 · read:metrics', ip:'52.40.21.118', category:'auth'    },
+  { id:'a4',  ts:'34m ago',    user:'API · Datadog',       avatar:'DD', avatarColor:'bg-slate-500',  action:'Token used',                 resource:'token_ref_7d2f · read:metrics', ip:'52.40.21.118', category:'auth'    },
   { id:'a5',  ts:'1h ago',     user:'Marco Rossi',         avatar:'MR', avatarColor:'bg-blue-500',   action:'Added connector',            resource:'Snowflake DWH',                ip:'94.32.118.7',  category:'config'  },
   { id:'a6',  ts:'1h ago',     user:'Giulia Ferrari',      avatar:'GF', avatarColor:'bg-purple-500', action:'Logged in',                  resource:'2FA verified · Chrome 134',    ip:'93.41.227.21', category:'auth'    },
   { id:'a7',  ts:'2h ago',     user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Ran agent',                  resource:'Risk Scoring Agent',           ip:'94.32.118.4',  category:'data'    },
   { id:'a8',  ts:'3h ago',     user:'Luca Bianchi',        avatar:'LB', avatarColor:'bg-amber-500',  action:'Edited ontology mapping',    resource:'mfg:Order.totalValue',         ip:'78.13.94.201', category:'config'  },
-  { id:'a9',  ts:'4h ago',     user:'API · CI/CD',         avatar:'CI', avatarColor:'bg-slate-500',  action:'Token used',                 resource:'sk_live_••••a3f2 · read:ontology', ip:'18.221.4.87',  category:'auth'    },
+  { id:'a9',  ts:'4h ago',     user:'API · CI/CD',         avatar:'CI', avatarColor:'bg-slate-500',  action:'Token used',                 resource:'token_ref_a14c · read:ontology', ip:'18.221.4.87',  category:'auth'    },
   { id:'a10', ts:'yesterday',  user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Invited user',               resource:'alessandro.c@semint.ai · editor', ip:'94.32.118.4',  category:'auth'    },
   { id:'a11', ts:'yesterday',  user:'Marco Rossi',         avatar:'MR', avatarColor:'bg-blue-500',   action:'Exported report',            resource:'finance · Q1-2026',            ip:'94.32.118.7',  category:'reports' },
   { id:'a12', ts:'2 days ago', user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Generated API token',        resource:'Production CI/CD',             ip:'94.32.118.4',  category:'auth'    },

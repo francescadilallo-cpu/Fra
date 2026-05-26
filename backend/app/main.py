@@ -3,15 +3,28 @@ SemanticIntelligence – FastAPI application entry point.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
+import logging
 import os
+import threading
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field, model_validator
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from .database import get_connection, get_table_counts, init_db
 from .models import (
@@ -20,80 +33,353 @@ from .models import (
     MappingsResponse,
     OntologyGraphData,
     PaginatedData,
-    QueryRequest,
-    QueryResult,
     RecentOrder,
 )
+from .agentic.executive import ExecutiveAgenticLayer
+from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
-from .query.engine import run_query
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+# ── Security config ────────────────────────────────────────────────────────────
+
+DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173"
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_ISSUER = os.getenv("JWT_ISSUER", "semanticintelligence-api")
+JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "semanticintelligence-clients")
+AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
+
+
+def _login_limit_key(request: Request) -> str:
+    return f"ip:{get_remote_address(request)}"
+
+
+def _semantic_limit_key(request: Request) -> str:
+    # Prefer token fingerprint as user key; fallback to remote IP.
+    auth = (request.headers.get("authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        token_fingerprint = hashlib.sha256(auth.encode("utf-8")).hexdigest()[:20]
+        return f"token:{token_fingerprint}"
+    return f"ip:{get_remote_address(request)}"
+
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "RATE_LIMIT_EXCEEDED",
+            "message": "Troppe richieste. Riprova tra poco.",
+        },
+    )
+
+
+def _parse_allowed_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGIN)
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    return origins or [DEFAULT_ALLOWED_ORIGIN]
+
+
+def _get_jwt_secret() -> str:
+    secret = os.getenv("JWT_SECRET_KEY", "")
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="JWT_SECRET_KEY is not configured",
+        )
+    return secret
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(f"{data}{padding}")
+
+
+def _jwt_encode(payload: dict[str, Any], secret: str) -> str:
+    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
+    header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    signature_b64 = _b64url_encode(signature)
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
+    try:
+        header_b64, payload_b64, signature_b64 = token.split(".")
+    except ValueError as exc:
+        raise ValueError("Malformed token") from exc
+
+    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
+    expected_signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    actual_signature = _b64url_decode(signature_b64)
+    if not hmac.compare_digest(expected_signature, actual_signature):
+        raise ValueError("Invalid token signature")
+
+    try:
+        header = json.loads(_b64url_decode(header_b64))
+        payload = json.loads(_b64url_decode(payload_b64))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError("Invalid token payload") from exc
+
+    if header.get("alg") != JWT_ALGORITHM:
+        raise ValueError("Unsupported token algorithm")
+
+    now = int(datetime.now(timezone.utc).timestamp())
+    exp = payload.get("exp")
+    if not isinstance(exp, int) or exp <= now:
+        raise ValueError("Token expired")
+
+    nbf = payload.get("nbf")
+    if isinstance(nbf, int) and nbf > now:
+        raise ValueError("Token not yet valid")
+
+    if payload.get("iss") != JWT_ISSUER:
+        raise ValueError("Invalid token issuer")
+
+    aud = payload.get("aud")
+    if isinstance(aud, list):
+        if JWT_AUDIENCE not in aud:
+            raise ValueError("Invalid token audience")
+    elif aud != JWT_AUDIENCE:
+        raise ValueError("Invalid token audience")
+
+    return payload
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Verify passwords stored as pbkdf2_sha256$iterations$salt$hash."""
+    try:
+        scheme, iters_raw, salt, expected = stored_hash.split("$", 3)
+        if scheme != "pbkdf2_sha256":
+            return False
+        iterations = int(iters_raw)
+    except (TypeError, ValueError):
+        return False
+
+    candidate = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations,
+    )
+    candidate_b64 = base64.b64encode(candidate).decode("ascii")
+    return hmac.compare_digest(candidate_b64, expected)
+
+
+def _load_auth_users() -> dict[str, dict[str, Any]]:
+    """Load users from AUTH_USERS_JSON env. No credentials are hardcoded in code."""
+    raw = os.getenv(AUTH_USERS_JSON_ENV, "")
+    if not raw:
+        return {}
+    try:
+        users = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.error("%s contains invalid JSON", AUTH_USERS_JSON_ENV)
+        return {}
+
+    if not isinstance(users, list):
+        logger.error("%s must be a JSON array", AUTH_USERS_JSON_ENV)
+        return {}
+
+    allowed_roles = {"admin", "user"}
+    result: dict[str, dict[str, Any]] = {}
+    for entry in users:
+        if not isinstance(entry, dict):
+            continue
+        username = str(entry.get("username", "")).strip()
+        password_hash = str(entry.get("password_hash", "")).strip()
+        role = str(entry.get("role", "user")).strip().lower()
+        disabled = bool(entry.get("disabled", False))
+
+        if not username or not password_hash or role not in allowed_roles:
+            continue
+        result[username] = {
+            "username": username,
+            "password_hash": password_hash,
+            "role": role,
+            "disabled": disabled,
+        }
+    return result
+
+
+def _authenticate_user(username: str, password: str) -> dict[str, Any] | None:
+    users = _load_auth_users()
+    user = users.get(username)
+    if not user or user.get("disabled"):
+        return None
+    if not _verify_password(password, user["password_hash"]):
+        return None
+    return user
+
+
+def _create_access_token(subject: str, role: Literal["admin", "user"]) -> tuple[str, int]:
+    secret = _get_jwt_secret()
+    now = datetime.now(timezone.utc)
+    expire_at = now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": subject,
+        "role": role,
+        "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
+        "exp": int(expire_at.timestamp()),
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+    }
+    token = _jwt_encode(payload, secret)
+    return token, int((expire_at - now).total_seconds())
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    role: Literal["admin", "user"]
+
+
+class UserPrincipal(BaseModel):
+    username: str
+    role: Literal["admin", "user"]
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
+    credentials_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired authentication token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    secret = _get_jwt_secret()
+    try:
+        payload = _jwt_decode(token, secret)
+    except ValueError:
+        raise credentials_exc
+
+    subject = payload.get("sub")
+    role = payload.get("role")
+    if not isinstance(subject, str) or role not in {"admin", "user"}:
+        raise credentials_exc
+
+    return UserPrincipal(username=subject, role=role)
+
+
+def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincipal]:
+    allowed = set(roles)
+
+    def _checker(current_user: UserPrincipal = Depends(get_current_user)) -> UserPrincipal:
+        if current_user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient role privileges",
+            )
+        return current_user
+
+    return _checker
 
 # ── Semantic Layer global state (lazy-initialised on first /api/semantic/* call) ──
 
 _semantic_state: dict[str, Any] = {
     "loaded": False,
     "layer": None,
+    "ontology": None,
     "kg": None,
     "catalog": None,
     "erp": None,
     "crm": None,
     "hr_pim": None,
 }
+_semantic_init_lock = threading.RLock()
 
 _SCENARIO_PATH = Path(__file__).parent.parent.parent / "test_scenario"
 
 
 def _ensure_semantic_loaded() -> None:
-    """Lazily build the semantic stack (connectors → KG → catalog → layer)."""
+    """Lazily build semantic stack exactly once (thread-safe).
+
+    Double-checked locking keeps the fast path lock-free after initialization.
+    """
     if _semantic_state["loaded"]:
         return
 
-    from .connectors.postgres_connector import PostgresConnector
-    from .connectors.sqlite_connector import SQLiteConnector
-    from .connectors.file_connector import FileConnector
-    from .ontology.ontology import Ontology
-    from .kg.graph import KnowledgeGraph
-    from .metadata.catalog import MetadataCatalog
-    from .semantic.layer import SemanticLayer
-    from .context.manager import ContextManager
+    with _semantic_init_lock:
+        if _semantic_state["loaded"]:
+            return
 
-    erp = PostgresConnector(_SCENARIO_PATH / "erp_postgres" / "orion_sales_dump.sql")
-    crm = SQLiteConnector(_SCENARIO_PATH / "crm_sqlite" / "clienthub.db")
-    hr_pim = FileConnector(
-        hr_csv_path=_SCENARIO_PATH / "hr_pim_files" / "dipendenti_hr.csv",
-        pim_json_path=_SCENARIO_PATH / "hr_pim_files" / "product_catalog_pim.json",
-    )
+        from .connectors.postgres_connector import PostgresConnector
+        from .connectors.sqlite_connector import SQLiteConnector
+        from .connectors.file_connector import FileConnector
+        from .ontology.ontology import Ontology
+        from .kg.graph import KnowledgeGraph
+        from .metadata.catalog import MetadataCatalog
+        from .semantic.layer import SemanticLayer
+        from .context.manager import ContextManager
 
-    ontology_path = _SCENARIO_PATH / "ontology_example.yaml"
-    ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
+        erp = PostgresConnector(_SCENARIO_PATH / "erp_postgres" / "orion_sales_dump.sql")
+        crm = SQLiteConnector(_SCENARIO_PATH / "crm_sqlite" / "clienthub.db")
+        hr_pim = FileConnector(
+            hr_csv_path=_SCENARIO_PATH / "hr_pim_files" / "dipendenti_hr.csv",
+            pim_json_path=_SCENARIO_PATH / "hr_pim_files" / "product_catalog_pim.json",
+        )
 
-    kg = KnowledgeGraph()
-    kg.build(erp, crm, hr_pim)
+        ontology_path = _SCENARIO_PATH / "ontology_example.yaml"
+        ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
 
-    catalog = MetadataCatalog()
-    catalog.populate([erp, crm, hr_pim], ontology, kg)
+        kg = KnowledgeGraph()
+        kg.build(erp, crm, hr_pim)
 
-    ctx_mgr = ContextManager()
-    layer = SemanticLayer(ontology, kg, catalog, ctx_mgr)
-    layer.set_connectors(erp, crm, hr_pim)
+        catalog = MetadataCatalog()
+        catalog.populate([erp, crm, hr_pim], ontology, kg)
 
-    _semantic_state.update({
-        "loaded": True,
-        "layer": layer,
-        "kg": kg,
-        "catalog": catalog,
-        "erp": erp,
-        "crm": crm,
-        "hr_pim": hr_pim,
-    })
+        ctx_mgr = ContextManager()
+        layer = SemanticLayer(ontology, kg, catalog, ctx_mgr)
+        layer.set_connectors(erp, crm, hr_pim)
+
+        _semantic_state.update({
+            "loaded": True,
+            "layer": layer,
+            "ontology": ontology,
+            "kg": kg,
+            "catalog": catalog,
+            "erp": erp,
+            "crm": crm,
+            "hr_pim": hr_pim,
+        })
 
 
 # ── Pydantic models for semantic endpoints ──────────────────────────────────
 
 class SemanticAskRequest(BaseModel):
-    question: str
+    question: str | None = Field(default=None, description="Primary NL question field")
+    query: str | None = Field(default=None, description="Alias for question in normalized clients")
+    session_id: str | None = Field(default=None, description="Optional semantic session identifier")
+    context: dict[str, Any] = Field(default_factory=dict, description="Optional normalized semantic context")
+
+    @model_validator(mode="after")
+    def _validate_normalized_payload(self) -> "SemanticAskRequest":
+        q = (self.question or "").strip()
+        alias = (self.query or "").strip()
+        if not q and not alias:
+            raise ValueError("Either 'question' or 'query' must be provided")
+        return self
+
+    def normalized_question(self) -> str:
+        q = (self.question or "").strip()
+        if q:
+            return q
+        return (self.query or "").strip()
 
 
 class SemanticAskResponse(BaseModel):
@@ -130,14 +416,30 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+app.add_middleware(SlowAPIMiddleware)
 
+allowed_origins = _parse_allowed_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _get_agentic_ontology() -> Any:
+    _ensure_semantic_loaded()
+    return _semantic_state.get("ontology")
+
+
+_agentic_layer = ExecutiveAgenticLayer(
+    get_ontology=_get_agentic_ontology,
+    get_db_connection=get_connection,
+)
+app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
@@ -145,6 +447,38 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "SemanticIntelligence API"}
+
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+@app.post("/api/auth/token", response_model=TokenResponse)
+@limiter.limit("5/minute", key_func=_login_limit_key)
+def login_for_access_token(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+) -> TokenResponse:
+    if not os.getenv(AUTH_USERS_JSON_ENV, ""):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{AUTH_USERS_JSON_ENV} is not configured",
+        )
+
+    user = _authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token, expires_in = _create_access_token(
+        subject=user["username"],
+        role=user["role"],
+    )
+    return TokenResponse(
+        access_token=token,
+        expires_in=expires_in,
+        role=user["role"],
+    )
 
 
 @app.get("/api/dashboard", response_model=DashboardData)
@@ -241,27 +575,14 @@ def ontology_mappings() -> MappingsResponse:
 
 
 @app.put("/api/ontology/mappings")
-def update_ontology_mapping(req: MappingUpdateRequest) -> dict[str, Any]:
+def update_ontology_mapping(
+    req: MappingUpdateRequest,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     success = update_mapping(req.table, req.field, req.ontology_path)
     if not success:
         raise HTTPException(status_code=404, detail="Table or field not found in mappings")
     return {"success": True, "table": req.table, "field": req.field, "ontology_path": req.ontology_path}
-
-
-@app.post("/api/query", response_model=QueryResult)
-def natural_language_query(req: QueryRequest) -> QueryResult:
-    if not req.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty")
-
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key or api_key == "your_key_here":
-        raise HTTPException(
-            status_code=503,
-            detail="ANTHROPIC_API_KEY not configured. Set it in backend/.env",
-        )
-
-    result = run_query(req.question)
-    return QueryResult(**result)
 
 
 @app.get("/api/data/{table}", response_model=PaginatedData)
@@ -269,6 +590,7 @@ def get_table_data(
     table: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> PaginatedData:
     allowed_tables = {"customers", "products", "quotes", "quote_lines", "orders", "order_lines"}
     if table not in allowed_tables:
@@ -297,7 +619,9 @@ def get_table_data(
 
 
 @app.get("/api/semantic/status")
-def semantic_status() -> dict[str, Any]:
+def semantic_status(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
     """Return the current status of the semantic layer (loaded/not loaded)."""
     if not _semantic_state["loaded"]:
         return {
@@ -323,18 +647,28 @@ def semantic_status() -> dict[str, Any]:
 
 
 @app.post("/api/semantic/ask")
-def semantic_ask(req: SemanticAskRequest) -> SemanticAskResponse:
+@limiter.limit("5/minute", key_func=_semantic_limit_key)
+def semantic_ask(
+    request: Request,
+    req: SemanticAskRequest,
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> SemanticAskResponse:
     """Ask a natural-language question to the Semantic Layer."""
-    from .semantic.layer import AmbiguityError
+    from .semantic.layer import (
+        AmbiguityError,
+        SemanticOntologyViolationError,
+        SemanticSecurityViolationError,
+    )
 
-    if not req.question.strip():
+    question = req.normalized_question()
+    if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     _ensure_semantic_loaded()
     layer = _semantic_state["layer"]
 
     try:
-        result = layer.ask(req.question)
+        result = layer.ask(question, context={"session_id": req.session_id, **(req.context or {})})
         return SemanticAskResponse(
             answer=result.answer,
             sql_used=result.sql_used,
@@ -354,3 +688,47 @@ def semantic_ask(req: SemanticAskRequest) -> SemanticAskResponse:
             notes=str(e),
             ambiguity_error=True,
         )
+    except SemanticSecurityViolationError:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "SEMANTIC_SECURITY_VIOLATION",
+                "message": "Query semantica non valida o non autorizzata",
+            },
+        )
+    except SemanticOntologyViolationError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "SEMANTIC_ONTOLOGY_VIOLATION",
+                "message": str(e),
+            },
+        )
+
+
+@app.post("/api/kg/build")
+def rebuild_knowledge_graph(
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """Rebuild KG + semantic stack. Admin-only because it mutates in-memory system state."""
+    with _semantic_init_lock:
+        _semantic_state.update({
+            "loaded": False,
+            "layer": None,
+            "ontology": None,
+            "kg": None,
+            "catalog": None,
+            "erp": None,
+            "crm": None,
+            "hr_pim": None,
+        })
+        _ensure_semantic_loaded()
+        kg = _semantic_state["kg"]
+        catalog = _semantic_state["catalog"]
+        return {
+            "success": True,
+            "kg_nodes": kg.node_count,
+            "kg_edges": kg.edge_count,
+            "metadata_rows": catalog.row_count(),
+            "dedup_count": kg.dedup_count,
+        }

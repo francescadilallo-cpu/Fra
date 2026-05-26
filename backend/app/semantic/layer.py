@@ -23,6 +23,7 @@ NL question → rule-based intent → (fallback Claude API if ANTHROPIC_API_KEY 
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -43,11 +44,24 @@ class AmbiguityError(Exception):
         self.candidates = candidates
 
 
+class SemanticOntologyViolationError(Exception):
+    """Raised when inferred intent violates ontology or metadata constraints."""
+
+    pass
+
+
+class SemanticSecurityViolationError(SemanticOntologyViolationError):
+    """Raised when LLM output contains unsafe or unauthorized query patterns."""
+
+    pass
+
+
 # ── Result ────────────────────────────────────────────────────────────────────
 
 @dataclass
 class Result:
     answer: Any
+    interpreted_as: str = ""
     sql_used: str | None = None
     sources_touched: list[str] = field(default_factory=list)
     provenance: dict[str, Any] = field(default_factory=dict)
@@ -59,6 +73,7 @@ class Result:
     def to_dict(self) -> dict:
         return {
             "answer": self.answer,
+            "interpreted_as": self.interpreted_as,
             "sql_used": self.sql_used,
             "sources_touched": self.sources_touched,
             "provenance": self.provenance,
@@ -81,6 +96,256 @@ class Intent:
     limit: int | None = None
     year: int | None = None
     raw_question: str = ""
+
+
+@dataclass
+class OntologyIntentMapping:
+    """Ontology-grounded intent emitted by the FM mapping stage."""
+
+    intent_type: str
+    metric: str | None = None
+    entities: list[str] = field(default_factory=list)
+    properties: list[str] = field(default_factory=list)
+    relations: list[str] = field(default_factory=list)
+    filters: dict[str, Any] = field(default_factory=dict)
+    limit: int | None = None
+    year: int | None = None
+    model: str = ""
+    raw_payload: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class NeuroSymbolicPlan:
+    """Deterministic plan validated against ontology + metadata catalog."""
+
+    intent_type: str
+    metric: str | None
+    entities: list[str]
+    properties: list[str]
+    relations: list[str]
+    connectors: list[str]
+    tables: list[str]
+    validation_steps: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "intent_type": self.intent_type,
+            "metric": self.metric,
+            "entities": self.entities,
+            "properties": self.properties,
+            "relations": self.relations,
+            "connectors": self.connectors,
+            "tables": self.tables,
+            "validation_steps": self.validation_steps,
+        }
+
+
+_INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
+    "count_employees": {
+        "metric": None,
+        "entities": ["Employee"],
+        "properties": ["Employee.MatricolaDip", "Employee.Reparto"],
+        "relations": [],
+    },
+    "count_employees_by_group": {
+        "metric": None,
+        "entities": ["Employee"],
+        "properties": ["Employee.GruppoReparto"],
+        "relations": [],
+    },
+    "avg_hourly_rate": {
+        "metric": None,
+        "entities": ["Employee"],
+        "properties": ["Employee.RetribuzioneOraria", "Employee.Reparto"],
+        "relations": [],
+    },
+    "product_price": {
+        "metric": None,
+        "entities": ["Product"],
+        "properties": ["Product.displayName", "Product.listPrice", "Product.standardCost"],
+        "relations": [],
+    },
+    "count_make_only": {
+        "metric": None,
+        "entities": ["Product"],
+        "properties": ["Product.isMakeOnly"],
+        "relations": [],
+    },
+    "count_orders": {
+        "metric": None,
+        "entities": ["SalesOrder"],
+        "properties": ["SalesOrder.order_id", "SalesOrder.order_date"],
+        "relations": [],
+    },
+    "list_b2b_active": {
+        "metric": None,
+        "entities": ["Customer"],
+        "properties": ["Customer.accountType", "Customer.isActive", "Customer.ragioneSociale"],
+        "relations": [],
+    },
+    "customers_by_state": {
+        "metric": None,
+        "entities": ["Customer"],
+        "properties": ["Customer.accountId"],
+        "relations": [],
+    },
+    "top_salesperson_by_orders": {
+        "metric": None,
+        "entities": ["SalesOrder", "Employee"],
+        "properties": ["SalesOrder.salesperson_ref", "SalesOrder.order_id", "Employee.MatricolaDip"],
+        "relations": ["SalesOrder.salesperson_ref->Employee"],
+    },
+    "top_salespersons_by_revenue": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder", "Employee"],
+        "properties": ["SalesOrder.salesperson_ref", "SalesOrder.total_due", "Employee.MatricolaDip"],
+        "relations": ["SalesOrder.salesperson_ref->Employee"],
+    },
+    "revenue_by_territory": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder", "Territory"],
+        "properties": ["SalesOrder.total_due", "SalesOrder.territory_ref"],
+        "relations": ["SalesOrder.territory_ref->Territory"],
+    },
+    "revenue_vs_quota": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder", "Salesperson"],
+        "properties": ["SalesOrder.total_due", "SalesOrder.salesperson_ref"],
+        "relations": ["SalesOrder.salesperson_ref->Salesperson"],
+    },
+    "top_customer_by_spend": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder", "Customer"],
+        "properties": ["SalesOrder.customer_ref", "SalesOrder.total_due", "Customer.accountId"],
+        "relations": ["SalesOrder.customer_ref->Customer"],
+    },
+    "top_products_by_qty": {
+        "metric": None,
+        "entities": ["SalesOrderLine", "Product"],
+        "properties": ["SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.displayName"],
+        "relations": ["SalesOrderLine.product_ref->Product"],
+    },
+    "customer_state_most_orders": {
+        "metric": None,
+        "entities": ["SalesOrder", "Customer"],
+        "properties": ["SalesOrder.customer_ref", "SalesOrder.order_id", "Customer.accountId"],
+        "relations": ["SalesOrder.customer_ref->Customer"],
+    },
+    "margin_per_salesperson": {
+        "metric": "margin",
+        "entities": ["SalesOrder", "SalesOrderLine", "Product"],
+        "properties": ["SalesOrder.salesperson_ref", "SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.standardCost", "Product.listPrice"],
+        "relations": ["SalesOrder.hasLine->SalesOrderLine", "SalesOrderLine.product_ref->Product"],
+    },
+    "avg_revenue_by_segment": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder", "Customer"],
+        "properties": ["SalesOrder.customer_ref", "SalesOrder.total_due", "Customer.accountType"],
+        "relations": ["SalesOrder.customer_ref->Customer"],
+    },
+    "top_category_by_margin": {
+        "metric": "margin",
+        "entities": ["SalesOrderLine", "Product"],
+        "properties": ["SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.categoryPath", "Product.standardCost", "Product.listPrice"],
+        "relations": ["SalesOrderLine.product_ref->Product"],
+    },
+    "orders_with_discount": {
+        "metric": None,
+        "entities": ["SalesOrderLine"],
+        "properties": ["SalesOrderLine.offer_ref"],
+        "relations": [],
+    },
+    "count_customers_unique": {
+        "metric": "active_customers",
+        "entities": ["Customer"],
+        "properties": ["Customer.accountId"],
+        "relations": [],
+    },
+    "check_duplicate_accounts": {
+        "metric": None,
+        "entities": ["Customer"],
+        "properties": ["Customer.accountId", "Customer.ragioneSociale", "Customer.nomeContatto"],
+        "relations": [],
+    },
+    "data_provenance": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
+    "revenue_with_tax": {
+        "metric": "revenue_with_tax",
+        "entities": ["SalesOrder"],
+        "properties": ["SalesOrder.total_due", "SalesOrder.order_date"],
+        "relations": [],
+    },
+    "lookup_employee": {
+        "metric": None,
+        "entities": ["Employee"],
+        "properties": ["Employee.MatricolaDip", "Employee.Nome", "Employee.Cognome", "Employee.Reparto"],
+        "relations": [],
+    },
+    "impossible": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
+}
+
+
+_DANGEROUS_SQL_RE = re.compile(
+    r"\b(drop|alter|delete|insert|update|truncate|grant|revoke|create|attach|pragma)\b",
+    re.IGNORECASE,
+)
+_PROMPT_INJECTION_RE = re.compile(
+    r"ignore\s+(all\s+)?(previous|prior)\s+instructions|"
+    r"system\s+prompt|"
+    r"developer\s+message|"
+    r"jailbreak|"
+    r"bypass\s+guardrails|"
+    r"tool\s+call|function\s+call",
+    re.IGNORECASE,
+)
+_SQL_META_TOKENS_RE = re.compile(r";|--|/\*|\*/")
+_SQL_TABLE_ACCESS_RE = re.compile(
+    r"\b(?:from|join|into|update|table)\s+([a-zA-Z_][a-zA-Z0-9_\.]*)",
+    re.IGNORECASE,
+)
+_SYSTEM_TABLE_MARKERS = {
+    "sqlite_master",
+    "sqlite_temp_master",
+    "information_schema",
+    "pg_catalog",
+    "pg_tables",
+    "mysql",
+    "sys",
+}
+
+
+def _extract_json_payload(text: str) -> dict[str, Any]:
+    """Extract a JSON object from model text output."""
+    raw = text.strip()
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, re.DOTALL)
+    if fenced:
+        parsed = json.loads(fenced.group(1))
+        if isinstance(parsed, dict):
+            return parsed
+
+    inline = re.search(r"\{.*\}", raw, re.DOTALL)
+    if inline:
+        parsed = json.loads(inline.group(0))
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("Could not parse JSON payload from model output")
 
 
 # ── Rule-based intent parser ──────────────────────────────────────────────────
@@ -406,6 +671,8 @@ class SemanticLayer:
             result = self._resolve(question, context)
         except AmbiguityError:
             raise
+        except SemanticOntologyViolationError:
+            raise
         except Exception as exc:
             logger.exception("SemanticLayer.ask error: %s", exc)
             result = Result(
@@ -419,20 +686,393 @@ class SemanticLayer:
     # ── resolution ────────────────────────────────────────────────────────────
 
     def _resolve(self, question: str, context) -> Result:
-        # Rule-based parse — may raise AmbiguityError
+        # Stage 1: deterministic baseline parse
         try:
-            intent = self._parser.parse(question)
+            baseline_intent = self._parser.parse(question)
         except AmbiguityError:
             raise
         except Exception as exc:
-            logger.warning("Rule parser failed: %s — falling back to Claude", exc)
-            intent = self._claude_fallback(question)
+            logger.warning("Rule parser failed: %s", exc)
+            baseline_intent = Intent(intent_type="unknown", raw_question=question)
 
-        if intent.intent_type == "unknown":
-            # Try Claude if available
-            intent = self._claude_fallback(question)
+        # Stage 2: FM maps NL to ontology concepts (never SQL)
+        mapped_intent, mapping = self._map_to_ontology_intent(question, baseline_intent)
 
-        return self._execute(intent)
+        # Stage 3: ontology + metadata validation and deterministic plan
+        plan = self._build_validated_plan(mapped_intent, mapping)
+
+        # Stage 4: deterministic query execution via typed templates
+        result = self._execute(mapped_intent)
+        result.interpreted_as = (
+            f"intent={mapped_intent.intent_type}; entities={','.join(plan.entities) or '-'}; "
+            f"metric={plan.metric or '-'}"
+        )
+
+        # Stage 5: enforce complete lineage/provenance in final response
+        self._inject_plan_lineage(result, plan, question, mapping)
+        return result
+
+    def _map_to_ontology_intent(
+        self,
+        question: str,
+        baseline_intent: Intent,
+    ) -> tuple[Intent, OntologyIntentMapping]:
+        mapping = self._llm_ontology_mapping(question, baseline_intent)
+        if mapping is None:
+            mapping = self._fallback_mapping_from_rule(baseline_intent)
+
+        intent_type = mapping.intent_type or baseline_intent.intent_type
+        if intent_type not in _INTENT_CONTRACTS:
+            raise SemanticOntologyViolationError(
+                f"Model mapped to unsupported intent '{intent_type}'"
+            )
+
+        merged_filters = dict(baseline_intent.filters)
+        merged_filters.update(mapping.filters)
+        merged_intent = Intent(
+            intent_type=intent_type,
+            filters=merged_filters,
+            dimensions=list(baseline_intent.dimensions),
+            limit=mapping.limit if mapping.limit is not None else baseline_intent.limit,
+            year=mapping.year if mapping.year is not None else baseline_intent.year,
+            raw_question=question,
+        )
+        return merged_intent, mapping
+
+    def _llm_ontology_mapping(
+        self,
+        question: str,
+        baseline_intent: Intent,
+    ) -> OntologyIntentMapping | None:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        strict = os.getenv("SEMANTIC_REQUIRE_LLM_INTENT", "1").strip().lower() not in {
+            "0", "false", "no"
+        }
+        if not api_key:
+            if strict:
+                raise SemanticOntologyViolationError(
+                    "ANTHROPIC_API_KEY is required for ontology intent mapping"
+                )
+            return None
+
+        entity_names = self._ontology.entity_names() if self._ontology else self._catalog.list_entities()
+        metric_names = self._catalog.list_metrics() if self._catalog else []
+        relation_hints: list[str] = []
+        if self._ontology:
+            for entity in self._ontology.entity_names():
+                for rel in self._ontology.relations_of(entity):
+                    target = rel.get("target")
+                    rel_name = rel.get("name")
+                    if target and rel_name:
+                        relation_hints.append(f"{entity}.{rel_name}->{target}")
+
+        system_prompt = (
+            "You are an ontology intent mapper for a neuro-symbolic semantic layer. "
+            "Your job is ONLY to map user questions to ontology concepts. "
+            "Never generate SQL, code, or executable statements. "
+            "Return STRICT JSON with keys: intent_type, metric, entities, properties, relations, filters, limit, year. "
+            f"Allowed intent_type values: {sorted(_INTENT_CONTRACTS.keys())}. "
+            f"Allowed ontology entities: {sorted(entity_names)}. "
+            f"Known metrics from metadata catalog: {sorted(metric_names)}. "
+            f"Known relation hints: {sorted(relation_hints)[:80]}."
+        )
+        user_prompt = {
+            "question": question,
+            "baseline_intent": baseline_intent.intent_type,
+            "year": baseline_intent.year,
+            "limit": baseline_intent.limit,
+            "filters": baseline_intent.filters,
+        }
+
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": json.dumps(user_prompt)}],
+            )
+            payload = _extract_json_payload(msg.content[0].text)
+        except Exception as exc:
+            if strict:
+                raise SemanticOntologyViolationError(
+                    f"Failed ontology intent mapping with Anthropic: {exc}"
+                ) from exc
+            logger.warning("LLM ontology mapping failed, using rule fallback: %s", exc)
+            return None
+
+        intent_type = str(payload.get("intent_type", baseline_intent.intent_type)).strip()
+        metric = payload.get("metric")
+        entities = [str(x).strip() for x in payload.get("entities", []) if str(x).strip()]
+        properties = [str(x).strip() for x in payload.get("properties", []) if str(x).strip()]
+        relations = [str(x).strip() for x in payload.get("relations", []) if str(x).strip()]
+        filters = payload.get("filters", {}) if isinstance(payload.get("filters", {}), dict) else {}
+        year = payload.get("year") if isinstance(payload.get("year"), int) else None
+        limit = payload.get("limit") if isinstance(payload.get("limit"), int) else None
+
+        self._validate_llm_payload_security(payload)
+
+        return OntologyIntentMapping(
+            intent_type=intent_type,
+            metric=str(metric).strip() if isinstance(metric, str) and metric.strip() else None,
+            entities=entities,
+            properties=properties,
+            relations=relations,
+            filters=filters,
+            limit=limit,
+            year=year,
+            model="claude-sonnet-4-6",
+            raw_payload=payload,
+        )
+
+    def _fallback_mapping_from_rule(self, intent: Intent) -> OntologyIntentMapping:
+        contract = _INTENT_CONTRACTS.get(intent.intent_type, {"entities": [], "properties": [], "relations": [], "metric": None})
+        return OntologyIntentMapping(
+            intent_type=intent.intent_type,
+            metric=contract.get("metric"),
+            entities=list(contract.get("entities", [])),
+            properties=list(contract.get("properties", [])),
+            relations=list(contract.get("relations", [])),
+            filters=dict(intent.filters),
+            limit=intent.limit,
+            year=intent.year,
+            model="rule_fallback",
+            raw_payload={"source": "rule_parser"},
+        )
+
+    def _validate_llm_payload_security(self, payload: dict[str, Any]) -> None:
+        """Strict guardrail over LLM JSON output before any connector interaction."""
+        allowed_tables = self._allowed_catalog_tables()
+
+        for path, value in self._iter_string_leaves(payload):
+            normalized = value.strip()
+            if not normalized:
+                continue
+
+            if _PROMPT_INJECTION_RE.search(normalized):
+                self._security_block(
+                    reason="prompt_injection_pattern",
+                    path=path,
+                    value=normalized,
+                )
+
+            if _DANGEROUS_SQL_RE.search(normalized):
+                self._security_block(
+                    reason="destructive_sql_keyword",
+                    path=path,
+                    value=normalized,
+                )
+
+            if _SQL_META_TOKENS_RE.search(normalized):
+                self._security_block(
+                    reason="sql_meta_token",
+                    path=path,
+                    value=normalized,
+                )
+
+            if re.search(r"\bselect\b", normalized, re.IGNORECASE):
+                self._security_block(
+                    reason="raw_sql_not_allowed",
+                    path=path,
+                    value=normalized,
+                )
+
+            for table_ref in _SQL_TABLE_ACCESS_RE.findall(normalized):
+                table_name = table_ref.split(".")[-1].lower()
+                if table_name in _SYSTEM_TABLE_MARKERS:
+                    self._security_block(
+                        reason="system_table_access",
+                        path=path,
+                        value=normalized,
+                    )
+                if allowed_tables and table_name not in allowed_tables:
+                    self._security_block(
+                        reason="table_not_mapped_in_catalog",
+                        path=path,
+                        value=normalized,
+                    )
+
+    def _allowed_catalog_tables(self) -> set[str]:
+        tables: set[str] = set()
+        if not self._catalog:
+            return tables
+        for entity in self._catalog.list_entities():
+            meta = self._catalog.get_entity(entity)
+            if not meta:
+                continue
+            for src in meta.sources:
+                if not isinstance(src, dict):
+                    continue
+                table = src.get("table")
+                if isinstance(table, str) and table.strip():
+                    tables.add(table.strip().lower())
+        return tables
+
+    def _iter_string_leaves(self, payload: Any, path: str = "$") -> list[tuple[str, str]]:
+        leaves: list[tuple[str, str]] = []
+        if isinstance(payload, str):
+            leaves.append((path, payload))
+            return leaves
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                leaves.extend(self._iter_string_leaves(value, f"{path}.{key}"))
+            return leaves
+        if isinstance(payload, list):
+            for idx, item in enumerate(payload):
+                leaves.extend(self._iter_string_leaves(item, f"{path}[{idx}]"))
+            return leaves
+        return leaves
+
+    def _security_block(self, reason: str, path: str, value: str) -> None:
+        logger.error(
+            "SECURITY_GUARDRAIL_BLOCK reason=%s path=%s value=%r",
+            reason,
+            path,
+            value[:240],
+        )
+        raise SemanticSecurityViolationError(
+            f"Blocked unsafe LLM output ({reason})"
+        )
+
+    def _build_validated_plan(
+        self,
+        intent: Intent,
+        mapping: OntologyIntentMapping,
+    ) -> NeuroSymbolicPlan:
+        contract = _INTENT_CONTRACTS.get(intent.intent_type)
+        if not contract:
+            raise SemanticOntologyViolationError(
+                f"No ontology contract defined for intent '{intent.intent_type}'"
+            )
+
+        validation_steps: list[str] = [
+            "fm_intent_mapped",
+            "ontology_contract_selected",
+        ]
+
+        catalog_entities = set(self._catalog.list_entities()) if self._catalog else set()
+        ontology_entities = set(self._ontology.entity_names()) if self._ontology else set(catalog_entities)
+        allowed_entities = set(contract.get("entities", []))
+        candidate_entities = set(mapping.entities or contract.get("entities", []))
+
+        if not candidate_entities.issubset(allowed_entities):
+            raise SemanticOntologyViolationError(
+                f"Ontology violation: entities {sorted(candidate_entities)} are outside intent contract {sorted(allowed_entities)}"
+            )
+
+        for entity in sorted(candidate_entities):
+            if entity not in ontology_entities:
+                raise SemanticOntologyViolationError(
+                    f"Ontology violation: unknown entity '{entity}'"
+                )
+            if catalog_entities and entity not in catalog_entities:
+                raise SemanticOntologyViolationError(
+                    f"Metadata violation: entity '{entity}' not present in catalog"
+                )
+        validation_steps.append("entities_validated")
+
+        allowed_properties = set(contract.get("properties", []))
+        candidate_properties = set(mapping.properties or contract.get("properties", []))
+        if not candidate_properties.issubset(allowed_properties):
+            raise SemanticOntologyViolationError(
+                "Ontology violation: model requested properties outside allowed contract"
+            )
+
+        for prop in sorted(candidate_properties):
+            if "." not in prop:
+                raise SemanticOntologyViolationError(
+                    f"Invalid property format '{prop}', expected Entity.attribute"
+                )
+            entity, attribute = prop.split(".", 1)
+            if entity not in candidate_entities and candidate_entities:
+                raise SemanticOntologyViolationError(
+                    f"Property '{prop}' references undeclared entity '{entity}'"
+                )
+            if self._catalog and not self._catalog.get_attribute(entity, attribute):
+                raise SemanticOntologyViolationError(
+                    f"Metadata violation: attribute '{prop}' not found in catalog"
+                )
+        validation_steps.append("properties_validated")
+
+        metric = mapping.metric if mapping.metric is not None else contract.get("metric")
+        if metric and self._catalog:
+            metrics = set(self._catalog.list_metrics())
+            if metric not in metrics:
+                raise SemanticOntologyViolationError(
+                    f"Metadata violation: metric '{metric}' not found in catalog"
+                )
+        validation_steps.append("metrics_validated")
+
+        allowed_relations = set(contract.get("relations", []))
+        candidate_relations = set(mapping.relations or contract.get("relations", []))
+        if not candidate_relations.issubset(allowed_relations):
+            raise SemanticOntologyViolationError(
+                "Ontology violation: relation path outside allowed contract"
+            )
+        validation_steps.append("relations_validated")
+
+        connector_set: set[str] = set()
+        table_set: set[str] = set()
+        for entity in sorted(candidate_entities):
+            ent = self._catalog.get_entity(entity) if self._catalog else None
+            if not ent:
+                continue
+            for src in ent.sources:
+                if not isinstance(src, dict):
+                    continue
+                connector = src.get("source") or src.get("connector") or src.get("system")
+                table = src.get("table")
+                if isinstance(connector, str) and connector:
+                    connector_set.add(connector)
+                if isinstance(table, str) and table:
+                    table_set.add(table)
+        validation_steps.append("lineage_sources_collected")
+
+        return NeuroSymbolicPlan(
+            intent_type=intent.intent_type,
+            metric=metric,
+            entities=sorted(candidate_entities),
+            properties=sorted(candidate_properties),
+            relations=sorted(candidate_relations),
+            connectors=sorted(connector_set),
+            tables=sorted(table_set),
+            validation_steps=validation_steps,
+        )
+
+    def _inject_plan_lineage(
+        self,
+        result: Result,
+        plan: NeuroSymbolicPlan,
+        question: str,
+        mapping: OntologyIntentMapping,
+    ) -> None:
+        original_provenance = result.provenance or {}
+        result.sources_touched = sorted(set(result.sources_touched).union(plan.connectors))
+        result.provenance = {
+            "lineage": {
+                "connectors": plan.connectors,
+                "tables": plan.tables,
+            },
+            "ontology_intent": {
+                "intent_type": plan.intent_type,
+                "metric": plan.metric,
+                "entities": plan.entities,
+                "properties": plan.properties,
+                "relations": plan.relations,
+            },
+            "validation": {
+                "steps": plan.validation_steps,
+                "status": "validated",
+            },
+            "question": question,
+            "model_mapping": {
+                "model": mapping.model,
+                "raw": mapping.raw_payload,
+            },
+            "resolved_provenance": original_provenance,
+        }
 
     def _claude_fallback(self, question: str) -> Intent:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")

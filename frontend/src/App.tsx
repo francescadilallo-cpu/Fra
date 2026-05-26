@@ -21,6 +21,7 @@ import { useSector } from './contexts/SectorContext'
 import type { SectorId } from './data/sectors'
 import { loadExtension, saveExtension } from './data/ontologyExtensions'
 import { createCompany, migrateExistingCompany, logoutCurrent } from './data/companies'
+import { clearAuthToken, getAuthToken } from './api/client'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
@@ -70,7 +71,7 @@ function addCustomEntityToOntology(sectorId: SectorId, rawName: string) {
 }
 
 export default function App() {
-  const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1')
+  const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1' && Boolean(getAuthToken()))
   const [activeTab, setActiveTab] = useState<NavTab>('overview')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { setSector, sectorId } = useSector()
@@ -105,6 +106,7 @@ export default function App() {
       logoutCurrent()
       localStorage.removeItem(ONBOARDING_KEY)
       sessionStorage.removeItem(SESSION_KEY)
+      clearAuthToken()
       setGranted(false)
       setActiveTab('overview')
     }

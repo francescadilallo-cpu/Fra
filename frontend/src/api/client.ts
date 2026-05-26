@@ -6,11 +6,14 @@ import type {
   OntologyGraphData,
   PaginatedData,
   QueryResult,
+  SemanticStatusResponse,
 } from '../types'
+import { parseSemanticStatusResponse } from '../types/semantic'
 import { mockDashboard, mockMappings, mockOntologyGraph, mockQueryResult } from './mockData'
 
 const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+export const AUTH_TOKEN_STORAGE_KEY = 'si-auth-token'
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -19,6 +22,83 @@ const api = axios.create({
 })
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export const setAuthToken = (token: string): void => {
+  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+}
+
+export const clearAuthToken = (): void => {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
+  } catch {
+    // ignore storage failures
+  }
+}
+
+api.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    const maybeResponse = error as { response?: { status?: number } }
+    if (maybeResponse.response?.status === 401) {
+      clearAuthToken()
+    }
+    return Promise.reject(error)
+  },
+)
+
+interface LoginResponse {
+  access_token: string
+  token_type: 'bearer'
+  expires_in: number
+  role: 'admin' | 'user'
+}
+
+interface SemanticAskApiResponse {
+  answer: unknown
+  sql_used: string | null
+  sources_touched: string[]
+  provenance: Record<string, unknown>
+  latency_ms: number
+  disambiguation_required: boolean
+  candidates: string[]
+  notes: string
+  ambiguity_error: boolean
+}
+
+export const login = async (username: string, password: string): Promise<void> => {
+  if (IS_MOCK) {
+    await delay(250)
+    const fake = `mock.${btoa(`${username}:${Date.now()}`)}.token`
+    setAuthToken(fake)
+    return
+  }
+
+  const form = new URLSearchParams()
+  form.set('username', username)
+  form.set('password', password)
+
+  const response = await api.post<LoginResponse>('/api/auth/token', form.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+  setAuthToken(response.data.access_token)
+}
 
 // ── Health ──────────────────────────────────────────────────────────────────────
 
@@ -58,7 +138,37 @@ export const runQuery = async (question: string): Promise<QueryResult> => {
     await delay(1200)
     return { ...mockQueryResult, question }
   }
-  return api.post<QueryResult>('/api/query', { question }).then((r) => r.data)
+
+  const semantic = await api
+    .post<SemanticAskApiResponse>('/api/semantic/ask', { question })
+    .then((r) => r.data)
+
+  const answer = semantic.answer
+  let rows: Record<string, unknown>[] = []
+  if (Array.isArray(answer)) {
+    rows = answer.map((item) => {
+      if (item && typeof item === 'object') return item as Record<string, unknown>
+      return { value: item as unknown }
+    })
+  } else if (answer && typeof answer === 'object') {
+    rows = [answer as Record<string, unknown>]
+  } else if (answer !== null && answer !== undefined) {
+    rows = [{ value: answer }]
+  }
+
+  const ontologyIntent = (
+    ((semantic.provenance?.ontology_intent as Record<string, unknown> | undefined)?.intent_type as string | undefined)
+      ?? 'unknown'
+  )
+  const connectors = semantic.sources_touched.length ? semantic.sources_touched.join(', ') : 'n/a'
+
+  return {
+    question,
+    interpreted_as: `intent=${ontologyIntent}`,
+    sql_query: semantic.sql_used ?? '-- deterministic semantic-layer query plan',
+    results: rows,
+    summary: semantic.notes || `Semantic query executed using connectors: ${connectors}`,
+  }
 }
 
 // ── Data ────────────────────────────────────────────────────────────────────────
@@ -66,4 +176,22 @@ export const runQuery = async (question: string): Promise<QueryResult> => {
 export const fetchTableData = (table: string, page = 1, pageSize = 20) => {
   if (IS_MOCK) return Promise.resolve({ table, total: 0, page, page_size: pageSize, data: [] } as PaginatedData)
   return api.get<PaginatedData>(`/api/data/${table}`, { params: { page, page_size: pageSize } }).then((r) => r.data)
+}
+
+// ── Semantic layer ─────────────────────────────────────────────────────────────
+
+export const fetchSemanticStatus = async (): Promise<SemanticStatusResponse> => {
+  if (IS_MOCK) {
+    await delay(250)
+    return {
+      loaded: false,
+      entities: [],
+      kg_nodes: 0,
+      kg_edges: 0,
+      metadata_rows: 0,
+      sources: [],
+      dedup_count: 0,
+    }
+  }
+  return api.get<unknown>('/api/semantic/status').then((r) => parseSemanticStatusResponse(r.data))
 }
