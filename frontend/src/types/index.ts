@@ -48,7 +48,8 @@ export interface DashboardData {
 export type PropertyType = 'string' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'text' | 'uuid' | 'fk'
 
 export interface OntologyProperty {
-  name: string
+  name: string           // semantic concept name (what you call it in queries)
+  physicalName?: string  // physical column/field name in the source DB (if different from name)
   type: PropertyType
   required?: boolean
   unique?: boolean
