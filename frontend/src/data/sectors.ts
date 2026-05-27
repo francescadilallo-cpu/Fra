@@ -46,30 +46,129 @@ export const SECTORS: Record<SectorId, SectorConfig> = {
     connectors: ['OrionSales ERP (PostgreSQL)', 'ClientHub CRM (SQLite)', 'HR CSV', 'PIM JSON'],
     ontology: {
       nodes: [
-        // CRM — ClientHub (SQLite)
-        { id: 'Customer',        type: 'ontologyNode', position: { x: 100,  y: 200 }, data: { label: 'Customer',        uri: 'aw:Customer',        db_table: 'account',              row_count: 19829, properties: [p('accountId','integer',{required:true,unique:true}), p('accountNumber','string',{unique:true}), p('name','string',{required:true}), p('customerType','string'), p('territory','string')] } },
-        // ERP — OrionSales (PostgreSQL)
-        { id: 'SalesOrder',      type: 'ontologyNode', position: { x: 700,  y: 200 }, data: { label: 'SalesOrder',      uri: 'aw:SalesOrder',      db_table: 'sales_order_header',   row_count: 31465, properties: [p('orderId','integer',{required:true,unique:true}), p('orderDate','date',{required:true}), p('shipDate','date'), p('status','string'), p('subtotalAmount','decimal'), p('totalDue','decimal'), p('onlineOrderFlag','boolean')] } },
-        { id: 'SalesOrderLine',  type: 'ontologyNode', position: { x: 700,  y: 450 }, data: { label: 'SalesOrderLine',  uri: 'aw:SalesOrderLine',  db_table: 'sales_order_line',     row_count: 121317, properties: [p('lineId','integer',{required:true,unique:true}), p('quantity','integer',{required:true}), p('unitPrice','decimal',{required:true}), p('lineTotal','decimal'), p('offerRef','integer')] } },
-        // PIM — JSON file
-        { id: 'Product',         type: 'ontologyNode', position: { x: 1100, y: 200 }, data: { label: 'Product',         uri: 'aw:Product',         db_table: 'product_catalog_pim',  row_count: 504,   properties: [p('internalId','string',{required:true,unique:true}), p('name','string',{required:true}), p('category','string'), p('subcategory','string'), p('listPrice','decimal'), p('color','string')] } },
-        // ERP
-        { id: 'Salesperson',     type: 'ontologyNode', position: { x: 400,  y: 50  }, data: { label: 'Salesperson',     uri: 'aw:Salesperson',     db_table: 'salesperson',          row_count: 17,    properties: [p('salesPersonId','integer',{required:true,unique:true}), p('salesQuota','decimal'), p('bonus','decimal'), p('commissionPct','decimal'), p('salesYTD','decimal')] } },
-        // HR — CSV file (Italian schema)
-        { id: 'Employee',        type: 'ontologyNode', position: { x: 100,  y: 450 }, data: { label: 'Employee',        uri: 'aw:Employee',        db_table: 'dipendenti_hr',        row_count: 290,   properties: [p('matricolaDip','string',{required:true,unique:true}), p('cognome','string',{required:true}), p('nome','string',{required:true}), p('ruolo','string'), p('dataNascita','date'), p('dataAssunzione','date')] } },
-        // ERP
-        { id: 'Territory',       type: 'ontologyNode', position: { x: 400,  y: 450 }, data: { label: 'Territory',       uri: 'aw:Territory',       db_table: 'territory',            row_count: 10,    properties: [p('territoryId','integer',{required:true,unique:true}), p('name','string',{required:true}), p('countryRegion','string'), p('group','string'), p('salesYTD','decimal')] } },
-        { id: 'Offer',           type: 'ontologyNode', position: { x: 1100, y: 450 }, data: { label: 'Offer',           uri: 'aw:Offer',           db_table: 'offer',                row_count: 16,    properties: [p('offerId','integer',{required:true,unique:true}), p('description','string',{required:true}), p('discountPct','decimal'), p('type','string'), p('minQty','integer'), p('maxQty','integer')] } },
+        // ── CRM — ClientHub (SQLite) ─────────────────────────────────────────────
+        { id: 'Customer', type: 'ontologyNode', position: { x: 80, y: 220 }, data: {
+          label: 'Customer', uri: 'aw:Customer', db_table: 'crm.accounts', row_count: 19829,
+          properties: [
+            p('accountId',     'integer', { required: true, unique: true }),
+            p('companyName',   'string',  { required: true }),
+            p('creditLimit',   'decimal'),
+            p('country',       'string'),
+            p('segment',       'string'),
+            p('email',         'string'),
+            p('phone',         'string'),
+          ],
+        }},
+        // ── ERP — OrionSales (PostgreSQL) ────────────────────────────────────────
+        { id: 'SalesOrder', type: 'ontologyNode', position: { x: 480, y: 100 }, data: {
+          label: 'SalesOrder', uri: 'aw:SalesOrder', db_table: 'erp.SalesOrder', row_count: 31465,
+          properties: [
+            p('orderId',          'integer', { required: true, unique: true }),
+            p('orderDate',        'date',    { required: true }),
+            p('shipDate',         'date'),
+            p('dueDate',          'date'),
+            p('status',           'string'),
+            p('subtotalAmount',   'decimal'),
+            p('taxAmt',           'decimal'),
+            p('freight',          'decimal'),
+            p('totalDue',         'decimal'),
+            p('onlineOrderFlag',  'boolean'),
+            p('salesPersonId',    'fk',     { fkTarget: 'Salesperson' }),
+            p('customer_ref',     'fk',     { fkTarget: 'Customer' }),
+            p('territoryId',      'fk',     { fkTarget: 'Territory' }),
+          ],
+        }},
+        { id: 'SalesOrderLine', type: 'ontologyNode', position: { x: 480, y: 400 }, data: {
+          label: 'SalesOrderLine', uri: 'aw:SalesOrderLine', db_table: 'erp.SalesOrderLine', row_count: 121317,
+          properties: [
+            p('lineId',           'integer', { required: true, unique: true }),
+            p('orderId',          'fk',      { fkTarget: 'SalesOrder' }),
+            p('productId',        'fk',      { fkTarget: 'Product' }),
+            p('quantity',         'integer', { required: true }),
+            p('unitPrice',        'decimal', { required: true }),
+            p('unitPriceDiscount','decimal'),
+            p('lineTotal',        'decimal'),
+          ],
+        }},
+        { id: 'Salesperson', type: 'ontologyNode', position: { x: 260, y: -60 }, data: {
+          label: 'Salesperson', uri: 'aw:Salesperson', db_table: 'erp.SalesPerson', row_count: 17,
+          properties: [
+            p('salesPersonId', 'integer', { required: true, unique: true }),
+            p('salesQuota',    'decimal'),
+            p('salesYTD',      'decimal'),
+            p('salesLastYear', 'decimal'),
+            p('bonus',         'decimal'),
+            p('commissionPct', 'decimal'),
+            p('territoryId',   'fk', { fkTarget: 'Territory' }),
+          ],
+        }},
+        { id: 'Territory', type: 'ontologyNode', position: { x: 260, y: 380 }, data: {
+          label: 'Territory', uri: 'aw:Territory', db_table: 'erp.SalesTerritory', row_count: 10,
+          properties: [
+            p('territoryId',   'integer', { required: true, unique: true }),
+            p('name',          'string',  { required: true }),
+            p('countryRegion', 'string'),
+            p('group',         'string'),
+            p('salesYTD',      'decimal'),
+            p('salesLastYear', 'decimal'),
+          ],
+        }},
+        // ── PIM — JSON file ─────────────────────────────────────────────────────
+        { id: 'Product', type: 'ontologyNode', position: { x: 860, y: 220 }, data: {
+          label: 'Product', uri: 'aw:Product', db_table: 'pim.product_catalog', row_count: 504,
+          properties: [
+            p('internalId',   'string',  { required: true, unique: true }),
+            p('name',         'string',  { required: true }),
+            p('category',     'string'),
+            p('subcategory',  'string'),
+            p('listPrice',    'decimal'),
+            p('standardCost', 'decimal'),
+            p('color',        'string'),
+            p('size',         'string'),
+            p('weight',       'decimal'),
+          ],
+        }},
+        // ── HR — CSV file (Italian schema) ──────────────────────────────────────
+        { id: 'Employee', type: 'ontologyNode', position: { x: 80, y: 520 }, data: {
+          label: 'Employee', uri: 'aw:Employee', db_table: 'hr.dipendenti_hr', row_count: 290,
+          properties: [
+            p('matricolaDip',  'string', { required: true, unique: true }),
+            p('cognome',       'string', { required: true }),
+            p('nome',          'string', { required: true }),
+            p('ruolo',         'string'),
+            p('stipendio',     'decimal'),
+            p('repartoId',     'integer'),
+            p('dataNascita',   'date'),
+            p('dataAssunzione','date'),
+          ],
+        }},
+        // ── Special Offer — ERP ─────────────────────────────────────────────────
+        { id: 'Offer', type: 'ontologyNode', position: { x: 860, y: 480 }, data: {
+          label: 'Offer', uri: 'aw:Offer', db_table: 'erp.SpecialOffer', row_count: 16,
+          properties: [
+            p('offerId',      'integer', { required: true, unique: true }),
+            p('description',  'string',  { required: true }),
+            p('discountPct',  'decimal'),
+            p('type',         'string'),
+            p('category',     'string'),
+            p('minQty',       'integer'),
+            p('maxQty',       'integer'),
+            p('startDate',    'date'),
+            p('endDate',      'date'),
+          ],
+        }},
       ],
       edges: [
-        // ⚡ = cross-source bridge (identity join across systems)
-        { id: 'e1', source: 'SalesOrder',     target: 'Customer',    label: '⚡ PLACED_BY',    cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488' }, labelStyle: { fill: '#0D9488', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e2', source: 'SalesOrder',     target: 'Salesperson', label: '⚡ SOLD_BY',      cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488' }, labelStyle: { fill: '#0D9488', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e3', source: 'SalesOrder',     target: 'Territory',   label: 'IN_TERRITORY',    cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#6366F1' }, labelStyle: { fill: '#6366F1', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e4', source: 'SalesOrderLine', target: 'SalesOrder',  label: 'PART_OF',          cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#F59E0B' }, labelStyle: { fill: '#F59E0B', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e5', source: 'SalesOrderLine', target: 'Product',     label: '⚡ OF_PRODUCT',   cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488' }, labelStyle: { fill: '#0D9488', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e6', source: 'SalesOrderLine', target: 'Offer',       label: 'WITH_OFFER',       cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#8B5CF6' }, labelStyle: { fill: '#8B5CF6', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
-        { id: 'e7', source: 'Salesperson',    target: 'Employee',    label: '⚡ IS_A',          cardinality: '1:1', type: 'smoothstep', animated: true,  style: { stroke: '#EC4899' }, labelStyle: { fill: '#EC4899', fontSize: 11 }, markerEnd: { type: 'ArrowClosed' } },
+        // ⚡ cross-source bridges — ERP ↔ CRM, ERP ↔ HR, ERP ↔ PIM
+        { id: 'e-placed-by',   source: 'SalesOrder',     target: 'Customer',    label: '⚡ PLACED_BY (93.2%)',  cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488', strokeWidth: 2 }, labelStyle: { fill: '#0D9488', fontSize: 10, fontWeight: 600 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-sold-by',     source: 'SalesOrder',     target: 'Salesperson', label: '⚡ SOLD_BY (100%)',    cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488', strokeWidth: 2 }, labelStyle: { fill: '#0D9488', fontSize: 10, fontWeight: 600 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-of-product',  source: 'SalesOrderLine', target: 'Product',     label: '⚡ OF_PRODUCT (99.6%)', cardinality: 'N:1', type: 'smoothstep', animated: true,  style: { stroke: '#0D9488', strokeWidth: 2 }, labelStyle: { fill: '#0D9488', fontSize: 10, fontWeight: 600 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-is-a',        source: 'Salesperson',    target: 'Employee',    label: '⚡ IS_A (ERP↔HR)',     cardinality: '1:1', type: 'smoothstep', animated: true,  style: { stroke: '#EC4899', strokeWidth: 2 }, labelStyle: { fill: '#EC4899', fontSize: 10, fontWeight: 600 }, markerEnd: { type: 'ArrowClosed' } },
+        // intra-ERP relationships
+        { id: 'e-part-of',     source: 'SalesOrderLine', target: 'SalesOrder',  label: 'PART_OF',              cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#F59E0B', strokeWidth: 1.5 }, labelStyle: { fill: '#F59E0B', fontSize: 10 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-territory',   source: 'SalesOrder',     target: 'Territory',   label: 'IN_TERRITORY',         cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#6366F1', strokeWidth: 1.5 }, labelStyle: { fill: '#6366F1', fontSize: 10 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-rep-terr',    source: 'Salesperson',    target: 'Territory',   label: 'COVERS',               cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#6366F1', strokeWidth: 1.5, strokeDasharray: '4 2' }, labelStyle: { fill: '#6366F1', fontSize: 10 }, markerEnd: { type: 'ArrowClosed' } },
+        { id: 'e-with-offer',  source: 'SalesOrderLine', target: 'Offer',       label: 'WITH_OFFER',           cardinality: 'N:1', type: 'smoothstep', animated: false, style: { stroke: '#8B5CF6', strokeWidth: 1.5 }, labelStyle: { fill: '#8B5CF6', fontSize: 10 }, markerEnd: { type: 'ArrowClosed' } },
       ],
     },
   },

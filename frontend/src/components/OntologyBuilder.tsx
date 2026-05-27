@@ -826,7 +826,7 @@ function buildAddClassWithLinkIntent(
 }
 
 // Build initial canvas state by merging sector ontology + saved extensions
-function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string>; labelStyle: Record<string, string | number> }[] } }, sectorId: string): { nodes: Node[]; edges: Edge[] } {
+function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string | number>; labelStyle: Record<string, string | number> }[] } }, sectorId: string): { nodes: Node[]; edges: Edge[] } {
   const ext = loadExtension(sectorId)
 
   // Base nodes (possibly with extra properties added via builder)
@@ -2061,6 +2061,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // ── Edit existing entity modal ──────────────────────────────────────────────
+const ALL_PROP_TYPES: PropertyType[] = ['string', 'integer', 'decimal', 'boolean', 'date', 'datetime', 'text', 'uuid', 'fk']
+
 function EditEntityModal({
   entity,
   onSave,
@@ -2075,16 +2077,26 @@ function EditEntityModal({
   const [label, setLabel] = useState(entity.label)
   const [dbTable, setDbTable] = useState(entity.db_table ?? '')
   const [properties, setProperties] = useState<OntologyProperty[]>(entity.properties)
-  const [newProp, setNewProp] = useState('')
+  const [newPropName, setNewPropName] = useState('')
+  const [newPropPhysical, setNewPropPhysical] = useState('')
+  const [newPropType, setNewPropType] = useState<PropertyType>('string')
 
   function addProperty() {
-    const name = normalizeProperty(newProp.trim())
+    const name = normalizeProperty(newPropName.trim())
     if (!name || properties.some((x) => x.name === name)) return
-    setProperties([...properties, { name, type: inferType(name) }])
-    setNewProp('')
+    const physicalName = newPropPhysical.trim() || undefined
+    setProperties([...properties, { name, physicalName, type: newPropType, required: false, unique: false }])
+    setNewPropName('')
+    setNewPropPhysical('')
+    setNewPropType('string')
   }
-  function removeProperty(name: string) {
-    setProperties(properties.filter((x) => x.name !== name))
+
+  function updateProperty(idx: number, patch: Partial<OntologyProperty>) {
+    setProperties(properties.map((p, i) => i === idx ? { ...p, ...patch } : p))
+  }
+
+  function removeProperty(idx: number) {
+    setProperties(properties.filter((_, i) => i !== idx))
   }
 
   function handleSave() {
@@ -2103,7 +2115,7 @@ function EditEntityModal({
   return (
     <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -2127,58 +2139,104 @@ function EditEntityModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <Field label="Class name">
-            <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
-            />
-            <p className="text-[11px] text-slate-400 mt-1">URI and DB table will be updated accordingly.</p>
-          </Field>
-
-          <Field label="DB table">
-            <input
-              type="text"
-              value={dbTable}
-              onChange={(e) => setDbTable(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
-              placeholder="(no mapping)"
-            />
-          </Field>
-
-          <Field label={`Properties (${properties.length})`}>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {properties.length === 0 && (
-                <span className="text-xs text-slate-400 italic">No properties.</span>
-              )}
-              {properties.map((p) => (
-                <span key={p.name} className="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-800 border border-teal-200 rounded-full px-2 py-1 font-mono">
-                  {p.name}
-                  <span className={`text-[9px] px-1 rounded ${TYPE_COLORS[p.type] ?? 'bg-slate-100 text-slate-500'}`}>{p.type}</span>
-                  <button onClick={() => removeProperty(p.name)} className="text-teal-600 hover:text-teal-900">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Class name">
               <input
                 type="text"
-                value={newProp}
-                onChange={(e) => setNewProp(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addProperty())}
-                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
-                placeholder="add property..."
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none"
               />
-              <button
-                onClick={addProperty}
-                disabled={!newProp.trim()}
-                className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add
-              </button>
+            </Field>
+            <Field label="DB table">
+              <input
+                type="text"
+                value={dbTable}
+                onChange={(e) => setDbTable(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-teal-400 focus:ring-2 focus:ring-teal-100 outline-none font-mono"
+                placeholder="(no mapping)"
+              />
+            </Field>
+          </div>
+
+          <Field label={`Properties (${properties.length})`}>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              {/* Table header */}
+              <div className="grid grid-cols-[1fr_1fr_90px_28px_28px_28px] gap-x-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                <span>Semantic name</span>
+                <span>Physical column</span>
+                <span>Type</span>
+                <span className="text-center">Req</span>
+                <span className="text-center">Uniq</span>
+                <span />
+              </div>
+              {/* Rows */}
+              <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                {properties.length === 0 && (
+                  <p className="px-3 py-3 text-xs text-slate-400 italic text-center">No properties yet — add one below.</p>
+                )}
+                {properties.map((p, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_1fr_90px_28px_28px_28px] gap-x-2 px-3 py-1.5 items-center hover:bg-slate-50">
+                    <input
+                      value={p.name}
+                      onChange={e => updateProperty(idx, { name: e.target.value })}
+                      className="px-2 py-1 text-xs font-mono border border-slate-200 rounded focus:border-teal-400 outline-none w-full"
+                    />
+                    <input
+                      value={p.physicalName ?? ''}
+                      onChange={e => updateProperty(idx, { physicalName: e.target.value || undefined })}
+                      placeholder="= semantic"
+                      className="px-2 py-1 text-xs font-mono border border-slate-200 rounded focus:border-teal-400 outline-none w-full text-slate-500 placeholder:text-slate-300 placeholder:not-italic"
+                    />
+                    <select
+                      value={p.type}
+                      onChange={e => updateProperty(idx, { type: e.target.value as PropertyType })}
+                      className="px-1.5 py-1 text-xs border border-slate-200 rounded focus:border-teal-400 outline-none bg-white w-full"
+                    >
+                      {ALL_PROP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input type="checkbox" checked={!!p.required} onChange={e => updateProperty(idx, { required: e.target.checked })} className="mx-auto accent-teal-600" />
+                    <input type="checkbox" checked={!!p.unique} onChange={e => updateProperty(idx, { unique: e.target.checked })} className="mx-auto accent-teal-600" />
+                    <button onClick={() => removeProperty(idx)} className="text-slate-300 hover:text-rose-500 transition-colors flex items-center justify-center">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {/* Add row */}
+              <div className="grid grid-cols-[1fr_1fr_90px_28px_28px_28px] gap-x-2 px-3 py-2 bg-slate-50/80 border-t border-slate-200 items-center">
+                <input
+                  value={newPropName}
+                  onChange={e => setNewPropName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addProperty())}
+                  placeholder="name…"
+                  className="px-2 py-1.5 text-xs font-mono border border-slate-200 rounded focus:border-teal-400 outline-none w-full"
+                />
+                <input
+                  value={newPropPhysical}
+                  onChange={e => setNewPropPhysical(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addProperty())}
+                  placeholder="physical col…"
+                  className="px-2 py-1.5 text-xs font-mono border border-slate-200 rounded focus:border-teal-400 outline-none w-full text-slate-500"
+                />
+                <select
+                  value={newPropType}
+                  onChange={e => setNewPropType(e.target.value as PropertyType)}
+                  className="px-1.5 py-1.5 text-xs border border-slate-200 rounded focus:border-teal-400 outline-none bg-white w-full"
+                >
+                  {ALL_PROP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <span />
+                <span />
+                <button
+                  onClick={addProperty}
+                  disabled={!newPropName.trim()}
+                  className="text-teal-600 hover:text-teal-800 disabled:text-slate-300 transition-colors flex items-center justify-center"
+                  title="Add property"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </Field>
         </div>

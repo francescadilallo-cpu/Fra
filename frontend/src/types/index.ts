@@ -48,8 +48,8 @@ export interface DashboardData {
 export type PropertyType = 'string' | 'integer' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'text' | 'uuid' | 'fk'
 
 export interface OntologyProperty {
-  name: string
-  physicalName?: string
+  name: string           // semantic concept name (what you call it in queries)
+  physicalName?: string  // physical column/field name in the source DB (if different from name)
   type: PropertyType
   required?: boolean
   unique?: boolean
@@ -78,7 +78,7 @@ export interface OntologyEdge {
   label: string
   type: string
   animated: boolean
-  style: Record<string, string>
+  style: Record<string, string | number>
   labelStyle: Record<string, string | number>
   markerEnd: Record<string, string>
   cardinality?: '1:1' | '1:N' | 'N:1' | 'N:M'
@@ -131,4 +131,4 @@ export interface PaginatedData {
 
 // ── Nav ────────────────────────────────────────────────────────────────────────
 
-export type NavTab = 'overview' | 'usecases' | 'sembuilder' | 'dashboard' | 'ontology' | 'builder' | 'agents' | 'sources' | 'data' | 'query' | 'mappings' | 'process' | 'config' | 'compliance'
+export type NavTab = 'overview' | 'usecases' | 'sembuilder' | 'dashboard' | 'ontology' | 'builder' | 'agents' | 'sources' | 'data' | 'query' | 'process' | 'config' | 'compliance'

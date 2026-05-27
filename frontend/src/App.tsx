@@ -6,7 +6,6 @@ import Dashboard from './components/Dashboard'
 import OntologyGraph from './components/OntologyGraph'
 import OntologyBuilder from './components/OntologyBuilder'
 import QueryInterface from './components/QueryInterface'
-import MappingView from './components/MappingView'
 import ProcessView from './components/ProcessView'
 import ConfigurationView from './components/ConfigurationView'
 import AgentsView from './components/AgentsView'
@@ -97,6 +96,16 @@ export default function App() {
     return () => window.removeEventListener('create-agent-from-entity', handler)
   }, [])
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { question } = (e as CustomEvent<{ question: string }>).detail ?? {}
+      if (question) sessionStorage.setItem('query-prefill', question)
+      setActiveTab('query')
+    }
+    window.addEventListener('navigate-to-query', handler)
+    return () => window.removeEventListener('navigate-to-query', handler)
+  }, [])
+
   // Logout: archives the active company so all its data is preserved, then
   // clears the live state and onboarding flag. Re-entry triggers the wizard.
   // Previously-saved companies remain accessible via the dropdown after the
@@ -176,7 +185,6 @@ export default function App() {
         {activeTab === 'sources' && <DataSourcesView />}
         {activeTab === 'data' && <DataExplorer />}
         {activeTab === 'query' && <QueryInterface />}
-        {activeTab === 'mappings' && <MappingView />}
         {activeTab === 'process' && <ProcessView />}
         {activeTab === 'compliance' && <ComplianceView />}
         {activeTab === 'config' && <ConfigurationView />}
