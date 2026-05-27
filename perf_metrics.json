@@ -1,0 +1,19 @@
+{
+  "timestamp_utc": "2026-05-27T22:51:16.116006+00:00",
+  "git_commit_short": "f26fa12",
+  "question_count": 21,
+  "status_summary": {
+    "ok_200": 21,
+    "non_200": 0
+  },
+  "pure_deterministic_layer": {
+    "average_ms": 9290.64,
+    "p50_ms": 3919.63,
+    "p95_ms": 19890.72
+  },
+  "llm_fallback_layer": {
+    "average_ms": 9290.64,
+    "p50_ms": 3919.63,
+    "p95_ms": 19890.72
+  }
+}
