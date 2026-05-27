@@ -1,5 +1,9 @@
 FROM node:20-alpine AS build
 
+# Build-time env var — empty string = relative paths proxied by nginx
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

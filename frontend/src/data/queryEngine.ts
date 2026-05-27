@@ -559,45 +559,6 @@ LIMIT  10`,
       ],
     }),
   },
-  // ── Revenue disambiguation ────────────────────────────────────────────────────
-  {
-    test: q => /\brevenue\b|fatturato|how much.*sold|total.*sales|sales.*total/i.test(q),
-    result: () => ({
-      sql: `-- "fatturato" disambiguation: two valid interpretations
--- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
--- Use total_due for GROSS amount billed to customer
-
-SELECT
-  SUM(subtotalAmount) AS net_revenue,    -- $20,127,070 — commercial "fatturato"
-  SUM(totalDue)       AS gross_revenue,  -- $22,410,568 — incl. tax + freight
-  COUNT(*)            AS order_count,
-  AVG(subtotalAmount) AS avg_order_net
-FROM erp.SalesOrder
-WHERE YEAR(orderDate) = 2014`,
-      rows: [
-        { metric: 'Net revenue (subtotal)', value: '$20,127,070', note: 'Excl. tax + freight — use for "commercial revenue"' },
-        { metric: 'Gross revenue (total_due)', value: '$22,410,568', note: 'Incl. tax + freight — use for "billed amount"' },
-        { metric: 'Order count (2014)', value: '31,465', note: 'ERP OrionSales · all statuses' },
-        { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
-        { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
-      ],
-      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — choose which definition applies below.',
-      interpreted_as: 'SUM(subtotalAmount) ≠ SUM(totalDue) · SalesOrder 2014 · user resolution required',
-      isDisambiguation: true,
-      sources: [SRC.ERP],
-      steps: [
-        '① Term "revenue" / "fatturato" matched → ambiguity detected',
-        '② Definition A: subtotal_amount = $20,127,070 (commercial net, excl. tax + freight)',
-        '③ Definition B: total_due = $22,410,568 (billed gross, incl. tax + freight)',
-        '④ Semantic layer paused — awaiting user disambiguation choice',
-      ],
-      followUps: [
-        'Who is the top salesperson by revenue in 2014?',
-        'Show orders by territory ranked by sales YTD',
-        'How many unique customers after CRM deduplication?',
-      ],
-    }),
-  },
   // ── Customer / CRM dedup ──────────────────────────────────────────────────────
   {
     test: q => /customer|client|account|how many.*customer|crm|dedup|duplicate/i.test(q),
@@ -668,7 +629,7 @@ ORDER  BY t.salesYTD DESC`,
         { territory: 'Southeast',      countryRegion: 'US', group: 'North America', salesYTD:  2538667.25, order_count: 1910 },
         { territory: 'Northeast',      countryRegion: 'US', group: 'North America', salesYTD:  2402176.85, order_count: 1833 },
       ],
-      summary: '**Southwest** leads with $10.5M YTD (8,512 orders), followed by **Northwest** ($7.9M). North America $32.2M combined. Europe (UK, France, Germany) $13.6M.',
+      summary: '**Southwest** leads with $10.5M YTD (8,512 orders), followed by **Northwest** ($7.9M). North America $33.2M combined. Europe (UK, France, Germany) $13.6M.',
       interpreted_as: 'ERP.SalesTerritory LEFT JOIN SalesOrder · GROUP BY territory · ORDER BY salesYTD DESC',
       chartData: {
         type: 'bar',
@@ -693,7 +654,7 @@ ORDER  BY t.salesYTD DESC`,
   },
   // ── Products ──────────────────────────────────────────────────────────────────
   {
-    test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q),
+    test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q) && !/\bcategor/i.test(q),
     result: () => ({
       sql: `-- ERP × PIM cross-source join
 -- PIM product_catalog (JSON, 504 products) joined to ERP SalesOrderLine
@@ -711,16 +672,16 @@ GROUP BY p.internal_id
 ORDER BY revenue DESC
 LIMIT    10`,
       rows: [
-        { name: 'Mountain-200 Black, 38',  category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 2049.00, revenue: 261435.60, units_sold: 3 },
-        { name: 'Road-150 Red, 62',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice: 3578.27, revenue: 106419.60, units_sold: 2 },
-        { name: 'Touring-1000 Blue, 60',   category: 'Bikes', subcategory: 'Touring Bikes',  listPrice: 2384.07, revenue:  32726.48, units_sold: 1 },
-        { name: 'Mountain-100 Silver, 44', category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 3399.99, revenue:  14289.93, units_sold: 5 },
-        { name: 'Road-650 Red, 58',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice:  782.99, revenue:   8159.97, units_sold: 6 },
-        { name: 'Long-Sleeve Logo Jersey', category: 'Clothing', subcategory: 'Jerseys',     listPrice:   49.99, revenue:   4079.98, units_sold: 2 },
-        { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 1 },
-        { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 1 },
+        { name: 'Mountain-200 Black, 38',  category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 2049.00, revenue: 261435.60, units_sold: 139 },
+        { name: 'Road-150 Red, 62',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice: 3578.27, revenue: 106419.60, units_sold: 32  },
+        { name: 'Touring-1000 Blue, 60',   category: 'Bikes', subcategory: 'Touring Bikes',  listPrice: 2384.07, revenue:  32726.48, units_sold: 15  },
+        { name: 'Mountain-100 Silver, 44', category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 3399.99, revenue:  14289.93, units_sold: 5   },
+        { name: 'Road-650 Red, 58',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice:  782.99, revenue:   8159.97, units_sold: 11  },
+        { name: 'Long-Sleeve Logo Jersey', category: 'Clothing', subcategory: 'Jerseys',     listPrice:   49.99, revenue:   4079.98, units_sold: 89  },
+        { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 63  },
+        { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 245 },
       ],
-      summary: 'Top product: **Mountain-200 Black, 38** ($261K, 3 units). All top 5 are bikes. 47 PIM products had no matching ERP orders (orphans). Cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
+      summary: 'Top product: **Mountain-200 Black, 38** ($261K, 139 units). All top 5 are bikes. 47 PIM products have no ERP order history (orphans). Cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
       interpreted_as: 'PIM.product_catalog JOIN ERP.SalesOrderLine · SUM(lineTotal) · ORDER BY revenue DESC',
       chartData: {
         type: 'bar',
@@ -732,8 +693,8 @@ LIMIT    10`,
       sources: [SRC.ERP, SRC.PIM],
       steps: [
         '① PIM product_catalog loaded: 504 products (JSON, field: internal_id)',
-        '② Bridge resolved: productId ↔ internal_id (457/504 matched — 99.6%)',
-        '③ 47 orphan products flagged (in PIM, no ERP sales history)',
+        '② Bridge resolved: productId ↔ internal_id (457/459 ERP products matched — 99.6%)',
+        '③ 47 PIM products have no ERP sales history (PIM orphans — unlaunched or discontinued)',
         '④ Cross-join ERP.SalesOrderLine × PIM · GROUP BY product · SUM(lineTotal)',
       ],
       followUps: [
@@ -789,7 +750,8 @@ LIMIT  10`,
   },
   // ── Orders ────────────────────────────────────────────────────────────────────
   {
-    test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q),
+    test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q)
+      && !/average.*order|avg.*order|\border.*value\b/i.test(q),
     result: () => ({
       sql: `SELECT orderId,
        orderDate,
@@ -800,7 +762,7 @@ LIMIT  10`,
        CASE WHEN onlineOrderFlag THEN 'Online' ELSE 'In-store' END AS channel
 FROM   erp.SalesOrder
 ORDER  BY orderDate DESC
-LIMIT  12`,
+LIMIT  10`,
       rows: [
         { orderId: 75124, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  53209.80, totalDue:  56994.49, channel: 'In-store' },
         { orderId: 75123, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  87145.20, totalDue:  93345.65, channel: 'In-store' },
@@ -810,11 +772,11 @@ LIMIT  12`,
         { orderId: 75119, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   2039.99, totalDue:   2185.98, channel: 'Online'   },
         { orderId: 75118, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   1429.00, totalDue:   1532.21, channel: 'Online'   },
         { orderId: 75117, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Shipped',    subtotalAmount:      9.99, totalDue:     13.07, channel: 'Online'   },
-        { orderId: 43662, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  28832.53, totalDue:  32474.93, channel: 'In-store' },
-        { orderId: 43661, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  32726.48, totalDue:  36865.80, channel: 'In-store' },
+        { orderId: 75116, orderDate: '2014-11-29', shipDate: '2014-12-06', status: 'Shipped',    subtotalAmount:    732.40, totalDue:    784.77, channel: 'Online'   },
+        { orderId: 75115, orderDate: '2014-11-28', shipDate: '2014-12-05', status: 'Shipped',    subtotalAmount:   3578.27, totalDue:   3831.82, channel: 'In-store' },
       ],
-      summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Note: `subtotalAmount` ≠ `totalDue` — tax + freight adds ~11%.',
-      interpreted_as: 'ERP.SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+      summary: 'Showing **10 most recent orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Note: `subtotalAmount` ≠ `totalDue` — tax + freight adds ~11%.',
+      interpreted_as: 'ERP.SalesOrder · ORDER BY orderDate DESC · LIMIT 10',
       sources: [SRC.ERP],
       steps: [
         '① ERP.SalesOrder loaded: 31,465 rows total',
@@ -846,16 +808,16 @@ FROM kg.bridge_validation_report
 ORDER BY match_pct DESC`,
       rows: [
         { bridge_name: 'SOLD_BY',       source_a: 'ERP SalesPerson', field_a: 'salesPersonId', source_b: 'HR CSV',      field_b: 'matricolaDip', total_a: 14,     matched: 14,    unmatched: 0,  match_pct: '100.0%' },
-        { bridge_name: 'OF_PRODUCT',    source_a: 'ERP OrderLine',   field_a: 'productId',     source_b: 'PIM JSON',    field_b: 'internal_id', total_a: 504,    matched: 457,   unmatched: 47, match_pct: '99.6%'  },
+        { bridge_name: 'OF_PRODUCT',    source_a: 'ERP OrderLine',   field_a: 'productId',     source_b: 'PIM JSON',    field_b: 'internal_id', total_a: 459,    matched: 457,   unmatched: 2,  match_pct: '99.6%'  },
         { bridge_name: 'PLACED_BY',     source_a: 'ERP SalesOrder',  field_a: 'customer_ref',  source_b: 'CRM ClientHub', field_b: 'accountId', total_a: 19829,  matched: 18484, unmatched: 1345, match_pct: '93.2%' },
       ],
-      summary: '3 cross-source bridges validated. **SOLD_BY** (ERP × HR): 100% — all 14 sales reps matched. **OF_PRODUCT** (ERP × PIM): 99.6% — 47 orphan products. **PLACED_BY** (ERP × CRM): 93.2% — 1,345 CRM-only prospects. KG: **193,062 nodes · 313,193 edges**.',
+      summary: '3 cross-source bridges validated. **SOLD_BY** (ERP × HR): 100% — all 14 sales reps matched. **OF_PRODUCT** (ERP × PIM): 99.6% (457/459 ERP products) — 47 PIM orphans. **PLACED_BY** (ERP × CRM): 93.2% — 1,345 CRM-only prospects. KG: **193,062 nodes · 313,193 edges**.',
       interpreted_as: 'kg.bridge_validation_report · 3 bridges · match rates',
       sources: [SRC.ERP, SRC.CRM, SRC.HR, SRC.PIM, SRC.KG],
       steps: [
         '① Knowledge Graph loaded: 193,062 nodes · 313,193 edges',
         '② Bridge SOLD_BY: salesPersonId ↔ matricolaDip → 14/14 (100%)',
-        '③ Bridge OF_PRODUCT: productId ↔ internal_id → 457/504 (99.6%, 47 orphans)',
+        '③ Bridge OF_PRODUCT: productId ↔ internal_id → 457/459 ERP products (99.6%) · 47 PIM orphans',
         '④ Bridge PLACED_BY: customer_ref ↔ accountId → 18,484/19,829 (93.2%)',
       ],
       followUps: [
@@ -898,7 +860,7 @@ ORDER BY revenue DESC`,
       sources: [SRC.ERP, SRC.PIM],
       steps: [
         '① PIM product_catalog: 504 products across 4 categories',
-        '② Bridge OF_PRODUCT: productId ↔ internal_id (457/504 — 99.6%)',
+        '② Bridge OF_PRODUCT: productId ↔ internal_id (457/459 ERP products — 99.6%)',
         '③ GROUP BY category · SUM(lineTotal) for revenue · AVG(listPrice)',
         '④ Bikes = 97 SKUs but 98% of revenue — high unit price drives result',
       ],
@@ -1009,16 +971,16 @@ WHERE YEAR(orderDate) = 2014
 GROUP BY onlineOrderFlag, DATEPART(quarter, orderDate)
 ORDER BY channel, quarter`,
       rows: [
-        { channel: 'In-store', quarter: 'Q1', orders: 901,  avg_net: 2628.16, avg_gross: 2814.23, min_order: 2.29,    max_order: 187487.83 },
-        { channel: 'In-store', quarter: 'Q2', orders: 1102, avg_net: 2851.90, avg_gross: 3054.37, min_order: 5.70,    max_order: 217628.97 },
-        { channel: 'In-store', quarter: 'Q3', orders: 1187, avg_net: 2791.44, avg_gross: 2988.96, min_order: 3.99,    max_order: 189519.73 },
-        { channel: 'In-store', quarter: 'Q4', orders:  616, avg_net: 2380.09, avg_gross: 2549.06, min_order: 0.99,    max_order: 112103.14 },
-        { channel: 'Online',   quarter: 'Q1', orders: 6411, avg_net:  342.41, avg_gross: 366.71,  min_order: 2.29,    max_order:   9887.43 },
-        { channel: 'Online',   quarter: 'Q2', orders: 7102, avg_net:  365.98, avg_gross: 391.90,  min_order: 2.29,    max_order:  12049.37 },
-        { channel: 'Online',   quarter: 'Q3', orders: 7660, avg_net:  382.13, avg_gross: 409.01,  min_order: 2.29,    max_order:  11988.73 },
-        { channel: 'Online',   quarter: 'Q4', orders: 6486, avg_net:  308.97, avg_gross: 331.04,  min_order: 1.99,    max_order:   9437.82 },
+        { channel: 'In-store', quarter: 'Q1', orders: 901,  avg_net: 2628.16, avg_gross: 2926.18, min_order: 2.29,    max_order: 187487.83 },
+        { channel: 'In-store', quarter: 'Q2', orders: 1102, avg_net: 2851.90, avg_gross: 3175.26, min_order: 5.70,    max_order: 217628.97 },
+        { channel: 'In-store', quarter: 'Q3', orders: 1187, avg_net: 2791.44, avg_gross: 3107.91, min_order: 3.99,    max_order: 189519.73 },
+        { channel: 'In-store', quarter: 'Q4', orders:  616, avg_net: 2380.09, avg_gross: 2649.99, min_order: 0.99,    max_order: 112103.14 },
+        { channel: 'Online',   quarter: 'Q1', orders: 6411, avg_net:  273.52, avg_gross: 304.54,  min_order: 2.29,    max_order:   9887.43 },
+        { channel: 'Online',   quarter: 'Q2', orders: 7102, avg_net:  287.26, avg_gross: 319.85,  min_order: 2.29,    max_order:  12049.37 },
+        { channel: 'Online',   quarter: 'Q3', orders: 7660, avg_net:  330.81, avg_gross: 368.25,  min_order: 2.29,    max_order:  11988.73 },
+        { channel: 'Online',   quarter: 'Q4', orders: 6486, avg_net:  540.94, avg_gross: 602.24,  min_order: 1.99,    max_order:   9437.82 },
       ],
-      summary: 'Global avg order net: **$639.65**. In-store avg **$2,704** (7.6× higher than online $356). Q2 is peak for both channels. Largest single order: $217K in-store Q2 2014.',
+      summary: 'Global avg order net: **$639.65**. In-store avg **$2,704** (7.6× higher than online $356). Q2 peak for in-store avg ($2,852). **Q4 highest online avg ($541)** as in-store drops to 616 orders. Largest single order: $217K in-store Q2 2014.',
       interpreted_as: 'ERP.SalesOrder · AVG(subtotalAmount) GROUP BY channel, quarter · 2014',
       sources: [SRC.ERP],
       steps: [
@@ -1192,8 +1154,8 @@ WHERE  YEAR(o.orderDate) = 2014
 GROUP  BY t.territoryId
 ORDER  BY total_overhead DESC`,
       rows: [
-        { territory: 'Southwest',      orders: 8512, total_tax: 906432, total_freight: 226608, total_overhead: 1133040, overhead_pct: '10.8%' },
-        { territory: 'Northwest',      orders: 6438, total_tax: 680145, total_freight: 170036, total_overhead: 850181, overhead_pct: '10.8%' },
+        { territory: 'Southwest',      orders: 8512, total_tax: 800_000, total_freight: 164_000, total_overhead: 964_000, overhead_pct: '10.8%' },
+        { territory: 'Northwest',      orders: 6438, total_tax: 600_000, total_freight: 120_000, total_overhead: 720_000, overhead_pct: '10.8%' },
         { territory: 'Canada',         orders: 4821, total_tax: 0,       total_freight: 127843, total_overhead: 127843, overhead_pct: '1.9%' },
         { territory: 'Australia',      orders: 3944, total_tax: 0,       total_freight: 104634, total_overhead: 104634, overhead_pct: '1.7%' },
         { territory: 'United Kingdom', orders: 3201, total_tax: 0,       total_freight: 84981,  total_overhead: 84981,  overhead_pct: '1.7%' },
@@ -1232,19 +1194,19 @@ GROUP BY so.description, so.category, so.discountPct
 ORDER BY discount_given DESC
 LIMIT 8`,
       rows: [
-        { offer: 'Volume Discount 41 to 60',  category: 'Reseller',   discountPct: '0.02', lines_applied: 4_221, net_revenue: 1_847_312, discount_given: 37_702 },
-        { offer: 'Volume Discount 61 to 100', category: 'Reseller',   discountPct: '0.05', lines_applied: 1_843, net_revenue: 1_214_509, discount_given: 63_921 },
         { offer: 'Mountain-100 Clearance',    category: 'Clearance',  discountPct: '0.35', lines_applied:   318, net_revenue:   184_621, discount_given: 99_411 },
+        { offer: 'Volume Discount 61 to 100', category: 'Reseller',   discountPct: '0.05', lines_applied: 1_843, net_revenue: 1_214_509, discount_given: 63_921 },
         { offer: 'Road-650 Overstock',        category: 'Clearance',  discountPct: '0.30', lines_applied:   241, net_revenue:   117_882, discount_given: 50_521 },
         { offer: 'Touring-3000 Promotion',    category: 'Seasonal',   discountPct: '0.10', lines_applied:   892, net_revenue:   413_221, discount_given: 45_913 },
+        { offer: 'Volume Discount 41 to 60',  category: 'Reseller',   discountPct: '0.02', lines_applied: 4_221, net_revenue: 1_847_312, discount_given: 37_702 },
       ],
       summary: '**5 active offer types** applied to 7,515 order lines. Mountain-100 Clearance deepest discount (35%) — $99K given away but cleared aged inventory. Volume discounts (Reseller tier) account for most lines. Total discount given: **$297,468** (~1.5% of net revenue).',
       interpreted_as: 'ERP.SalesOrderLine × SpecialOffer · unitPriceDiscount > 0 · GROUP BY offer',
       chartData: {
         type: 'bar',
         title: 'Discount given by special offer',
-        labels: ['Volume 41-60', 'Volume 61-100', 'Mountain-100', 'Road-650', 'Touring-3000'],
-        values: [37702, 63921, 99411, 50521, 45913],
+        labels: ['Mountain-100', 'Volume 61-100', 'Road-650', 'Touring-3000', 'Volume 41-60'],
+        values: [99411, 63921, 50521, 45913, 37702],
         unit: '$',
       },
       sources: [SRC.ERP],
@@ -1351,7 +1313,7 @@ ORDER BY margin_pct DESC`,
   },
   // ── HR department headcount and salary ───────────────────────────────────────
   {
-    test: q => /department|reparto|salary.*dept|dept.*salary|stipendio.*reparto|headcount.*dept|org.?chart|department.*headcount/i.test(q),
+    test: q => /department|reparto|org.?chart|headcount.*dept|department.*headcount|salary|stipendio|payroll|\bwage/i.test(q),
     result: () => ({
       sql: `SELECT   d.repartoNome                AS department,
          COUNT(*)                     AS headcount,
@@ -1363,7 +1325,7 @@ FROM     hr.dipendenti_hr d
 GROUP BY d.repartoNome
 ORDER BY headcount DESC`,
       rows: [
-        { department: 'Production',      headcount: 179, avg_salary: 28_241,  min_salary: 18_000, max_salary: 84_000,  total_payroll: 5_055_139 },
+        { department: 'Production',      headcount: 211, avg_salary: 28_241,  min_salary: 18_000, max_salary: 84_000,  total_payroll: 5_958_851 },
         { department: 'Sales',           headcount: 18,  avg_salary: 52_180,  min_salary: 35_000, max_salary: 91_000,  total_payroll: 939_240   },
         { department: 'Engineering',     headcount: 31,  avg_salary: 71_432,  min_salary: 48_000, max_salary: 135_000, total_payroll: 2_214_392 },
         { department: 'Finance',         headcount: 12,  avg_salary: 65_812,  min_salary: 42_000, max_salary: 112_000, total_payroll: 789_744   },
@@ -1371,13 +1333,13 @@ ORDER BY headcount DESC`,
         { department: 'IT',              headcount: 8,   avg_salary: 69_441,  min_salary: 52_000, max_salary: 98_000,  total_payroll: 555_528   },
         { department: 'Executive',       headcount: 4,   avg_salary: 124_500, min_salary: 98_000, max_salary: 165_000, total_payroll: 498_000   },
       ],
-      summary: '**290 employees** across 7 departments. Production is largest (179 FTE, avg $28K). Engineering highest avg salary ($71K, 31 FTE). Total payroll: **$10,405,569/year**. Executive team (4): avg $124,500. Cross-reference: Sales dept ↔ ERP SalesPerson via SOLD_BY bridge (100% match).',
+      summary: '**290 employees** across 7 departments. Production is largest (211 FTE, avg $28K). Engineering highest avg salary ($71K, 31 FTE). Total payroll: **$11,309,281/year**. Executive team (4): avg $124,500. Cross-reference: Sales dept ↔ ERP SalesPerson via SOLD_BY bridge (100% match).',
       interpreted_as: 'HR.dipendenti_hr · GROUP BY repartoNome · payroll analysis',
       chartData: {
         type: 'bar',
         title: 'Headcount by department (HR CSV)',
         labels: ['Production', 'Sales', 'Engineering', 'Finance', 'IT', 'HR', 'Executive'],
-        values: [179, 18, 31, 12, 8, 6, 4],
+        values: [211, 18, 31, 12, 8, 6, 4],
         unit: '',
       },
       sources: [SRC.HR],
@@ -1391,6 +1353,45 @@ ORDER BY headcount DESC`,
         'Show salary and bonus for the sales team',
         'Who is the top salesperson by revenue in 2014?',
         'What is the online vs in-store channel split?',
+      ],
+    }),
+  },
+  // ── Revenue disambiguation (last — fires only when no specific pattern matches) ─
+  {
+    test: q => /\brevenue\b|fatturato|how much.*sold|total.*sales|sales.*total/i.test(q),
+    result: () => ({
+      sql: `-- "fatturato" disambiguation: two valid interpretations
+-- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
+-- Use total_due for GROSS amount billed to customer
+
+SELECT
+  SUM(subtotalAmount) AS net_revenue,    -- $20,127,070 — commercial "fatturato"
+  SUM(totalDue)       AS gross_revenue,  -- $22,410,568 — incl. tax + freight
+  COUNT(*)            AS order_count,
+  AVG(subtotalAmount) AS avg_order_net
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014`,
+      rows: [
+        { metric: 'Net revenue (subtotal)', value: '$20,127,070', note: 'Excl. tax + freight — use for "commercial revenue"' },
+        { metric: 'Gross revenue (total_due)', value: '$22,410,568', note: 'Incl. tax + freight — use for "billed amount"' },
+        { metric: 'Order count (2014)', value: '31,465', note: 'ERP OrionSales · all statuses' },
+        { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
+        { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
+      ],
+      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — choose which definition applies below.',
+      interpreted_as: 'SUM(subtotalAmount) ≠ SUM(totalDue) · SalesOrder 2014 · user resolution required',
+      isDisambiguation: true,
+      sources: [SRC.ERP],
+      steps: [
+        '① Term "revenue" / "fatturato" matched → ambiguity detected',
+        '② Definition A: subtotal_amount = $20,127,070 (commercial net, excl. tax + freight)',
+        '③ Definition B: total_due = $22,410,568 (billed gross, incl. tax + freight)',
+        '④ Semantic layer paused — awaiting user disambiguation choice',
+      ],
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'How many unique customers after CRM deduplication?',
       ],
     }),
   },
@@ -1485,7 +1486,7 @@ const RETAIL_PATTERNS: Array<{
         { month: '2024-08', orders: 134, revenue: 23478, avg_order: 175.2 },
         { month: '2024-09', orders: 69,  revenue: 12042, avg_order: 174.5 },
       ],
-      summary: '**740 paid orders** total, $138K revenue, avg order **$186.49**. Peak July (156 orders, $28.7K). Revenue growing +37% April→July, then seasonal dip in Sept (partial month). Checkout conversion: 740/920 started = **80.4%**.',
+      summary: '**740 paid orders** total, $136K revenue, avg order **$183.14**. Peak July (156 orders, $28.7K). Revenue growing +37% April→July, then seasonal dip in Sept (partial month). Checkout conversion: 740/920 started = **80.4%**.',
       interpreted_as: "orders WHERE status='paid' · GROUP BY month · SUM(total) · AVG(total)",
       chartData: {
         type: 'line',
@@ -1596,7 +1597,7 @@ const HEALTHCARE_PATTERNS: Array<{
         { condition: 'COPD',              patients: 63,  avg_age: 67.2 },
         { condition: 'Heart Failure',     patients: 41,  avg_age: 71.8 },
       ],
-      summary: '**1,240 registered patients**, 872 with documented chronic conditions. Hypertension most prevalent (284, avg age 58). Heart Failure cohort oldest (avg 71.8). 368 patients with no chronic condition on record — may require data completion.',
+      summary: '**1,240 registered patients**. Top 8 conditions cover **1,124 patients**. Hypertension most prevalent (284, avg age 58). Heart Failure cohort oldest (avg 71.8). 116 patients have no recorded condition or a rare condition outside top-8.',
       interpreted_as: 'patients GROUP BY chronicConditions · COUNT · AVG age · WHERE condition NOT NULL',
       chartData: {
         type: 'bar',
@@ -1612,7 +1613,7 @@ const HEALTHCARE_PATTERNS: Array<{
         '① patients: 1,240 registered in EHR',
         '② Filter chronicConditions IS NOT NULL (872 have conditions)',
         '③ GROUP BY condition · COUNT · AVG age from birthDate',
-        '④ 368 patients with no chronic condition — check data completeness',
+        '④ 116 patients outside top-8 conditions — rare conditions or missing data',
       ],
       followUps: ['How many encounters per doctor?', 'Show prescriptions issued recently', 'Which treatments have no outcome recorded?'],
     }),
@@ -1699,13 +1700,13 @@ const HEALTHCARE_PATTERNS: Array<{
         { type: 'Radiation',         treatments: 31,  no_outcome: 5,  pct_missing: '16.1%' },
         { type: 'Psychotherapy',     treatments: 72,  no_outcome: 8,  pct_missing: '11.1%' },
       ],
-      summary: '**178 treatments (24.7%) have no outcome recorded**. Physical Therapy worst (40.2% missing) — likely because outcomes documented at discharge, not start. Surgery 23.6% gap. Medication Course highest volume (341) with 62 missing. Action required: close outcome loop for 170 treatments.',
+      summary: '**178 treatments (24.1%) have no outcome recorded**. Physical Therapy worst (40.2% missing) — likely because outcomes documented at discharge, not start. Surgery 23.6% gap. Medication Course highest volume (341) with 62 missing. Action required: close outcome loop for 178 treatments.',
       interpreted_as: 'treatments GROUP BY type · COUNT(outcome IS NULL) / COUNT(*)',
       sources: [
         { id: 'ehr', label: 'EHR System', bg: 'bg-blue-100', text: 'text-blue-700' },
       ],
       steps: [
-        '① treatments: 720 total in the system',
+        '① treatments: 740 total in the system',
         '② GROUP BY type · conditional COUNT for NULL outcome',
         '③ pct_missing = missing/total × 100',
         '④ Physical Therapy 40% gap — outcome typically at discharge, check EHR workflow',
@@ -1740,7 +1741,7 @@ const FINANCE_PATTERNS: Array<{
         { status: 'Rejected',  loans: 87, total_amount: 2288700, avg_amount: 26307, avg_rate: 0.0698 },
         { status: 'Closed',    loans: 36, total_amount: 946800,  avg_amount: 26300, avg_rate: 0.0554 },
       ],
-      summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **45.3%** (145/320). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
+      summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **52.5%** (168/320 active+disbursed+closed). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
       interpreted_as: 'loans GROUP BY status · SUM(amount) · AVG(rate)',
       chartData: {
         type: 'pie',
@@ -1773,7 +1774,7 @@ const FINANCE_PATTERNS: Array<{
         { category: 'BB – Watch',     applicants: 61, avg_score: 558, avg_pd_pct: 7.4,  avg_income: 42100 },
         { category: 'B – Subprime',   applicants: 32, avg_score: 481, avg_pd_pct: 14.2, avg_income: 31800 },
       ],
-      summary: '**320 applicants scored**. Prime/Standard (135 = 42.2%) have avg PD < 1.5% — low risk. BB Watch (61 = 19%) and Subprime (32 = 10%) elevate portfolio risk. Income clearly correlates: AAA avg $94K vs Subprime $31K. Blended portfolio PD: **3.8%**.',
+      summary: '**320 applicants scored**. Prime/Standard (135 = 42.2%) have avg PD < 1.5% — low risk. BB Watch (61 = 19%) and Subprime (32 = 10%) elevate portfolio risk. Income clearly correlates: AAA avg $94K vs Subprime $31K. Blended portfolio PD: **4.1%**.',
       interpreted_as: 'risk_profiles JOIN applicants · GROUP BY category · AVG score, PD rate, income',
       chartData: {
         type: 'bar',

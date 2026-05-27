@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -31,9 +32,8 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# ── Singleton unified DuckDB connection ────────────────────────────────────────
-
-_UNIFIED_CONN: dict[str, duckdb.DuckDBPyConnection] = {}
+# Scenario path — same relative position as main.py uses
+_SCENARIO_PATH = Path(__file__).parent.parent.parent.parent / "test_scenario"
 
 # ── Claude client singleton ────────────────────────────────────────────────────
 
@@ -233,84 +233,22 @@ Rules:
 """
 
 
-# ── Unified DuckDB connection ──────────────────────────────────────────────────
+# ── Unified DuckDB connection (scalable — persistent file or live pushdown) ────
 
-def get_unified_conn(erp, crm, hr_pim) -> duckdb.DuckDBPyConnection:
+def _get_unified_conn() -> duckdb.DuckDBPyConnection:
     """
-    Build (or return cached) a unified DuckDB in-memory connection with all
-    4 data sources registered as tables.
+    Return a DuckDB connection with all 4 sources available as flat tables.
 
-    Parameters
-    ----------
-    erp:    PostgresConnector instance
-    crm:    SQLiteConnector instance
-    hr_pim: FileConnector instance
+    Delegates to DuckDBSourceManager which:
+    - First startup:   builds a persistent .duckdb snapshot (one-time, ~2-3 s)
+    - Subsequent runs: opens the snapshot read-only (<100 ms, no re-parsing)
+    - Live mode:       when ERP_POSTGRES_DSN / CRM_SQLITE_PATH / HR_CSV_PATH /
+                       PIM_JSON_PATH env vars are set, uses DuckDB native readers
+                       (postgres_scanner, sqlite_scanner, read_csv, read_json)
+                       with full predicate pushdown — no copy into RAM.
     """
-    if "default" in _UNIFIED_CONN:
-        return _UNIFIED_CONN["default"]
-
-    logger.info("Building unified DuckDB connection from all 4 sources…")
-    conn = duckdb.connect(database=":memory:")
-
-    # ── ERP tables ──────────────────────────────────────────────────────────
-    erp_tables = [
-        "sales_order_header",
-        "sales_order_line",
-        "salesperson",
-        "territory",
-        "offer",
-    ]
-    for table in erp_tables:
-        try:
-            rows = erp.execute_query(f"SELECT * FROM {table}")
-            df = pd.DataFrame(rows)
-            conn.register(table, df)
-            logger.info("ERP table %s: %d rows", table, len(df))
-        except Exception as exc:
-            logger.warning("Could not load ERP table %s: %s", table, exc)
-            conn.register(table, pd.DataFrame())
-
-    # ── CRM tables ──────────────────────────────────────────────────────────
-    crm_tables = [
-        "account",
-        "contact",
-        "address",
-        "account_address",
-        "state_province",
-    ]
-    for table in crm_tables:
-        try:
-            rows = crm.execute_query(f"SELECT * FROM {table}")
-            df = pd.DataFrame(rows)
-            conn.register(table, df)
-            logger.info("CRM table %s: %d rows", table, len(df))
-        except Exception as exc:
-            logger.warning("Could not load CRM table %s: %s", table, exc)
-            conn.register(table, pd.DataFrame())
-
-    # ── HR (FileConnector) ───────────────────────────────────────────────────
-    try:
-        hr_rows = hr_pim._ensure_hr()
-        hr_df = pd.DataFrame(hr_rows)
-        conn.register("hr_employees", hr_df)
-        logger.info("HR table hr_employees: %d rows", len(hr_df))
-    except Exception as exc:
-        logger.warning("Could not load HR data: %s", exc)
-        conn.register("hr_employees", pd.DataFrame())
-
-    # ── PIM (FileConnector) ──────────────────────────────────────────────────
-    try:
-        pim_rows = hr_pim._ensure_pim()
-        pim_df = pd.DataFrame(pim_rows)
-        conn.register("pim_products", pim_df)
-        logger.info("PIM table pim_products: %d rows", len(pim_df))
-    except Exception as exc:
-        logger.warning("Could not load PIM data: %s", exc)
-        conn.register("pim_products", pd.DataFrame())
-
-    _UNIFIED_CONN["default"] = conn
-    logger.info("Unified DuckDB connection ready.")
-    return conn
+    from ..connectors.duckdb_source_manager import get_source_manager
+    return get_source_manager(_SCENARIO_PATH).get_connection()
 
 
 # ── JSON extraction helper ─────────────────────────────────────────────────────
@@ -342,7 +280,7 @@ def _extract_json(text: str) -> dict:
 
 # ── Main query function ────────────────────────────────────────────────────────
 
-def run_aw_query(question: str, erp, crm, hr_pim) -> dict[str, Any]:
+def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, Any]:
     """
     Translate a natural-language question to SQL using Claude, execute it on
     the unified DuckDB connection, and return a structured result dict.
@@ -403,21 +341,24 @@ def run_aw_query(question: str, erp, crm, hr_pim) -> dict[str, Any]:
     chart_hint: dict | None = parsed.get("chart_hint")
 
     # ── Step 2: Execute SQL on unified DuckDB ───────────────────────────────
-    unified = get_unified_conn(erp, crm, hr_pim)
     rows: list[dict[str, Any]] = []
     sql_error: str | None = None
 
+    unified = _get_unified_conn()
     try:
         if not sql.strip().upper().startswith("SELECT"):
             raise ValueError("Only SELECT queries are allowed")
         result_df = unified.execute(sql).df()
-        # Limit to 100 rows
         result_df = result_df.head(100)
-        # Convert to list of dicts, handling NaN/NaT
         rows = result_df.where(result_df.notna(), other=None).to_dict(orient="records")
     except Exception as exc:
         sql_error = str(exc)
         logger.error("SQL execution error: %s\nSQL: %s", exc, sql)
+    finally:
+        try:
+            unified.close()
+        except Exception:
+            pass
 
     total_rows = len(rows)
 

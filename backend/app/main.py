@@ -753,7 +753,10 @@ def rebuild_knowledge_graph(
 
 @app.post("/api/ask", response_model=AskResult)
 def ask(req: AskRequest) -> AskResult:
-    """Main NL→SQL query endpoint. Uses real AW connectors via DuckDB."""
+    """
+    Main NL→SQL query endpoint.
+    Uses DuckDBSourceManager (persistent snapshot or live pushdown).
+    """
     from .query.aw_engine import run_aw_query
 
     if not req.question.strip():
@@ -766,13 +769,54 @@ def ask(req: AskRequest) -> AskResult:
             detail="ANTHROPIC_API_KEY not configured. Set it in backend/.env",
         )
 
-    _ensure_semantic_loaded()
-    erp = _semantic_state["erp"]
-    crm = _semantic_state["crm"]
-    hr_pim = _semantic_state["hr_pim"]
-
-    result = run_aw_query(req.question, erp, crm, hr_pim)
+    result = run_aw_query(req.question)
     return AskResult(**result)
+
+
+# ── Data store management ──────────────────────────────────────────────────────
+
+
+@app.get("/api/data/store/status")
+def data_store_status(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Return metadata about the unified DuckDB snapshot."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    try:
+        mgr = get_source_manager(_SCENARIO_PATH)
+        meta = mgr.describe()
+        return {
+            "source_type": meta.source_type,
+            "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
+            "tables": meta.tables,
+            "row_counts": meta.record_counts,
+            "total_rows": sum(meta.record_counts.values()),
+            "notes": meta.notes,
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.post("/api/data/store/rebuild")
+def rebuild_data_store(
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """
+    Force full re-ingest of all 4 sources into the DuckDB snapshot.
+    Use after source files are updated. Admin-only.
+    """
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    row_counts = mgr.rebuild()
+    meta = mgr.describe()
+    return {
+        "rebuilt": True,
+        "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
+        "row_counts": row_counts,
+        "total_rows": sum(row_counts.values()),
+    }
 
 
 # ── Semantic sources ───────────────────────────────────────────────────────────
