@@ -1,34 +1,30 @@
 """
-DuckDBSourceManager — scalable, zero-RAM-copy data layer.
+DuckDBSourceManager — scalable, registry-driven data layer.
 
 Architecture
 ============
 
-**Snapshot mode** (default for file-based scenarios)
-  First startup:  parse all 4 sources → write to ``backend/data/fra_unified.duckdb``
-  Every restart:  open the .duckdb file read-only (<100 ms, no re-parsing)
-  Rebuild:        DELETE the file + call ``manager.rebuild()``
+All configured sources are stored in a SourceRegistry (SQLite).
+On first startup the manager ingests every source into a persistent DuckDB
+snapshot file.  On subsequent restarts it opens the file read-only (<100 ms).
 
-**Live pushdown mode** (opt-in via environment variables)
-  Set one or more of the env vars below to switch individual sources to native
-  DuckDB readers that push filter/projection predicates down to the source,
-  so only matching rows leave the source database:
+Adding a new source
+-------------------
+POST /api/sources  →  SourceRegistry.upsert()  →  POST /api/sources/{id}/sync
+The sync call triggers a full snapshot rebuild with the new source included.
 
-    ERP_POSTGRES_DSN   postgresql://user:pass@host/db   → postgres_scanner
-    CRM_SQLITE_PATH    /path/to/clienthub.db            → sqlite_scanner
-    HR_CSV_PATH        /path/to/dipendenti_hr.csv       → read_csv (streaming)
-    PIM_JSON_PATH      /path/to/product_catalog_pim.json → read_json (streaming)
-
-  In live mode the unified connection is in-memory (no snapshot file needed);
-  a new connection is created for each query, always reading fresh source data.
-
-Scale characteristics
----------------------
-Snapshot .duckdb file  →  ~100 GB with columnar compression; typical 10–50× smaller
-                           than source files due to DuckDB's FSST/ALP encoding.
-Live pushdown mode     →  effectively unlimited (source DB limits apply).
-                          postgres_scanner uses parallel chunk reads and predicate
-                          pushdown; sqlite_scanner and read_csv use streaming I/O.
+Supported connector_types
+--------------------------
+  erp_sqldump   — PostgreSQL dump loaded via SQLite (default ERP source)
+  crm_sqlite    — SQLite database (default CRM source)
+  hr_csv        — semicolon-delimited CSV (default HR source)
+  pim_json      — JSON with products array (default PIM source)
+  csv           — any CSV file (comma or semicolon)
+  json          — any JSON file (top-level array or {records: [...]} object)
+  excel         — .xlsx / .xls via pandas
+  sqlite        — any SQLite database (all tables or filtered list)
+  postgresql    — PostgreSQL via psycopg2 + pandas (table list required)
+  <saas>        — registered but not yet synced (status stays 'pending')
 """
 from __future__ import annotations
 
@@ -44,10 +40,16 @@ import duckdb
 import pandas as pd
 
 from .base import SourceMeta
+from .source_registry import (
+    SourceConfig,
+    SourceRegistry,
+    get_source_registry,
+    IMPLEMENTED_CONNECTOR_TYPES,
+)
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_VERSION = "2"
+_SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
 _MANAGER: "DuckDBSourceManager | None" = None
 _MANAGER_LOCK = threading.RLock()
@@ -72,7 +74,8 @@ def get_source_manager(
                 Path(__file__).parent.parent.parent / "data" / "fra_unified.duckdb"
             )
             effective_db.parent.mkdir(parents=True, exist_ok=True)
-            _MANAGER = DuckDBSourceManager(scenario_path, effective_db)
+            registry = get_source_registry()
+            _MANAGER = DuckDBSourceManager(scenario_path, effective_db, registry)
     return _MANAGER
 
 
@@ -80,33 +83,33 @@ def get_source_manager(
 
 class DuckDBSourceManager:
     """
-    Unified, scalable connector for all 4 AdventureWorks sources.
+    Registry-driven connector for all data sources.
 
-    Thread-safe: multiple concurrent read-only connections are supported by
-    DuckDB's MVCC engine when the snapshot file is used.
+    On init it seeds the registry with the 4 default scenario sources (if
+    the registry is empty), then builds or opens the DuckDB snapshot.
     """
 
-    def __init__(self, scenario_path: Path, db_path: Path) -> None:
+    def __init__(
+        self,
+        scenario_path: Path,
+        db_path: Path,
+        registry: SourceRegistry,
+    ) -> None:
         self._scenario_path = Path(scenario_path)
         self._db_path = Path(db_path)
+        self._registry = registry
         self._ready = False
-        self._live_mode = self._detect_live_mode()
         self._init_lock = threading.RLock()
         self._row_counts: dict[str, int] = {}
         self._built_at: datetime | None = None
 
+        self._seed_defaults()
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        """
-        Return a DuckDB connection with all 4 sources available as flat tables.
-
-        Snapshot mode:  read-only connection to persistent .duckdb file.
-        Live mode:      new in-memory connection with source VIEWs.
-        """
+        """Return a read-only DuckDB connection over the snapshot."""
         self._ensure_ready()
-        if self._live_mode:
-            return self._build_live_connection()
         return duckdb.connect(str(self._db_path), read_only=True)
 
     def execute(self, sql: str) -> list[dict[str, Any]]:
@@ -128,10 +131,7 @@ class DuckDBSourceManager:
             conn.close()
 
     def rebuild(self) -> dict[str, int]:
-        """
-        Force a full re-ingest of all sources.
-        Deletes the snapshot file and rebuilds from scratch.
-        """
+        """Force full re-ingest of all active sources."""
         with self._init_lock:
             if self._db_path.exists():
                 self._db_path.unlink()
@@ -142,20 +142,31 @@ class DuckDBSourceManager:
             self._ensure_ready()
         return dict(self._row_counts)
 
+    def ingest_one(self, source_id: str) -> dict[str, int]:
+        """Re-ingest a single source then rebuild the full snapshot."""
+        cfg = self._registry.get(source_id)
+        if cfg is None:
+            raise KeyError(f"Source '{source_id}' not found in registry")
+        self._registry.patch(source_id, status="syncing", error_msg=None)
+        return self.rebuild()
+
     def describe(self) -> SourceMeta:
         self._ensure_ready()
         return SourceMeta(
             name="unified_duckdb",
-            source_type="duckdb_snapshot" if not self._live_mode else "duckdb_live",
+            source_type="duckdb_snapshot",
             tables=list(self._row_counts.keys()),
             record_counts=self._row_counts,
             loaded_at=self._built_at or datetime.utcnow(),
             notes=(
                 f"DuckDB unified store | schema_version={_SCHEMA_VERSION} | "
-                f"mode={'live_pushdown' if self._live_mode else 'snapshot'} | "
-                f"path={self._db_path}"
+                f"sources={len(self._registry.list())} | path={self._db_path}"
             ),
         )
+
+    @property
+    def registry(self) -> SourceRegistry:
+        return self._registry
 
     @property
     def row_counts(self) -> dict[str, int]:
@@ -166,15 +177,55 @@ class DuckDBSourceManager:
     def built_at(self) -> datetime | None:
         return self._built_at
 
-    # ── Initialisation ─────────────────────────────────────────────────────────
+    # ── Defaults seeding ───────────────────────────────────────────────────────
 
-    def _detect_live_mode(self) -> bool:
-        return bool(
-            os.getenv("ERP_POSTGRES_DSN")
-            or os.getenv("CRM_SQLITE_PATH")
-            or os.getenv("HR_CSV_PATH")
-            or os.getenv("PIM_JSON_PATH")
-        )
+    def _seed_defaults(self) -> None:
+        """Seed the 4 default scenario sources if the registry is empty."""
+        if self._registry.count() > 0:
+            return
+        sp = self._scenario_path
+        defaults = [
+            SourceConfig(
+                id="erp",
+                connector_type="erp_sqldump",
+                label="ERP — OrionSales",
+                params={"path": str(sp / "erp_postgres" / "orion_sales_dump.sql")},
+                target_tables=_ERP_TABLES,
+                is_default=True,
+            ),
+            SourceConfig(
+                id="crm",
+                connector_type="crm_sqlite",
+                label="CRM — ClientHub",
+                params={"path": str(sp / "crm_sqlite" / "clienthub.db")},
+                target_tables=_CRM_TABLES,
+                is_default=True,
+            ),
+            SourceConfig(
+                id="hr",
+                connector_type="hr_csv",
+                label="HR — Employees",
+                params={
+                    "path": str(sp / "hr_pim_files" / "dipendenti_hr.csv"),
+                    "delimiter": ";",
+                },
+                target_tables=["hr_employees"],
+                is_default=True,
+            ),
+            SourceConfig(
+                id="pim",
+                connector_type="pim_json",
+                label="PIM — Product Catalog",
+                params={"path": str(sp / "hr_pim_files" / "product_catalog_pim.json")},
+                target_tables=["pim_products"],
+                is_default=True,
+            ),
+        ]
+        for cfg in defaults:
+            self._registry.upsert(cfg)
+        logger.info("Seeded %d default sources into registry", len(defaults))
+
+    # ── Initialisation ─────────────────────────────────────────────────────────
 
     def _ensure_ready(self) -> None:
         if self._ready:
@@ -182,34 +233,22 @@ class DuckDBSourceManager:
         with self._init_lock:
             if self._ready:
                 return
-            if self._live_mode:
-                logger.info("DuckDB live-pushdown mode active (env vars detected)")
-                self._ready = True
-                return
             if self._db_path.exists():
-                ok = self._try_load_snapshot()
-                if ok:
+                if self._try_load_snapshot():
                     self._ready = True
                     return
-                # Corrupted or wrong schema version — rebuild
                 self._db_path.unlink()
             self._build_snapshot()
             self._ready = True
 
-    # ── Snapshot mode ──────────────────────────────────────────────────────────
-
     def _try_load_snapshot(self) -> bool:
-        """Open existing snapshot and read metadata. Returns False if invalid."""
         try:
             conn = duckdb.connect(str(self._db_path), read_only=True)
-            meta_rows = conn.execute(
-                "SELECT key, value FROM _build_meta"
-            ).fetchall()
+            meta_rows = conn.execute("SELECT key, value FROM _build_meta").fetchall()
             conn.close()
         except Exception as exc:
             logger.warning("Cannot open snapshot %s: %s", self._db_path, exc)
             return False
-
         meta = {r[0]: r[1] for r in meta_rows}
         if meta.get("schema_version") != _SCHEMA_VERSION:
             logger.info(
@@ -217,35 +256,42 @@ class DuckDBSourceManager:
                 meta.get("schema_version"), _SCHEMA_VERSION,
             )
             return False
-
         self._built_at = datetime.fromisoformat(
             meta.get("built_at", datetime.utcnow().isoformat())
         )
         self._row_counts = json.loads(meta.get("row_counts", "{}"))
         logger.info(
-            "Snapshot loaded: %s | built %s | %d tables, %d total rows",
-            self._db_path,
-            self._built_at.isoformat(),
-            len(self._row_counts),
-            sum(self._row_counts.values()),
+            "Snapshot loaded: %s | built %s | %d total rows",
+            self._db_path, self._built_at.isoformat(), sum(self._row_counts.values()),
         )
         return True
 
+    # ── Snapshot build ─────────────────────────────────────────────────────────
+
     def _build_snapshot(self) -> None:
-        """Build the persistent DuckDB file from all 4 sources (one-time)."""
         logger.info("Building DuckDB snapshot at %s …", self._db_path)
         conn = duckdb.connect(str(self._db_path))
         try:
-            self._ingest_erp(conn)
-            self._ingest_crm(conn)
-            self._ingest_hr(conn)
-            self._ingest_pim(conn)
+            for cfg in self._registry.list():
+                try:
+                    self._ingest_source(conn, cfg)
+                    now = datetime.utcnow().isoformat()
+                    self._registry.patch(
+                        cfg.id, status="active", error_msg=None, last_sync_at=now,
+                        row_count=sum(
+                            v for k, v in self._row_counts.items()
+                            if k.startswith(f"{cfg.id}.")
+                        ),
+                    )
+                except Exception as exc:
+                    logger.error("Failed to ingest source '%s': %s", cfg.id, exc)
+                    self._registry.patch(cfg.id, status="error", error_msg=str(exc))
+
             self._write_meta(conn)
             conn.execute("CHECKPOINT")
             logger.info(
                 "Snapshot built: %d tables, %d total rows",
-                len(self._row_counts),
-                sum(self._row_counts.values()),
+                len(self._row_counts), sum(self._row_counts.values()),
             )
         except Exception:
             conn.close()
@@ -260,7 +306,8 @@ class DuckDBSourceManager:
 
     def _write_meta(self, conn: duckdb.DuckDBPyConnection) -> None:
         self._built_at = datetime.utcnow()
-        conn.execute("CREATE TABLE _build_meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("CREATE TABLE IF NOT EXISTS _build_meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute("DELETE FROM _build_meta")
         conn.executemany(
             "INSERT INTO _build_meta VALUES (?, ?)",
             [
@@ -270,188 +317,212 @@ class DuckDBSourceManager:
             ],
         )
 
-    # ── Source ingestion (snapshot) ────────────────────────────────────────────
+    # ── Source dispatcher ──────────────────────────────────────────────────────
 
-    def _ingest_erp(self, conn: duckdb.DuckDBPyConnection) -> None:
-        dump_path = self._scenario_path / "erp_postgres" / "orion_sales_dump.sql"
+    def _ingest_source(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        ctype = cfg.connector_type
+        if ctype == "erp_sqldump":
+            self._ingest_erp_sqldump(conn, cfg)
+        elif ctype == "crm_sqlite":
+            self._ingest_crm_sqlite(conn, cfg)
+        elif ctype == "hr_csv":
+            self._ingest_hr_csv(conn, cfg)
+        elif ctype == "pim_json":
+            self._ingest_pim_json(conn, cfg)
+        elif ctype == "csv":
+            self._ingest_csv(conn, cfg)
+        elif ctype == "json":
+            self._ingest_json_file(conn, cfg)
+        elif ctype == "excel":
+            self._ingest_excel(conn, cfg)
+        elif ctype == "sqlite":
+            self._ingest_sqlite_generic(conn, cfg)
+        elif ctype == "postgresql":
+            self._ingest_postgresql(conn, cfg)
+        elif ctype not in IMPLEMENTED_CONNECTOR_TYPES:
+            logger.info(
+                "Source '%s' connector_type='%s' not yet implemented — skipping",
+                cfg.id, ctype,
+            )
+        else:
+            raise NotImplementedError(f"Connector type '{ctype}' has no ingester")
+
+    # ── Per-type ingesters ─────────────────────────────────────────────────────
+
+    def _ingest_erp_sqldump(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        dump_path = Path(cfg.params.get("path", ""))
         if not dump_path.exists():
             logger.warning("ERP dump not found: %s", dump_path)
             return
         from .postgres_connector import _load_sql_dump_to_sqlite
-
         sqlite_conn = _load_sql_dump_to_sqlite(dump_path)
         for table in _ERP_TABLES:
             try:
-                # fetchall returns sqlite3.Row (supports dict())
                 rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
                 df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(f"CREATE TABLE {table} AS SELECT * FROM df")
-                self._row_counts[f"erp.{table}"] = len(df)
+                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df")
+                self._row_counts[f"{cfg.id}.{table}"] = len(df)
                 logger.info("ERP  %-25s %7d rows", table, len(df))
             except Exception as exc:
                 logger.warning("Could not ingest ERP.%s: %s", table, exc)
 
-    def _ingest_crm(self, conn: duckdb.DuckDBPyConnection) -> None:
-        import sqlite3
-
-        crm_path = self._scenario_path / "crm_sqlite" / "clienthub.db"
+    def _ingest_crm_sqlite(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        import sqlite3 as _sqlite3
+        crm_path = Path(cfg.params.get("path", ""))
         if not crm_path.exists():
             logger.warning("CRM SQLite not found: %s", crm_path)
             return
-        sqlite_conn = sqlite3.connect(str(crm_path))
-        sqlite_conn.row_factory = sqlite3.Row
+        sqlite_conn = _sqlite3.connect(str(crm_path))
+        sqlite_conn.row_factory = _sqlite3.Row
         for table in _CRM_TABLES:
             try:
                 rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
                 df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(f"CREATE TABLE {table} AS SELECT * FROM df")
-                self._row_counts[f"crm.{table}"] = len(df)
+                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df")
+                self._row_counts[f"{cfg.id}.{table}"] = len(df)
                 logger.info("CRM  %-25s %7d rows", table, len(df))
             except Exception as exc:
                 logger.warning("Could not ingest CRM.%s: %s", table, exc)
 
-    def _ingest_hr(self, conn: duckdb.DuckDBPyConnection) -> None:
-        hr_path = self._scenario_path / "hr_pim_files" / "dipendenti_hr.csv"
+    def _ingest_hr_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        hr_path = Path(cfg.params.get("path", ""))
         if not hr_path.exists():
             logger.warning("HR CSV not found: %s", hr_path)
             return
         from .file_connector import _load_hr
-
         rows = _load_hr(hr_path)
         df = pd.DataFrame(rows)
-        conn.execute("CREATE TABLE hr_employees AS SELECT * FROM df")
-        self._row_counts["hr.hr_employees"] = len(df)
+        conn.execute("CREATE TABLE IF NOT EXISTS hr_employees AS SELECT * FROM df")
+        self._row_counts[f"{cfg.id}.hr_employees"] = len(df)
         logger.info("HR   %-25s %7d rows", "hr_employees", len(df))
 
-    def _ingest_pim(self, conn: duckdb.DuckDBPyConnection) -> None:
-        pim_path = self._scenario_path / "hr_pim_files" / "product_catalog_pim.json"
+    def _ingest_pim_json(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        pim_path = Path(cfg.params.get("path", ""))
         if not pim_path.exists():
             logger.warning("PIM JSON not found: %s", pim_path)
             return
         from .file_connector import _load_pim
-
         rows = _load_pim(pim_path)
         df = pd.DataFrame(rows)
-        conn.execute("CREATE TABLE pim_products AS SELECT * FROM df")
-        self._row_counts["pim.pim_products"] = len(df)
+        conn.execute("CREATE TABLE IF NOT EXISTS pim_products AS SELECT * FROM df")
+        self._row_counts[f"{cfg.id}.pim_products"] = len(df)
         logger.info("PIM  %-25s %7d rows", "pim_products", len(df))
 
-    # ── Live pushdown mode ─────────────────────────────────────────────────────
-
-    def _build_live_connection(self) -> duckdb.DuckDBPyConnection:
-        """
-        Build an in-memory DuckDB connection with VIEWs pointing to live sources.
-        DuckDB pushes predicates/projections down to each source — no full copy.
-        """
-        conn = duckdb.connect(":memory:")
-        erp_dsn = os.getenv("ERP_POSTGRES_DSN")
-        crm_path = os.getenv(
-            "CRM_SQLITE_PATH",
-            str(self._scenario_path / "crm_sqlite" / "clienthub.db"),
-        )
-        hr_csv = os.getenv(
-            "HR_CSV_PATH",
-            str(self._scenario_path / "hr_pim_files" / "dipendenti_hr.csv"),
-        )
-        pim_json = os.getenv(
-            "PIM_JSON_PATH",
-            str(self._scenario_path / "hr_pim_files" / "product_catalog_pim.json"),
-        )
-
-        # ERP: live PostgreSQL or fallback to snapshot ingestion
-        if erp_dsn:
-            try:
-                conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
-                conn.execute(
-                    f"ATTACH '{erp_dsn}' AS erp_live (TYPE POSTGRES, READ_ONLY)"
-                )
-                for table in _ERP_TABLES:
-                    conn.execute(
-                        f"CREATE VIEW {table} AS SELECT * FROM erp_live.{table}"
-                    )
-                logger.info("ERP: live PostgreSQL via postgres_scanner (%s)", erp_dsn)
-            except Exception as exc:
-                logger.warning("postgres_scanner failed (%s); falling back to snapshot for ERP", exc)
-                self._attach_snapshot_tables(conn, _ERP_TABLES)
+    def _ingest_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        import io
+        # Support inline CSV (uploaded from browser) or file path
+        inline = cfg.params.get("inline_csv")
+        table = cfg.params.get("table_name") or "imported_data"
+        if inline:
+            df = pd.read_csv(io.StringIO(inline), sep=",", low_memory=False)
         else:
-            self._attach_snapshot_tables(conn, _ERP_TABLES)
+            path = Path(cfg.params.get("path", ""))
+            if not path.exists():
+                raise FileNotFoundError(f"CSV not found: {path}")
+            table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
+            delimiter = cfg.params.get("delimiter", ",")
+            df = pd.read_csv(str(path), sep=delimiter, encoding="utf-8", low_memory=False)
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+        self._row_counts[f"{cfg.id}.{table}"] = len(df)
+        logger.info("CSV  %-25s %7d rows", table, len(df))
+        if table not in cfg.target_tables:
+            cfg.target_tables.append(table)
 
-        # CRM: sqlite_scanner (zero-copy pushdown)
+    def _ingest_json_file(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        path = Path(cfg.params.get("path", ""))
+        if not path.exists():
+            raise FileNotFoundError(f"JSON not found: {path}")
+        table = cfg.params.get("table_name") or path.stem.replace("-", "_").replace(" ", "_").lower()
+        records_key = cfg.params.get("records_key")
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        records = raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
+        if not isinstance(records, list):
+            raise ValueError("JSON must be a top-level array or contain a list under 'records_key'")
+        df = pd.DataFrame(records)
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+        self._row_counts[f"{cfg.id}.{table}"] = len(df)
+        logger.info("JSON %-25s %7d rows", table, len(df))
+        if table not in cfg.target_tables:
+            cfg.target_tables.append(table)
+
+    def _ingest_excel(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        path = Path(cfg.params.get("path", ""))
+        if not path.exists():
+            raise FileNotFoundError(f"Excel not found: {path}")
+        sheet = cfg.params.get("sheet", 0)
+        table = cfg.params.get("table_name") or path.stem.replace("-", "_").replace(" ", "_").lower()
+        df = pd.read_excel(str(path), sheet_name=sheet)
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+        self._row_counts[f"{cfg.id}.{table}"] = len(df)
+        logger.info("XLS  %-25s %7d rows", table, len(df))
+        if table not in cfg.target_tables:
+            cfg.target_tables.append(table)
+
+    def _ingest_sqlite_generic(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        import sqlite3 as _sqlite3
+        path = Path(cfg.params.get("path", ""))
+        if not path.exists():
+            raise FileNotFoundError(f"SQLite not found: {path}")
+        table_filter: list[str] | None = cfg.params.get("tables")
+        src = _sqlite3.connect(str(path))
+        src.row_factory = _sqlite3.Row
+        tables = [
+            r[0] for r in src.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+        ]
+        if table_filter:
+            tables = [t for t in tables if t in table_filter]
+        for table in tables:
+            rows = src.execute(f"SELECT * FROM {table}").fetchall()
+            df = pd.DataFrame([dict(r) for r in rows])
+            conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+            self._row_counts[f"{cfg.id}.{table}"] = len(df)
+            logger.info("SDB  %-25s %7d rows", table, len(df))
+            if table not in cfg.target_tables:
+                cfg.target_tables.append(table)
+
+    def _ingest_postgresql(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        dsn = cfg.params.get("dsn", "")
+        tables: list[str] = cfg.params.get("tables", [])
+        schema: str = cfg.params.get("schema", "public")
+        if not dsn:
+            raise ValueError("PostgreSQL source requires 'dsn' param")
+        if not tables:
+            raise ValueError("PostgreSQL source requires 'tables' param (list of table names)")
         try:
-            conn.execute("INSTALL sqlite; LOAD sqlite;")
-            conn.execute(
-                f"ATTACH '{crm_path}' AS crm_live (TYPE SQLITE, READ_ONLY)"
-            )
-            for table in _CRM_TABLES:
-                conn.execute(
-                    f"CREATE VIEW {table} AS SELECT * FROM crm_live.{table}"
-                )
-            logger.info("CRM: live SQLite via sqlite_scanner (%s)", crm_path)
-        except Exception as exc:
-            logger.warning("sqlite_scanner failed (%s); falling back to snapshot for CRM", exc)
-            self._attach_snapshot_tables(conn, _CRM_TABLES)
-
-        # HR: read_csv streaming (no copy into RAM)
-        try:
-            conn.execute(f"""
-                CREATE VIEW hr_employees AS
-                SELECT * FROM read_csv(
-                    '{hr_csv}',
-                    delim=';',
-                    header=true,
-                    nullstr='',
-                    ignore_errors=true
-                )
-            """)
-            logger.info("HR: live CSV streaming via read_csv (%s)", hr_csv)
-        except Exception as exc:
-            logger.warning("read_csv failed (%s); falling back to snapshot for HR", exc)
-            self._attach_snapshot_tables(conn, ["hr_employees"])
-
-        # PIM: read_json streaming
-        try:
-            conn.execute(f"""
-                CREATE VIEW pim_products AS
-                SELECT p.*
-                FROM (
-                    SELECT UNNEST(products) AS p
-                    FROM read_json('{pim_json}', format='auto')
-                ) t
-            """)
-            logger.info("PIM: live JSON streaming via read_json (%s)", pim_json)
-        except Exception as exc:
-            logger.warning("read_json failed (%s); falling back to snapshot for PIM", exc)
-            self._attach_snapshot_tables(conn, ["pim_products"])
-
-        return conn
-
-    def _attach_snapshot_tables(
-        self,
-        conn: duckdb.DuckDBPyConnection,
-        tables: list[str],
-    ) -> None:
-        """Copy specific tables from snapshot into a live connection as fallback."""
-        if not self._db_path.exists():
-            logger.warning("No snapshot available for fallback (missing %s)", self._db_path)
-            return
-        snap = duckdb.connect(str(self._db_path), read_only=True)
-        try:
+            import psycopg2
+            import psycopg2.extras
+            pg_conn = psycopg2.connect(dsn)
+            cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             for table in tables:
-                # Find the table in the snapshot (may be prefixed with source name)
-                try:
-                    df = snap.execute(f"SELECT * FROM {table}").df()
-                    conn.execute(f"CREATE TABLE {table} AS SELECT * FROM df")
-                except Exception as exc:
-                    logger.warning("Could not copy snapshot table %s: %s", table, exc)
-        finally:
-            snap.close()
+                cur.execute(f'SELECT * FROM "{schema}"."{table}"')
+                rows = cur.fetchall()
+                df = pd.DataFrame([dict(r) for r in rows])
+                conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+                self._row_counts[f"{cfg.id}.{table}"] = len(df)
+                logger.info("PG   %-25s %7d rows", table, len(df))
+                if table not in cfg.target_tables:
+                    cfg.target_tables.append(table)
+            pg_conn.close()
+        except ImportError:
+            # Fallback: try DuckDB postgres_scanner
+            conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
+            conn.execute(f"ATTACH '{dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
+            for table in tables:
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM _pg_src."{schema}"."{table}"'
+                )
+                n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                self._row_counts[f"{cfg.id}.{table}"] = n
+                logger.info("PG   %-25s %7d rows", table, n)
+                if table not in cfg.target_tables:
+                    cfg.target_tables.append(table)
 
+    # ── Adapter shims (BaseConnector-compatible) ───────────────────────────────
+    # These expose load_entity() / execute_query() / describe() so KnowledgeGraph
+    # and MetadataCatalog can read from the same DuckDB snapshot.
 
-# ── BaseConnector-compatible adapters ─────────────────────────────────────────
-#
-# These shims expose the load_entity() / execute_query() / describe() interface
-# expected by KnowledgeGraph and MetadataCatalog, but delegate all I/O to the
-# shared DuckDBSourceManager — no duplicate parsing, no extra RAM copies.
 
 class _DuckDBConnectorAdapter:
     _SOURCE_NAME: str = ""

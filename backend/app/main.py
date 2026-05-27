@@ -810,10 +810,7 @@ def data_store_status(
 def rebuild_data_store(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
-    """
-    Force full re-ingest of all 4 sources into the DuckDB snapshot.
-    Use after source files are updated. Admin-only.
-    """
+    """Force full re-ingest of all sources into the DuckDB snapshot. Admin-only."""
     from .connectors.duckdb_source_manager import get_source_manager
 
     mgr = get_source_manager(_SCENARIO_PATH)
@@ -825,6 +822,125 @@ def rebuild_data_store(
         "row_counts": row_counts,
         "total_rows": sum(row_counts.values()),
     }
+
+
+# ── Source registry CRUD ───────────────────────────────────────────────────────
+
+
+class SourceAddRequest(BaseModel):
+    connector_type: str
+    label: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceResponse(BaseModel):
+    id: str
+    connector_type: str
+    label: str
+    params: dict[str, Any]
+    target_tables: list[str]
+    row_count: int
+    status: str
+    error_msg: str | None
+    connected_at: str
+    last_sync_at: str | None
+    is_default: bool
+
+
+def _source_cfg_to_response(cfg) -> SourceResponse:
+    return SourceResponse(
+        id=cfg.id,
+        connector_type=cfg.connector_type,
+        label=cfg.label,
+        params={k: v for k, v in cfg.params.items() if k not in ("api_key", "password")},
+        target_tables=cfg.target_tables,
+        row_count=cfg.row_count,
+        status=cfg.status,
+        error_msg=cfg.error_msg,
+        connected_at=cfg.connected_at,
+        last_sync_at=cfg.last_sync_at,
+        is_default=cfg.is_default,
+    )
+
+
+@app.get("/api/sources", response_model=list[SourceResponse])
+def list_sources(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[SourceResponse]:
+    """List all configured data sources."""
+    from .connectors.duckdb_source_manager import get_source_manager
+    mgr = get_source_manager(_SCENARIO_PATH)
+    return [_source_cfg_to_response(s) for s in mgr.registry.list()]
+
+
+@app.post("/api/sources", response_model=SourceResponse, status_code=201)
+def add_source(
+    req: SourceAddRequest,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> SourceResponse:
+    """Register a new data source. Triggers a DuckDB rebuild for implemented types."""
+    import uuid
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.source_registry import SourceConfig, IMPLEMENTED_CONNECTOR_TYPES
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    source_id = req.params.get("id") or f"{req.connector_type}-{uuid.uuid4().hex[:8]}"
+    cfg = SourceConfig(
+        id=source_id,
+        connector_type=req.connector_type,
+        label=req.label,
+        params=req.params,
+        status="pending",
+    )
+    mgr.registry.upsert(cfg)
+
+    if req.connector_type in IMPLEMENTED_CONNECTOR_TYPES:
+        try:
+            mgr.rebuild()
+            cfg = mgr.registry.get(source_id) or cfg
+        except Exception as exc:
+            mgr.registry.patch(source_id, status="error", error_msg=str(exc))
+            cfg = mgr.registry.get(source_id) or cfg
+
+    return _source_cfg_to_response(cfg)
+
+
+@app.delete("/api/sources/{source_id}", status_code=204)
+def remove_source(
+    source_id: str,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> None:
+    """Remove a source from the registry and trigger a DuckDB rebuild."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    try:
+        mgr.registry.remove(source_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    mgr.rebuild()
+
+
+@app.post("/api/sources/{source_id}/sync", response_model=SourceResponse)
+def sync_source(
+    source_id: str,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> SourceResponse:
+    """Re-ingest a single source and rebuild the DuckDB snapshot."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    cfg = mgr.registry.get(source_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
+    try:
+        mgr.ingest_one(source_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    cfg = mgr.registry.get(source_id) or cfg
+    return _source_cfg_to_response(cfg)
 
 
 # ── Semantic sources ───────────────────────────────────────────────────────────

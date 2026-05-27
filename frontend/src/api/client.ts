@@ -15,7 +15,7 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 export const AUTH_TOKEN_STORAGE_KEY = 'si-auth-token'
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 60_000,
