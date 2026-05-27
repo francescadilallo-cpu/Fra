@@ -660,6 +660,64 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   )
 }
 
+// ── Intra-DB Relations data ────────────────────────────────────────────────────
+
+const AW_RELATIONS = [
+  {
+    source: 'ERP — OrionSales',
+    colorBorder: 'border-blue-200',
+    colorBg: 'bg-blue-50',
+    colorText: 'text-blue-700',
+    colorDot: 'bg-blue-500',
+    icon: '🏭',
+    relations: [
+      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId', cardinality: '1:N', rows: '31,465 → 121,317', note: 'One order has many line items' },
+      { from: 'SalesOrder', to: 'Territory',      via: 'territoryId', cardinality: 'N:1', rows: '31,465 → 10', note: 'Each order belongs to a sales territory' },
+      { from: 'SalesOrder', to: 'SalesPerson',    via: 'salesPersonId', cardinality: 'N:1', rows: '31,465 → 17', note: 'Each order is assigned to a salesperson (nullable)' },
+      { from: 'SalesOrder', to: 'Customer',       via: 'customer_ref → customerId', cardinality: 'N:1', rows: '31,465 → 19,185', note: 'Internal ERP customer ref (different from CRM accountId)' },
+      { from: 'SalesPerson', to: 'Territory',     via: 'territoryId', cardinality: 'N:1', rows: '17 → 10', note: 'Salesperson is assigned to a home territory' },
+      { from: 'SalesOrderLine', to: 'SalesOrder', via: 'orderId', cardinality: 'N:1', rows: '121,317 → 31,465', note: 'Reverse of the order-line relationship' },
+    ],
+  },
+  {
+    source: 'CRM — ClientHub',
+    colorBorder: 'border-teal-200',
+    colorBg: 'bg-teal-50',
+    colorText: 'text-teal-700',
+    colorDot: 'bg-teal-500',
+    icon: '🤝',
+    relations: [
+      { from: 'Customer', to: 'Contact',       via: 'accountId', cardinality: '1:N', rows: '19,829 → 19,302', note: 'Each account can have multiple contacts' },
+      { from: 'Customer', to: 'Address',       via: 'accountId', cardinality: '1:N', rows: '19,829 → 19,614', note: 'Each account can have multiple shipping/billing addresses' },
+      { from: 'Address',  to: 'StateProvince', via: 'stateProvinceId', cardinality: 'N:1', rows: '19,614 → 70', note: 'Address belongs to a state/province' },
+      { from: 'StateProvince', to: 'Country',  via: 'countryId', cardinality: 'N:1', rows: '70 → 6', note: 'State/province belongs to a country' },
+    ],
+  },
+  {
+    source: 'PIM — Catalog',
+    colorBorder: 'border-amber-200',
+    colorBg: 'bg-amber-50',
+    colorText: 'text-amber-700',
+    colorDot: 'bg-amber-500',
+    icon: '📦',
+    relations: [
+      { from: 'Product', to: 'Category',    via: 'category (string)', cardinality: 'N:1', rows: '504 → ~4', note: 'Denormalized — Bikes, Components, Clothing, Accessories' },
+      { from: 'Product', to: 'Subcategory', via: 'subcategory (string)', cardinality: 'N:1', rows: '504 → ~37', note: 'Denormalized — Mountain Bikes, Road Bikes, Helmets…' },
+    ],
+  },
+  {
+    source: 'HR — Employees',
+    colorBorder: 'border-violet-200',
+    colorBg: 'bg-violet-50',
+    colorText: 'text-violet-700',
+    colorDot: 'bg-violet-500',
+    icon: '👥',
+    relations: [
+      { from: 'Employee', to: 'Department', via: 'repartoId', cardinality: 'N:1', rows: '290 → n/a', note: 'Department is a string field (not a FK table in this source)' },
+    ],
+  },
+]
+
 // ── Bridges Builder ───────────────────────────────────────────────────────────
 
 function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityOptions: string[] }) {
@@ -1898,7 +1956,7 @@ function AmbiguityLogPanel() {
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'rules' | 'metrics' | 'hierarchies' | 'segments' | 'definitions' | 'playground'
+type SLSection = 'overview' | 'sources' | 'entities' | 'bridges' | 'relations' | 'rules' | 'metrics' | 'hierarchies' | 'segments' | 'definitions' | 'playground'
 
 const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ className?: string }>; desc: string; group?: string }[] = [
   { id: 'overview',     label: 'Overview',    Icon: Layers,           desc: 'Stats & quality' },
@@ -1906,6 +1964,7 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
   { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
   { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
+  { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source FK links' },
   { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Disambiguation', group: 'Semantics' },
   { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
   { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },
@@ -2044,6 +2103,7 @@ export default function SemanticLayerView() {
     if (id === 'sources')     return sourcesCount
     if (id === 'entities')    return nodeCount
     if (id === 'bridges')     return bridgesCount
+    if (id === 'relations')   return isManufacturing ? AW_RELATIONS.reduce((acc, g) => acc + g.relations.length, 0) : 0
     if (id === 'rules')       return rulesCount
     if (id === 'definitions') return allMappings.length
     if (id === 'metrics')     return metricsCount
@@ -2867,6 +2927,54 @@ export default function SemanticLayerView() {
               )}
               <BridgesBuilder sectorId={sectorId} entityOptions={entityOptions} />
             </div>
+          </div>
+        )}
+
+        {/* ── RELATIONS ── */}
+        {section === 'relations' && (
+          <div className="px-8 py-7 space-y-6">
+            <SectionHeader icon={ArrowRight} title="Intra-source Relations"
+              desc="Foreign-key relationships within each data source — visible in the ontology graph" />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Relations are FK joins that exist <em>inside</em> a single system, as opposed to Bridges which connect different systems.
+              They define the navigable graph within each source and drive ontology graph edges.
+            </p>
+
+            {isManufacturing ? (
+              <div className="space-y-6">
+                {AW_RELATIONS.map(group => (
+                  <div key={group.source} className={`border ${group.colorBorder} rounded-xl overflow-hidden`}>
+                    <div className={`${group.colorBg} px-4 py-3 flex items-center gap-2`}>
+                      <span className="text-base">{group.icon}</span>
+                      <span className={`text-xs font-semibold ${group.colorText}`}>{group.source}</span>
+                      <span className="ml-auto text-[10px] text-slate-400">{group.relations.length} relation{group.relations.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {group.relations.map((r, i) => (
+                        <div key={i} className="px-4 py-3 flex items-start gap-4 bg-white hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="font-mono text-xs font-semibold text-slate-700 shrink-0">{r.from}</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="font-mono text-xs font-semibold text-slate-700 shrink-0">{r.to}</span>
+                            <span className="text-[10px] text-slate-400 font-mono shrink-0">via {r.via}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.cardinality}</span>
+                            <span className="text-[10px] text-slate-400 hidden sm:block">{r.rows}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 hidden md:block w-56 shrink-0">{r.note}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-xs text-slate-400 bg-slate-50">
+                No relations defined for this sector yet.<br />
+                Relations are inferred from the ontology graph edges you add in the Entities section.
+              </div>
+            )}
           </div>
         )}
 

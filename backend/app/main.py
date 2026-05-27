@@ -145,7 +145,7 @@ def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
 
     now = int(datetime.now(timezone.utc).timestamp())
     exp = payload.get("exp")
-    if not isinstance(exp, int) or exp <= now:
+    if exp is not None and (not isinstance(exp, int) or exp <= now):
         raise ValueError("Token expired")
 
     nbf = payload.get("nbf")
@@ -234,18 +234,22 @@ def _authenticate_user(username: str, password: str) -> dict[str, Any] | None:
 def _create_access_token(subject: str, role: Literal["admin", "user"]) -> tuple[str, int]:
     secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
-    expire_at = now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {
+    payload: dict[str, Any] = {
         "sub": subject,
         "role": role,
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
-        "exp": int(expire_at.timestamp()),
         "iss": JWT_ISSUER,
         "aud": JWT_AUDIENCE,
     }
+    if JWT_ACCESS_TOKEN_EXPIRE_MINUTES > 0:
+        expire_at = now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+        payload["exp"] = int(expire_at.timestamp())
+        expires_in = int((expire_at - now).total_seconds())
+    else:
+        expires_in = -1  # no expiry
     token = _jwt_encode(payload, secret)
-    return token, int((expire_at - now).total_seconds())
+    return token, expires_in
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
