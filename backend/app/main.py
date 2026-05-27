@@ -690,7 +690,7 @@ def validate_ontology_configuration(
         }
     except OntologyValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error": "ONTOLOGY_VALIDATION_ERROR",
                 "message": str(exc),
