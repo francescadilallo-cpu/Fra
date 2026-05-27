@@ -72,7 +72,7 @@ Customers (deduped CRM): 19,829 | ERP-matched: 18,484 (93.2%) | CRM-only prospec
 Quarterly net: Q1 $4,121,485 (7,312 orders) | Q2 $5,182,930 (8,204) | Q3 $5,847,621 (8,847) | Q4 $4,975,034 (7,102)
 YoY: 2011 had 1,607 orders avg $7,868 net $12,646,110 | 2014 had 31,465 orders avg $640 net $20,127,070
 
-Product categories (ERP×PIM): Bikes 97 SKUs $19,791,723 (98% of revenue) | Components 189 SKUs $931,644 | Clothing 35 SKUs $339,772 | Accessories 36 SKUs $231,521
+Product categories (ERP×PIM): Bikes 97 SKUs $19,791,723 (98.3% of revenue) | Components 189 SKUs $207,915 | Clothing 35 SKUs $75,788 | Accessories 36 SKUs $51,644 | Total $20,127,070
 Top products: Mountain-200 Black,38 $261,436 | Road-150 Red,62 $106,420 | Touring-1000 Blue,60 $32,726
 
 Top salespersons by salesYTD:
