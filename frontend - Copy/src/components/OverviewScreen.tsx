@@ -1,0 +1,313 @@
+import { GitBranch, MessageSquare, ArrowRight, CheckCircle2, Activity, Brain, Plug, Network, BookOpen, BotMessageSquare } from 'lucide-react'
+import { useSector } from '../contexts/SectorContext'
+import { useExtendedOntology } from '../data/ontologyExtensions'
+import { useAgentStore, countFindings } from '../data/agentStore'
+import type { NavTab } from '../types'
+
+interface Props { onNavigate: (tab: NavTab) => void }
+
+// ── Guided journey steps (matches the nav) ────────────────────────────────────
+const JOURNEY: {
+  step: number
+  section: string
+  tab: NavTab
+  icon: typeof GitBranch
+  title: string
+  desc: string
+  aw?: string
+}[] = [
+  {
+    step: 1, section: 'CONNECT',
+    tab: 'sources',      icon: Plug,           title: 'Data Sources',
+    desc: 'Connect your data sources. Configure mappings, validate quality, and ingest into the semantic layer.',
+    aw: '3 AW sources active: ERP 152k rows · CRM 59k · HR+PIM 794',
+  },
+  {
+    step: 2, section: 'BUILD',
+    tab: 'ontology',     icon: GitBranch,      title: 'Ontology',
+    desc: 'Define your business entities and their properties. The graph shows relationships and cardinalities.',
+    aw: '8 AW entities: Customer 19,829 · SalesOrder 31,465 · Product 504…',
+  },
+  {
+    step: 3, section: 'BUILD',
+    tab: 'sembuilder',   icon: Network,        title: 'Knowledge Graph',
+    desc: 'Visualize how entities connect across sources. Document cross-source bridges.',
+    aw: '193,062 nodes · 313,193 edges · 3 bridges ⚡ (PLACED_BY · SOLD_BY · OF_PRODUCT)',
+  },
+  {
+    step: 4, section: 'BUILD',
+    tab: 'sembuilder',   icon: BookOpen,       title: 'Semantic Layer',
+    desc: 'Define the meaning of fields. Document ambiguities ("fatturato"), map the Italian HR schema.',
+    aw: '47 semantic definitions · 2 documented ambiguities · cross-source bridges',
+  },
+  {
+    step: 5, section: 'QUERY',
+    tab: 'query',        icon: MessageSquare,  title: 'Query AI',
+    desc: 'Query the semantic layer in natural language. The engine resolves cross-source joins and ambiguities.',
+    aw: '"Who is the top salesperson?" → Linda Mitchell $4.25M · ERP×HR join',
+  },
+  {
+    step: 6, section: 'ACT',
+    tab: 'agents',       icon: BotMessageSquare, title: 'Agents',
+    desc: 'Automated agents running on the semantic layer: anomaly detection, trend analysis, alerts.',
+    aw: '4 AW agents: Sales Performance · CRM Dedup · Revenue Disambiguator · Bridge Validator',
+  },
+]
+
+export default function OverviewScreen({ onNavigate }: Props) {
+  const { sectorId, sector } = useSector()
+  const ontology = useExtendedOntology(sectorId)
+  const agentRuns = useAgentStore(sectorId)
+  const findings = countFindings(agentRuns)
+
+  const entityCount = ontology.nodes.length
+  const edgeCount = ontology.edges.length
+  const isAW = sectorId === 'manufacturing'
+
+  return (
+    <div className="min-h-full bg-white text-slate-900 overflow-auto">
+
+      {/* ── Status bar ─────────────────────────────────────────────────────── */}
+      <div className="bg-slate-900 text-white px-12 py-3.5">
+        <div className="max-w-5xl flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-teal-400" />
+            <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Platform Status</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-teal-400 rounded-full" />
+            <span className="text-xs text-slate-300">Ontology</span>
+            <span className="text-xs font-semibold text-white ml-1">{entityCount} entities · {edgeCount} relationships</span>
+          </div>
+          {isAW && (
+            <>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-teal-400 rounded-full" />
+                <span className="text-xs text-slate-300">Knowledge Graph</span>
+                <span className="text-xs font-semibold text-white ml-1">193,062 nodes · 313,193 edges</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-teal-400 rounded-full" />
+                <span className="text-xs text-slate-300">Sources</span>
+                <span className="text-xs font-semibold text-white ml-1">ERP · CRM · HR · PIM — connected</span>
+              </div>
+            </>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${agentRuns.length > 0 ? 'bg-teal-400' : 'bg-slate-500'}`} />
+            <span className="text-xs text-slate-300">Agents</span>
+            <span className="text-xs font-semibold text-white ml-1">
+              {agentRuns.length > 0
+                ? `${agentRuns.length} run · ${findings.critical > 0 ? `${findings.critical} critical` : 'all clear'}`
+                : 'not started yet'}
+            </span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => onNavigate('query')} className="text-xs bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
+              Query AI →
+            </button>
+            <button onClick={() => onNavigate('process')} className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
+              Run Pipeline →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      <section className="px-12 py-14 border-b border-slate-100">
+        <div className="max-w-4xl">
+          <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
+            {isAW ? 'Demo — AdventureWorks 2014' : `Demo — ${sector.name}`}
+          </span>
+          <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
+            Semantic<span className="text-teal-600">Intelligence</span>
+          </h1>
+          <p className="text-lg text-slate-500 mb-6">
+            The semantic layer that transforms distributed, heterogeneous data into AI-queryable knowledge.
+          </p>
+
+          {isAW ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo scenario — AdventureWorks Cycles</p>
+              <p className="text-sm text-slate-600 mb-3 leading-relaxed">
+                A bicycle manufacturer with <strong>real data distributed across 4 systems</strong>: ERP (31,465 orders),
+                CRM (20,201 accounts with 372 duplicates), HR in CSV with Italian schema (290 employees), PIM JSON (504 products).
+                The systems don't share a common language: different keys, different field names, semantic ambiguities (e.g. "fatturato").
+              </p>
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { label: 'ERP — OrionSales', value: '31,465 orders',   sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                  { label: 'CRM — ClientHub',  value: '19,829 clients',  sub: 'SQLite (372 dedup)',   color: 'text-teal-600 bg-teal-50 border-teal-200' },
+                  { label: 'HR — Employees',   value: '290 employees',   sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
+                  { label: 'PIM — Catalog',    value: '504 products',    sub: 'JSON',                 color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                ].map(s => (
+                  <div key={s.label} className={`border rounded-lg px-3 py-2.5 ${s.color}`}>
+                    <p className="text-[11px] font-semibold">{s.label}</p>
+                    <p className="text-base font-bold mt-0.5">{s.value}</p>
+                    <p className="text-[10px] opacity-70 mt-0.5">{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
+              <p className="text-sm text-slate-600">Active sector: <strong>{sector.name}</strong> — {sector.domain}</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+              Start from Connect →
+            </button>
+            <button onClick={() => onNavigate('dashboard')} className="border border-slate-200 text-slate-600 rounded-lg px-6 py-3 text-sm font-semibold hover:border-teal-300 hover:text-teal-700 transition-colors">
+              Go to Dashboard
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Guided journey ─────────────────────────────────────────────────── */}
+      <section className="px-12 py-12 border-b border-slate-100 bg-slate-50">
+        <div className="max-w-5xl">
+          <div className="flex items-center gap-3 mb-2">
+            <Brain className="w-5 h-5 text-teal-600" />
+            <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Journey</span>
+          </div>
+          <h2 className="mt-1 text-2xl font-bold text-slate-900 mb-8">
+            Connect → Build → Query → Act — each tab is a step in the flow
+          </h2>
+
+          <div className="grid grid-cols-3 gap-4">
+            {JOURNEY.map(({ step, section, tab, icon: Icon, title, desc, aw }) => (
+              <button
+                key={tab}
+                onClick={() => onNavigate(tab)}
+                className="group text-left bg-white border border-slate-200 hover:border-teal-300 rounded-xl p-4 transition-all hover:shadow-sm"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                      <Icon className="w-4 h-4 text-teal-600" />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{section} {step}</span>
+                  </div>
+                </div>
+                <p className="text-sm font-semibold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors">{title}</p>
+                <p className="text-xs text-slate-500 leading-snug mb-2">{desc}</p>
+                {aw && (
+                  <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
+                )}
+                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Open <ArrowRight className="w-3 h-3" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Problem → Solution ─────────────────────────────────────────────── */}
+      <section className="px-12 py-12 border-b border-slate-100">
+        <div className="max-w-5xl">
+          <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Problem</span>
+          <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
+            The data is there. It just can't be understood.
+          </h2>
+          <div className="grid grid-cols-3 gap-6">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
+              <p className="text-3xl font-extrabold text-red-500 mb-2">4</p>
+              <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
+              <p className="text-xs text-slate-500">ERP, CRM, HR, PIM — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
+              <p className="text-3xl font-extrabold text-amber-500 mb-2">372</p>
+              <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
+              <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated by 1.9%.</p>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-violet-400">
+              <p className="text-3xl font-extrabold text-violet-500 mb-2">"fatturato"</p>
+              <p className="text-sm font-semibold text-slate-900 mb-1">ambiguous term</p>
+              <p className="text-xs text-slate-500">subtotal_amount = $20.1M (net) or total_due = $22.4M (with tax & freight)? AI must ask, not guess.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Solution ───────────────────────────────────────────────────────── */}
+      <section className="px-12 py-12 border-b border-slate-100 bg-slate-50">
+        <div className="max-w-5xl">
+          <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Solution</span>
+          <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
+            A semantic layer that unifies, disambiguates, and empowers AI
+          </h2>
+          <div className="grid grid-cols-2 gap-6">
+            {[
+              {
+                icon: Network, color: 'border-l-teal-500', bg: 'bg-teal-50',
+                title: 'Cross-source Knowledge Graph',
+                desc: 'The 3 semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. 193k nodes, 313k edges, reliable joins.',
+              },
+              {
+                icon: BookOpen, color: 'border-l-violet-500', bg: 'bg-violet-50',
+                title: 'Semantic Definitions',
+                desc: 'Every field has a formal definition. Ambiguities like "fatturato" are documented and resolved at query time by the AI engine.',
+              },
+              {
+                icon: MessageSquare, color: 'border-l-blue-500', bg: 'bg-blue-50',
+                title: 'Natural Language Query AI',
+                desc: '"Who is the top salesperson 2014?" → Linda Mitchell, $4.25M YTD. ERP×HR join resolved automatically — matricolaDip ↔ salesPersonId bridge.',
+              },
+              {
+                icon: BotMessageSquare, color: 'border-l-amber-500', bg: 'bg-amber-50',
+                title: 'Agents on reliable data',
+                desc: 'Agents operate on a shared, verified vocabulary. No hallucinations from inconsistent data. Every decision is traceable.',
+              },
+            ].map(({ icon: Icon, color, bg, title, desc }) => (
+              <div key={title} className={`bg-white border border-slate-200 rounded-xl p-5 border-l-4 ${color}`}>
+                <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center mb-3`}>
+                  <Icon className="w-4 h-4 text-slate-700" />
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-2">{title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ────────────────────────────────────────────────────────────── */}
+      <section className="px-12 py-16 bg-slate-900">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl font-bold text-white leading-snug mb-6">
+            Ready to explore the demo?
+          </h2>
+          <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
+            {[
+              'Real AdventureWorks 2014 data — 31,465 orders, 4 systems',
+              'Knowledge Graph with 193k nodes and 313k edges',
+              'Natural language Query AI — "Who is the top salesperson?"',
+              'Download CSV for each entity from the Data Explorer',
+            ].map(item => (
+              <li key={item} className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
+                {item}
+              </li>
+            ))}
+          </ul>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+              Start from Connect →
+            </button>
+            <button onClick={() => onNavigate('query')} className="bg-slate-700 text-slate-200 rounded-lg px-6 py-3 text-sm font-semibold hover:bg-slate-600 transition-colors">
+              Query AI →
+            </button>
+            <button onClick={() => onNavigate('dashboard')} className="border border-slate-600 text-slate-300 rounded-lg px-6 py-3 text-sm font-semibold hover:border-teal-500 hover:text-teal-400 transition-colors">
+              Dashboard
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  )
+}

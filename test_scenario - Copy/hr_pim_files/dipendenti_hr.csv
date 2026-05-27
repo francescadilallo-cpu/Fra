@@ -1,0 +1,291 @@
+MatricolaDip;Nome;Cognome;Mansione;Reparto;GruppoReparto;DataAssunzione;DataNascita;Genere;StatoCivile;OreFerieResidue;OreMalattiaResidue;RetribuzioneOraria;FrequenzaPaga
+1;Ken;Sánchez;Chief Executive Officer;Executive;Executive General and Administration;14/01/2009;29/01/1969;M;S;99;69;125.5;2
+2;Terri;Duffy;Vice President of Engineering;Engineering;Research and Development;31/01/2008;01/08/1971;F;S;1;20;63.4615;2
+3;Roberto;Tamburello;Engineering Manager;Engineering;Research and Development;11/11/2007;12/11/1974;M;M;2;21;43.2692;2
+4;Rob;Walters;Senior Tool Designer;Tool Design;Research and Development;05/12/2007;23/12/1974;M;S;48;80;29.8462;2
+5;Gail;Erickson;Design Engineer;Engineering;Research and Development;06/01/2008;27/09/1952;F;M;5;22;32.6923;2
+6;Jossef;Goldberg;Design Engineer;Engineering;Research and Development;24/01/2008;11/03/1959;M;M;6;23;32.6923;2
+7;Dylan;Miller;Research and Development Manager;Research and Development;Research and Development;08/02/2009;24/02/1987;M;M;61;50;;2
+8;Diane;Margheim;Research and Development Engineer;Research and Development;Research and Development;29/12/2008;05/06/1986;F;S;62;51;40.8654;2
+9;Gigi;Matthew;Research and Development Engineer;Research and Development;Research and Development;16/01/2009;21/01/1979;F;M;63;51;40.8654;2
+10;Michael;Raheem;Research and Development Manager;Research and Development;Research and Development;03/05/2009;30/11/1984;M;M;16;64;42.4808;2
+11;Ovidiu;Cracium;Senior Tool Designer;Tool Design;Research and Development;05/12/2010;17/01/1978;M;S;7;23;28.8462;2
+12;Thierry;D'Hers;Tool Designer;Tool Design;Research and Development;11/12/2007;29/07/1959;M;M;9;24;25;2
+13;Janice;Galvin;Tool Designer;Tool Design;Research and Development;23/12/2010;28/05/1989;F;M;8;24;25;2
+14;Michael;Sullivan;Senior Design Engineer;Engineering;Research and Development;30/12/2010;16/06/1979;M;S;3;21;36.0577;2
+15;Sharon;Salavaria;Design Engineer;Engineering;Research and Development;18/01/2011;02/05/1961;F;M;4;22;32.6923;2
+16;David;Bradley;Marketing Manager;Marketing;Sales and Marketing;20/12/2007;19/03/1975;M;S;40;40;37.5;2
+17;Kevin;Brown;Marketing Assistant;Marketing;Sales and Marketing;26/01/2007;03/05/1987;M;S;42;41;13.4615;2
+18;John;Wood;Marketing Specialist;Marketing;Sales and Marketing;07/02/2011;06/03/1978;M;S;48;44;14.4231;2
+19;Mary;Dempsey;Marketing Assistant;Marketing;Sales and Marketing;14/02/2011;29/01/1978;F;S;43;41;13.4615;2
+20;Wanida;Benshoof;Marketing Assistant;Marketing;Sales and Marketing;07/01/2011;17/03/1975;F;M;41;40;13.4615;2
+21;Terry;Eminhizer;Marketing Specialist;Marketing;Sales and Marketing;02/03/2009;04/02/1986;M;M;44;42;14.4231;2
+22;Sariya;Harnpadoungsataya;Marketing Specialist;Marketing;Sales and Marketing;12/12/2008;21/05/1987;M;S;45;42;14.4231;2
+23;Mary;Gibson;Marketing Specialist;Marketing;Sales and Marketing;12/01/2009;13/09/1962;F;M;46;43;14.4231;2
+24;Jill;Williams;Marketing Specialist;Marketing;Sales and Marketing;18/01/2009;18/06/1979;F;M;47;43;14.4231;2
+25;James;Hamilton;Vice President of Production;Production;Manufacturing;03/02/2009;07/01/1983;M;S;64;52;84.1346;2
+26;Peter;Krebs;Production Control Manager;Production Control;Manufacturing;01/12/2008;03/11/1982;M;M;43;41;24.5192;2
+27;Jo;Brown;Production Supervisor - WC60;Production;Manufacturing;27/02/2008;08/10/1956;F;S;80;60;25;2
+28;Guy;Gilbert;Production Technician - WC60;Production;Manufacturing;30/06/2006;13/03/1988;M;M;21;30;12.45;1
+29;Mark;McArthur;Production Technician - WC60;Production;Manufacturing;23/01/2009;25/09/1979;M;S;19;29;12.45;1
+30;Britta;Simon;Production Technician - WC60;Production;Manufacturing;29/01/2009;28/09/1989;F;M;14;27;12.45;1
+31;Margie;Shoop;Production Technician - WC60;Production;Manufacturing;04/01/2009;20/05/1986;F;M;18;29;12.45;1
+32;Rebecca;Laszlo;Production Technician - WC60;Production;Manufacturing;29/12/2008;10/07/1977;F;M;23;31;12.45;1
+33;Annik;Stahl;Production Technician - WC60;Production;Manufacturing;17/12/2008;26/12/1976;M;M;17;28;12.45;1
+34;Suchitra;Mohan;Production Technician - WC60;Production;Manufacturing;16/02/2009;10/06/1987;F;M;15;27;12.45;1
+35;Brandon;Heidepriem;Production Technician - WC60;Production;Manufacturing;08/02/2009;10/01/1977;M;M;22;31;12.45;1
+36;Jose;Lugo;Production Technician - WC60;Production;Manufacturing;10/02/2009;31/07/1984;M;M;20;30;12.45;1
+37;Chris;Okelberry;Production Technician - WC60;Production;Manufacturing;07/03/2009;07/08/1986;M;S;16;28;12.45;1
+38;Kim;Abercrombie;Production Technician - WC60;Production;Manufacturing;16/01/2010;14/12/1966;F;M;24;32;12.45;1
+39;Ed;Dudenhoefer;Production Technician - WC60;Production;Manufacturing;05/02/2010;11/09/1971;M;S;25;32;12.45;1
+40;JoLynn;Dobney;Production Supervisor - WC60;Production;Manufacturing;26/12/2007;16/01/1956;F;S;82;61;25;2
+41;Bryan;Baker;Production Technician - WC60;Production;Manufacturing;21/01/2009;27/08/1973;M;S;35;37;12.45;1
+42;James;Kramer;Production Technician - WC60;Production;Manufacturing;27/12/2008;25/07/1984;M;M;39;39;12.45;1
+43;Nancy;Anderson;Production Technician - WC60;Production;Manufacturing;02/01/2009;19/11/1988;F;M;34;37;12.45;1
+44;Simon;Rapier;Production Technician - WC60;Production;Manufacturing;08/12/2008;17/05/1990;M;S;38;39;12.45;1
+45;Thomas;Michaels;Production Technician - WC60;Production;Manufacturing;26/02/2009;10/01/1986;M;M;37;38;12.45;1
+46;Eugene;Kogan;Production Technician - WC60;Production;Manufacturing;08/02/2009;10/02/1976;M;S;36;38;12.45;1
+47;Andrew;Hill;Production Supervisor - WC10;Production;Manufacturing;22/02/2009;06/09/1988;M;S;65;52;25;2
+48;Ruth;Ellerbrock;Production Technician - WC10;Production;Manufacturing;06/01/2008;04/06/1956;F;M;83;61;13.45;1
+49;Barry;Johnson;Production Technician - WC10;Production;Manufacturing;07/01/2008;26/03/1956;M;S;88;64;13.45;1
+50;Sidney;Higa;Production Technician - WC10;Production;Manufacturing;02/02/2008;30/08/1956;M;M;84;62;13.45;1
+51;Jeffrey;Ford;Production Technician - WC10;Production;Manufacturing;20/02/2008;11/07/1956;M;S;85;62;13.45;1
+52;Doris;Hartwig;Production Technician - WC10;Production;Manufacturing;10/03/2008;04/04/1956;F;M;86;63;13.45;1
+53;Diane;Glimp;Production Technician - WC10;Production;Manufacturing;28/03/2008;29/03/1956;F;M;87;63;13.45;1
+54;Bonnie;Kearney;Production Technician - WC10;Production;Manufacturing;01/01/2010;10/09/1986;F;M;89;64;13.45;1
+55;Taylor;Maxwell;Production Supervisor - WC50;Production;Manufacturing;08/02/2008;01/04/1956;M;M;79;59;25;2
+56;Denise;Smith;Production Technician - WC50;Production;Manufacturing;05/02/2009;06/07/1988;F;M;9;24;11;1
+57;Frank;Miller;Production Technician - WC50;Production;Manufacturing;23/02/2009;24/07/1971;M;S;10;25;11;1
+58;Kendall;Keil;Production Technician - WC50;Production;Manufacturing;05/12/2008;30/05/1986;M;M;11;25;11;1
+59;Bob;Hohman;Production Technician - WC50;Production;Manufacturing;24/12/2008;16/08/1979;M;S;12;26;11;1
+60;Pete;Male;Production Technician - WC50;Production;Manufacturing;11/01/2009;03/02/1977;M;S;13;26;11;1
+61;Diane;Tibbott;Production Technician - WC50;Production;Manufacturing;18/01/2009;09/08/1989;F;S;8;24;11;1
+62;John;Campbell;Production Supervisor - WC60;Production;Manufacturing;17/03/2008;07/08/1956;M;M;81;60;25;2
+63;Maciej;Dusza;Production Technician - WC60;Production;Manufacturing;29/01/2010;30/01/1955;M;S;30;35;12.45;1
+64;Michael;Zwilling;Production Technician - WC60;Production;Manufacturing;23/02/2010;05/09/1973;M;S;26;33;12.45;1
+65;Randy;Reeves;Production Technician - WC60;Production;Manufacturing;23/02/2010;28/04/1970;M;M;29;34;12.45;1
+66;Karan;Khanna;Production Technician - WC60;Production;Manufacturing;22/12/2009;07/03/1970;M;S;28;34;12.45;1
+67;Jay;Adams;Production Technician - WC60;Production;Manufacturing;05/03/2009;11/02/1976;M;S;32;36;12.45;1
+68;Charles;Fitzgerald;Production Technician - WC60;Production;Manufacturing;03/12/2009;02/09/1971;M;S;27;33;12.45;1
+69;Steve;Masters;Production Technician - WC60;Production;Manufacturing;15/02/2009;06/04/1991;M;S;31;35;12.45;1
+70;David;Ortiz;Production Technician - WC60;Production;Manufacturing;15/12/2008;29/12/1984;M;M;33;36;12.45;1
+71;Michael;Ray;Production Supervisor - WC30;Production;Manufacturing;15/02/2009;29/01/1989;M;S;70;55;25;2
+72;Steven;Selikoff;Production Technician - WC30;Production;Manufacturing;01/12/2008;14/05/1977;M;M;41;40;9.5;1
+73;Carole;Poland;Production Technician - WC30;Production;Manufacturing;19/12/2008;19/10/1983;F;M;42;41;9.5;1
+74;Bjorn;Rettig;Production Technician - WC30;Production;Manufacturing;07/01/2009;06/11/1989;M;S;43;41;9.5;1
+75;Michiko;Osada;Production Technician - WC30;Production;Manufacturing;26/01/2009;27/06/1982;M;S;44;42;9.5;1
+76;Carol;Philips;Production Technician - WC30;Production;Manufacturing;12/02/2009;17/10/1988;F;M;45;42;9.5;1
+77;Merav;Netz;Production Technician - WC30;Production;Manufacturing;03/03/2009;13/05/1983;F;M;46;43;9.5;1
+78;Reuben;D'sa;Production Supervisor - WC40;Production;Manufacturing;15/12/2008;27/08/1987;M;M;72;56;25;2
+79;Eric;Brown;Production Technician - WC40;Production;Manufacturing;24/01/2010;08/12/1966;M;M;60;50;15;1
+80;Sandeep;Kaliyath;Production Technician - WC40;Production;Manufacturing;17/01/2010;03/12/1970;M;S;65;52;15;1
+81;Mihail;Frintu;Production Technician - WC40;Production;Manufacturing;29/12/2009;09/03/1971;M;S;64;52;15;1
+82;Jack;Creasey;Production Technician - WC40;Production;Manufacturing;03/03/2010;29/08/1973;M;S;62;51;15;1
+83;Patrick;Cook;Production Technician - WC40;Production;Manufacturing;12/02/2010;23/12/1973;M;M;61;50;15;1
+84;Frank;Martinez;Production Technician - WC40;Production;Manufacturing;05/02/2010;02/03/1952;M;M;66;53;15;1
+85;Brian;Goldstein;Production Technician - WC40;Production;Manufacturing;11/12/2009;23/12/1970;M;S;63;51;15;1
+86;Ryan;Cornelsen;Production Technician - WC40;Production;Manufacturing;05/01/2009;13/06/1972;M;M;59;49;15;1
+87;Cristian;Petculescu;Production Supervisor - WC10;Production;Manufacturing;22/12/2008;11/04/1984;M;M;67;53;25;2
+88;Betsy;Stadick;Production Technician - WC10;Production;Manufacturing;18/12/2009;17/12/1966;F;S;99;69;13.45;1
+89;Patrick;Wedge;Production Technician - WC10;Production;Manufacturing;01/02/2010;10/09/1986;M;S;96;68;13.45;1
+90;Danielle;Tiedt;Production Technician - WC10;Production;Manufacturing;20/02/2010;07/09/1986;F;S;97;68;13.45;1
+91;Kimberly;Zimmerman;Production Technician - WC10;Production;Manufacturing;12/01/2010;13/09/1986;F;S;95;67;13.45;1
+92;Tom;Vande Velde;Production Technician - WC10;Production;Manufacturing;10/03/2010;01/10/1986;M;M;98;69;13.45;1
+93;Kok-Ho;Loh;Production Supervisor - WC50;Production;Manufacturing;27/12/2008;28/04/1980;M;S;78;59;25;2
+94;Russell;Hunter;Production Technician - WC50;Production;Manufacturing;12/12/2008;25/11/1972;M;M;6;23;11;1
+95;Jim;Scardelis;Production Technician - WC50;Production;Manufacturing;19/12/2008;08/09/1986;M;M;1;20;11;1
+96;Elizabeth;Keyser;Production Technician - WC50;Production;Manufacturing;02/03/2009;25/01/1990;F;M;5;22;11;1
+97;Mandar;Samant;Production Technician - WC50;Production;Manufacturing;10/02/2009;21/03/1986;M;S;0;20;11;1
+98;Sameer;Tejani;Production Technician - WC50;Production;Manufacturing;11/02/2009;26/06/1978;M;M;4;22;11;1
+99;Nuan;Yu;Production Technician - WC50;Production;Manufacturing;06/01/2009;29/03/1979;M;S;2;21;11;1
+100;Lolan;Song;Production Technician - WC50;Production;Manufacturing;12/01/2009;24/01/1973;M;M;7;23;11;1
+101;Houman;Pournasseh;Production Technician - WC50;Production;Manufacturing;25/01/2009;30/08/1971;M;M;3;21;11;1
+102;Zheng;Mu;Production Supervisor - WC10;Production;Manufacturing;03/12/2008;26/10/1983;M;S;66;53;25;2
+103;Ebru;Ersan;Production Technician - WC10;Production;Manufacturing;06/12/2009;22/09/1986;M;S;93;66;13.45;1
+104;Mary;Baker;Production Technician - WC10;Production;Manufacturing;25/12/2009;19/09/1986;F;M;94;67;13.45;1
+105;Kevin;Homer;Production Technician - WC10;Production;Manufacturing;25/12/2009;19/09/1986;M;S;90;65;13.45;1
+106;John;Kane;Production Technician - WC10;Production;Manufacturing;27/02/2010;28/09/1986;M;S;92;66;;1
+107;Christopher;Hill;Production Technician - WC10;Production;Manufacturing;08/02/2010;01/10/1986;M;M;91;65;13.45;1
+108;Jinghao;Liu;Production Supervisor - WC50;Production;Manufacturing;08/12/2008;05/02/1989;M;S;77;58;25;2
+109;Alice;Ciccu;Production Technician - WC50;Production;Manufacturing;07/12/2008;26/01/1978;F;M;95;67;11;1
+110;Jun;Cao;Production Technician - WC50;Production;Manufacturing;14/12/2008;06/07/1979;M;S;90;65;11;1
+111;Suroor;Fatima;Production Technician - WC50;Production;Manufacturing;17/12/2008;25/02/1978;M;S;93;66;11;1
+112;John;Evans;Production Technician - WC50;Production;Manufacturing;01/01/2009;31/05/1978;M;S;91;65;11;1
+113;Linda;Moschell;Production Technician - WC50;Production;Manufacturing;25/12/2008;17/07/1987;F;M;96;68;11;1
+114;Mindaugas;Krapauskas;Production Technician - WC50;Production;Manufacturing;13/01/2009;07/05/1978;M;M;97;68;11;1
+115;Angela;Barbariol;Production Technician - WC50;Production;Manufacturing;20/01/2009;31/05/1991;F;S;92;66;11;1
+116;Michael;Patten;Production Technician - WC50;Production;Manufacturing;31/01/2009;03/05/1974;M;S;98;69;11;1
+117;Chad;Niswonger;Production Technician - WC50;Production;Manufacturing;18/02/2009;04/08/1990;M;M;99;69;11;1
+118;Don;Hall;Production Technician - WC50;Production;Manufacturing;13/02/2009;13/06/1971;M;M;88;64;11;1
+119;Michael;Entin;Production Technician - WC50;Production;Manufacturing;25/02/2009;15/06/1989;M;S;94;67;11;1
+120;Kitti;Lertpiriyasuwat;Production Technician - WC50;Production;Manufacturing;04/03/2009;06/06/1987;F;S;89;64;11;1
+121;Pilar;Ackerman;Shipping and Receiving Supervisor;Shipping and Receiving;Inventory Management;02/01/2009;09/09/1972;M;S;93;66;19.2308;2
+122;Susan;Eaton;Stocker;Shipping and Receiving;Inventory Management;07/12/2008;17/02/1978;F;S;97;68;9;1
+123;Vamsi;Kuppa;Shipping and Receiving Clerk;Shipping and Receiving;Inventory Management;07/12/2008;18/03/1977;M;M;95;67;9.5;2
+124;Kim;Ralls;Stocker;Shipping and Receiving;Inventory Management;26/12/2008;30/04/1984;F;S;98;69;9;1
+125;Matthias;Berndt;Shipping and Receiving Clerk;Shipping and Receiving;Inventory Management;20/01/2009;11/11/1973;M;M;94;67;9.5;2
+126;Jimmy;Bischoff;Stocker;Shipping and Receiving;Inventory Management;26/02/2009;04/05/1985;M;M;96;68;9;1
+127;David;Hamilton;Production Supervisor - WC40;Production;Manufacturing;03/01/2009;02/07/1983;M;S;73;56;25;2
+128;Paul;Komosinski;Production Technician - WC40;Production;Manufacturing;04/12/2008;13/11/1980;M;S;68;54;15;1
+129;Gary;Yukish;Production Technician - WC40;Production;Manufacturing;22/12/2008;16/05/1988;M;S;69;54;15;1
+130;Rob;Caron;Production Technician - WC40;Production;Manufacturing;13/02/2009;04/08/1973;M;S;71;55;15;1
+131;Baris;Cetinok;Production Technician - WC40;Production;Manufacturing;15/02/2009;07/10/1990;M;S;72;56;15;1
+132;Nicole;Holliday;Production Technician - WC40;Production;Manufacturing;22/02/2009;09/04/1986;F;M;67;53;15;1
+133;Michael;Rothkugel;Production Technician - WC40;Production;Manufacturing;10/01/2009;04/01/1991;M;S;70;55;15;1
+134;Eric;Gubbels;Production Supervisor - WC20;Production;Manufacturing;14/01/2009;19/01/1985;M;M;40;40;25;2
+135;Ivo;Salmre;Production Technician - WC20;Production;Manufacturing;04/12/2008;03/01/1982;M;M;9;24;14;1
+136;Sylvester;Valdez;Production Technician - WC20;Production;Manufacturing;11/12/2009;12/11/1970;M;M;4;22;14;1
+137;Anibal;Sousa;Production Technician - WC20;Production;Manufacturing;23/02/2009;05/09/1974;F;S;8;24;14;1
+138;Samantha;Smith;Production Technician - WC20;Production;Manufacturing;04/02/2009;22/11/1987;F;M;7;23;14;1
+139;Hung-Fu;Ting;Production Technician - WC20;Production;Manufacturing;06/01/2010;23/10/1971;M;S;0;20;14;1
+140;Prasanna;Samarawickrama;Production Technician - WC20;Production;Manufacturing;22/01/2010;30/04/1953;M;M;5;22;14;1
+141;Min;Su;Production Technician - WC20;Production;Manufacturing;24/01/2010;10/09/1974;M;M;1;20;14;1
+142;Olinda;Turner;Production Technician - WC20;Production;Manufacturing;04/03/2010;04/04/1970;F;S;3;21;14;1
+143;Krishna;Sunkammurali;Production Technician - WC20;Production;Manufacturing;13/02/2010;05/09/1971;M;S;2;21;14;1
+144;Paul;Singh;Production Technician - WC20;Production;Manufacturing;17/01/2009;04/11/1990;M;M;6;23;14;1
+145;Cynthia;Randall;Production Supervisor - WC30;Production;Manufacturing;27/01/2009;18/08/1981;F;S;69;54;25;2
+146;Jian Shuo;Wang;Production Technician - WC30;Production;Manufacturing;07/12/2008;25/06/1989;M;S;36;38;9.5;1
+147;Sandra;Reátegui Alayo;Production Technician - WC30;Production;Manufacturing;26/12/2008;05/11/1975;F;M;37;38;9.5;1
+148;Jason;Watters;Production Technician - WC30;Production;Manufacturing;14/01/2009;07/12/1988;M;S;38;39;9.5;1
+149;Andy;Ruth;Production Technician - WC30;Production;Manufacturing;31/01/2009;20/10/1983;M;M;39;39;;1
+150;Michael;Vanderhyde;Production Technician - WC30;Production;Manufacturing;26/02/2009;18/09/1982;M;M;35;37;9.5;1
+151;Rostislav;Shabalin;Production Technician - WC30;Production;Manufacturing;19/02/2009;13/09/1977;M;M;40;40;9.5;1
+152;Yuhong;Li;Production Supervisor - WC20;Production;Manufacturing;01/02/2009;06/04/1977;M;M;41;40;25;2
+153;Hanying;Feng;Production Technician - WC20;Production;Manufacturing;16/12/2008;16/10/1974;M;S;15;27;14;1
+154;Raymond;Sam;Production Technician - WC20;Production;Manufacturing;23/12/2008;02/03/1967;M;M;10;25;;1
+155;Fadi;Fakhouri;Production Technician - WC20;Production;Manufacturing;04/01/2009;15/02/1989;M;S;16;28;14;1
+156;Lane;Sacksteder;Production Technician - WC20;Production;Manufacturing;11/01/2009;23/09/1974;M;M;11;25;14;1
+157;Linda;Randall;Production Technician - WC20;Production;Manufacturing;03/02/2009;05/10/1977;F;S;12;26;14;1
+158;Shelley;Dyck;Production Technician - WC20;Production;Manufacturing;07/03/2009;08/12/1986;F;S;14;27;14;1
+159;Terrence;Earls;Production Technician - WC20;Production;Manufacturing;16/02/2009;08/12/1984;M;S;13;26;14;1
+160;Jeff;Hay;Production Supervisor - WC45;Production;Manufacturing;21/01/2009;15/01/1977;M;M;74;57;25;2
+161;Kirk;Koenigsbauer;Production Technician - WC45;Production;Manufacturing;15/12/2008;06/02/1985;M;S;74;57;10;1
+162;Laura;Steele;Production Technician - WC45;Production;Manufacturing;03/01/2009;25/12/1980;F;S;75;57;10;1
+163;Alex;Nayberg;Production Technician - WC45;Production;Manufacturing;08/02/2009;13/04/1990;M;M;77;58;10;1
+164;Andrew;Cencini;Production Technician - WC45;Production;Manufacturing;06/03/2009;24/09/1988;M;S;73;56;10;1
+165;Chris;Preston;Production Technician - WC45;Production;Manufacturing;22/01/2009;16/12/1988;M;M;76;58;10;1
+166;Jack;Richins;Production Supervisor - WC30;Production;Manufacturing;21/02/2009;22/06/1983;M;S;68;54;25;2
+167;David;Johnson;Production Technician - WC30;Production;Manufacturing;02/12/2008;02/11/1979;M;S;25;32;9.5;1
+168;Garrett;Young;Production Technician - WC30;Production;Manufacturing;07/12/2008;25/08/1984;M;S;34;37;9.5;1
+169;Susan;Metters;Production Technician - WC30;Production;Manufacturing;14/12/2008;02/04/1983;F;S;31;35;9.5;1
+170;George;Li;Production Technician - WC30;Production;Manufacturing;21/12/2008;16/04/1977;M;M;26;33;9.5;1
+171;David;Yalovsky;Production Technician - WC30;Production;Manufacturing;02/01/2009;03/08/1981;M;S;32;36;9.5;1
+172;Marc;Ingle;Production Technician - WC30;Production;Manufacturing;16/01/2009;24/10/1986;M;M;22;31;9.5;1
+173;Eugene;Zabokritski;Production Technician - WC30;Production;Manufacturing;21/01/2009;15/07/1987;M;S;33;36;9.5;1
+174;Benjamin;Martin;Production Technician - WC30;Production;Manufacturing;27/01/2009;05/01/1986;M;S;28;34;9.5;1
+175;Reed;Koch;Production Technician - WC30;Production;Manufacturing;02/02/2009;08/01/1989;M;M;23;31;9.5;1
+176;David;Lawrence;Production Technician - WC30;Production;Manufacturing;14/02/2009;23/09/1985;M;M;29;34;9.5;1
+177;Russell;King;Production Technician - WC30;Production;Manufacturing;21/02/2009;11/02/1982;M;M;24;32;9.5;1
+178;John;Frum;Production Technician - WC30;Production;Manufacturing;03/03/2009;24/03/1982;M;S;27;33;9.5;1
+179;Jan;Miksovsky;Production Technician - WC30;Production;Manufacturing;05/03/2009;15/11/1974;M;S;30;35;9.5;1
+180;Katie;McAskill-White;Production Supervisor - WC20;Production;Manufacturing;20/02/2009;18/11/1984;F;S;42;41;25;2
+181;Michael;Hines;Production Technician - WC20;Production;Manufacturing;09/12/2008;17/11/1984;M;S;20;30;14;1
+182;Nitin;Mirchandani;Production Technician - WC20;Production;Manufacturing;28/12/2008;01/12/1986;M;S;21;30;14;1
+183;Barbara;Decker;Production Technician - WC20;Production;Manufacturing;22/01/2009;02/07/1979;F;M;17;28;14;1
+184;John;Chen;Production Technician - WC20;Production;Manufacturing;09/02/2009;05/04/1986;M;M;18;29;14;1
+185;Stefen;Hesse;Production Technician - WC20;Production;Manufacturing;28/02/2009;21/12/1975;M;S;19;29;14;1
+186;Shane;Kim;Production Supervisor - WC45;Production;Manufacturing;08/02/2009;24/05/1990;M;S;75;57;25;2
+187;Yvonne;McKay;Production Technician - WC45;Production;Manufacturing;09/12/2008;15/04/1989;F;M;79;59;10;1
+188;Douglas;Hite;Production Technician - WC45;Production;Manufacturing;27/12/2008;24/11/1985;M;M;80;60;10;1
+189;Janeth;Esteves;Production Technician - WC45;Production;Manufacturing;15/01/2009;24/07/1972;F;S;81;60;10;1
+190;Robert;Rounthwaite;Production Technician - WC45;Production;Manufacturing;02/02/2009;28/02/1985;M;S;82;61;10;1
+191;Lionel;Penuchot;Production Technician - WC45;Production;Manufacturing;26/02/2009;14/03/1988;M;S;78;59;10;1
+192;Brenda;Diaz;Production Supervisor - WC40;Production;Manufacturing;05/03/2009;28/02/1983;F;M;71;55;25;2
+193;Alejandro;McGuel;Production Technician - WC40;Production;Manufacturing;06/12/2008;05/12/1988;M;S;52;46;15;1
+194;Fred;Northup;Production Technician - WC40;Production;Manufacturing;12/12/2008;25/06/1989;M;S;47;43;15;1
+195;Kevin;Liu;Production Technician - WC40;Production;Manufacturing;17/12/2008;25/12/1985;M;S;58;49;15;1
+196;Shammi;Mohamed;Production Technician - WC40;Production;Manufacturing;24/12/2008;04/10/1980;M;M;53;46;15;1
+197;Rajesh;Patel;Production Technician - WC40;Production;Manufacturing;31/12/2008;04/10/1977;M;M;48;44;;1
+198;Lorraine;Nay;Production Technician - WC40;Production;Manufacturing;04/01/2009;26/11/1988;F;M;49;44;15;1
+199;Paula;Nartker;Production Technician - WC40;Production;Manufacturing;12/01/2009;10/02/1987;F;M;54;47;15;1
+200;Frank;Lee;Production Technician - WC40;Production;Manufacturing;17/01/2009;06/09/1987;M;M;56;48;15;1
+201;Brian;Lloyd;Production Technician - WC40;Production;Manufacturing;29/01/2009;10/02/1977;M;S;55;47;15;1
+202;Tawana;Nusbaum;Production Technician - WC40;Production;Manufacturing;05/02/2009;10/11/1989;M;S;50;45;15;1
+203;Ken;Myer;Production Technician - WC40;Production;Manufacturing;24/02/2009;28/05/1981;M;M;51;45;15;1
+204;Gabe;Mares;Production Technician - WC40;Production;Manufacturing;08/03/2009;10/05/1988;M;M;57;48;15;1
+205;Lori;Kane;Production Supervisor - WC45;Production;Manufacturing;26/02/2009;18/07/1980;F;S;76;58;25;2
+206;Stuart;Munson;Production Technician - WC45;Production;Manufacturing;02/12/2008;13/09/1962;M;S;84;62;10;1
+207;Greg;Alderson;Production Technician - WC45;Production;Manufacturing;02/12/2008;18/10/1970;M;S;85;62;10;1
+208;Scott;Gode;Production Technician - WC45;Production;Manufacturing;08/01/2009;10/02/1987;M;M;86;63;10;1
+209;Kathie;Flood;Production Technician - WC45;Production;Manufacturing;27/01/2009;01/11/1990;F;M;87;63;10;1
+210;Belinda;Newman;Production Technician - WC45;Production;Manufacturing;20/02/2009;17/09/1969;F;S;83;61;10;1
+211;Hazem;Abolrous;Quality Assurance Manager;Quality Assurance;Quality Assurance;28/02/2009;26/10/1977;M;S;80;60;28.8462;2
+212;Peng;Wu;Quality Assurance Supervisor;Quality Assurance;Quality Assurance;09/12/2008;18/03/1976;M;M;81;60;21.6346;2
+213;Sootha;Charncherngkha;Quality Assurance Technician;Quality Assurance;Quality Assurance;23/02/2010;05/12/1966;M;M;85;62;10.5769;2
+214;Andreas;Berglund;Quality Assurance Technician;Quality Assurance;Quality Assurance;02/02/2009;28/03/1989;M;M;84;62;10.5769;2
+215;Mark;Harrington;Quality Assurance Technician;Quality Assurance;Quality Assurance;15/01/2009;30/04/1986;M;S;83;61;10.5769;2
+216;Sean;Alexander;Quality Assurance Technician;Quality Assurance;Quality Assurance;28/12/2008;06/03/1976;M;S;82;61;10.5769;2
+217;Zainal;Arifin;Document Control Manager;Document Control;Quality Assurance;04/01/2009;30/01/1976;M;M;77;58;17.7885;2
+218;Tengiz;Kharatishvili;Control Specialist;Document Control;Quality Assurance;16/12/2008;28/04/1990;M;S;76;58;16.8269;2
+219;Sean;Chai;Document Control Assistant;Document Control;Quality Assurance;22/01/2009;12/03/1987;M;S;78;59;10.25;2
+220;Karen;Berge;Document Control Assistant;Document Control;Quality Assurance;09/02/2009;25/12/1975;F;M;79;59;10.25;2
+221;Chris;Norred;Control Specialist;Document Control;Quality Assurance;06/03/2009;26/05/1987;M;M;75;57;16.8269;2
+222;A. Scott;Wright;Master Scheduler;Production Control;Manufacturing;12/12/2008;17/09/1968;M;S;44;42;23.5577;2
+223;Sairaj;Uddin;Scheduling Assistant;Production Control;Manufacturing;26/01/2009;22/12/1987;M;M;46;43;16;2
+224;William;Vong;Scheduling Assistant;Production Control;Manufacturing;07/01/2009;06/11/1981;M;M;45;42;16;2
+225;Alan;Brewer;Scheduling Assistant;Production Control;Manufacturing;13/02/2009;29/03/1984;M;M;47;43;16;2
+226;Brian;LaMee;Scheduling Assistant;Production Control;Manufacturing;03/03/2009;11/08/1984;M;M;48;44;16;2
+227;Gary;Altman;Facilities Manager;Facilities and Maintenance;Executive General and Administration;02/12/2009;18/02/1971;M;M;86;63;24.0385;2
+228;Christian;Kleinerman;Maintenance Supervisor;Facilities and Maintenance;Executive General and Administration;14/12/2008;18/01/1976;M;M;92;66;20.4327;2
+229;Lori;Penor;Janitor;Facilities and Maintenance;Executive General and Administration;16/02/2010;31/07/1970;F;M;90;65;9.25;1
+230;Stuart;Macrae;Janitor;Facilities and Maintenance;Executive General and Administration;05/03/2010;17/12/1971;M;M;88;64;9.25;1
+231;Jo;Berry;Janitor;Facilities and Maintenance;Executive General and Administration;07/03/2010;24/04/1954;F;M;91;65;9.25;1
+232;Pat;Coleman;Janitor;Facilities and Maintenance;Executive General and Administration;27/01/2010;03/12/1970;M;S;89;64;9.25;1
+233;Magnus;Hedlund;Facilities Administrative Assistant;Facilities and Maintenance;Executive General and Administration;21/12/2009;27/08/1971;M;M;87;63;9.75;2
+234;Laura;Norman;Chief Financial Officer;Executive;Executive General and Administration;31/01/2009;06/01/1976;F;M;0;20;60.0962;2
+235;Paula;Barreto de Mattos;Human Resources Manager;Human Resources;Executive General and Administration;06/12/2008;11/02/1976;F;M;54;47;27.1394;2
+236;Grant;Culbertson;Human Resources Administrative Assistant;Human Resources;Executive General and Administration;25/02/2009;16/04/1976;M;S;53;46;13.9423;2
+237;Hao;Chen;Human Resources Administrative Assistant;Human Resources;Executive General and Administration;06/02/2009;17/04/1977;M;S;52;46;13.9423;2
+238;Vidur;Luthra;Recruiter;Human Resources;Executive General and Administration;01/01/2009;01/08/1984;M;S;50;45;18.2692;2
+239;Mindy;Martin;Benefits Specialist;Human Resources;Executive General and Administration;25/12/2008;20/11/1984;F;M;51;45;16.5865;2
+240;Willis;Johnson;Recruiter;Human Resources;Executive General and Administration;13/12/2008;18/07/1978;M;S;49;44;18.2692;2
+241;David;Liu;Accounts Manager;Finance;Executive General and Administration;30/01/2009;08/07/1983;M;M;57;48;34.7356;2
+242;Deborah;Poe;Accounts Receivable Specialist;Finance;Executive General and Administration;18/12/2008;06/03/1976;F;M;60;50;19;2
+243;Candy;Spoon;Accounts Receivable Specialist;Finance;Executive General and Administration;06/01/2009;23/02/1976;F;S;61;50;19;2
+244;Bryan;Walton;Accounts Receivable Specialist;Finance;Executive General and Administration;24/01/2009;20/09/1984;M;S;62;51;;2
+245;Barbara;Moreland;Accountant;Finance;Executive General and Administration;18/02/2009;04/01/1976;F;M;58;49;26.4423;2
+246;Dragan;Tomic;Accounts Payable Specialist;Finance;Executive General and Administration;11/02/2009;14/02/1977;M;M;63;51;19;2
+247;Janet;Sheperdigian;Accounts Payable Specialist;Finance;Executive General and Administration;01/03/2009;09/03/1979;F;M;64;52;19;2
+248;Mike;Seamans;Accountant;Finance;Executive General and Administration;08/03/2009;01/07/1979;M;S;59;49;26.4423;2
+249;Wendy;Kahn;Finance Manager;Finance;Executive General and Administration;25/12/2008;11/10/1984;F;S;55;47;43.2692;2
+250;Sheela;Word;Purchasing Manager;Purchasing;Inventory Management;25/02/2011;10/02/1978;F;S;49;44;30;2
+251;Mikael;Sandberg;Buyer;Purchasing;Inventory Management;10/02/2009;17/08/1984;M;S;59;49;18.2692;2
+252;Arvind;Rao;Buyer;Purchasing;Inventory Management;28/02/2009;21/08/1974;M;M;60;50;18.2692;2
+253;Linda;Meisner;Buyer;Purchasing;Inventory Management;17/12/2009;30/11/1970;F;M;56;48;18.2692;2
+254;Fukiko;Ogisu;Buyer;Purchasing;Inventory Management;04/01/2010;24/11/1970;M;M;57;48;18.2692;2
+255;Gordon;Hee;Buyer;Purchasing;Inventory Management;11/01/2010;29/11/1966;M;M;52;46;18.2692;2
+256;Frank;Pellow;Buyer;Purchasing;Inventory Management;23/01/2010;12/05/1952;M;M;58;49;18.2692;2
+257;Eric;Kurjan;Buyer;Purchasing;Inventory Management;27/01/2010;17/09/1972;M;S;54;47;18.2692;2
+258;Erin;Hagens;Buyer;Purchasing;Inventory Management;31/01/2010;04/01/1971;F;S;53;46;18.2692;2
+259;Ben;Miller;Buyer;Purchasing;Inventory Management;09/03/2010;03/06/1973;M;M;55;47;18.2692;2
+260;Annette;Hill;Purchasing Assistant;Purchasing;Inventory Management;06/12/2010;29/01/1978;F;M;50;45;12.75;2
+261;Reinout;Hillmann;Purchasing Assistant;Purchasing;Inventory Management;25/12/2010;17/01/1978;M;M;51;45;12.75;2
+262;David;Barber;Assistant to the Chief Financial Officer;Finance;Executive General and Administration;12/01/2009;21/06/1964;M;S;56;48;13.4615;2
+263;Jean;Trenary;Information Services Manager;Information Services;Executive General and Administration;11/12/2008;13/12/1975;F;S;65;52;50.4808;2
+264;Stephanie;Conroy;Network Manager;Information Services;Executive General and Administration;04/02/2009;25/03/1984;F;S;68;54;39.6635;2
+265;Ashvini;Sharma;Network Administrator;Information Services;Executive General and Administration;04/12/2008;27/03/1977;M;S;70;55;32.4519;2
+266;Peter;Connelly;Network Administrator;Information Services;Executive General and Administration;23/02/2009;28/05/1980;M;S;69;54;32.4519;2
+267;Karen;Berg;Application Specialist;Information Services;Executive General and Administration;16/02/2009;19/05/1978;F;S;74;57;27.4038;2
+268;Ramesh;Meyyappan;Application Specialist;Information Services;Executive General and Administration;03/02/2009;13/03/1988;M;S;73;56;27.4038;2
+269;Dan;Bacon;Application Specialist;Information Services;Executive General and Administration;11/01/2009;26/05/1987;M;M;72;56;27.4038;2
+270;François;Ajenstat;Database Administrator;Information Services;Executive General and Administration;17/01/2009;17/05/1975;M;S;67;53;38.4615;2
+271;Dan;Wilson;Database Administrator;Information Services;Executive General and Administration;22/01/2009;06/01/1976;M;M;66;53;38.4615;2
+272;Janaina;Bueno;Application Specialist;Information Services;Executive General and Administration;23/12/2008;30/01/1985;F;M;71;55;27.4038;2
+273;Brian;Welcker;Vice President of Sales;Sales;Sales and Marketing;15/02/2011;06/06/1977;M;S;10;25;72.1154;2
+274;Stephen;Jiang;North American Sales Manager;Sales;Sales and Marketing;04/01/2011;17/10/1951;M;M;14;27;48.101;2
+275;Michael;Blythe;Sales Representative;Sales;Sales and Marketing;31/05/2011;25/12/1968;M;S;38;39;23.0769;2
+276;Linda;Mitchell;Sales Representative;Sales;Sales and Marketing;31/05/2011;27/02/1980;F;M;27;33;23.0769;2
+277;Jillian;Carson;Sales Representative;Sales;Sales and Marketing;31/05/2011;29/08/1962;F;S;24;32;23.0769;2
+278;Garrett;Vargas;Sales Representative;Sales;Sales and Marketing;31/05/2011;04/02/1975;M;M;33;36;23.0769;2
+279;Tsvi;Reiter;Sales Representative;Sales;Sales and Marketing;31/05/2011;18/01/1974;M;M;29;34;23.0769;2
+280;Pamela;Ansman-Wolfe;Sales Representative;Sales;Sales and Marketing;31/05/2011;06/12/1974;F;S;22;31;23.0769;2
+281;Shu;Ito;Sales Representative;Sales;Sales and Marketing;31/05/2011;09/03/1968;M;M;26;33;23.0769;2
+282;José;Saraiva;Sales Representative;Sales;Sales and Marketing;31/05/2011;11/12/1963;M;M;31;35;23.0769;2
+283;David;Campbell;Sales Representative;Sales;Sales and Marketing;31/05/2011;11/02/1974;M;S;23;31;23.0769;2
+284;Tete;Mensa-Annan;Sales Representative;Sales;Sales and Marketing;30/09/2012;05/01/1978;M;M;39;39;23.0769;2
+285;Syed;Abbas;Pacific Sales Manager;Sales;Sales and Marketing;14/03/2013;11/01/1975;M;M;20;30;48.101;2
+286;Lynn;Tsoflias;Sales Representative;Sales;Sales and Marketing;30/05/2013;14/02/1977;F;S;36;38;23.0769;2
+287;Amy;Alberts;European Sales Manager;Sales;Sales and Marketing;16/04/2012;20/09/1957;F;M;21;30;;2
+288;Rachel;Valdez;Sales Representative;Sales;Sales and Marketing;30/05/2013;09/07/1975;F;S;35;37;23.0769;2
+289;Jae;Pak;Sales Representative;Sales;Sales and Marketing;30/05/2012;17/03/1968;F;M;37;38;23.0769;2
+290;Ranjit;Varkey Chudukatil;Sales Representative;Sales;Sales and Marketing;30/05/2012;30/09/1975;M;S;34;37;23.0769;2

@@ -1,0 +1,242 @@
+# Esempio di mapping ontologico per le 3 fonti dello scenario.
+# Questo è il TIPO di mappatura che il tuo Semantic Layer dovrebbe ESPORRE 
+# (o derivare automaticamente) per permettere agli agenti di interrogare
+# i dati senza conoscere lo schema fisico.
+#
+# Sintassi inventata didattica — adatta al formato del tuo layer.
+
+ontology_version: "1.0"
+scenario: "adventureworks_distributed"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENTITÀ DI BUSINESS
+# ─────────────────────────────────────────────────────────────────────────────
+entities:
+
+  Customer:
+    description: "Cliente dell'azienda, può essere persona fisica (B2C) o azienda (B2B)"
+    primary_key: customer_id
+    sources:
+      - source: crm_sqlite
+        table: account
+        key_field: accountId
+        type_discriminator:
+          field: accountType
+          values: { B2C: PersonCustomer, B2B: BusinessCustomer }
+    attributes:
+      customer_id:
+        type: integer
+        sources:
+          crm_sqlite.account.accountId: primary
+          erp_postgres.sales_order_header.customer_ref: foreign  # ⚠ key bridging!
+      display_name:
+        type: string
+        description: "Nome del cliente per la presentazione"
+        # Logica: se B2B usa ragioneSociale, se B2C usa nomeContatto
+        derivation:
+          if: crm_sqlite.account.accountType = 'B2B'
+          then: crm_sqlite.account.ragioneSociale
+          else: crm_sqlite.account.nomeContatto
+      email:
+        sources:
+          crm_sqlite.account.emailContatto: primary
+        nullability: ~3%
+      territory:
+        sources:
+          crm_sqlite.account.territoryHint: hint
+          # join indiretto via address
+          crm_sqlite.account_address > address > state_province.territoryRef: derived
+    quality_flags:
+      duplicates_detected: true
+      duplicates_rule: "accountId < 0 indica duplicato; deduplica per (lower(emailContatto), trim(nomeContatto))"
+
+  Employee:
+    description: "Dipendente dell'azienda. Un Employee può essere anche un Salesperson."
+    primary_key: employee_id
+    sources:
+      - source: hr_files
+        table: dipendenti_hr.csv  
+        key_field: MatricolaDip
+    attributes:
+      employee_id:
+        type: integer
+        sources:
+          hr_files.dipendenti.MatricolaDip: primary
+          erp_postgres.salesperson.salesperson_id: same  # stesso BusinessEntityID!
+          erp_postgres.sales_order_header.salesperson_ref: foreign
+      full_name:
+        derivation: "concat(Nome, ' ', Cognome)"
+        sources:
+          hr_files.dipendenti.[Nome, Cognome]: composite
+      department:
+        sources:
+          hr_files.dipendenti.Reparto: primary
+      hire_date:
+        type: date
+        sources:
+          hr_files.dipendenti.DataAssunzione: primary
+        source_format: "DD/MM/YYYY"  # ⚠ formato italiano
+        normalized_format: "YYYY-MM-DD"
+      hourly_rate:
+        type: decimal
+        sources:
+          hr_files.dipendenti.RetribuzioneOraria: primary
+        nullability: ~3%
+
+  Product:
+    description: "Prodotto del catalogo aziendale"
+    primary_key: product_id
+    sources:
+      - source: pim_files
+        table: product_catalog_pim.json
+        key_field: internal_id
+    attributes:
+      product_id:
+        sources:
+          pim_files.products.internal_id: primary
+          erp_postgres.sales_order_line.product_ref: foreign
+      sku:
+        sources:
+          pim_files.products.sku: alternative_key
+      name:
+        sources:
+          pim_files.products.displayName: primary
+      category_path:
+        type: string
+        description: "Path gerarchico: Categoria/Sottocategoria"
+        sources:
+          pim_files.products.categoryPath: primary
+      standard_cost:
+        type: decimal
+        unit: USD
+        sources:
+          pim_files.products.standardCost: primary
+      list_price:
+        type: decimal
+        unit: USD
+        sources:
+          pim_files.products.listPrice: primary
+
+  SalesOrder:
+    description: "Ordine di vendita completo (header + righe)"
+    primary_key: order_id
+    sources:
+      - source: erp_postgres
+        table: sales_order_header
+        key_field: order_id
+    attributes:
+      order_id:
+        sources: { erp_postgres.sales_order_header.order_id: primary }
+      order_date:
+        type: date
+        sources: { erp_postgres.sales_order_header.order_date: primary }
+      customer:
+        relation: many_to_one
+        target: Customer
+        via: customer_ref → Customer.customer_id
+      salesperson:
+        relation: many_to_one
+        target: Employee
+        via: salesperson_ref → Employee.employee_id
+      lines:
+        relation: one_to_many
+        target: SalesOrderLine
+
+  SalesOrderLine:
+    description: "Singola riga di un ordine"
+    primary_key: [order_id, line_id]
+    sources:
+      - source: erp_postgres
+        table: sales_order_line
+    attributes:
+      product:
+        relation: many_to_one
+        target: Product
+        via: product_ref → Product.product_id
+      qty:
+        sources: { erp_postgres.sales_order_line.qty: primary }
+      line_total:
+        sources: { erp_postgres.sales_order_line.line_total: primary }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# METRICHE DI BUSINESS (semantic layer style)
+# ─────────────────────────────────────────────────────────────────────────────
+metrics:
+
+  revenue:
+    label: "Fatturato (ricavi puri)"
+    description: "Somma di subtotal_amount sugli ordini, esclude tasse e spedizione"
+    formula: "SUM(SalesOrder.subtotal_amount)"
+    unit: USD
+    
+  revenue_with_tax:
+    label: "Fatturato lordo"
+    description: "Somma di total_due, include tasse e spedizione"
+    formula: "SUM(SalesOrder.total_due)"
+    unit: USD
+    aliases: ["incasso", "incassi"]
+
+  # ⚠ NOTA: quando un agente chiede "fatturato" senza specificare,
+  # il layer dovrebbe chiedere QUALE delle due metriche usare.
+  
+  margin:
+    label: "Margine commerciale"
+    description: "Ricavi meno costi standard"
+    formula: "SUM(SalesOrderLine.qty * (Product.list_price - Product.standard_cost))"
+    unit: USD
+    requires_join: [SalesOrderLine, Product]  # cross-fonte ERP ↔ PIM
+
+  active_customers:
+    label: "Clienti attivi"
+    description: "Account attivi nel CRM, deduplicati"
+    formula: "COUNT(DISTINCT Customer WHERE Customer.isActive = 1)"
+    deduplication: required
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DIMENSIONI (per aggregazioni)
+# ─────────────────────────────────────────────────────────────────────────────
+dimensions:
+  
+  time:
+    type: temporal
+    base_field: SalesOrder.order_date
+    levels: [day, month, quarter, year]
+    
+  geography:
+    type: hierarchical
+    levels:
+      - level: country
+        source: crm_sqlite.country
+      - level: state_province
+        source: crm_sqlite.state_province
+      - level: territory
+        source: erp_postgres.territory
+
+  product_hierarchy:
+    type: hierarchical
+    source: pim_files.products.categoryPath
+    separator: "/"
+    levels: [category, subcategory]
+
+  customer_segment:
+    type: categorical
+    source: crm_sqlite.account.accountType
+    values: [B2C, B2B]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AMBIGUITÀ CONOSCIUTE (per il context layer)
+# ─────────────────────────────────────────────────────────────────────────────
+known_ambiguities:
+  
+  - term: "fatturato"
+    candidates: [revenue, revenue_with_tax]
+    action: "ask_user_to_disambiguate"
+  
+  - term: "venditore"
+    notes: "È sia un Employee (HR) sia ha attributi commerciali (ERP.salesperson). Risolvere via join salesperson_id ↔ employee_id."
+  
+  - term: "cliente"
+    notes: "Verificare deduplica nel CRM prima di rispondere a domande di conteggio o aggregate."
