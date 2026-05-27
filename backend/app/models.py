@@ -6,17 +6,6 @@ import json
 
 # ── Request / Response models ──────────────────────────────────────────────────
 
-class QueryRequest(BaseModel):
-    question: str
-
-
-class QueryResult(BaseModel):
-    question: str
-    interpreted_as: str
-    sql_query: str
-    results: list[dict[str, Any]]
-    summary: str
-
 
 class MappingUpdateRequest(BaseModel):
     table: str
