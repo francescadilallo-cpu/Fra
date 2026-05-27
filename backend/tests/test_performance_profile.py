@@ -31,7 +31,9 @@ def _password_hash(password: str, iterations: int = 120_000) -> str:
     digest = hashlib.pbkdf2_hmac(
         "sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations
     )
-    return f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    return (
+        f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -69,6 +71,8 @@ def auth_headers(client: TestClient) -> dict[str, str]:
     )
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
 GOLDEN_PATH = ROOT / "test_scenario" / "golden_questions.md"
 METRICS_PATH = ROOT / "perf_metrics.json"
 HISTORY_PATH = ROOT / "backend" / "tests" / "perf_history.json"
