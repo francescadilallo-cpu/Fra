@@ -70,6 +70,7 @@ Revenue 2014: subtotalAmount (net) = $20,127,070 | totalDue (gross) = $22,410,56
 Orders: 31,465 total | avg net $639.65 | Online: 27,659 (87.9%, avg $356) | In-store: 3,806 (12.1%, avg $2,704)
 Customers (deduped CRM): 19,829 | ERP-matched: 18,484 (93.2%) | CRM-only prospects: 1,345
 Quarterly net: Q1 $4,121,485 (7,312 orders) | Q2 $5,182,930 (8,204) | Q3 $5,847,621 (8,847) | Q4 $4,975,034 (7,102)
+Monthly net 2014: Jan $1,247,000 | Feb $1,397,000 | Mar $1,477,485 | Apr $1,617,000 | May $1,726,000 | Jun $1,839,930 | Jul $1,891,000 | Aug $2,007,621 (peak) | Sep $1,949,000 | Oct $1,621,000 | Nov $1,646,034 | Dec $1,708,000 | Total $20,127,070
 YoY: 2011 had 1,607 orders avg $7,868 net $12,646,110 | 2014 had 31,465 orders avg $640 net $20,127,070
 
 Product categories (ERP×PIM): Bikes 97 SKUs $19,791,723 (98.3% of revenue) | Components 189 SKUs $207,915 | Clothing 35 SKUs $75,788 | Accessories 36 SKUs $51,644 | Total $20,127,070

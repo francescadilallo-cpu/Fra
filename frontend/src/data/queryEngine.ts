@@ -1034,6 +1034,58 @@ ORDER BY channel, quarter`,
       ],
     }),
   },
+  // ── Monthly distribution ──────────────────────────────────────────────────────
+  {
+    test: q => /\bmonth|mensil|monthly|per month|month.{0,10}distribut|distribut.{0,10}month|month.{0,10}sale|sale.{0,10}month/i.test(q),
+    result: () => ({
+      sql: `-- Monthly net revenue breakdown 2014
+SELECT
+  MONTH(orderDate)            AS month_num,
+  DATENAME(month, orderDate)  AS month_name,
+  COUNT(*)                    AS orders,
+  SUM(subtotalAmount)         AS net_revenue,
+  AVG(subtotalAmount)         AS avg_order_net
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014
+GROUP BY MONTH(orderDate), DATENAME(month, orderDate)
+ORDER BY month_num`,
+      rows: [
+        { month: 'Jan', month_num: 1,  orders: 2253, net_revenue: 1_247_000, avg_order_net: 553.48 },
+        { month: 'Feb', month_num: 2,  orders: 2412, net_revenue: 1_397_000, avg_order_net: 579.10 },
+        { month: 'Mar', month_num: 3,  orders: 2647, net_revenue: 1_477_485, avg_order_net: 558.19 },
+        { month: 'Apr', month_num: 4,  orders: 2658, net_revenue: 1_617_000, avg_order_net: 608.35 },
+        { month: 'May', month_num: 5,  orders: 2789, net_revenue: 1_726_000, avg_order_net: 618.93 },
+        { month: 'Jun', month_num: 6,  orders: 2757, net_revenue: 1_839_930, avg_order_net: 667.44 },
+        { month: 'Jul', month_num: 7,  orders: 2894, net_revenue: 1_891_000, avg_order_net: 653.21 },
+        { month: 'Aug', month_num: 8,  orders: 3041, net_revenue: 2_007_621, avg_order_net: 660.18 },
+        { month: 'Sep', month_num: 9,  orders: 2912, net_revenue: 1_949_000, avg_order_net: 669.33 },
+        { month: 'Oct', month_num: 10, orders: 2421, net_revenue: 1_621_000, avg_order_net: 669.56 },
+        { month: 'Nov', month_num: 11, orders: 2318, net_revenue: 1_646_034, avg_order_net: 710.11 },
+        { month: 'Dec', month_num: 12, orders: 2363, net_revenue: 1_708_000, avg_order_net: 722.81 },
+      ],
+      summary: '**August is the peak month** ($2.01M, 3,041 orders). January is the slowest ($1.25M). Sales build steadily from Jan through Aug, then plateau in Q4. Full-year net: **$20,127,070** across 31,465 orders.',
+      interpreted_as: 'ERP.SalesOrder GROUP BY MONTH(orderDate) · net_revenue, orders · 2014',
+      chartData: {
+        type: 'bar',
+        title: 'Monthly net revenue — 2014',
+        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        values: [1_247_000, 1_397_000, 1_477_485, 1_617_000, 1_726_000, 1_839_930, 1_891_000, 2_007_621, 1_949_000, 1_621_000, 1_646_034, 1_708_000],
+        unit: '$',
+      },
+      sources: [SRC.ERP],
+      steps: [
+        '① ERP.SalesOrder: 31,465 orders in YEAR 2014',
+        '② GROUP BY MONTH(orderDate) · 12 groups',
+        '③ SUM(subtotalAmount) per month · total $20,127,070',
+        '④ Peak: Aug $2.01M | Trough: Jan $1.25M | Range $760K',
+      ],
+      followUps: [
+        'Show quarterly revenue breakdown for 2014',
+        'How does online vs in-store split by month?',
+        'Which month had the highest average order value?',
+      ],
+    }),
+  },
   // ── Quarterly analysis ────────────────────────────────────────────────────────
   {
     test: q => /\bquart|\bQ1\b|\bQ2\b|\bQ3\b|\bQ4\b|quarterly|trimest/i.test(q),
