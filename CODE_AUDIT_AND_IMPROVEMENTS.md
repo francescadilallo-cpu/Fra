@@ -14,6 +14,18 @@ Fonti considerate:
 
 Conseguenza: affidabilita alta su hardening/security e governance agentica; resta una regressione semantica puntuale sul parser intent da chiudere prima della piena baseline CI.
 
+Aggiornamento implementativo odierno (ripristino post-cleanup):
+
+- ripristinati quality gates CI completi in `.github/workflows/ci.yml`
+- ripristinata baseline static typing con `backend/mypy.ini` + step MyPy in CI
+- ripristinata evaluation faithfulness automatizzata (`backend/tests/test_faithfulness_eval.py`) con artifact `faithfulness_report.json`
+- ripristinata cache Redis opzionale su `/api/semantic/ask` con invalidazione su mutate-path
+- ripristinata suite regressiva cache (`backend/tests/test_semantic_cache.py`)
+- ripristinata modalita no-datalake (`FRA_STORAGE_MODE=nostore`) con snapshot persistente opzionale
+- ripristinato endpoint admin `/api/ontology/validate` + validazione ontologica hard-fail
+- ripristinato gate performance (benchmark + regression check p95) con artifact CI
+- riallineato percorso legacy `/api/ask` come alias sicuro verso `/api/semantic/ask`
+
 
 ## 2) Executive summary aggiornato
 
@@ -434,6 +446,11 @@ Output atteso:
 
 - metrica oggettiva su allucinazione e grounding
 
+Stato implementazione:
+
+- PARZIALE RISOLTO: presente evaluation automatizzata con metrica grounding threshold-based in CI
+- evoluzione futura consigliata: integrazione RAGAS/DeepEval per metriche avanzate multi-dimensione
+
 
 ### 9.4 Analisi statica con Ruff + Mypy
 
@@ -454,6 +471,10 @@ Output atteso:
 
 - regressioni semantiche e di typing intercettate prima del merge
 
+Stato implementazione:
+
+- RISOLTO (baseline): configurazione MyPy introdotta e gate CI attivo
+
 
 ### 9.5 Performance profiling (cProfile / py-spy)
 
@@ -472,6 +493,10 @@ Implementazione consigliata:
 Output atteso:
 
 - identificazione dei veri hotspot e priorita di ottimizzazione
+
+Stato implementazione:
+
+- RISOLTO (fase 1): benchmark opt-in + artifact metrics + regression gate automatico in CI (fail su p95)
 
 
 ### 9.6 Caching strategico (Redis) per query frequenti
@@ -492,6 +517,24 @@ Implementazione consigliata:
 Output atteso:
 
 - latenza ridotta e carico inferiore sui connettori
+
+Stato implementazione:
+
+- RISOLTO (fase 1): cache Redis opzionale su endpoint `/api/semantic/ask` con TTL configurabile e invalidazione namespace su mapping/KG rebuild
+
+### 9.7 No datalake locale by default
+
+Valore: ALTO
+
+Stato implementazione:
+
+- RISOLTO: `FRA_STORAGE_MODE=nostore` impostabile come default operativo, con persistenza locale disattivata
+- Modalita `snapshot` mantenuta come opzione compatibile per ambienti che la richiedono
+
+Impatto:
+
+- riduzione superficie data-at-rest locale
+- allineamento compliance per ambienti sensibili
 
 
 ## 10) Priorita esecutiva suggerita (da questi spunti)

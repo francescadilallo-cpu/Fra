@@ -47,6 +47,14 @@ Endpoint principali:
   - protetto con autenticazione esplicita via Depends(get_current_user)
   - payload normalizzato: question oppure query (alias), session_id, context
   - rate limiting slowapi: massimo 5 richieste/minuto per utente/IP (429 su superamento)
+  - cache risposta opzionale su Redis con chiave deterministica question+context (`SEMANTIC_REDIS_URL`)
+  - TTL cache configurabile via `SEMANTIC_REDIS_TTL_SECONDS` (default 120)
+  - invalidazione cache a namespace bump su `PUT /api/ontology/mappings` e `POST /api/kg/build`
+- POST /api/ontology/validate
+  - validazione admin-only della configurazione ontologica (YAML)
+  - hard-fail 422 su incoerenze strutturali (`ONTOLOGY_VALIDATION_ERROR`)
+- POST /api/ask
+  - alias legacy compatibile, instradato internamente allo stesso path sicuro di `/api/semantic/ask`
 - POST /api/auth/token e POST /api/auth/login
   - endpoint autenticazione OAuth2 password flow
   - rate limiting slowapi: massimo 5 tentativi/minuto per IP (anti brute force)
@@ -112,6 +120,10 @@ Ruoli:
   - carica HR CSV e PIM JSON
   - normalizza date (IT DD/MM/YYYY -> ISO, US MM/DD/YYYY -> ISO)
   - espone query SQL via DuckDB su dataframe in-memory
+- DuckDBSourceManager (registry-driven):
+  - `FRA_STORAGE_MODE=nostore` (default): nessuna persistenza datalake locale, runtime in-memory
+  - `FRA_STORAGE_MODE=snapshot`: snapshot DuckDB persistente opzionale
+  - supporta view legacy compatibili `dipendenti_hr` e `product_catalog_pim`
 
 
 ### 3.4 Knowledge Graph
@@ -248,6 +260,13 @@ Comandi:
 File: backend/tests/test_golden_questions.py
 File: backend/tests/test_neurosymbolic_pipeline.py
 File: backend/tests/test_agentic_endpoints.py
+File: backend/tests/test_semantic_cache.py
+File: backend/tests/test_faithfulness_eval.py
+File: backend/tests/test_performance_profile.py
+File: backend/tests/check_perf_regression.py
+File: backend/tests/test_check_perf_regression.py
+File: backend/tests/test_ontology_validation_hard_fail.py
+File: backend/tests/test_ontology_validation_endpoint.py
 
 Copertura:
 
@@ -260,6 +279,20 @@ Copertura:
 - verifica policy admin-only, coda PENDING_HUMAN_APPROVAL, approvazione/rifiuto, errori controllati e audit trail
 - test endpoint-level sequenziale: seconda approve su action gia EXECUTED ritorna HTTP 409 controllato
 - test concorrenza: doppia approvazione simultanea sullo stesso action_id con lock-safe behavior (1 EXECUTED + 1 errore controllato)
+- test cache semantica:
+  - namespace invalidation su mapping update e KG rebuild
+  - cache-hit endpoint-level su `/api/semantic/ask` con backend Redis opzionale
+- faithfulness evaluation automatizzata:
+  - suite opt-in `backend/tests/test_faithfulness_eval.py`
+  - score grounding su golden questions e soglia via `FAITHFULNESS_MIN_SCORE`
+  - report artifact `faithfulness_report.json`
+- performance profiling + regression gate:
+  - benchmark opt-in `backend/tests/test_performance_profile.py` con output `perf_metrics.json`
+  - storico append-only `backend/tests/perf_history.json`
+  - gate `backend/tests/check_perf_regression.py` (blocco su regressione p95 oltre +20%)
+- validazione ontologia hard-fail:
+  - loader: `OntologyValidationError` su YAML incoerente
+  - endpoint admin `/api/ontology/validate`
 - esecuzione locale verificata: `python -m pytest -q tests/test_agentic_endpoints.py` -> 12 passed
 - verifica estesa sessione corrente:
   - frontend: `npm run build` OK
@@ -435,3 +468,14 @@ Per completare una knowledge base ancora piu forte, conviene aggiungere:
 - diagramma sequence su lazy loading semantic stack
 - matrice ownership file/moduli
 - policy versioning per ontologia e mapping
+
+## 9) Quality gates CI ripristinati
+
+File: .github/workflows/ci.yml
+
+- backend lint/format con Ruff
+- static typing baseline con MyPy (`backend/mypy.ini`)
+- backend test suite + smoke test agentic dedicato
+- faithfulness evaluation automatizzata con upload artifact
+- security scan dipendenze con pip-audit
+- frontend build TypeScript/Vite

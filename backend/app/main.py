@@ -21,17 +21,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, model_validator
+from jose import ExpiredSignatureError, JWTError, jwt
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
-import json
-
 from .database import get_connection, get_table_counts, init_db
 from .models import (
-    AskRequest,
-    AskResult,
     DashboardData,
     HierarchyCreate,
     MappingUpdateRequest,
@@ -76,6 +73,11 @@ def _semantic_limit_key(request: Request) -> str:
 
 limiter = Limiter(key_func=get_remote_address)
 
+_semantic_redis_client: Any = None
+_semantic_redis_client_initialized = False
+_semantic_redis_lock = threading.Lock()
+_semantic_cache_namespace = 0
+
 
 def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
     return JSONResponse(
@@ -93,6 +95,56 @@ def _parse_allowed_origins() -> list[str]:
     return origins or [DEFAULT_ALLOWED_ORIGIN]
 
 
+def _semantic_cache_ttl_seconds() -> int:
+    raw = os.getenv("SEMANTIC_REDIS_TTL_SECONDS", "120").strip()
+    try:
+        ttl = int(raw)
+    except ValueError:
+        ttl = 120
+    return max(1, ttl)
+
+
+def _get_semantic_redis_client() -> Any:
+    global _semantic_redis_client_initialized, _semantic_redis_client
+
+    if _semantic_redis_client_initialized:
+        return _semantic_redis_client
+
+    with _semantic_redis_lock:
+        if _semantic_redis_client_initialized:
+            return _semantic_redis_client
+
+        url = os.getenv("SEMANTIC_REDIS_URL", "").strip()
+        if not url:
+            _semantic_redis_client_initialized = True
+            _semantic_redis_client = None
+            return None
+
+        try:
+            import redis
+
+            client = redis.Redis.from_url(url, decode_responses=True)
+            client.ping()
+            _semantic_redis_client = client
+        except Exception as exc:
+            logger.warning("Redis cache disabled: %s", exc)
+            _semantic_redis_client = None
+
+        _semantic_redis_client_initialized = True
+        return _semantic_redis_client
+
+
+def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
+    payload = json.dumps({"q": question.strip(), "ctx": context}, sort_keys=True, ensure_ascii=False, default=str)
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"semantic:ask:v{_semantic_cache_namespace}:{digest}"
+
+
+def _bump_semantic_cache_namespace() -> None:
+    global _semantic_cache_namespace
+    _semantic_cache_namespace += 1
+
+
 def _get_jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET_KEY", "")
     if not secret:
@@ -103,66 +155,23 @@ def _get_jwt_secret() -> str:
     return secret
 
 
-def _b64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def _b64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(f"{data}{padding}")
-
-
 def _jwt_encode(payload: dict[str, Any], secret: str) -> str:
-    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
-    header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    signature_b64 = _b64url_encode(signature)
-    return f"{header_b64}.{payload_b64}.{signature_b64}"
+    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
 def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
     try:
-        header_b64, payload_b64, signature_b64 = token.split(".")
-    except ValueError as exc:
-        raise ValueError("Malformed token") from exc
-
-    signing_input = f"{header_b64}.{payload_b64}".encode("ascii")
-    expected_signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    actual_signature = _b64url_decode(signature_b64)
-    if not hmac.compare_digest(expected_signature, actual_signature):
-        raise ValueError("Invalid token signature")
-
-    try:
-        header = json.loads(_b64url_decode(header_b64))
-        payload = json.loads(_b64url_decode(payload_b64))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError("Invalid token payload") from exc
-
-    if header.get("alg") != JWT_ALGORITHM:
-        raise ValueError("Unsupported token algorithm")
-
-    now = int(datetime.now(timezone.utc).timestamp())
-    exp = payload.get("exp")
-    if exp is not None and (not isinstance(exp, int) or exp <= now):
-        raise ValueError("Token expired")
-
-    nbf = payload.get("nbf")
-    if isinstance(nbf, int) and nbf > now:
-        raise ValueError("Token not yet valid")
-
-    if payload.get("iss") != JWT_ISSUER:
-        raise ValueError("Invalid token issuer")
-
-    aud = payload.get("aud")
-    if isinstance(aud, list):
-        if JWT_AUDIENCE not in aud:
-            raise ValueError("Invalid token audience")
-    elif aud != JWT_AUDIENCE:
-        raise ValueError("Invalid token audience")
-
-    return payload
+        return jwt.decode(
+            token,
+            secret,
+            algorithms=[JWT_ALGORITHM],
+            issuer=JWT_ISSUER,
+            audience=JWT_AUDIENCE,
+        )
+    except ExpiredSignatureError as exc:
+        raise ValueError("Token expired") from exc
+    except JWTError as exc:
+        raise ValueError("Invalid token") from exc
 
 
 def _verify_password(password: str, stored_hash: str) -> bool:
@@ -406,6 +415,26 @@ class SemanticAskResponse(BaseModel):
     notes: str = ""
     ambiguity_error: bool = False
 
+
+class OntologyValidateRequest(BaseModel):
+    ontology_path: str | None = Field(
+        default=None,
+        description="Optional path relative to test_scenario/ for admin validation",
+    )
+
+
+def _resolve_ontology_validation_path(raw: str | None) -> Path:
+    if not raw:
+        return _SCENARIO_PATH / "ontology_example.yaml"
+
+    candidate = (_SCENARIO_PATH / raw).resolve()
+    scenario_root = _SCENARIO_PATH.resolve()
+    if scenario_root not in [candidate, *candidate.parents]:
+        raise HTTPException(status_code=400, detail="Invalid ontology path scope")
+    if not candidate.exists():
+        raise HTTPException(status_code=404, detail="Ontology file not found")
+    return candidate
+
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
 
@@ -598,10 +627,43 @@ def update_ontology_mapping(
     req: MappingUpdateRequest,
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
+    _bump_semantic_cache_namespace()
+    if _semantic_state.get("layer") is not None:
+        try:
+            _semantic_state["layer"].clear_semantic_cache()
+        except Exception:
+            pass
     success = update_mapping(req.table, req.field, req.ontology_path)
     if not success:
         raise HTTPException(status_code=404, detail="Table or field not found in mappings")
     return {"success": True, "table": req.table, "field": req.field, "ontology_path": req.ontology_path}
+
+
+@app.post("/api/ontology/validate")
+def validate_ontology_configuration(
+    req: OntologyValidateRequest,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    from .ontology.ontology import Ontology, OntologyValidationError
+
+    path = _resolve_ontology_validation_path(req.ontology_path)
+    try:
+        ontology = Ontology.load(path)
+        return {
+            "valid": True,
+            "path": str(path),
+            "entities": ontology.entity_names(),
+            "metrics": ontology.metric_names(),
+            "dimensions": ontology.dimension_names(),
+        }
+    except OntologyValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "error": "ONTOLOGY_VALIDATION_ERROR",
+                "message": str(exc),
+            },
+        )
 
 
 @app.get("/api/data/{table}", response_model=PaginatedData)
@@ -683,12 +745,23 @@ def semantic_ask(
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
+    merged_context = {"session_id": req.session_id, **(req.context or {})}
+    redis_client = _get_semantic_redis_client()
+    cache_key = _semantic_cache_key(question, merged_context)
+    if redis_client is not None:
+        try:
+            cached_payload = redis_client.get(cache_key)
+            if isinstance(cached_payload, str) and cached_payload.strip():
+                return SemanticAskResponse.model_validate_json(cached_payload)
+        except Exception:
+            pass
+
     _ensure_semantic_loaded()
     layer = _semantic_state["layer"]
 
     try:
-        result = layer.ask(question, context={"session_id": req.session_id, **(req.context or {})})
-        return SemanticAskResponse(
+        result = layer.ask(question, context=merged_context)
+        response_model = SemanticAskResponse(
             answer=result.answer,
             sql_used=result.sql_used,
             sources_touched=result.sources_touched,
@@ -699,6 +772,12 @@ def semantic_ask(
             notes=result.notes,
             ambiguity_error=False,
         )
+        if redis_client is not None:
+            try:
+                redis_client.setex(cache_key, _semantic_cache_ttl_seconds(), response_model.model_dump_json())
+            except Exception:
+                pass
+        return response_model
     except AmbiguityError as e:
         return SemanticAskResponse(
             answer=None,
@@ -734,6 +813,12 @@ def rebuild_knowledge_graph(
 ) -> dict[str, Any]:
     """Rebuild KG + semantic stack. Admin-only because it mutates in-memory system state."""
     with _semantic_init_lock:
+        _bump_semantic_cache_namespace()
+        if _semantic_state.get("layer") is not None:
+            try:
+                _semantic_state["layer"].clear_semantic_cache()
+            except Exception:
+                pass
         _semantic_state.update({
             "loaded": False,
             "layer": None,
@@ -756,29 +841,17 @@ def rebuild_knowledge_graph(
         }
 
 
-# ── Unified NL query endpoint (real AdventureWorks data) ──────────────────────
+# ── Legacy query alias (secured, routed to semantic pipeline) ─────────────────
 
 
-@app.post("/api/ask", response_model=AskResult)
-def ask(req: AskRequest) -> AskResult:
-    """
-    Main NL→SQL query endpoint.
-    Uses DuckDBSourceManager (persistent snapshot or live pushdown).
-    """
-    from .query.aw_engine import run_aw_query
-
-    if not req.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty")
-
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key or api_key == "your_key_here":
-        raise HTTPException(
-            status_code=503,
-            detail="ANTHROPIC_API_KEY not configured. Set it in backend/.env",
-        )
-
-    result = run_aw_query(req.question)
-    return AskResult(**result)
+@app.post("/api/ask")
+@limiter.limit("5/minute", key_func=_semantic_limit_key)
+def ask_legacy_alias(
+    request: Request,
+    req: SemanticAskRequest,
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> SemanticAskResponse:
+    return semantic_ask(request, req, _current_user)
 
 
 # ── Data store management ──────────────────────────────────────────────────────

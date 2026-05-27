@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend-lint-format:
+    name: Backend Lint and Format (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies and tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install ruff mypy
+
+      - name: Auto-format backend with ruff format
+        run: ruff format backend
+
+      - name: Auto-fix backend lint with ruff check
+        run: ruff check backend --fix
+
+      - name: Static typing baseline (mypy)
+        run: mypy --config-file backend/mypy.ini backend/app/ontology/ontology.py
+
+      - name: Fail if formatting/lint fixes were needed
+        run: git diff --exit-code
+
+  backend-tests:
+    name: Backend Test Suite (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run all backend tests
+        working-directory: backend
+        env:
+          SEMANTIC_REQUIRE_LLM_INTENT: "0"
+        run: python -m pytest -q tests
+
+      - name: Agentic safe-execution smoke tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_agentic_endpoints.py
+
+      - name: Run regression gate unit tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_check_perf_regression.py
+
+      - name: Run performance profile benchmark
+        working-directory: backend
+        env:
+          SEMANTIC_REQUIRE_LLM_INTENT: "0"
+          RUN_PERFORMANCE_PROFILE: "1"
+        run: python -m pytest -q tests/test_performance_profile.py -s
+
+      - name: Run automated faithfulness evaluation
+        working-directory: backend
+        env:
+          SEMANTIC_REQUIRE_LLM_INTENT: "0"
+          RUN_FAITHFULNESS_EVAL: "1"
+          FAITHFULNESS_MIN_SCORE: "0.90"
+        run: python -m pytest -q tests/test_faithfulness_eval.py -s
+
+      - name: Enforce performance regression gate
+        working-directory: backend
+        run: python tests/check_perf_regression.py
+
+      - name: Upload performance artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-artifacts
+          path: |
+            perf_metrics.json
+            backend/tests/perf_history.json
+          if-no-files-found: warn
+
+      - name: Upload faithfulness artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faithfulness-artifact
+          path: faithfulness_report.json
+          if-no-files-found: warn
+
+  backend-security-scan:
+    name: Backend Security Scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: Audit backend dependencies
+        run: pip-audit -r backend/requirements.txt
+
+  frontend-build:
+    name: Frontend Build (TypeScript + Vite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build

@@ -5,8 +5,9 @@ Architecture
 ============
 
 All configured sources are stored in a SourceRegistry (SQLite).
-On first startup the manager ingests every source into a persistent DuckDB
-snapshot file.  On subsequent restarts it opens the file read-only (<100 ms).
+Runtime mode is controlled by FRA_STORAGE_MODE:
+- nostore (default): no local datalake persistence; ephemeral in-memory DuckDB
+- snapshot: persistent DuckDB snapshot file reused across restarts
 
 Adding a new source
 -------------------
@@ -102,30 +103,42 @@ class DuckDBSourceManager:
         self._init_lock = threading.RLock()
         self._row_counts: dict[str, int] = {}
         self._built_at: datetime | None = None
+        mode = os.getenv("FRA_STORAGE_MODE", "nostore").strip().lower()
+        self._storage_mode = mode if mode in {"nostore", "snapshot"} else "nostore"
 
         self._seed_defaults()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        """Return a read-only DuckDB connection over the snapshot."""
+        """Return a DuckDB connection for current storage mode."""
         self._ensure_ready()
+        if self._storage_mode == "nostore":
+            conn = duckdb.connect(":memory:")
+            self._populate_connection(conn)
+            return conn
         return duckdb.connect(str(self._db_path), read_only=True)
 
-    def execute(self, sql: str) -> list[dict[str, Any]]:
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         """Execute a SELECT and return up to 100 rows (for frontend queries)."""
         conn = self.get_connection()
         try:
-            df = conn.execute(sql).df().head(100)
+            if params:
+                df = conn.execute(sql, params).df().head(100)
+            else:
+                df = conn.execute(sql).df().head(100)
             return df.where(df.notna(), other=None).to_dict(orient="records")
         finally:
             conn.close()
 
-    def execute_all(self, sql: str) -> list[dict[str, Any]]:
+    def execute_all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         """Execute a SELECT and return ALL rows (for KG/catalog bulk loads)."""
         conn = self.get_connection()
         try:
-            df = conn.execute(sql).df()
+            if params:
+                df = conn.execute(sql, params).df()
+            else:
+                df = conn.execute(sql).df()
             return df.where(df.notna(), other=None).to_dict(orient="records")
         finally:
             conn.close()
@@ -133,7 +146,7 @@ class DuckDBSourceManager:
     def rebuild(self) -> dict[str, int]:
         """Force full re-ingest of all active sources."""
         with self._init_lock:
-            if self._db_path.exists():
+            if self._storage_mode == "snapshot" and self._db_path.exists():
                 self._db_path.unlink()
                 logger.info("Removed stale snapshot: %s", self._db_path)
             self._ready = False
@@ -154,12 +167,12 @@ class DuckDBSourceManager:
         self._ensure_ready()
         return SourceMeta(
             name="unified_duckdb",
-            source_type="duckdb_snapshot",
+            source_type="duckdb_snapshot" if self._storage_mode == "snapshot" else "duckdb_nostore_ephemeral",
             tables=list(self._row_counts.keys()),
             record_counts=self._row_counts,
             loaded_at=self._built_at or datetime.utcnow(),
             notes=(
-                f"DuckDB unified store | schema_version={_SCHEMA_VERSION} | "
+                f"DuckDB unified store | mode={self._storage_mode} | schema_version={_SCHEMA_VERSION} | "
                 f"sources={len(self._registry.list())} | path={self._db_path}"
             ),
         )
@@ -233,6 +246,14 @@ class DuckDBSourceManager:
         with self._init_lock:
             if self._ready:
                 return
+            if self._storage_mode == "nostore":
+                probe = duckdb.connect(":memory:")
+                try:
+                    self._populate_connection(probe)
+                finally:
+                    probe.close()
+                self._ready = True
+                return
             if self._db_path.exists():
                 if self._try_load_snapshot():
                     self._ready = True
@@ -272,21 +293,7 @@ class DuckDBSourceManager:
         logger.info("Building DuckDB snapshot at %s …", self._db_path)
         conn = duckdb.connect(str(self._db_path))
         try:
-            for cfg in self._registry.list():
-                try:
-                    self._ingest_source(conn, cfg)
-                    now = datetime.utcnow().isoformat()
-                    self._registry.patch(
-                        cfg.id, status="active", error_msg=None, last_sync_at=now,
-                        row_count=sum(
-                            v for k, v in self._row_counts.items()
-                            if k.startswith(f"{cfg.id}.")
-                        ),
-                    )
-                except Exception as exc:
-                    logger.error("Failed to ingest source '%s': %s", cfg.id, exc)
-                    self._registry.patch(cfg.id, status="error", error_msg=str(exc))
-
+            self._populate_connection(conn)
             self._write_meta(conn)
             conn.execute("CHECKPOINT")
             logger.info(
@@ -303,6 +310,24 @@ class DuckDBSourceManager:
                 conn.close()
             except Exception:
                 pass
+
+    def _populate_connection(self, conn: duckdb.DuckDBPyConnection) -> None:
+        self._row_counts = {}
+        for cfg in self._registry.list():
+            try:
+                self._ingest_source(conn, cfg)
+                now = datetime.utcnow().isoformat()
+                self._registry.patch(
+                    cfg.id,
+                    status="active",
+                    error_msg=None,
+                    last_sync_at=now,
+                    row_count=sum(v for k, v in self._row_counts.items() if k.startswith(f"{cfg.id}.")),
+                )
+            except Exception as exc:
+                logger.error("Failed to ingest source '%s': %s", cfg.id, exc)
+                self._registry.patch(cfg.id, status="error", error_msg=str(exc))
+        self._built_at = datetime.utcnow()
 
     def _write_meta(self, conn: duckdb.DuckDBPyConnection) -> None:
         self._built_at = datetime.utcnow()
@@ -393,6 +418,7 @@ class DuckDBSourceManager:
         rows = _load_hr(hr_path)
         df = pd.DataFrame(rows)
         conn.execute("CREATE TABLE IF NOT EXISTS hr_employees AS SELECT * FROM df")
+        conn.execute("CREATE OR REPLACE VIEW dipendenti_hr AS SELECT * FROM hr_employees")
         self._row_counts[f"{cfg.id}.hr_employees"] = len(df)
         logger.info("HR   %-25s %7d rows", "hr_employees", len(df))
 
@@ -405,6 +431,7 @@ class DuckDBSourceManager:
         rows = _load_pim(pim_path)
         df = pd.DataFrame(rows)
         conn.execute("CREATE TABLE IF NOT EXISTS pim_products AS SELECT * FROM df")
+        conn.execute("CREATE OR REPLACE VIEW product_catalog_pim AS SELECT * FROM pim_products")
         self._row_counts[f"{cfg.id}.pim_products"] = len(df)
         logger.info("PIM  %-25s %7d rows", "pim_products", len(df))
 
@@ -537,8 +564,8 @@ class _DuckDBConnectorAdapter:
             raise ValueError(f"{self._SOURCE_NAME}: unknown entity '{entity_type}'")
         return self._mgr.execute_all(f'SELECT * FROM "{table}"')
 
-    def execute_query(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
-        return self._mgr.execute_all(sql)
+    def execute_query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        return self._mgr.execute_all(sql, params)
 
     def describe(self) -> SourceMeta:
         unified = self._mgr.describe()

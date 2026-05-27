@@ -17,3 +17,5 @@ pytest
 pytest-asyncio
 python-multipart
 slowapi==0.1.9
+redis==5.0.8
+python-jose[cryptography]==3.3.0

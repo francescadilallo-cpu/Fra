@@ -1,0 +1,15 @@
+ontology_version: 1
+entities:
+  SalesOrder:
+    description: Invalid fixture for hard-fail validation tests
+    attributes:
+      broken_link:
+        relation: many_to_one
+        target: UnknownEntity
+        via: order_id
+    sources:
+      - source: erp
+        table: sales_order_header
+metrics: {}
+dimensions: {}
+known_ambiguities: []

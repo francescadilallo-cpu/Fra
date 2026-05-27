@@ -166,6 +166,76 @@ _ENTITY_REGISTRY: dict[str, type[OntologyEntity]] = {
 }
 
 
+class OntologyValidationError(ValueError):
+    """Raised when ontology YAML contains structural inconsistencies."""
+
+
+def _validate_yaml_schema(data: dict[str, Any]) -> None:
+    if not isinstance(data, dict):
+        raise OntologyValidationError("Ontology root must be a dictionary")
+
+    entities = data.get("entities", {})
+    if not isinstance(entities, dict):
+        raise OntologyValidationError("entities must be a dictionary")
+
+    known_entities = set(_ENTITY_REGISTRY.keys())
+    declared_entities = set(entities.keys())
+
+    for entity_name, entity_cfg in entities.items():
+        if entity_name not in known_entities:
+            raise OntologyValidationError(
+                f"Entity '{entity_name}' is not registered in canonical model"
+            )
+        if not isinstance(entity_cfg, dict):
+            raise OntologyValidationError(f"Entity '{entity_name}' config must be a dictionary")
+
+        attrs = entity_cfg.get("attributes", {})
+        if attrs is not None and not isinstance(attrs, dict):
+            raise OntologyValidationError(f"Entity '{entity_name}' attributes must be a dictionary")
+
+        for attr_name, attr_cfg in (attrs or {}).items():
+            if not isinstance(attr_cfg, dict) or "relation" not in attr_cfg:
+                continue
+
+            rel_kind = attr_cfg.get("relation")
+            target = attr_cfg.get("target")
+            via = attr_cfg.get("via")
+
+            if not target or target not in known_entities:
+                raise OntologyValidationError(
+                    f"Relation '{entity_name}.{attr_name}' has invalid target '{target}'"
+                )
+            if target not in declared_entities:
+                raise OntologyValidationError(
+                    f"Relation '{entity_name}.{attr_name}' targets undeclared entity '{target}'"
+                )
+            if rel_kind in {"many_to_one", "one_to_one", "many_to_many"} and not via:
+                raise OntologyValidationError(
+                    f"Relation '{entity_name}.{attr_name}' requires non-empty 'via'"
+                )
+
+        sources = entity_cfg.get("sources", [])
+        if sources is not None and not isinstance(sources, list):
+            raise OntologyValidationError(f"Entity '{entity_name}' sources must be a list")
+        for src in sources or []:
+            if not isinstance(src, dict):
+                raise OntologyValidationError(f"Entity '{entity_name}' source must be a dictionary")
+            if not src.get("source") or not src.get("table"):
+                raise OntologyValidationError(
+                    f"Entity '{entity_name}' source entry must include 'source' and 'table'"
+                )
+
+    metrics = data.get("metrics", {})
+    dimensions = data.get("dimensions", {})
+    ambiguities = data.get("known_ambiguities", [])
+    if metrics is not None and not isinstance(metrics, dict):
+        raise OntologyValidationError("metrics must be a dictionary")
+    if dimensions is not None and not isinstance(dimensions, dict):
+        raise OntologyValidationError("dimensions must be a dictionary")
+    if ambiguities is not None and not isinstance(ambiguities, list):
+        raise OntologyValidationError("known_ambiguities must be a list")
+
+
 # ── Ontology class ─────────────────────────────────────────────────────────────
 
 class Ontology:
@@ -190,6 +260,7 @@ class Ontology:
         p = Path(path)
         with p.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
+        _validate_yaml_schema(data)
         logger.info("Ontology loaded from %s (version=%s)", p, data.get("ontology_version"))
         return cls(data)
 

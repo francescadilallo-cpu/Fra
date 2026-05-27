@@ -523,7 +523,7 @@ class _RuleParser:
 
         # ── Q7: revenue by territory ──────────────────────────────────────
         if ("territorio" in q or "territory" in q) and (
-            "incass" in q or "revenue" in q or "total" in q or "fatturato" not in q
+            "incass" in q or "revenue" in q or "total" in q or "fatturato" in q
         ):
             return Intent(
                 intent_type="revenue_by_territory",
@@ -542,7 +542,7 @@ class _RuleParser:
             )
 
         # ── Q8: top customer by spend ─────────────────────────────────────
-        if "cliente" in q and ("più" in q or "top" in q) and ("speso" in q or "spesa" in q or "spend" in q):
+        if "cliente" in q and ("più" in q or "piu" in q or "top" in q) and ("speso" in q or "spesa" in q or "spend" in q):
             return Intent(intent_type="top_customer_by_spend", raw_question=question)
 
         # ── Q9: top products by quantity ──────────────────────────────────
@@ -583,7 +583,7 @@ class _RuleParser:
             return Intent(intent_type="orders_with_discount", raw_question=question)
 
         # ── incassi → revenue_with_tax ────────────────────────────────────
-        if "incass" in q:
+        if "incass" in q or "revenue with tax" in q or ("revenue" in q and "tax" in q):
             return Intent(
                 intent_type="revenue_with_tax",
                 filters={"year": year} if year else {},
@@ -663,6 +663,14 @@ class SemanticLayer:
         self._erp = erp
         self._crm = crm
         self._hr_pim = hr_pim
+
+    def clear_semantic_cache(self) -> None:
+        """Compatibility hook for endpoint-level invalidation.
+
+        Current layer version does not persist internal validated-plan cache,
+        but this explicit method keeps mutation hooks stable and forward-compatible.
+        """
+        return None
 
     def ask(self, question: str, context=None) -> Result:
         """Resolve *question* and return a Result."""
@@ -1232,7 +1240,7 @@ class SemanticLayer:
     def _q_count_orders(self, intent: Intent) -> Result:
         year = intent.filters.get("year") or intent.year
         if year:
-            sql = "SELECT COUNT(*) as cnt FROM sales_order_header WHERE strftime('%Y', order_date) = ?"
+            sql = "SELECT COUNT(*) as cnt FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
             rows = self._erp.execute_query(sql, (str(year),))
         else:
             sql = "SELECT COUNT(*) as cnt FROM sales_order_header"
@@ -1306,7 +1314,7 @@ class SemanticLayer:
             sql = """
                 SELECT salesperson_ref, COUNT(*) as n
                 FROM sales_order_header
-                WHERE strftime('%Y', order_date) = ?
+                                WHERE strftime('%Y', CAST(order_date AS DATE)) = ?
                   AND salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1
             """
@@ -1352,7 +1360,7 @@ class SemanticLayer:
             sql = """
                 SELECT salesperson_ref, ROUND(SUM(total_due), 2) as revenue
                 FROM sales_order_header
-                WHERE strftime('%Y', order_date) = ?
+                                WHERE strftime('%Y', CAST(order_date AS DATE)) = ?
                   AND salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
             """
@@ -1391,7 +1399,7 @@ class SemanticLayer:
                 SELECT t.territory_name, ROUND(SUM(h.total_due), 2) as revenue
                 FROM sales_order_header h
                 JOIN territory t ON h.territory_ref = t.territory_id
-                WHERE strftime('%Y', h.order_date) = ?
+                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
                 GROUP BY t.territory_name ORDER BY revenue DESC
             """
             rows = self._erp.execute_query(sql, (str(year),))
@@ -1420,7 +1428,7 @@ class SemanticLayer:
                        ROUND(SUM(h.total_due) / NULLIF(MAX(sp.sales_quota), 0) * 100, 1) as pct_quota
                 FROM sales_order_header h
                 JOIN salesperson sp ON h.salesperson_ref = sp.salesperson_id
-                WHERE strftime('%Y', h.order_date) = ?
+                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY revenue DESC
             """
@@ -1536,7 +1544,7 @@ class SemanticLayer:
                        ROUND(SUM(l.qty * (l.unit_price - l.unit_price * l.unit_discount)), 2) as approx_revenue
                 FROM sales_order_header h
                 JOIN sales_order_line l ON l.order_id = h.order_id
-                WHERE strftime('%Y', h.order_date) = ?
+                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY approx_revenue DESC
             """
@@ -1563,7 +1571,7 @@ class SemanticLayer:
                        SUM(l.qty) as total_qty
                 FROM sales_order_header h
                 JOIN sales_order_line l ON l.order_id = h.order_id
-                WHERE strftime('%Y', h.order_date) = ?
+                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref, l.product_ref
             """
@@ -1759,6 +1767,7 @@ class SemanticLayer:
         year = intent.year or intent.filters.get("year")
         if year:
             sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', order_date) = ?"
+            sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
             rows = self._erp.execute_query(sql, (str(year),))
         else:
             sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header"
