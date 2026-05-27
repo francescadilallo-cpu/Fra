@@ -750,7 +750,8 @@ LIMIT  10`,
   },
   // ── Orders ────────────────────────────────────────────────────────────────────
   {
-    test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q),
+    test: q => /order|sales order|show.*order|list.*order|recent.*order/i.test(q)
+      && !/average.*order|avg.*order|\border.*value\b/i.test(q),
     result: () => ({
       sql: `SELECT orderId,
        orderDate,
@@ -761,7 +762,7 @@ LIMIT  10`,
        CASE WHEN onlineOrderFlag THEN 'Online' ELSE 'In-store' END AS channel
 FROM   erp.SalesOrder
 ORDER  BY orderDate DESC
-LIMIT  12`,
+LIMIT  10`,
       rows: [
         { orderId: 75124, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  53209.80, totalDue:  56994.49, channel: 'In-store' },
         { orderId: 75123, orderDate: '2014-12-28', shipDate: null,         status: 'Confirmed',  subtotalAmount:  87145.20, totalDue:  93345.65, channel: 'In-store' },
@@ -771,11 +772,11 @@ LIMIT  12`,
         { orderId: 75119, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   2039.99, totalDue:   2185.98, channel: 'Online'   },
         { orderId: 75118, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Processing', subtotalAmount:   1429.00, totalDue:   1532.21, channel: 'Online'   },
         { orderId: 75117, orderDate: '2014-11-30', shipDate: '2014-12-07', status: 'Shipped',    subtotalAmount:      9.99, totalDue:     13.07, channel: 'Online'   },
-        { orderId: 43662, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  28832.53, totalDue:  32474.93, channel: 'In-store' },
-        { orderId: 43661, orderDate: '2011-05-31', shipDate: '2011-06-07', status: 'Shipped',    subtotalAmount:  32726.48, totalDue:  36865.80, channel: 'In-store' },
+        { orderId: 75116, orderDate: '2014-11-29', shipDate: '2014-12-06', status: 'Shipped',    subtotalAmount:    732.40, totalDue:    784.77, channel: 'Online'   },
+        { orderId: 75115, orderDate: '2014-11-28', shipDate: '2014-12-05', status: 'Shipped',    subtotalAmount:   3578.27, totalDue:   3831.82, channel: 'In-store' },
       ],
-      summary: 'Showing **10 orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Note: `subtotalAmount` ≠ `totalDue` — tax + freight adds ~11%.',
-      interpreted_as: 'ERP.SalesOrder · ORDER BY orderDate DESC · LIMIT 12',
+      summary: 'Showing **10 most recent orders** from ERP OrionSales (31,465 total). Two large confirmed orders (#75123 $87K, #75124 $53K) from Dec 2014 are pending shipment. Note: `subtotalAmount` ≠ `totalDue` — tax + freight adds ~11%.',
+      interpreted_as: 'ERP.SalesOrder · ORDER BY orderDate DESC · LIMIT 10',
       sources: [SRC.ERP],
       steps: [
         '① ERP.SalesOrder loaded: 31,465 rows total',
@@ -1312,7 +1313,7 @@ ORDER BY margin_pct DESC`,
   },
   // ── HR department headcount and salary ───────────────────────────────────────
   {
-    test: q => /department|reparto|salary.*dept|dept.*salary|stipendio.*reparto|headcount.*dept|org.?chart|department.*headcount/i.test(q),
+    test: q => /department|reparto|org.?chart|headcount.*dept|department.*headcount|salary|stipendio|payroll|\bwage/i.test(q),
     result: () => ({
       sql: `SELECT   d.repartoNome                AS department,
          COUNT(*)                     AS headcount,
