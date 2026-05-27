@@ -1486,7 +1486,7 @@ const RETAIL_PATTERNS: Array<{
         { month: '2024-08', orders: 134, revenue: 23478, avg_order: 175.2 },
         { month: '2024-09', orders: 69,  revenue: 12042, avg_order: 174.5 },
       ],
-      summary: '**740 paid orders** total, $138K revenue, avg order **$186.49**. Peak July (156 orders, $28.7K). Revenue growing +37% April→July, then seasonal dip in Sept (partial month). Checkout conversion: 740/920 started = **80.4%**.',
+      summary: '**740 paid orders** total, $136K revenue, avg order **$183.14**. Peak July (156 orders, $28.7K). Revenue growing +37% April→July, then seasonal dip in Sept (partial month). Checkout conversion: 740/920 started = **80.4%**.',
       interpreted_as: "orders WHERE status='paid' · GROUP BY month · SUM(total) · AVG(total)",
       chartData: {
         type: 'line',
@@ -1597,7 +1597,7 @@ const HEALTHCARE_PATTERNS: Array<{
         { condition: 'COPD',              patients: 63,  avg_age: 67.2 },
         { condition: 'Heart Failure',     patients: 41,  avg_age: 71.8 },
       ],
-      summary: '**1,240 registered patients**, 872 with documented chronic conditions. Hypertension most prevalent (284, avg age 58). Heart Failure cohort oldest (avg 71.8). 368 patients with no chronic condition on record — may require data completion.',
+      summary: '**1,240 registered patients**. Top 8 conditions cover **1,124 patients**. Hypertension most prevalent (284, avg age 58). Heart Failure cohort oldest (avg 71.8). 116 patients have no recorded condition or a rare condition outside top-8.',
       interpreted_as: 'patients GROUP BY chronicConditions · COUNT · AVG age · WHERE condition NOT NULL',
       chartData: {
         type: 'bar',
@@ -1613,7 +1613,7 @@ const HEALTHCARE_PATTERNS: Array<{
         '① patients: 1,240 registered in EHR',
         '② Filter chronicConditions IS NOT NULL (872 have conditions)',
         '③ GROUP BY condition · COUNT · AVG age from birthDate',
-        '④ 368 patients with no chronic condition — check data completeness',
+        '④ 116 patients outside top-8 conditions — rare conditions or missing data',
       ],
       followUps: ['How many encounters per doctor?', 'Show prescriptions issued recently', 'Which treatments have no outcome recorded?'],
     }),
@@ -1700,13 +1700,13 @@ const HEALTHCARE_PATTERNS: Array<{
         { type: 'Radiation',         treatments: 31,  no_outcome: 5,  pct_missing: '16.1%' },
         { type: 'Psychotherapy',     treatments: 72,  no_outcome: 8,  pct_missing: '11.1%' },
       ],
-      summary: '**178 treatments (24.7%) have no outcome recorded**. Physical Therapy worst (40.2% missing) — likely because outcomes documented at discharge, not start. Surgery 23.6% gap. Medication Course highest volume (341) with 62 missing. Action required: close outcome loop for 170 treatments.',
+      summary: '**178 treatments (24.1%) have no outcome recorded**. Physical Therapy worst (40.2% missing) — likely because outcomes documented at discharge, not start. Surgery 23.6% gap. Medication Course highest volume (341) with 62 missing. Action required: close outcome loop for 178 treatments.',
       interpreted_as: 'treatments GROUP BY type · COUNT(outcome IS NULL) / COUNT(*)',
       sources: [
         { id: 'ehr', label: 'EHR System', bg: 'bg-blue-100', text: 'text-blue-700' },
       ],
       steps: [
-        '① treatments: 720 total in the system',
+        '① treatments: 740 total in the system',
         '② GROUP BY type · conditional COUNT for NULL outcome',
         '③ pct_missing = missing/total × 100',
         '④ Physical Therapy 40% gap — outcome typically at discharge, check EHR workflow',
@@ -1741,7 +1741,7 @@ const FINANCE_PATTERNS: Array<{
         { status: 'Rejected',  loans: 87, total_amount: 2288700, avg_amount: 26307, avg_rate: 0.0698 },
         { status: 'Closed',    loans: 36, total_amount: 946800,  avg_amount: 26300, avg_rate: 0.0554 },
       ],
-      summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **45.3%** (145/320). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
+      summary: '**320 total loan applications**, $8.4M total exposure. Active portfolio: 89 loans × $2.34M. 65 pending review ($1.71M). Approval rate: **52.5%** (168/320 active+disbursed+closed). Rejected avg rate 6.98% vs Active 6.12% — risk-based pricing visible.',
       interpreted_as: 'loans GROUP BY status · SUM(amount) · AVG(rate)',
       chartData: {
         type: 'pie',
@@ -1774,7 +1774,7 @@ const FINANCE_PATTERNS: Array<{
         { category: 'BB – Watch',     applicants: 61, avg_score: 558, avg_pd_pct: 7.4,  avg_income: 42100 },
         { category: 'B – Subprime',   applicants: 32, avg_score: 481, avg_pd_pct: 14.2, avg_income: 31800 },
       ],
-      summary: '**320 applicants scored**. Prime/Standard (135 = 42.2%) have avg PD < 1.5% — low risk. BB Watch (61 = 19%) and Subprime (32 = 10%) elevate portfolio risk. Income clearly correlates: AAA avg $94K vs Subprime $31K. Blended portfolio PD: **3.8%**.',
+      summary: '**320 applicants scored**. Prime/Standard (135 = 42.2%) have avg PD < 1.5% — low risk. BB Watch (61 = 19%) and Subprime (32 = 10%) elevate portfolio risk. Income clearly correlates: AAA avg $94K vs Subprime $31K. Blended portfolio PD: **4.1%**.',
       interpreted_as: 'risk_profiles JOIN applicants · GROUP BY category · AVG score, PD rate, income',
       chartData: {
         type: 'bar',
