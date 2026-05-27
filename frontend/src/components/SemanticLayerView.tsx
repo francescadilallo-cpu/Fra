@@ -665,55 +665,59 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 const AW_RELATIONS = [
   {
     source: 'ERP — OrionSales',
+    sourceKey: 'erp',
     colorBorder: 'border-blue-200',
     colorBg: 'bg-blue-50',
     colorText: 'text-blue-700',
     colorDot: 'bg-blue-500',
     icon: '🏭',
     relations: [
-      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId', cardinality: '1:N', rows: '31,465 → 121,317', note: 'One order has many line items' },
-      { from: 'SalesOrder', to: 'Territory',      via: 'territoryId', cardinality: 'N:1', rows: '31,465 → 10', note: 'Each order belongs to a sales territory' },
-      { from: 'SalesOrder', to: 'SalesPerson',    via: 'salesPersonId', cardinality: 'N:1', rows: '31,465 → 17', note: 'Each order is assigned to a salesperson (nullable)' },
-      { from: 'SalesOrder', to: 'Customer',       via: 'customer_ref → customerId', cardinality: 'N:1', rows: '31,465 → 19,185', note: 'Internal ERP customer ref (different from CRM accountId)' },
-      { from: 'SalesPerson', to: 'Territory',     via: 'territoryId', cardinality: 'N:1', rows: '17 → 10', note: 'Salesperson is assigned to a home territory' },
-      { from: 'SalesOrderLine', to: 'SalesOrder', via: 'orderId', cardinality: 'N:1', rows: '121,317 → 31,465', note: 'Reverse of the order-line relationship' },
+      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId',                     cardinality: '1:N' as const, fromRows: 31465,  toRows: 121317, note: 'One order has many line items' },
+      { from: 'SalesOrder', to: 'Territory',       via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 31465,  toRows: 10,     note: 'Each order belongs to a sales territory' },
+      { from: 'SalesOrder', to: 'SalesPerson',     via: 'salesPersonId',               cardinality: 'N:1' as const, fromRows: 31465,  toRows: 17,     note: 'Nullable — online orders have no assigned rep' },
+      { from: 'SalesOrder', to: 'Customer',        via: 'customer_ref → customerId',   cardinality: 'N:1' as const, fromRows: 31465,  toRows: 19185,  note: 'Internal ERP customer ref — distinct from CRM accountId' },
+      { from: 'SalesPerson', to: 'Territory',      via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 17,     toRows: 10,     note: 'Salesperson is assigned to a home territory' },
+      { from: 'SalesOrderLine', to: 'SalesOrder',  via: 'orderId',                     cardinality: 'N:1' as const, fromRows: 121317, toRows: 31465,  note: 'Each line item belongs to one order' },
     ],
   },
   {
     source: 'CRM — ClientHub',
+    sourceKey: 'crm',
     colorBorder: 'border-teal-200',
     colorBg: 'bg-teal-50',
     colorText: 'text-teal-700',
     colorDot: 'bg-teal-500',
     icon: '🤝',
     relations: [
-      { from: 'Customer', to: 'Contact',       via: 'accountId', cardinality: '1:N', rows: '19,829 → 19,302', note: 'Each account can have multiple contacts' },
-      { from: 'Customer', to: 'Address',       via: 'accountId', cardinality: '1:N', rows: '19,829 → 19,614', note: 'Each account can have multiple shipping/billing addresses' },
-      { from: 'Address',  to: 'StateProvince', via: 'stateProvinceId', cardinality: 'N:1', rows: '19,614 → 70', note: 'Address belongs to a state/province' },
-      { from: 'StateProvince', to: 'Country',  via: 'countryId', cardinality: 'N:1', rows: '70 → 6', note: 'State/province belongs to a country' },
+      { from: 'Customer',     to: 'Contact',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19302, note: 'Each account can have multiple contacts' },
+      { from: 'Customer',     to: 'Address',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19614, note: 'Shipping and billing addresses per account' },
+      { from: 'Address',      to: 'StateProvince', via: 'stateProvinceId', cardinality: 'N:1' as const, fromRows: 19614, toRows: 70,    note: 'Address belongs to a state/province' },
+      { from: 'StateProvince', to: 'Country',      via: 'countryId',       cardinality: 'N:1' as const, fromRows: 70,    toRows: 6,     note: 'State/province belongs to a country' },
     ],
   },
   {
     source: 'PIM — Catalog',
+    sourceKey: 'pim',
     colorBorder: 'border-amber-200',
     colorBg: 'bg-amber-50',
     colorText: 'text-amber-700',
     colorDot: 'bg-amber-500',
     icon: '📦',
     relations: [
-      { from: 'Product', to: 'Category',    via: 'category (string)', cardinality: 'N:1', rows: '504 → ~4', note: 'Denormalized — Bikes, Components, Clothing, Accessories' },
-      { from: 'Product', to: 'Subcategory', via: 'subcategory (string)', cardinality: 'N:1', rows: '504 → ~37', note: 'Denormalized — Mountain Bikes, Road Bikes, Helmets…' },
+      { from: 'Product', to: 'Category',    via: 'category',    cardinality: 'N:1' as const, fromRows: 504, toRows: 4,  note: 'Bikes · Components · Clothing · Accessories', soft: true },
+      { from: 'Product', to: 'Subcategory', via: 'subcategory', cardinality: 'N:1' as const, fromRows: 504, toRows: 37, note: 'Mountain Bikes · Road Bikes · Helmets…', soft: true },
     ],
   },
   {
     source: 'HR — Employees',
+    sourceKey: 'hr',
     colorBorder: 'border-violet-200',
     colorBg: 'bg-violet-50',
     colorText: 'text-violet-700',
     colorDot: 'bg-violet-500',
     icon: '👥',
     relations: [
-      { from: 'Employee', to: 'Department', via: 'repartoId', cardinality: 'N:1', rows: '290 → n/a', note: 'Department is a string field (not a FK table in this source)' },
+      { from: 'Employee', to: 'Department', via: 'repartoId', cardinality: 'N:1' as const, fromRows: 290, toRows: 0, note: 'Department stored as string — no separate table', soft: true },
     ],
   },
 ]
@@ -1972,6 +1976,177 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'definitions',  label: 'Definitions', Icon: Tag,              desc: 'Field glossary' },
 ]
 
+// ── Relations Section ─────────────────────────────────────────────────────────
+
+function RelationsSection({ isManufacturing, onNavigate }: {
+  isManufacturing: boolean
+  onNavigate: (s: SLSection) => void
+}) {
+  const [filterSource, setFilterSource] = useState<string>('all')
+  const [filterCard, setFilterCard] = useState<string>('all')
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [search, setSearch] = useState('')
+
+  const totalRelations = AW_RELATIONS.reduce((a, g) => a + g.relations.length, 0)
+  const oneToN = AW_RELATIONS.flatMap(g => g.relations).filter(r => r.cardinality === '1:N').length
+  const nToOne = AW_RELATIONS.flatMap(g => g.relations).filter(r => r.cardinality === 'N:1').length
+  const softCount = AW_RELATIONS.flatMap(g => g.relations).filter(r => 'soft' in r && r.soft).length
+
+  const filtered = AW_RELATIONS
+    .filter(g => filterSource === 'all' || g.sourceKey === filterSource)
+    .map(g => ({
+      ...g,
+      relations: g.relations.filter(r =>
+        (filterCard === 'all' || r.cardinality === filterCard) &&
+        (!search || r.from.toLowerCase().includes(search.toLowerCase()) || r.to.toLowerCase().includes(search.toLowerCase()))
+      ) as typeof g.relations,
+    }))
+    .filter(g => g.relations.length > 0)
+
+  function toggleCollapse(key: string) {
+    setCollapsed(c => ({ ...c, [key]: !c[key] }))
+  }
+
+  return (
+    <div className="px-8 py-7 space-y-5">
+      <SectionHeader icon={ArrowRight} title="Intra-source Relations"
+        desc="Foreign-key relationships within each data source" />
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Total relations', value: totalRelations, color: 'text-slate-700' },
+          { label: '1:N (one-to-many)', value: oneToN, color: 'text-blue-600' },
+          { label: 'N:1 (many-to-one)', value: nToOne, color: 'text-teal-600' },
+          { label: 'Soft / denormalized', value: softCount, color: 'text-amber-600' },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-center">
+            <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters + search */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Filter by entity…"
+            className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-teal-400 w-44"
+          />
+        </div>
+        <div className="flex items-center gap-1 ml-1">
+          {['all', 'erp', 'crm', 'pim', 'hr'].map(k => (
+            <button key={k} onClick={() => setFilterSource(k)}
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                filterSource === k ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}>
+              {k === 'all' ? 'All sources' : k.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          {(['all', '1:N', 'N:1'] as const).map(k => (
+            <button key={k} onClick={() => setFilterCard(k)}
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                filterCard === k ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+              }`}>
+              {k === 'all' ? 'All cardinalities' : k}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isManufacturing ? (
+        filtered.length === 0 ? (
+          <div className="border border-dashed border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">
+            No relations match the current filters.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filtered.map(group => {
+              const isOpen = collapsed[group.sourceKey] !== true
+              return (
+                <div key={group.source} className={`border ${group.colorBorder} rounded-xl overflow-hidden`}>
+                  {/* Group header — clickable to collapse */}
+                  <button
+                    onClick={() => toggleCollapse(group.sourceKey)}
+                    className={`w-full ${group.colorBg} px-4 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity`}
+                  >
+                    <span className="text-base">{group.icon}</span>
+                    <span className={`text-xs font-semibold ${group.colorText}`}>{group.source}</span>
+                    <span className="ml-1 text-[10px] text-slate-400">
+                      {group.relations.length} relation{group.relations.length !== 1 ? 's' : ''}
+                    </span>
+                    <ChevronDown className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                  </button>
+
+                  {/* Relations list */}
+                  {isOpen && (
+                    <div className="divide-y divide-slate-100">
+                      {group.relations.map((r, i) => {
+                        const isSoft = 'soft' in r && r.soft === true
+                        return (
+                          <div key={i} className="px-4 py-3.5 bg-white hover:bg-slate-50 transition-colors">
+                            {/* Top row: entity → entity + badges */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.from}</span>
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                                {r.cardinality === '1:N' ? (
+                                  <>
+                                    <span className="text-blue-500">1</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                    <span className="text-blue-500">N</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-teal-500">N</span>
+                                    <ArrowRight className="w-3 h-3" />
+                                    <span className="text-teal-500">1</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.to}</span>
+                              {isSoft && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium">soft FK</span>
+                              )}
+                            </div>
+                            {/* Bottom row: key + counts + note */}
+                            <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+                              <span className="font-mono text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
+                                via {r.via}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {r.fromRows.toLocaleString('en-US')} → {r.toRows > 0 ? r.toRows.toLocaleString('en-US') : 'n/a'}
+                              </span>
+                              <span className="text-[10px] text-slate-500">{r.note}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 space-y-2">
+          <p className="text-xs text-slate-400">No relations defined for this sector yet.</p>
+          <p className="text-[11px] text-slate-400">
+            Relations are inferred from FK edges you define in the{' '}
+            <button onClick={() => onNavigate('entities')} className="text-teal-600 hover:underline">Entities</button> section.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function SemanticLayerView() {
   const { sectorId, sector } = useSector()
   const ontology = useExtendedOntology(sectorId)
@@ -2932,50 +3107,7 @@ export default function SemanticLayerView() {
 
         {/* ── RELATIONS ── */}
         {section === 'relations' && (
-          <div className="px-8 py-7 space-y-6">
-            <SectionHeader icon={ArrowRight} title="Intra-source Relations"
-              desc="Foreign-key relationships within each data source — visible in the ontology graph" />
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Relations are FK joins that exist <em>inside</em> a single system, as opposed to Bridges which connect different systems.
-              They define the navigable graph within each source and drive ontology graph edges.
-            </p>
-
-            {isManufacturing ? (
-              <div className="space-y-6">
-                {AW_RELATIONS.map(group => (
-                  <div key={group.source} className={`border ${group.colorBorder} rounded-xl overflow-hidden`}>
-                    <div className={`${group.colorBg} px-4 py-3 flex items-center gap-2`}>
-                      <span className="text-base">{group.icon}</span>
-                      <span className={`text-xs font-semibold ${group.colorText}`}>{group.source}</span>
-                      <span className="ml-auto text-[10px] text-slate-400">{group.relations.length} relation{group.relations.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {group.relations.map((r, i) => (
-                        <div key={i} className="px-4 py-3 flex items-start gap-4 bg-white hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="font-mono text-xs font-semibold text-slate-700 shrink-0">{r.from}</span>
-                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="font-mono text-xs font-semibold text-slate-700 shrink-0">{r.to}</span>
-                            <span className="text-[10px] text-slate-400 font-mono shrink-0">via {r.via}</span>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.cardinality}</span>
-                            <span className="text-[10px] text-slate-400 hidden sm:block">{r.rows}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 hidden md:block w-56 shrink-0">{r.note}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-xs text-slate-400 bg-slate-50">
-                No relations defined for this sector yet.<br />
-                Relations are inferred from the ontology graph edges you add in the Entities section.
-              </div>
-            )}
-          </div>
+          <RelationsSection isManufacturing={isManufacturing} onNavigate={setSection} />
         )}
 
         {/* ── RULES ── */}
