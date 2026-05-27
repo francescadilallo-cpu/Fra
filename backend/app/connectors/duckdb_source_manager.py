@@ -110,10 +110,19 @@ class DuckDBSourceManager:
         return duckdb.connect(str(self._db_path), read_only=True)
 
     def execute(self, sql: str) -> list[dict[str, Any]]:
-        """Execute a SELECT statement and return rows as list of dicts."""
+        """Execute a SELECT and return up to 100 rows (for frontend queries)."""
         conn = self.get_connection()
         try:
             df = conn.execute(sql).df().head(100)
+            return df.where(df.notna(), other=None).to_dict(orient="records")
+        finally:
+            conn.close()
+
+    def execute_all(self, sql: str) -> list[dict[str, Any]]:
+        """Execute a SELECT and return ALL rows (for KG/catalog bulk loads)."""
+        conn = self.get_connection()
+        try:
+            df = conn.execute(sql).df()
             return df.where(df.notna(), other=None).to_dict(orient="records")
         finally:
             conn.close()
@@ -436,3 +445,68 @@ class DuckDBSourceManager:
                     logger.warning("Could not copy snapshot table %s: %s", table, exc)
         finally:
             snap.close()
+
+
+# ── BaseConnector-compatible adapters ─────────────────────────────────────────
+#
+# These shims expose the load_entity() / execute_query() / describe() interface
+# expected by KnowledgeGraph and MetadataCatalog, but delegate all I/O to the
+# shared DuckDBSourceManager — no duplicate parsing, no extra RAM copies.
+
+class _DuckDBConnectorAdapter:
+    _SOURCE_NAME: str = ""
+    _ENTITY_MAP: dict[str, str] = {}
+
+    def __init__(self, mgr: "DuckDBSourceManager") -> None:
+        self._mgr = mgr
+
+    def load_entity(self, entity_type: str) -> list[dict[str, Any]]:
+        table = self._ENTITY_MAP.get(entity_type)
+        if not table:
+            raise ValueError(f"{self._SOURCE_NAME}: unknown entity '{entity_type}'")
+        return self._mgr.execute_all(f'SELECT * FROM "{table}"')
+
+    def execute_query(self, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+        return self._mgr.execute_all(sql)
+
+    def describe(self) -> SourceMeta:
+        unified = self._mgr.describe()
+        tables = list(self._ENTITY_MAP.values())
+        counts = {
+            t: unified.record_counts.get(f"{self._SOURCE_NAME}.{t}", 0)
+            for t in tables
+        }
+        return SourceMeta(
+            name=self._SOURCE_NAME,
+            source_type=unified.source_type,
+            tables=tables,
+            record_counts=counts,
+            loaded_at=unified.loaded_at,
+        )
+
+
+class ERPDuckDBAdapter(_DuckDBConnectorAdapter):
+    _SOURCE_NAME = "erp"
+    _ENTITY_MAP = {
+        "SalesOrder": "sales_order_header",
+        "SalesOrderLine": "sales_order_line",
+        "Salesperson": "salesperson",
+        "Territory": "territory",
+        "Offer": "offer",
+    }
+
+
+class CRMDuckDBAdapter(_DuckDBConnectorAdapter):
+    _SOURCE_NAME = "crm"
+    _ENTITY_MAP = {
+        "Customer": "account",
+        "Address": "address",
+    }
+
+
+class HRPIMDuckDBAdapter(_DuckDBConnectorAdapter):
+    _SOURCE_NAME = "hr_pim"
+    _ENTITY_MAP = {
+        "Employee": "hr_employees",
+        "Product": "pim_products",
+    }

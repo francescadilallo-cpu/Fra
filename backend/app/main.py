@@ -329,21 +329,23 @@ def _ensure_semantic_loaded() -> None:
         if _semantic_state["loaded"]:
             return
 
-        from .connectors.postgres_connector import PostgresConnector
-        from .connectors.sqlite_connector import SQLiteConnector
-        from .connectors.file_connector import FileConnector
+        from .connectors.duckdb_source_manager import (
+            get_source_manager,
+            ERPDuckDBAdapter,
+            CRMDuckDBAdapter,
+            HRPIMDuckDBAdapter,
+        )
         from .ontology.ontology import Ontology
         from .kg.graph import KnowledgeGraph
         from .metadata.catalog import MetadataCatalog
         from .semantic.layer import SemanticLayer
         from .context.manager import ContextManager
 
-        erp = PostgresConnector(_SCENARIO_PATH / "erp_postgres" / "orion_sales_dump.sql")
-        crm = SQLiteConnector(_SCENARIO_PATH / "crm_sqlite" / "clienthub.db")
-        hr_pim = FileConnector(
-            hr_csv_path=_SCENARIO_PATH / "hr_pim_files" / "dipendenti_hr.csv",
-            pim_json_path=_SCENARIO_PATH / "hr_pim_files" / "product_catalog_pim.json",
-        )
+        # All four sources share the same DuckDB snapshot — built once, zero extra RAM
+        _mgr = get_source_manager(_SCENARIO_PATH)
+        erp = ERPDuckDBAdapter(_mgr)
+        crm = CRMDuckDBAdapter(_mgr)
+        hr_pim = HRPIMDuckDBAdapter(_mgr)
 
         ontology_path = _SCENARIO_PATH / "ontology_example.yaml"
         ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
@@ -409,7 +411,7 @@ class SemanticAskResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise DB + ontology at startup."""
+    """Initialise DB, manufacturing ontology, and DuckDB data snapshot at startup."""
     init_db()
     conn = get_connection()
     try:
@@ -417,6 +419,12 @@ async def lifespan(app: FastAPI):
         onto.populate_from_db(conn)
     finally:
         conn.close()
+
+    # Warm up the DuckDB snapshot on first boot so queries are instant from the start.
+    # On subsequent restarts this just opens the existing file (<100 ms).
+    from .connectors.duckdb_source_manager import get_source_manager
+    get_source_manager(_SCENARIO_PATH)
+
     yield
 
 
