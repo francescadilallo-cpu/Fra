@@ -1,8 +1,6 @@
 """
 SemanticIntelligence – FastAPI application entry point.
 """
-from __future__ import annotations
-
 import base64
 import hashlib
 import hmac
@@ -21,7 +19,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, model_validator
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt as _pyjwt
+from jwt.exceptions import ExpiredSignatureError as _JWTExpiredSignatureError
+from jwt.exceptions import InvalidTokenError as _JWTInvalidTokenError
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -156,21 +156,21 @@ def _get_jwt_secret() -> str:
 
 
 def _jwt_encode(payload: dict[str, Any], secret: str) -> str:
-    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
+    return _pyjwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
 def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
     try:
-        return jwt.decode(
+        return _pyjwt.decode(
             token,
             secret,
             algorithms=[JWT_ALGORITHM],
             issuer=JWT_ISSUER,
             audience=JWT_AUDIENCE,
         )
-    except ExpiredSignatureError as exc:
+    except _JWTExpiredSignatureError as exc:
         raise ValueError("Token expired") from exc
-    except JWTError as exc:
+    except _JWTInvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
 
 
@@ -658,7 +658,7 @@ def validate_ontology_configuration(
         }
     except OntologyValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": "ONTOLOGY_VALIDATION_ERROR",
                 "message": str(exc),

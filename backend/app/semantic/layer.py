@@ -380,6 +380,7 @@ class _RuleParser:
             "per territorio", "per venditore", "per cliente", "medio", "per categoria",
             "vs", "quota", "lordo", "netto", "incass", "annualizzato", "fonte",
             "cliente ", "reparto", "b2b", "b2c",
+            "venditore", "venditori", "top",
         ]
         if "fatturato" in q:
             has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
@@ -1766,7 +1767,6 @@ class SemanticLayer:
     def _q_revenue_with_tax(self, intent: Intent) -> Result:
         year = intent.year or intent.filters.get("year")
         if year:
-            sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', order_date) = ?"
             sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
             rows = self._erp.execute_query(sql, (str(year),))
         else:
