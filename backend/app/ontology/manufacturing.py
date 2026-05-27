@@ -2,6 +2,7 @@
 OWL ontology definition for manufacturing order management.
 Uses rdflib to build an in-memory RDF/OWL graph that mirrors the ERP schema.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -17,69 +18,95 @@ BASE = Namespace("http://semanticintelligence.io/data#")
 # ── Class URIs ─────────────────────────────────────────────────────────────────
 
 CLASSES: dict[str, URIRef] = {
-    "Organization":    MFG.Organization,
-    "Customer":        MFG.Customer,
-    "Product":         MFG.Product,
-    "Quote":           MFG.Quote,
-    "Order":           MFG.Order,
-    "QuoteLineItem":   MFG.QuoteLineItem,
-    "OrderLineItem":   MFG.OrderLineItem,
+    "Organization": MFG.Organization,
+    "Customer": MFG.Customer,
+    "Product": MFG.Product,
+    "Quote": MFG.Quote,
+    "Order": MFG.Order,
+    "QuoteLineItem": MFG.QuoteLineItem,
+    "OrderLineItem": MFG.OrderLineItem,
 }
 
 # ── Object Property URIs ───────────────────────────────────────────────────────
 
 OBJECT_PROPERTIES: dict[str, tuple[str, URIRef, URIRef]] = {
     # name -> (label, domain, range)
-    "hasCustomer":       ("hasCustomer",       MFG.Quote,         MFG.Customer),
-    "orderedBy":         ("orderedBy",         MFG.Order,         MFG.Customer),
-    "hasQuoteLineItem":  ("hasQuoteLineItem",   MFG.Quote,         MFG.QuoteLineItem),
-    "hasOrderLineItem":  ("hasOrderLineItem",   MFG.Order,         MFG.OrderLineItem),
-    "hasProduct":        ("hasProduct",         MFG.QuoteLineItem, MFG.Product),
-    "orderHasProduct":   ("orderHasProduct",    MFG.OrderLineItem,  MFG.Product),
-    "relatedToQuote":    ("relatedToQuote",     MFG.Order,         MFG.Quote),
+    "hasCustomer": ("hasCustomer", MFG.Quote, MFG.Customer),
+    "orderedBy": ("orderedBy", MFG.Order, MFG.Customer),
+    "hasQuoteLineItem": ("hasQuoteLineItem", MFG.Quote, MFG.QuoteLineItem),
+    "hasOrderLineItem": ("hasOrderLineItem", MFG.Order, MFG.OrderLineItem),
+    "hasProduct": ("hasProduct", MFG.QuoteLineItem, MFG.Product),
+    "orderHasProduct": ("orderHasProduct", MFG.OrderLineItem, MFG.Product),
+    "relatedToQuote": ("relatedToQuote", MFG.Order, MFG.Quote),
 }
 
 # Datatype properties per class (label, XSD type)
 DATA_PROPERTIES: dict[str, list[tuple[str, Any]]] = {
-    "Customer":       [("identifier", XSD.integer), ("name", XSD.string),
-                       ("sector", XSD.string), ("vatNumber", XSD.string),
-                       ("creditLimit", XSD.decimal)],
-    "Product":        [("identifier", XSD.integer), ("sku", XSD.string),
-                       ("name", XSD.string), ("category", XSD.string),
-                       ("unitPrice", XSD.decimal), ("unitOfMeasure", XSD.string)],
-    "Quote":          [("identifier", XSD.integer), ("date", XSD.date),
-                       ("status", XSD.string), ("totalValue", XSD.decimal),
-                       ("validUntil", XSD.date), ("createdBy", XSD.string)],
-    "QuoteLineItem":  [("identifier", XSD.integer), ("quantity", XSD.decimal),
-                       ("unitPrice", XSD.decimal), ("discountPct", XSD.decimal),
-                       ("lineTotal", XSD.decimal)],
-    "Order":          [("identifier", XSD.integer), ("date", XSD.date),
-                       ("status", XSD.string), ("deliveryDate", XSD.date),
-                       ("totalValue", XSD.decimal)],
-    "OrderLineItem":  [("identifier", XSD.integer), ("quantity", XSD.decimal),
-                       ("unitPrice", XSD.decimal), ("lineTotal", XSD.decimal)],
+    "Customer": [
+        ("identifier", XSD.integer),
+        ("name", XSD.string),
+        ("sector", XSD.string),
+        ("vatNumber", XSD.string),
+        ("creditLimit", XSD.decimal),
+    ],
+    "Product": [
+        ("identifier", XSD.integer),
+        ("sku", XSD.string),
+        ("name", XSD.string),
+        ("category", XSD.string),
+        ("unitPrice", XSD.decimal),
+        ("unitOfMeasure", XSD.string),
+    ],
+    "Quote": [
+        ("identifier", XSD.integer),
+        ("date", XSD.date),
+        ("status", XSD.string),
+        ("totalValue", XSD.decimal),
+        ("validUntil", XSD.date),
+        ("createdBy", XSD.string),
+    ],
+    "QuoteLineItem": [
+        ("identifier", XSD.integer),
+        ("quantity", XSD.decimal),
+        ("unitPrice", XSD.decimal),
+        ("discountPct", XSD.decimal),
+        ("lineTotal", XSD.decimal),
+    ],
+    "Order": [
+        ("identifier", XSD.integer),
+        ("date", XSD.date),
+        ("status", XSD.string),
+        ("deliveryDate", XSD.date),
+        ("totalValue", XSD.decimal),
+    ],
+    "OrderLineItem": [
+        ("identifier", XSD.integer),
+        ("quantity", XSD.decimal),
+        ("unitPrice", XSD.decimal),
+        ("lineTotal", XSD.decimal),
+    ],
 }
 
 # ── Graph positions for UI (ReactFlow layout) ─────────────────────────────────
 
 NODE_POSITIONS: dict[str, dict[str, float]] = {
-    "Organization":   {"x": 400, "y":  20},
-    "Customer":       {"x": 400, "y": 140},
-    "Quote":          {"x": 100, "y": 300},
-    "Order":          {"x": 700, "y": 300},
-    "QuoteLineItem":  {"x":  50, "y": 480},
-    "OrderLineItem":  {"x": 700, "y": 480},
-    "Product":        {"x": 400, "y": 480},
+    "Organization": {"x": 400, "y": 20},
+    "Customer": {"x": 400, "y": 140},
+    "Quote": {"x": 100, "y": 300},
+    "Order": {"x": 700, "y": 300},
+    "QuoteLineItem": {"x": 50, "y": 480},
+    "OrderLineItem": {"x": 700, "y": 480},
+    "Product": {"x": 400, "y": 480},
 }
 
 # Map ontology class → DB table
 CLASS_TO_TABLE: dict[str, str] = {
-    "Customer":       "customers",
-    "Product":        "products",
-    "Quote":          "quotes",
-    "QuoteLineItem":  "quote_lines",
-    "Order":          "orders",
-    "OrderLineItem":  "order_lines",
+    "Customer": "customers",
+    "Product": "products",
+    "Quote": "quotes",
+    "QuoteLineItem": "quote_lines",
+    "Order": "orders",
+    "OrderLineItem": "order_lines",
 }
 
 
@@ -102,7 +129,9 @@ class ManufacturingOntology:
         # Ontology declaration
         onto_uri = URIRef("http://semanticintelligence.io/mfg")
         g.add((onto_uri, RDF.type, OWL.Ontology))
-        g.add((onto_uri, RDFS.label, Literal("Manufacturing Order Management Ontology")))
+        g.add(
+            (onto_uri, RDFS.label, Literal("Manufacturing Order Management Ontology"))
+        )
 
         # Classes
         for name, uri in CLASSES.items():
@@ -143,11 +172,19 @@ class ManufacturingOntology:
         for r in rows:
             uri = BASE[f"customer/{r['id']}"]
             g.add((uri, RDF.type, MFG.Customer))
-            g.add((uri, MFG.customer_identifier, Literal(r["id"], datatype=XSD.integer)))
+            g.add(
+                (uri, MFG.customer_identifier, Literal(r["id"], datatype=XSD.integer))
+            )
             g.add((uri, MFG.customer_name, Literal(r["name"])))
             g.add((uri, MFG.customer_sector, Literal(r["sector"])))
             g.add((uri, MFG.customer_vatNumber, Literal(r["vat_number"])))
-            g.add((uri, MFG.customer_creditLimit, Literal(r["credit_limit"], datatype=XSD.decimal)))
+            g.add(
+                (
+                    uri,
+                    MFG.customer_creditLimit,
+                    Literal(r["credit_limit"], datatype=XSD.decimal),
+                )
+            )
 
         # Products
         rows = conn.execute("SELECT * FROM products").fetchall()
@@ -159,7 +196,13 @@ class ManufacturingOntology:
             g.add((uri, MFG.product_sku, Literal(r["sku"])))
             g.add((uri, MFG.product_name, Literal(r["name"])))
             g.add((uri, MFG.product_category, Literal(r["category"])))
-            g.add((uri, MFG.product_unitPrice, Literal(r["unit_price"], datatype=XSD.decimal)))
+            g.add(
+                (
+                    uri,
+                    MFG.product_unitPrice,
+                    Literal(r["unit_price"], datatype=XSD.decimal),
+                )
+            )
 
         # Quotes
         rows = conn.execute("SELECT * FROM quotes").fetchall()
@@ -170,7 +213,13 @@ class ManufacturingOntology:
             g.add((uri, MFG.quote_identifier, Literal(r["id"], datatype=XSD.integer)))
             g.add((uri, MFG.quote_date, Literal(r["date"], datatype=XSD.date)))
             g.add((uri, MFG.quote_status, Literal(r["status"])))
-            g.add((uri, MFG.quote_totalValue, Literal(r["total_value"], datatype=XSD.decimal)))
+            g.add(
+                (
+                    uri,
+                    MFG.quote_totalValue,
+                    Literal(r["total_value"], datatype=XSD.decimal),
+                )
+            )
             g.add((uri, MFG.quote_createdBy, Literal(r["created_by"])))
             g.add((uri, MFG.hasCustomer, BASE[f"customer/{r['customer_id']}"]))
 
@@ -180,9 +229,27 @@ class ManufacturingOntology:
         for r in rows:
             uri = BASE[f"quote_line/{r['id']}"]
             g.add((uri, RDF.type, MFG.QuoteLineItem))
-            g.add((uri, MFG.quoteLineItem_identifier, Literal(r["id"], datatype=XSD.integer)))
-            g.add((uri, MFG.quoteLineItem_quantity, Literal(r["quantity"], datatype=XSD.decimal)))
-            g.add((uri, MFG.quoteLineItem_lineTotal, Literal(r["line_total"], datatype=XSD.decimal)))
+            g.add(
+                (
+                    uri,
+                    MFG.quoteLineItem_identifier,
+                    Literal(r["id"], datatype=XSD.integer),
+                )
+            )
+            g.add(
+                (
+                    uri,
+                    MFG.quoteLineItem_quantity,
+                    Literal(r["quantity"], datatype=XSD.decimal),
+                )
+            )
+            g.add(
+                (
+                    uri,
+                    MFG.quoteLineItem_lineTotal,
+                    Literal(r["line_total"], datatype=XSD.decimal),
+                )
+            )
             g.add((uri, MFG.hasProduct, BASE[f"product/{r['product_id']}"]))
             g.add((BASE[f"quote/{r['quote_id']}"], MFG.hasQuoteLineItem, uri))
 
@@ -195,8 +262,20 @@ class ManufacturingOntology:
             g.add((uri, MFG.order_identifier, Literal(r["id"], datatype=XSD.integer)))
             g.add((uri, MFG.order_date, Literal(r["date"], datatype=XSD.date)))
             g.add((uri, MFG.order_status, Literal(r["status"])))
-            g.add((uri, MFG.order_totalValue, Literal(r["total_value"], datatype=XSD.decimal)))
-            g.add((uri, MFG.order_deliveryDate, Literal(r["delivery_date"], datatype=XSD.date)))
+            g.add(
+                (
+                    uri,
+                    MFG.order_totalValue,
+                    Literal(r["total_value"], datatype=XSD.decimal),
+                )
+            )
+            g.add(
+                (
+                    uri,
+                    MFG.order_deliveryDate,
+                    Literal(r["delivery_date"], datatype=XSD.date),
+                )
+            )
             g.add((uri, MFG.orderedBy, BASE[f"customer/{r['customer_id']}"]))
             if r["quote_id"]:
                 g.add((uri, MFG.relatedToQuote, BASE[f"quote/{r['quote_id']}"]))
@@ -207,9 +286,27 @@ class ManufacturingOntology:
         for r in rows:
             uri = BASE[f"order_line/{r['id']}"]
             g.add((uri, RDF.type, MFG.OrderLineItem))
-            g.add((uri, MFG.orderLineItem_identifier, Literal(r["id"], datatype=XSD.integer)))
-            g.add((uri, MFG.orderLineItem_quantity, Literal(r["quantity"], datatype=XSD.decimal)))
-            g.add((uri, MFG.orderLineItem_lineTotal, Literal(r["line_total"], datatype=XSD.decimal)))
+            g.add(
+                (
+                    uri,
+                    MFG.orderLineItem_identifier,
+                    Literal(r["id"], datatype=XSD.integer),
+                )
+            )
+            g.add(
+                (
+                    uri,
+                    MFG.orderLineItem_quantity,
+                    Literal(r["quantity"], datatype=XSD.decimal),
+                )
+            )
+            g.add(
+                (
+                    uri,
+                    MFG.orderLineItem_lineTotal,
+                    Literal(r["line_total"], datatype=XSD.decimal),
+                )
+            )
             g.add((uri, MFG.orderHasProduct, BASE[f"product/{r['product_id']}"]))
             g.add((BASE[f"order/{r['order_id']}"], MFG.hasOrderLineItem, uri))
 
@@ -231,18 +328,20 @@ class ManufacturingOntology:
             # Gather datatype properties for this class
             dprops = [label for label, _ in DATA_PROPERTIES.get(class_name, [])]
 
-            nodes.append({
-                "id": class_name,
-                "type": "ontologyNode",
-                "position": pos,
-                "data": {
-                    "label": class_name,
-                    "uri": str(uri),
-                    "db_table": table,
-                    "row_count": row_count,
-                    "properties": dprops,
-                },
-            })
+            nodes.append(
+                {
+                    "id": class_name,
+                    "type": "ontologyNode",
+                    "position": pos,
+                    "data": {
+                        "label": class_name,
+                        "uri": str(uri),
+                        "db_table": table,
+                        "row_count": row_count,
+                        "properties": dprops,
+                    },
+                }
+            )
 
         # Object property edges
         edge_id = 0
@@ -251,17 +350,19 @@ class ManufacturingOntology:
             source = next((k for k, v in CLASSES.items() if v == domain), None)
             target = next((k for k, v in CLASSES.items() if v == range_), None)
             if source and target:
-                edges.append({
-                    "id": f"e{edge_id}",
-                    "source": source,
-                    "target": target,
-                    "label": label,
-                    "type": "smoothstep",
-                    "animated": False,
-                    "style": {"stroke": "#14b8a6"},
-                    "labelStyle": {"fontSize": 10, "fill": "#94a3b8"},
-                    "markerEnd": {"type": "ArrowClosed", "color": "#14b8a6"},
-                })
+                edges.append(
+                    {
+                        "id": f"e{edge_id}",
+                        "source": source,
+                        "target": target,
+                        "label": label,
+                        "type": "smoothstep",
+                        "animated": False,
+                        "style": {"stroke": "#14b8a6"},
+                        "labelStyle": {"fontSize": 10, "fill": "#94a3b8"},
+                        "markerEnd": {"type": "ArrowClosed", "color": "#14b8a6"},
+                    }
+                )
                 edge_id += 1
 
         return {"nodes": nodes, "edges": edges}

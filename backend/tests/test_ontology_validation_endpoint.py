@@ -12,8 +12,12 @@ from fastapi.testclient import TestClient
 
 def _password_hash(password: str, iterations: int = 120_000) -> str:
     salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
-    return f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations
+    )
+    return (
+        f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    )
 
 
 def test_validate_ontology_endpoint_success_default_file() -> None:
@@ -38,7 +42,10 @@ def test_validate_ontology_endpoint_success_default_file() -> None:
         setattr(limiter, "enabled", False)
 
     with TestClient(app) as client:
-        token_resp = client.post("/api/auth/token", data={"username": "onto_admin", "password": "onto_password"})
+        token_resp = client.post(
+            "/api/auth/token",
+            data={"username": "onto_admin", "password": "onto_password"},
+        )
         assert token_resp.status_code == 200, token_resp.text
         token = token_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
@@ -72,7 +79,10 @@ def test_validate_ontology_endpoint_hard_fails_dirty_file() -> None:
         setattr(limiter, "enabled", False)
 
     with TestClient(app) as client:
-        token_resp = client.post("/api/auth/token", data={"username": "onto_admin2", "password": "onto_password2"})
+        token_resp = client.post(
+            "/api/auth/token",
+            data={"username": "onto_admin2", "password": "onto_password2"},
+        )
         assert token_resp.status_code == 200, token_resp.text
         token = token_resp.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}

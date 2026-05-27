@@ -18,7 +18,9 @@ def _extract_block(payload: dict) -> dict:
     return payload.get("pure_deterministic_layer", {})
 
 
-def _summary_line(label: str, latest: float, reference: float, limit: float, status: str) -> str:
+def _summary_line(
+    label: str, latest: float, reference: float, limit: float, status: str
+) -> str:
     delta = ((latest - reference) / reference * 100.0) if reference > 0 else 0.0
     return f"| {label} | {latest:.2f} | {reference:.2f} | {delta:+.2f}% | {limit:.2f} | {status} |"
 
@@ -72,9 +74,19 @@ def main() -> int:
             "",
             "| Metric | Latest | Reference | Delta | Allowed Max | Status |",
             "|---|---:|---:|---:|---:|---|",
-            _summary_line("average_ms", avg_latest, avg_ref, avg_limit, "WARN" if avg_warn else "OK"),
-            _summary_line("p50_ms", p50_latest, p50_ref, p50_limit, "WARN" if p50_warn else "OK"),
-            _summary_line("p95_ms", p95_latest, p95_ref, p95_limit, "FAIL" if p95_fail else "OK"),
+            _summary_line(
+                "average_ms",
+                avg_latest,
+                avg_ref,
+                avg_limit,
+                "WARN" if avg_warn else "OK",
+            ),
+            _summary_line(
+                "p50_ms", p50_latest, p50_ref, p50_limit, "WARN" if p50_warn else "OK"
+            ),
+            _summary_line(
+                "p95_ms", p95_latest, p95_ref, p95_limit, "FAIL" if p95_fail else "OK"
+            ),
             "",
             f"Run commit: {latest_payload.get('git_commit_short', 'unknown')}",
         ]

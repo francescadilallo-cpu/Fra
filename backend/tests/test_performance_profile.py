@@ -4,6 +4,7 @@ Produces:
 - perf_metrics.json (latest run)
 - backend/tests/perf_history.json (append-only history)
 """
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,9 @@ def _extract_questions(path: Path) -> list[str]:
 
 def _git_commit_short() -> str:
     try:
-        out = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True)
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True
+        )
         return out.strip()
     except Exception:
         return "unknown"
@@ -43,7 +46,8 @@ def _git_commit_short() -> str:
 
 @pytest.mark.performance
 @pytest.mark.skipif(
-    os.getenv("RUN_PERFORMANCE_PROFILE", "0").strip().lower() not in {"1", "true", "yes"},
+    os.getenv("RUN_PERFORMANCE_PROFILE", "0").strip().lower()
+    not in {"1", "true", "yes"},
     reason="Performance profiling is opt-in",
 )
 def test_performance_profile_semantic_endpoint(client, auth_headers) -> None:
@@ -55,7 +59,9 @@ def test_performance_profile_semantic_endpoint(client, auth_headers) -> None:
 
     for q in questions:
         t0 = time.perf_counter()
-        resp = client.post("/api/semantic/ask", json={"question": q}, headers=auth_headers)
+        resp = client.post(
+            "/api/semantic/ask", json={"question": q}, headers=auth_headers
+        )
         lat = (time.perf_counter() - t0) * 1000.0
         latencies_ms.append(round(lat, 2))
         statuses.append(resp.status_code)

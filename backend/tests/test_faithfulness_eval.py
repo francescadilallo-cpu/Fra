@@ -4,6 +4,7 @@ Writes report to faithfulness_report.json and enforces minimum grounded score.
 Run in CI with:
   RUN_FAITHFULNESS_EVAL=1 python -m pytest -q tests/test_faithfulness_eval.py -s
 """
+
 from __future__ import annotations
 
 import base64
@@ -25,8 +26,12 @@ REPORT_PATH = ROOT / "faithfulness_report.json"
 
 def _password_hash(password: str, iterations: int = 120_000) -> str:
     salt = secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
-    return f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations
+    )
+    return (
+        f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -95,12 +100,18 @@ def test_faithfulness_grounding_score(client, auth_headers, allowed_intents) -> 
     faithful_count = 0
 
     for case in GOLDEN_QUESTIONS:
-        response = client.post("/api/semantic/ask", json={"question": case["question"]}, headers=auth_headers)
+        response = client.post(
+            "/api/semantic/ask",
+            json={"question": case["question"]},
+            headers=auth_headers,
+        )
         ok = response.status_code == 200
         body: dict[str, Any] = response.json() if ok else {}
         provenance = body.get("provenance") or {}
         lineage = provenance.get("lineage") or {}
-        intent = ((provenance.get("ontology_intent") or {}).get("intent_type") or "").strip()
+        intent = (
+            (provenance.get("ontology_intent") or {}).get("intent_type") or ""
+        ).strip()
 
         connectors = lineage.get("connectors") or []
         tables = lineage.get("tables") or []
@@ -131,7 +142,9 @@ def test_faithfulness_grounding_score(client, auth_headers, allowed_intents) -> 
         "passed": score >= threshold,
         "details": details,
     }
-    REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    REPORT_PATH.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
     print("\n=== Faithfulness Evaluation ===")
     print(f"Questions: {report['questions']}")
@@ -140,4 +153,6 @@ def test_faithfulness_grounding_score(client, auth_headers, allowed_intents) -> 
     print(f"Threshold: {threshold:.4f}")
     print(f"Report saved to: {REPORT_PATH}")
 
-    assert score >= threshold, f"Faithfulness score regression: {score:.4f} < {threshold:.4f}"
+    assert score >= threshold, (
+        f"Faithfulness score regression: {score:.4f} < {threshold:.4f}"
+    )

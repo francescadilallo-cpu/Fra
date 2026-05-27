@@ -3,6 +3,7 @@ SQLite mock ERP database with realistic Italian manufacturing data.
 Generation is idempotent: skips creation if the DB already exists and is
 populated.
 """
+
 import json
 import sqlite3
 import random
@@ -128,32 +129,57 @@ CREATE TABLE IF NOT EXISTS sl_segments (
 # ── Seed data helpers ──────────────────────────────────────────────────────────
 
 SECTORS = [
-    "Automotive", "Aerospace", "Meccanica di Precisione", "Elettronica",
-    "Impianti Industriali", "Packaging", "Energia", "Ferroviario",
+    "Automotive",
+    "Aerospace",
+    "Meccanica di Precisione",
+    "Elettronica",
+    "Impianti Industriali",
+    "Packaging",
+    "Energia",
+    "Ferroviario",
 ]
 
 CATEGORIES = [
-    "Componenti Meccanici", "Elettronica Industriale", "Materiali Grezzi",
-    "Semilavorati", "Attrezzature", "Consumabili",
+    "Componenti Meccanici",
+    "Elettronica Industriale",
+    "Materiali Grezzi",
+    "Semilavorati",
+    "Attrezzature",
+    "Consumabili",
 ]
 
 UOM = ["pz", "kg", "m", "m²", "l", "set"]
 
 PRODUCT_NAMES = [
-    "Flangia DN100 PN16", "Valvola a sfera 2\"", "Cuscinetto SKF 6205",
-    "Piastra in acciaio inox 304", "Cilindro idraulico 50/200",
-    "Sensore di pressione 0-10bar", "Guarnizione PTFE 3mm",
-    "Profilo alluminio 40x40 L=3m", "Motore brushless 400W",
-    "Riduttore epicicloidale i=10", "Inverter trifase 7.5kW",
-    "Connettore M12 8 poli", "Tubo flessibile DN25 L=1m",
-    "Staffa di fissaggio tipo A", "Morsetto DIN 3x2.5mm²",
-    "Interruttore magnetotermico 16A", "Encoder incrementale 1024ppr",
-    "Cavo schermato 4x0.75mm²", "Pompa centrifuga 50l/min",
-    "Filtro aria G4 500x500", "Vite TCEI M8x30 A2",
-    "Dado autobloccante M10 A2", "Rondella piana M12 acciaio",
-    "Ruota dentata modulo 2 Z=40", "Cinghia dentata T10-1000",
-    "Attuatore pneumatico 63mm", "PLC Siemens S7-1200",
-    "Pannello HMI 7 pollici", "Cella di carico 500kg",
+    "Flangia DN100 PN16",
+    'Valvola a sfera 2"',
+    "Cuscinetto SKF 6205",
+    "Piastra in acciaio inox 304",
+    "Cilindro idraulico 50/200",
+    "Sensore di pressione 0-10bar",
+    "Guarnizione PTFE 3mm",
+    "Profilo alluminio 40x40 L=3m",
+    "Motore brushless 400W",
+    "Riduttore epicicloidale i=10",
+    "Inverter trifase 7.5kW",
+    "Connettore M12 8 poli",
+    "Tubo flessibile DN25 L=1m",
+    "Staffa di fissaggio tipo A",
+    "Morsetto DIN 3x2.5mm²",
+    "Interruttore magnetotermico 16A",
+    "Encoder incrementale 1024ppr",
+    "Cavo schermato 4x0.75mm²",
+    "Pompa centrifuga 50l/min",
+    "Filtro aria G4 500x500",
+    "Vite TCEI M8x30 A2",
+    "Dado autobloccante M10 A2",
+    "Rondella piana M12 acciaio",
+    "Ruota dentata modulo 2 Z=40",
+    "Cinghia dentata T10-1000",
+    "Attuatore pneumatico 63mm",
+    "PLC Siemens S7-1200",
+    "Pannello HMI 7 pollici",
+    "Cella di carico 500kg",
     "Termoresistenza PT100 classe A",
 ]
 
@@ -164,8 +190,11 @@ WEIGHTS_QUOTE = [0.10, 0.25, 0.35, 0.15, 0.15]
 WEIGHTS_ORDER = [0.10, 0.20, 0.20, 0.40, 0.10]
 
 AGENTS = [
-    "Marco Rossi", "Giulia Ferrari", "Luca Bianchi",
-    "Sara Conti", "Andrea Russo",
+    "Marco Rossi",
+    "Giulia Ferrari",
+    "Luca Bianchi",
+    "Sara Conti",
+    "Andrea Russo",
 ]
 
 
@@ -176,6 +205,7 @@ def _random_date(start_days_ago: int, end_days_ago: int = 0) -> str:
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+
 
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
@@ -238,7 +268,9 @@ def _seed_products(conn: sqlite3.Connection) -> None:
         )
 
 
-def _seed_quotes(conn: sqlite3.Connection, customer_ids: list, product_ids: list) -> None:
+def _seed_quotes(
+    conn: sqlite3.Connection, customer_ids: list, product_ids: list
+) -> None:
     for _ in range(50):
         cid = random.choice(customer_ids)
         q_date = _random_date(180, 0)
@@ -259,7 +291,7 @@ def _seed_quotes(conn: sqlite3.Connection, customer_ids: list, product_ids: list
             total = round(qty * price * (1 - disc / 100), 2)
             lines.append((pid, qty, price, disc, total))
 
-        quote_total = round(sum(l[4] for l in lines), 2)
+        quote_total = round(sum(row[4] for row in lines), 2)
 
         cursor = conn.execute(
             "INSERT INTO quotes (customer_id, date, status, total_value, valid_until, created_by) VALUES (?,?,?,?,?,?)",
@@ -414,11 +446,23 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
                     tags_json, is_builtin)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
                 (
-                    m["id"], "manufacturing", m["name"], m["description"],
-                    m["type"], m["entity"], m["field"],
-                    m["numerator"], m["denominator"], m["expression"],
-                    m["filters_json"], m["time_dimension"], m["grains_json"],
-                    m["format"], m["status"], m["owner"], m["tags_json"],
+                    m["id"],
+                    "manufacturing",
+                    m["name"],
+                    m["description"],
+                    m["type"],
+                    m["entity"],
+                    m["field"],
+                    m["numerator"],
+                    m["denominator"],
+                    m["expression"],
+                    m["filters_json"],
+                    m["time_dimension"],
+                    m["grains_json"],
+                    m["format"],
+                    m["status"],
+                    m["owner"],
+                    m["tags_json"],
                 ),
             )
 
@@ -430,13 +474,15 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "entity": "SalesOrder",
             "description": "Drill-down from year to day on order date.",
             "type": "time",
-            "levels_json": json.dumps([
-                {"name": "Year", "field": "YEAR(order_date)"},
-                {"name": "Quarter", "field": "QUARTER(order_date)"},
-                {"name": "Month", "field": "MONTH(order_date)"},
-                {"name": "Week", "field": "WEEK(order_date)"},
-                {"name": "Day", "field": "DATE(order_date)"},
-            ]),
+            "levels_json": json.dumps(
+                [
+                    {"name": "Year", "field": "YEAR(order_date)"},
+                    {"name": "Quarter", "field": "QUARTER(order_date)"},
+                    {"name": "Month", "field": "MONTH(order_date)"},
+                    {"name": "Week", "field": "WEEK(order_date)"},
+                    {"name": "Day", "field": "DATE(order_date)"},
+                ]
+            ),
         },
         {
             "id": "territory",
@@ -444,10 +490,12 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "entity": "territory",
             "description": "Geographic drill-down.",
             "type": "categorical",
-            "levels_json": json.dumps([
-                {"name": "Group", "field": "region_group"},
-                {"name": "Territory", "field": "territory_name"},
-            ]),
+            "levels_json": json.dumps(
+                [
+                    {"name": "Group", "field": "region_group"},
+                    {"name": "Territory", "field": "territory_name"},
+                ]
+            ),
         },
         {
             "id": "product",
@@ -455,10 +503,12 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "entity": "product",
             "description": "Product catalog drill-down.",
             "type": "categorical",
-            "levels_json": json.dumps([
-                {"name": "Category", "field": "category"},
-                {"name": "Name", "field": "name"},
-            ]),
+            "levels_json": json.dumps(
+                [
+                    {"name": "Category", "field": "category"},
+                    {"name": "Name", "field": "name"},
+                ]
+            ),
         },
     ]
 
@@ -472,8 +522,13 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
                    (id, sector_id, name, entity, description, type, levels_json, is_builtin)
                    VALUES (?,?,?,?,?,?,?,1)""",
                 (
-                    h["id"], "manufacturing", h["name"], h["entity"],
-                    h["description"], h["type"], h["levels_json"],
+                    h["id"],
+                    "manufacturing",
+                    h["name"],
+                    h["entity"],
+                    h["description"],
+                    h["type"],
+                    h["levels_json"],
                 ),
             )
 
@@ -484,9 +539,9 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "name": "Online Orders",
             "description": "Self-service orders via e-commerce.",
             "entity": "SalesOrder",
-            "conditions_json": json.dumps([
-                {"field": "online_order_flag", "operator": "=", "value": "1"}
-            ]),
+            "conditions_json": json.dumps(
+                [{"field": "online_order_flag", "operator": "=", "value": "1"}]
+            ),
             "tags_json": '["channel","digital"]',
             "used_by_json": '["Order Count"]',
         },
@@ -495,9 +550,9 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "name": "High-Value Orders",
             "description": "Orders with net revenue ≥ $1,000.",
             "entity": "SalesOrder",
-            "conditions_json": json.dumps([
-                {"field": "subtotal_amount", "operator": ">=", "value": "1000"}
-            ]),
+            "conditions_json": json.dumps(
+                [{"field": "subtotal_amount", "operator": ">=", "value": "1000"}]
+            ),
             "tags_json": '["tier"]',
             "used_by_json": '["Revenue"]',
         },
@@ -514,8 +569,14 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
                     conditions_json, tags_json, used_by_json, is_builtin)
                    VALUES (?,?,?,?,?,?,?,?,1)""",
                 (
-                    s["id"], "manufacturing", s["name"], s["description"],
-                    s["entity"], s["conditions_json"], s["tags_json"], s["used_by_json"],
+                    s["id"],
+                    "manufacturing",
+                    s["name"],
+                    s["description"],
+                    s["entity"],
+                    s["conditions_json"],
+                    s["tags_json"],
+                    s["used_by_json"],
                 ),
             )
 

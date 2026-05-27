@@ -3,6 +3,7 @@
 Each record stores the connector type, connection params, target DuckDB table
 names, last sync status and row counts. Backed by a SQLite file in backend/data/.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,9 +35,9 @@ def get_source_registry(db_path: Path | None = None) -> "SourceRegistry":
 @dataclass
 class SourceConfig:
     id: str
-    connector_type: str      # erp_sqldump | crm_sqlite | hr_csv | pim_json |
-                             # csv | json | excel | sqlite | postgresql | mysql |
-                             # shopify | stripe | salesforce | hubspot | ...
+    connector_type: str  # erp_sqldump | crm_sqlite | hr_csv | pim_json |
+    # csv | json | excel | sqlite | postgresql | mysql |
+    # shopify | stripe | salesforce | hubspot | ...
     label: str
     params: dict = field(default_factory=dict)
     target_tables: list[str] = field(default_factory=list)
@@ -54,20 +55,42 @@ class SourceConfig:
 
 # Connector types that have a real backend ingester
 IMPLEMENTED_CONNECTOR_TYPES = {
-    "erp_sqldump", "crm_sqlite", "hr_csv", "pim_json",
-    "csv", "json", "excel", "sqlite", "postgresql",
+    "erp_sqldump",
+    "crm_sqlite",
+    "hr_csv",
+    "pim_json",
+    "csv",
+    "json",
+    "excel",
+    "sqlite",
+    "postgresql",
 }
 
 # SaaS connectors: registered in registry but ingestion not yet implemented
 SAAS_CONNECTOR_TYPES = {
-    "shopify", "woocommerce", "magento", "prestashop",
-    "stripe", "satispay", "nexi",
-    "salesforce", "hubspot",
-    "teamsystem", "zucchetti", "sap_b1", "odoo",
-    "fatture_in_cloud", "aruba_fe", "danea_easyfatt",
-    "google_sheets", "airtable",
-    "brt", "gls_italy",
-    "sdi", "agenzia_entrate", "inps",
+    "shopify",
+    "woocommerce",
+    "magento",
+    "prestashop",
+    "stripe",
+    "satispay",
+    "nexi",
+    "salesforce",
+    "hubspot",
+    "teamsystem",
+    "zucchetti",
+    "sap_b1",
+    "odoo",
+    "fatture_in_cloud",
+    "aruba_fe",
+    "danea_easyfatt",
+    "google_sheets",
+    "airtable",
+    "brt",
+    "gls_italy",
+    "sdi",
+    "agenzia_entrate",
+    "inps",
     "mysql",
 }
 
@@ -155,10 +178,17 @@ class SourceRegistry:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        cfg.id, cfg.connector_type, cfg.label,
-                        json.dumps(cfg.params), json.dumps(cfg.target_tables),
-                        cfg.row_count, cfg.status, cfg.error_msg,
-                        cfg.connected_at, cfg.last_sync_at, int(cfg.is_default),
+                        cfg.id,
+                        cfg.connector_type,
+                        cfg.label,
+                        json.dumps(cfg.params),
+                        json.dumps(cfg.target_tables),
+                        cfg.row_count,
+                        cfg.status,
+                        cfg.error_msg,
+                        cfg.connected_at,
+                        cfg.last_sync_at,
+                        int(cfg.is_default),
                     ),
                 )
                 conn.commit()

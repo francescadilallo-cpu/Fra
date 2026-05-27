@@ -91,7 +91,9 @@ class ExecutiveAgenticLayer:
         self._pending_actions: dict[str, PendingAgentAction] = {}
         self._audit_log: list[AgentAuditRecord] = []
 
-    def submit_command(self, command: str, actor: str, actor_role: str) -> PendingAgentAction:
+    def submit_command(
+        self, command: str, actor: str, actor_role: str
+    ) -> PendingAgentAction:
         command_norm = command.strip()
         if not command_norm:
             raise AgentSemanticValidationError("Comando esecutivo vuoto")
@@ -101,7 +103,10 @@ class ExecutiveAgenticLayer:
             phase="PROPOSED",
             actor=actor,
             actor_role=actor_role,
-            details={"command": command_norm, "proposed_action": proposal.model_dump(mode="json")},
+            details={
+                "command": command_norm,
+                "proposed_action": proposal.model_dump(mode="json"),
+            },
         )
 
         validation = self._validate_semantics(proposal)
@@ -335,6 +340,9 @@ class ExecutiveAgenticLayer:
             actor_role=actor_role,
             details=details,
         )
-        logger.info("AGENT_AUDIT %s", json.dumps(record.model_dump(mode="json"), ensure_ascii=True))
+        logger.info(
+            "AGENT_AUDIT %s",
+            json.dumps(record.model_dump(mode="json"), ensure_ascii=True),
+        )
         with self._lock:
             self._audit_log.append(record)

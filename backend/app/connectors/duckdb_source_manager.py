@@ -27,6 +27,7 @@ Supported connector_types
   postgresql    — PostgreSQL via psycopg2 + pandas (table list required)
   <saas>        — registered but not yet synced (status stays 'pending')
 """
+
 from __future__ import annotations
 
 import json
@@ -55,11 +56,18 @@ _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 _MANAGER: "DuckDBSourceManager | None" = None
 _MANAGER_LOCK = threading.RLock()
 
-_ERP_TABLES = ["sales_order_header", "sales_order_line", "salesperson", "territory", "offer"]
+_ERP_TABLES = [
+    "sales_order_header",
+    "sales_order_line",
+    "salesperson",
+    "territory",
+    "offer",
+]
 _CRM_TABLES = ["account", "contact", "address", "account_address", "state_province"]
 
 
 # ── Singleton access ──────────────────────────────────────────────────────────
+
 
 def get_source_manager(
     scenario_path: Path,
@@ -81,6 +89,7 @@ def get_source_manager(
 
 
 # ── Main class ────────────────────────────────────────────────────────────────
+
 
 class DuckDBSourceManager:
     """
@@ -131,7 +140,9 @@ class DuckDBSourceManager:
         finally:
             conn.close()
 
-    def execute_all(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+    def execute_all(
+        self, sql: str, params: tuple[Any, ...] = ()
+    ) -> list[dict[str, Any]]:
         """Execute a SELECT and return ALL rows (for KG/catalog bulk loads)."""
         conn = self.get_connection()
         try:
@@ -167,7 +178,9 @@ class DuckDBSourceManager:
         self._ensure_ready()
         return SourceMeta(
             name="unified_duckdb",
-            source_type="duckdb_snapshot" if self._storage_mode == "snapshot" else "duckdb_nostore_ephemeral",
+            source_type="duckdb_snapshot"
+            if self._storage_mode == "snapshot"
+            else "duckdb_nostore_ephemeral",
             tables=list(self._row_counts.keys()),
             record_counts=self._row_counts,
             loaded_at=self._built_at or datetime.utcnow(),
@@ -274,7 +287,8 @@ class DuckDBSourceManager:
         if meta.get("schema_version") != _SCHEMA_VERSION:
             logger.info(
                 "Snapshot schema version mismatch (got %s, want %s) — rebuilding",
-                meta.get("schema_version"), _SCHEMA_VERSION,
+                meta.get("schema_version"),
+                _SCHEMA_VERSION,
             )
             return False
         self._built_at = datetime.fromisoformat(
@@ -283,7 +297,9 @@ class DuckDBSourceManager:
         self._row_counts = json.loads(meta.get("row_counts", "{}"))
         logger.info(
             "Snapshot loaded: %s | built %s | %d total rows",
-            self._db_path, self._built_at.isoformat(), sum(self._row_counts.values()),
+            self._db_path,
+            self._built_at.isoformat(),
+            sum(self._row_counts.values()),
         )
         return True
 
@@ -298,7 +314,8 @@ class DuckDBSourceManager:
             conn.execute("CHECKPOINT")
             logger.info(
                 "Snapshot built: %d tables, %d total rows",
-                len(self._row_counts), sum(self._row_counts.values()),
+                len(self._row_counts),
+                sum(self._row_counts.values()),
             )
         except Exception:
             conn.close()
@@ -322,7 +339,11 @@ class DuckDBSourceManager:
                     status="active",
                     error_msg=None,
                     last_sync_at=now,
-                    row_count=sum(v for k, v in self._row_counts.items() if k.startswith(f"{cfg.id}.")),
+                    row_count=sum(
+                        v
+                        for k, v in self._row_counts.items()
+                        if k.startswith(f"{cfg.id}.")
+                    ),
                 )
             except Exception as exc:
                 logger.error("Failed to ingest source '%s': %s", cfg.id, exc)
@@ -331,7 +352,9 @@ class DuckDBSourceManager:
 
     def _write_meta(self, conn: duckdb.DuckDBPyConnection) -> None:
         self._built_at = datetime.utcnow()
-        conn.execute("CREATE TABLE IF NOT EXISTS _build_meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS _build_meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
         conn.execute("DELETE FROM _build_meta")
         conn.executemany(
             "INSERT INTO _build_meta VALUES (?, ?)",
@@ -344,7 +367,9 @@ class DuckDBSourceManager:
 
     # ── Source dispatcher ──────────────────────────────────────────────────────
 
-    def _ingest_source(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_source(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         ctype = cfg.connector_type
         if ctype == "erp_sqldump":
             self._ingest_erp_sqldump(conn, cfg)
@@ -367,19 +392,23 @@ class DuckDBSourceManager:
         elif ctype not in IMPLEMENTED_CONNECTOR_TYPES:
             logger.info(
                 "Source '%s' connector_type='%s' not yet implemented — skipping",
-                cfg.id, ctype,
+                cfg.id,
+                ctype,
             )
         else:
             raise NotImplementedError(f"Connector type '{ctype}' has no ingester")
 
     # ── Per-type ingesters ─────────────────────────────────────────────────────
 
-    def _ingest_erp_sqldump(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_erp_sqldump(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         dump_path = Path(cfg.params.get("path", ""))
         if not dump_path.exists():
             logger.warning("ERP dump not found: %s", dump_path)
             return
         from .postgres_connector import _load_sql_dump_to_sqlite
+
         sqlite_conn = _load_sql_dump_to_sqlite(dump_path)
         for table in _ERP_TABLES:
             try:
@@ -391,8 +420,11 @@ class DuckDBSourceManager:
             except Exception as exc:
                 logger.warning("Could not ingest ERP.%s: %s", table, exc)
 
-    def _ingest_crm_sqlite(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_crm_sqlite(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         import sqlite3 as _sqlite3
+
         crm_path = Path(cfg.params.get("path", ""))
         if not crm_path.exists():
             logger.warning("CRM SQLite not found: %s", crm_path)
@@ -409,34 +441,45 @@ class DuckDBSourceManager:
             except Exception as exc:
                 logger.warning("Could not ingest CRM.%s: %s", table, exc)
 
-    def _ingest_hr_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_hr_csv(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         hr_path = Path(cfg.params.get("path", ""))
         if not hr_path.exists():
             logger.warning("HR CSV not found: %s", hr_path)
             return
         from .file_connector import _load_hr
+
         rows = _load_hr(hr_path)
         df = pd.DataFrame(rows)
         conn.execute("CREATE TABLE IF NOT EXISTS hr_employees AS SELECT * FROM df")
-        conn.execute("CREATE OR REPLACE VIEW dipendenti_hr AS SELECT * FROM hr_employees")
+        conn.execute(
+            "CREATE OR REPLACE VIEW dipendenti_hr AS SELECT * FROM hr_employees"
+        )
         self._row_counts[f"{cfg.id}.hr_employees"] = len(df)
         logger.info("HR   %-25s %7d rows", "hr_employees", len(df))
 
-    def _ingest_pim_json(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_pim_json(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         pim_path = Path(cfg.params.get("path", ""))
         if not pim_path.exists():
             logger.warning("PIM JSON not found: %s", pim_path)
             return
         from .file_connector import _load_pim
+
         rows = _load_pim(pim_path)
         df = pd.DataFrame(rows)
         conn.execute("CREATE TABLE IF NOT EXISTS pim_products AS SELECT * FROM df")
-        conn.execute("CREATE OR REPLACE VIEW product_catalog_pim AS SELECT * FROM pim_products")
+        conn.execute(
+            "CREATE OR REPLACE VIEW product_catalog_pim AS SELECT * FROM pim_products"
+        )
         self._row_counts[f"{cfg.id}.pim_products"] = len(df)
         logger.info("PIM  %-25s %7d rows", "pim_products", len(df))
 
     def _ingest_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
         import io
+
         # Support inline CSV (uploaded from browser) or file path
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
@@ -448,23 +491,34 @@ class DuckDBSourceManager:
                 raise FileNotFoundError(f"CSV not found: {path}")
             table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
             delimiter = cfg.params.get("delimiter", ",")
-            df = pd.read_csv(str(path), sep=delimiter, encoding="utf-8", low_memory=False)
+            df = pd.read_csv(
+                str(path), sep=delimiter, encoding="utf-8", low_memory=False
+            )
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
         logger.info("CSV  %-25s %7d rows", table, len(df))
         if table not in cfg.target_tables:
             cfg.target_tables.append(table)
 
-    def _ingest_json_file(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_json_file(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         path = Path(cfg.params.get("path", ""))
         if not path.exists():
             raise FileNotFoundError(f"JSON not found: {path}")
-        table = cfg.params.get("table_name") or path.stem.replace("-", "_").replace(" ", "_").lower()
+        table = (
+            cfg.params.get("table_name")
+            or path.stem.replace("-", "_").replace(" ", "_").lower()
+        )
         records_key = cfg.params.get("records_key")
         raw = json.loads(path.read_text(encoding="utf-8"))
-        records = raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
+        records = (
+            raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
+        )
         if not isinstance(records, list):
-            raise ValueError("JSON must be a top-level array or contain a list under 'records_key'")
+            raise ValueError(
+                "JSON must be a top-level array or contain a list under 'records_key'"
+            )
         df = pd.DataFrame(records)
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
@@ -477,7 +531,10 @@ class DuckDBSourceManager:
         if not path.exists():
             raise FileNotFoundError(f"Excel not found: {path}")
         sheet = cfg.params.get("sheet", 0)
-        table = cfg.params.get("table_name") or path.stem.replace("-", "_").replace(" ", "_").lower()
+        table = (
+            cfg.params.get("table_name")
+            or path.stem.replace("-", "_").replace(" ", "_").lower()
+        )
         df = pd.read_excel(str(path), sheet_name=sheet)
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
@@ -485,8 +542,11 @@ class DuckDBSourceManager:
         if table not in cfg.target_tables:
             cfg.target_tables.append(table)
 
-    def _ingest_sqlite_generic(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_sqlite_generic(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         import sqlite3 as _sqlite3
+
         path = Path(cfg.params.get("path", ""))
         if not path.exists():
             raise FileNotFoundError(f"SQLite not found: {path}")
@@ -494,7 +554,8 @@ class DuckDBSourceManager:
         src = _sqlite3.connect(str(path))
         src.row_factory = _sqlite3.Row
         tables = [
-            r[0] for r in src.execute(
+            r[0]
+            for r in src.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
             ).fetchall()
         ]
@@ -509,24 +570,31 @@ class DuckDBSourceManager:
             if table not in cfg.target_tables:
                 cfg.target_tables.append(table)
 
-    def _ingest_postgresql(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+    def _ingest_postgresql(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
         dsn = cfg.params.get("dsn", "")
         tables: list[str] = cfg.params.get("tables", [])
         schema: str = cfg.params.get("schema", "public")
         if not dsn:
             raise ValueError("PostgreSQL source requires 'dsn' param")
         if not tables:
-            raise ValueError("PostgreSQL source requires 'tables' param (list of table names)")
+            raise ValueError(
+                "PostgreSQL source requires 'tables' param (list of table names)"
+            )
         try:
             import psycopg2
             import psycopg2.extras
+
             pg_conn = psycopg2.connect(dsn)
             cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             for table in tables:
                 cur.execute(f'SELECT * FROM "{schema}"."{table}"')
                 rows = cur.fetchall()
                 df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
+                )
                 self._row_counts[f"{cfg.id}.{table}"] = len(df)
                 logger.info("PG   %-25s %7d rows", table, len(df))
                 if table not in cfg.target_tables:
@@ -564,15 +632,16 @@ class _DuckDBConnectorAdapter:
             raise ValueError(f"{self._SOURCE_NAME}: unknown entity '{entity_type}'")
         return self._mgr.execute_all(f'SELECT * FROM "{table}"')
 
-    def execute_query(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+    def execute_query(
+        self, sql: str, params: tuple[Any, ...] = ()
+    ) -> list[dict[str, Any]]:
         return self._mgr.execute_all(sql, params)
 
     def describe(self) -> SourceMeta:
         unified = self._mgr.describe()
         tables = list(self._ENTITY_MAP.values())
         counts = {
-            t: unified.record_counts.get(f"{self._SOURCE_NAME}.{t}", 0)
-            for t in tables
+            t: unified.record_counts.get(f"{self._SOURCE_NAME}.{t}", 0) for t in tables
         }
         return SourceMeta(
             name=self._SOURCE_NAME,

@@ -3,6 +3,7 @@
 These tests exercise the real agentic router and service with a minimal
 FastAPI app and an isolated sqlite DB, avoiding full app bootstrap deps.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -37,7 +38,9 @@ class _StubOntology:
         return _SalesOrder
 
 
-def _admin_dependency(authorization: str | None = Header(default=None)) -> SimpleNamespace:
+def _admin_dependency(
+    authorization: str | None = Header(default=None),
+) -> SimpleNamespace:
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -124,18 +127,29 @@ def _get_first_order(db_path: Path) -> tuple[int, date, str | None]:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
-        row = conn.execute("SELECT id, date, delivery_date FROM orders ORDER BY id LIMIT 1").fetchone()
+        row = conn.execute(
+            "SELECT id, date, delivery_date FROM orders ORDER BY id LIMIT 1"
+        ).fetchone()
         assert row is not None, "No orders in test database"
         delivery_raw = row["delivery_date"]
-        return int(row["id"]), date.fromisoformat(str(row["date"])), str(delivery_raw) if delivery_raw else None
+        return (
+            int(row["id"]),
+            date.fromisoformat(str(row["date"])),
+            str(delivery_raw) if delivery_raw else None,
+        )
     finally:
         conn.close()
 
 
-def _set_order_delivery_date(db_path: Path, order_id: int, delivery_date_iso: str | None) -> None:
+def _set_order_delivery_date(
+    db_path: Path, order_id: int, delivery_date_iso: str | None
+) -> None:
     conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute("UPDATE orders SET delivery_date = ? WHERE id = ?", (delivery_date_iso, order_id))
+        conn.execute(
+            "UPDATE orders SET delivery_date = ? WHERE id = ?",
+            (delivery_date_iso, order_id),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -151,7 +165,9 @@ def test_execute_returns_pending_human_approval(
 
     response = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"
+        },
         headers=admin_headers,
     )
 
@@ -172,7 +188,9 @@ def test_approve_executes_writeback(
 
     create_resp = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {new_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {new_date}"
+        },
         headers=admin_headers,
     )
     assert create_resp.status_code == 200, create_resp.text
@@ -200,7 +218,9 @@ def test_reject_keeps_action_rejected(
 
     create_resp = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"
+        },
         headers=admin_headers,
     )
     assert create_resp.status_code == 200, create_resp.text
@@ -217,7 +237,9 @@ def test_reject_keeps_action_rejected(
     assert body["manager_note"] == "Business priority changed"
 
 
-def test_execute_invalid_command_returns_controlled_422(client: TestClient, admin_headers: dict[str, str]) -> None:
+def test_execute_invalid_command_returns_controlled_422(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
     response = client.post(
         "/api/agent/execute",
         json={"command": "Aggiorna tutto il sistema e fai deploy"},
@@ -238,7 +260,9 @@ def test_execute_business_rule_violation_returns_controlled_422(
 
     response = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {invalid_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {invalid_date}"
+        },
         headers=admin_headers,
     )
     assert response.status_code == 422
@@ -246,7 +270,9 @@ def test_execute_business_rule_violation_returns_controlled_422(
     assert detail.get("error") == "AGENT_VALIDATION_FAILED"
 
 
-def test_approve_unknown_action_returns_404(client: TestClient, admin_headers: dict[str, str]) -> None:
+def test_approve_unknown_action_returns_404(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
     response = client.post(
         "/api/agent/approve/not-existing-action-id",
         json={"approve": True},
@@ -267,7 +293,9 @@ def test_audit_endpoint_returns_semantic_trace(
 
     exec_resp = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"
+        },
         headers=admin_headers,
     )
     assert exec_resp.status_code == 200, exec_resp.text
@@ -292,7 +320,9 @@ def test_execute_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_execute_requires_admin_role(client: TestClient, user_headers: dict[str, str]) -> None:
+def test_execute_requires_admin_role(
+    client: TestClient, user_headers: dict[str, str]
+) -> None:
     response = client.post(
         "/api/agent/execute",
         json={"command": "Sposta la data di consegna dell'ordine 1 al 2027-01-01"},
@@ -301,7 +331,9 @@ def test_execute_requires_admin_role(client: TestClient, user_headers: dict[str,
     assert response.status_code == 403
 
 
-def test_audit_requires_admin_role(client: TestClient, user_headers: dict[str, str]) -> None:
+def test_audit_requires_admin_role(
+    client: TestClient, user_headers: dict[str, str]
+) -> None:
     response = client.get("/api/agent/audit", headers=user_headers)
     assert response.status_code == 403
 
@@ -316,7 +348,9 @@ def test_second_approve_after_executed_returns_409(
 
     create_resp = client.post(
         "/api/agent/execute",
-        json={"command": f"Sposta la data di consegna dell'ordine {order_id} al {new_date}"},
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {new_date}"
+        },
         headers=admin_headers,
     )
     assert create_resp.status_code == 200, create_resp.text
@@ -370,7 +404,9 @@ def test_concurrent_double_approval_is_lock_safe(
                 manager_note="Concurrent approval test",
             )
             statuses.append(result.status)
-        except Exception as exc:  # pragma: no cover - assertion inspects captured errors
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - assertion inspects captured errors
             errors.append(exc)
 
     t1 = threading.Thread(target=_approve)

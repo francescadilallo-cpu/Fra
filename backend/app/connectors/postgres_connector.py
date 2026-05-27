@@ -3,6 +3,7 @@
 Falls back to DuckDB if psycopg2 is unavailable (which is the default for this
 test scenario since we're loading from a flat SQL dump file, not a live server).
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,25 +29,58 @@ ENTITY_TABLE_MAP = {
 # Column names per table (in INSERT order)
 TABLE_COLUMNS = {
     "sales_order_header": [
-        "order_id", "order_number", "order_date", "ship_date", "due_date",
-        "status_code", "customer_ref", "salesperson_ref", "territory_ref",
-        "subtotal_amount", "tax_amount", "freight_amount", "total_due", "currency_iso",
+        "order_id",
+        "order_number",
+        "order_date",
+        "ship_date",
+        "due_date",
+        "status_code",
+        "customer_ref",
+        "salesperson_ref",
+        "territory_ref",
+        "subtotal_amount",
+        "tax_amount",
+        "freight_amount",
+        "total_due",
+        "currency_iso",
     ],
     "sales_order_line": [
-        "order_id", "line_id", "product_ref", "qty", "unit_price",
-        "unit_discount", "line_total", "offer_ref",
+        "order_id",
+        "line_id",
+        "product_ref",
+        "qty",
+        "unit_price",
+        "unit_discount",
+        "line_total",
+        "offer_ref",
     ],
     "salesperson": [
-        "salesperson_id", "territory_ref", "sales_quota", "bonus",
-        "commission_pct", "sales_ytd", "sales_last_year",
+        "salesperson_id",
+        "territory_ref",
+        "sales_quota",
+        "bonus",
+        "commission_pct",
+        "sales_ytd",
+        "sales_last_year",
     ],
     "territory": [
-        "territory_id", "territory_name", "country_code", "region_group",
-        "sales_ytd", "cost_ytd",
+        "territory_id",
+        "territory_name",
+        "country_code",
+        "region_group",
+        "sales_ytd",
+        "cost_ytd",
     ],
     "offer": [
-        "offer_id", "description", "discount_pct", "offer_type", "category",
-        "start_date", "end_date", "min_qty", "max_qty",
+        "offer_id",
+        "description",
+        "discount_pct",
+        "offer_type",
+        "category",
+        "start_date",
+        "end_date",
+        "min_qty",
+        "max_qty",
     ],
 }
 
@@ -121,7 +155,10 @@ class PostgresConnector(BaseConnector):
             # Try psycopg2 first — but it won't work for a dump file, so skip
             try:
                 import psycopg2  # noqa: F401
-                logger.info("psycopg2 available but using file-based SQLite mode for dump")
+
+                logger.info(
+                    "psycopg2 available but using file-based SQLite mode for dump"
+                )
             except ImportError:
                 pass
 
@@ -133,7 +170,9 @@ class PostgresConnector(BaseConnector):
     def load_entity(self, entity_type: str) -> Iterable[dict]:
         table = ENTITY_TABLE_MAP.get(entity_type)
         if table is None:
-            raise ValueError(f"Unknown entity type '{entity_type}'. Known: {list(ENTITY_TABLE_MAP)}")
+            raise ValueError(
+                f"Unknown entity type '{entity_type}'. Known: {list(ENTITY_TABLE_MAP)}"
+            )
         conn = self._ensure_loaded()
         rows = conn.execute(f"SELECT * FROM {table}").fetchall()
         return [dict(r) for r in rows]

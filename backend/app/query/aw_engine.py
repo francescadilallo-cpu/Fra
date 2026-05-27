@@ -16,11 +16,11 @@ Tables registered in DuckDB (no schema prefix needed in SQL):
                         listPrice, isMakeOnly, isPurchasable, sellStartDate,
                         sellEndDate)
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import time
 from pathlib import Path
@@ -28,7 +28,6 @@ from typing import Any
 
 import anthropic
 import duckdb
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +234,7 @@ Rules:
 
 # ── Unified DuckDB connection (scalable — persistent file or live pushdown) ────
 
+
 def _get_unified_conn() -> duckdb.DuckDBPyConnection:
     """
     Return a DuckDB connection with all 4 sources available as flat tables.
@@ -248,10 +248,12 @@ def _get_unified_conn() -> duckdb.DuckDBPyConnection:
                        with full predicate pushdown — no copy into RAM.
     """
     from ..connectors.duckdb_source_manager import get_source_manager
+
     return get_source_manager(_SCENARIO_PATH).get_connection()
 
 
 # ── JSON extraction helper ─────────────────────────────────────────────────────
+
 
 def _extract_json(text: str) -> dict:
     """Extract JSON from Claude's response, handling markdown code blocks."""
@@ -279,6 +281,7 @@ def _extract_json(text: str) -> dict:
 
 
 # ── Main query function ────────────────────────────────────────────────────────
+
 
 def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, Any]:
     """
@@ -365,7 +368,16 @@ def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, An
     # Determine sources touched based on which table names appear in the SQL
     sources_touched: list[str] = []
     sql_lower = sql.lower()
-    if any(t in sql_lower for t in ["sales_order_header", "sales_order_line", "salesperson", "territory", "offer"]):
+    if any(
+        t in sql_lower
+        for t in [
+            "sales_order_header",
+            "sales_order_line",
+            "salesperson",
+            "territory",
+            "offer",
+        ]
+    ):
         sources_touched.append("erp")
     if any(t in sql_lower for t in ["account", "contact", "address", "state_province"]):
         sources_touched.append("crm")

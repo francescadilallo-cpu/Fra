@@ -4,6 +4,7 @@ Maintains per-session intent history and resolved entity aliases,
 so that a user who resolved "fatturato" to "revenue_with_tax" in Q21 will
 have that resolution remembered for subsequent questions.
 """
+
 from __future__ import annotations
 
 import logging
@@ -24,7 +25,7 @@ class Context:
     session_id: str
     user: str = "default"
     role: str = "viewer"
-    history: list[Any] = field(default_factory=list)          # list[Intent]
+    history: list[Any] = field(default_factory=list)  # list[Intent]
     resolved_entities: dict[str, str] = field(default_factory=dict)
     # e.g. {"fatturato": "revenue_with_tax"}
 
@@ -42,7 +43,9 @@ class ContextManager:
         self._store: dict[str, Context] = {}
         self._lock = threading.Lock()
 
-    def get_or_create(self, session_id: str | None = None, user: str = "default") -> Context:
+    def get_or_create(
+        self, session_id: str | None = None, user: str = "default"
+    ) -> Context:
         """Return existing context or create a new one."""
         if session_id is None:
             session_id = str(uuid.uuid4())

@@ -3,6 +3,7 @@
 Output format:
 pbkdf2_sha256$iterations$salt$base64_hash
 """
+
 from __future__ import annotations
 
 import argparse

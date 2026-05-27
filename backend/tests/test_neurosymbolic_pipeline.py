@@ -1,4 +1,5 @@
 """Focused tests for the unified neuro-symbolic query pipeline."""
+
 from __future__ import annotations
 
 from pathlib import Path

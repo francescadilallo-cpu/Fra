@@ -8,14 +8,22 @@ Every entity and attribute record stores:
   - quality_flags: {duplicates_detected, null_rate_warning}
   - lineage_edges: [{metric, entity, source_field}]
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, Text, create_engine, select
+from sqlalchemy import (
+    Column,
+    Float,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    select,
+)
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -24,6 +32,7 @@ NULL_RATE_WARN_THRESHOLD = 0.10  # warn if >10 % nulls
 
 
 # ── SQLAlchemy models ─────────────────────────────────────────────────────────
+
 
 class Base(DeclarativeBase):
     pass
@@ -35,9 +44,9 @@ class EntityMetaRow(Base):
     name = Column(String, primary_key=True)
     description = Column(Text, default="")
     primary_key = Column(String, default="")
-    sources_json = Column(Text, default="[]")       # JSON list of source dicts
+    sources_json = Column(Text, default="[]")  # JSON list of source dicts
     record_count = Column(Integer, default=0)
-    freshness = Column(String, default="")          # ISO 8601
+    freshness = Column(String, default="")  # ISO 8601
     quality_flags_json = Column(Text, default="{}")  # JSON dict
     kg_node_count = Column(Integer, default=0)
 
@@ -51,7 +60,7 @@ class AttributeMetaRow(Base):
     data_type = Column(String, default="unknown")
     nullability_rate = Column(Float, default=0.0)
     business_definition = Column(Text, default="")
-    source_path = Column(String, default="")        # e.g. "erp.sales_order_header.total_due"
+    source_path = Column(String, default="")  # e.g. "erp.sales_order_header.total_due"
     sample_values_json = Column(Text, default="[]")
     lineage_edges_json = Column(Text, default="[]")
 
@@ -70,6 +79,7 @@ class MetricMetaRow(Base):
 
 
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
+
 
 class EntityMeta:
     """Lightweight container for entity metadata."""
@@ -221,6 +231,7 @@ class MetricMeta:
 
 # ── MetadataCatalog ───────────────────────────────────────────────────────────
 
+
 class MetadataCatalog:
     """Persists entity/attribute/metric metadata to a SQLite database.
 
@@ -288,12 +299,7 @@ class MetadataCatalog:
     def row_count(self) -> int:
         """Total rows across all catalog tables."""
         with self._Session() as session:
-            n_entity = session.execute(
-                select(EntityMetaRow).with_only_columns(  # type: ignore[arg-type]
-                    *[EntityMetaRow.__table__.c.name]
-                )
-            ).rowcount
-            # Simpler approach:
+            # count via ORM:
             e = session.query(EntityMetaRow).count()
             a = session.query(AttributeMetaRow).count()
             m = session.query(MetricMetaRow).count()
@@ -425,7 +431,9 @@ class MetadataCatalog:
             if not existing:
                 session.add(m)
 
-    def _populate_erp(self, session: Session, connectors: list, ontology, kg, now: str) -> None:
+    def _populate_erp(
+        self, session: Session, connectors: list, ontology, kg, now: str
+    ) -> None:
         # Find ERP connector
         erp = _find_connector(connectors, "erp")
         if erp is None:
@@ -439,7 +447,9 @@ class MetadataCatalog:
             name="SalesOrder",
             description="Ordine di vendita completo (header).",
             primary_key="order_id",
-            sources=[{"source": "erp", "table": "sales_order_header", "key": "order_id"}],
+            sources=[
+                {"source": "erp", "table": "sales_order_header", "key": "order_id"}
+            ],
             record_count=len(orders),
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
@@ -462,8 +472,20 @@ class MetadataCatalog:
                 "territory_ref": "Riferimento territorio",
             },
             lineage={
-                "subtotal_amount": [{"metric": "revenue", "entity": "SalesOrder", "source_field": "subtotal_amount"}],
-                "total_due": [{"metric": "revenue_with_tax", "entity": "SalesOrder", "source_field": "total_due"}],
+                "subtotal_amount": [
+                    {
+                        "metric": "revenue",
+                        "entity": "SalesOrder",
+                        "source_field": "subtotal_amount",
+                    }
+                ],
+                "total_due": [
+                    {
+                        "metric": "revenue_with_tax",
+                        "entity": "SalesOrder",
+                        "source_field": "total_due",
+                    }
+                ],
             },
         )
 
@@ -495,8 +517,20 @@ class MetadataCatalog:
                 "offer_ref": "Offerta applicata (1 = nessuna offerta)",
             },
             lineage={
-                "qty": [{"metric": "margin", "entity": "SalesOrderLine", "source_field": "qty"}],
-                "line_total": [{"metric": "margin", "entity": "SalesOrderLine", "source_field": "line_total"}],
+                "qty": [
+                    {
+                        "metric": "margin",
+                        "entity": "SalesOrderLine",
+                        "source_field": "qty",
+                    }
+                ],
+                "line_total": [
+                    {
+                        "metric": "margin",
+                        "entity": "SalesOrderLine",
+                        "source_field": "line_total",
+                    }
+                ],
             },
         )
 
@@ -533,7 +567,9 @@ class MetadataCatalog:
             kg_node_count=kg_count_t,
         )
 
-    def _populate_crm(self, session: Session, connectors: list, ontology, kg, now: str) -> None:
+    def _populate_crm(
+        self, session: Session, connectors: list, ontology, kg, now: str
+    ) -> None:
         crm = _find_connector(connectors, "crm")
         if crm is None:
             return
@@ -577,7 +613,9 @@ class MetadataCatalog:
             lineage={},
         )
 
-    def _populate_hr_pim(self, session: Session, connectors: list, ontology, kg, now: str) -> None:
+    def _populate_hr_pim(
+        self, session: Session, connectors: list, ontology, kg, now: str
+    ) -> None:
         hr_pim = _find_connector(connectors, "hr_pim")
         if hr_pim is None:
             return
@@ -591,7 +629,9 @@ class MetadataCatalog:
             name="Employee",
             description="Dipendente HR. MatricolaDip è anche salesperson_id in ERP.",
             primary_key="MatricolaDip",
-            sources=[{"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"}],
+            sources=[
+                {"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"}
+            ],
             record_count=len(employees),
             freshness=now,
             quality_flags={
@@ -625,7 +665,13 @@ class MetadataCatalog:
             name="Product",
             description="Prodotto del catalogo PIM.",
             primary_key="internal_id",
-            sources=[{"source": "hr_pim", "table": "product_catalog_pim", "key": "internal_id"}],
+            sources=[
+                {
+                    "source": "hr_pim",
+                    "table": "product_catalog_pim",
+                    "key": "internal_id",
+                }
+            ],
             record_count=len(products),
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
@@ -648,13 +694,26 @@ class MetadataCatalog:
                 "sellStartDate": "Data inizio vendita (ISO 8601)",
             },
             lineage={
-                "standardCost": [{"metric": "margin", "entity": "Product", "source_field": "standardCost"}],
-                "listPrice": [{"metric": "margin", "entity": "Product", "source_field": "listPrice"}],
+                "standardCost": [
+                    {
+                        "metric": "margin",
+                        "entity": "Product",
+                        "source_field": "standardCost",
+                    }
+                ],
+                "listPrice": [
+                    {
+                        "metric": "margin",
+                        "entity": "Product",
+                        "source_field": "listPrice",
+                    }
+                ],
             },
         )
 
 
 # ── module-level helpers ──────────────────────────────────────────────────────
+
 
 def _find_connector(connectors: list, name: str):
     for c in connectors:

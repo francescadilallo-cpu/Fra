@@ -1,4 +1,5 @@
 """SQLiteConnector — wraps the CRM clienthub.db SQLite database."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -16,7 +17,14 @@ ENTITY_TABLE_MAP = {
     "Country": "country",
 }
 
-KNOWN_TABLES = ["account", "contact", "address", "account_address", "state_province", "country"]
+KNOWN_TABLES = [
+    "account",
+    "contact",
+    "address",
+    "account_address",
+    "state_province",
+    "country",
+]
 
 
 class SQLiteConnector(BaseConnector):

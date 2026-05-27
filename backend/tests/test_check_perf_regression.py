@@ -16,10 +16,16 @@ def test_gate_fails_on_p95_regression(tmp_path: Path, monkeypatch) -> None:
     history = tmp_path / "backend" / "tests" / "perf_history.json"
 
     latest = {
-        "pure_deterministic_layer": {"average_ms": 10.0, "p50_ms": 10.0, "p95_ms": 30.0},
+        "pure_deterministic_layer": {
+            "average_ms": 10.0,
+            "p50_ms": 10.0,
+            "p95_ms": 30.0,
+        },
         "git_commit_short": "abc123",
     }
-    prev = {"pure_deterministic_layer": {"average_ms": 10.0, "p50_ms": 10.0, "p95_ms": 20.0}}
+    prev = {
+        "pure_deterministic_layer": {"average_ms": 10.0, "p50_ms": 10.0, "p95_ms": 20.0}
+    }
 
     _write(metrics, latest)
     _write(history, [prev, latest])
@@ -35,10 +41,16 @@ def test_gate_warns_without_fail(tmp_path: Path, monkeypatch) -> None:
     history = tmp_path / "backend" / "tests" / "perf_history.json"
 
     latest = {
-        "pure_deterministic_layer": {"average_ms": 13.0, "p50_ms": 13.0, "p95_ms": 20.0},
+        "pure_deterministic_layer": {
+            "average_ms": 13.0,
+            "p50_ms": 13.0,
+            "p95_ms": 20.0,
+        },
         "git_commit_short": "abc123",
     }
-    prev = {"pure_deterministic_layer": {"average_ms": 10.0, "p50_ms": 10.0, "p95_ms": 20.0}}
+    prev = {
+        "pure_deterministic_layer": {"average_ms": 10.0, "p50_ms": 10.0, "p95_ms": 20.0}
+    }
 
     _write(metrics, latest)
     _write(history, [prev, latest])
@@ -59,6 +71,8 @@ def test_gate_passes_with_baseline(tmp_path: Path, monkeypatch) -> None:
     _write(metrics, latest)
 
     monkeypatch.setattr(check_perf_regression, "METRICS_PATH", metrics)
-    monkeypatch.setattr(check_perf_regression, "HISTORY_PATH", tmp_path / "missing.json")
+    monkeypatch.setattr(
+        check_perf_regression, "HISTORY_PATH", tmp_path / "missing.json"
+    )
 
     assert check_perf_regression.main() == 0

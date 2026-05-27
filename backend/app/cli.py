@@ -6,6 +6,7 @@ load --scenario PATH   Load all 3 sources, build KG, populate metadata.
 ask "question"         Ask a NL question; print answer + provenance.
 report                 Run all 25 golden questions; generate eval_report.md.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,6 +17,7 @@ import time
 from pathlib import Path
 
 # ── bootstrap helpers ─────────────────────────────────────────────────────────
+
 
 def _build_stack(scenario_path: Path):
     """Load all connectors, build KG, populate catalog, return (erp, crm, hr_pim, kg, catalog, layer)."""
@@ -62,14 +64,16 @@ def _print_summary(erp, crm, hr_pim, kg, catalog) -> None:
 
     print("\n[Sources]")
     for meta in (erp_meta, crm_meta, hr_meta):
-        print(f"  {meta.name} ({meta.source_type}): {sum(meta.record_counts.values())} rows")
+        print(
+            f"  {meta.name} ({meta.source_type}): {sum(meta.record_counts.values())} rows"
+        )
 
-    print(f"\n[Knowledge Graph]")
+    print("\n[Knowledge Graph]")
     print(f"  Nodes : {kg.node_count}")
     print(f"  Edges : {kg.edge_count}")
     print(f"  Dedup : {kg.dedup_count} duplicate accounts merged")
 
-    print(f"\n[Metadata Catalog]")
+    print("\n[Metadata Catalog]")
     entities = catalog.list_entities()
     metrics = catalog.list_metrics()
     print(f"  Entities : {entities}")
@@ -79,6 +83,7 @@ def _print_summary(erp, crm, hr_pim, kg, catalog) -> None:
 
 
 # ── commands ──────────────────────────────────────────────────────────────────
+
 
 def cmd_load(args) -> None:
     scenario = Path(args.scenario).expanduser().resolve()
@@ -99,7 +104,7 @@ def cmd_ask(args) -> None:
         print(f"ERROR: scenario path not found: {scenario}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Loading scenario…", flush=True)
+    print("Loading scenario…", flush=True)
     erp, crm, hr_pim, kg, catalog, layer = _build_stack(scenario)
     question = args.question
 
@@ -114,10 +119,12 @@ def cmd_ask(args) -> None:
 
 
 def _print_result(result) -> None:
-    import json
+
     answer = result.answer
     if isinstance(answer, (list, dict)):
-        print(f"Answer:\n{json.dumps(answer, indent=2, default=str, ensure_ascii=False)}")
+        print(
+            f"Answer:\n{json.dumps(answer, indent=2, default=str, ensure_ascii=False)}"
+        )
     else:
         print(f"Answer: {answer}")
     if result.sql_used:
@@ -143,7 +150,7 @@ def cmd_report(args) -> None:
         print("ERROR: golden_questions.md not found", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Loading scenario…", flush=True)
+    print("Loading scenario…", flush=True)
     erp, crm, hr_pim, kg, catalog, layer = _build_stack(scenario)
 
     questions = _parse_golden_questions(gq_path.read_text(encoding="utf-8"))
@@ -177,22 +184,28 @@ def cmd_report(args) -> None:
             notes = str(e)
 
         latency = round((time.perf_counter() - t0) * 1000, 1)
-        rows.append({
-            "id": q_id,
-            "level": level,
-            "question": question[:80],
-            "outcome": outcome,
-            "latency_ms": latency,
-            "sources_touched": ",".join(sources),
-            "metadata_present": meta_present,
-            "disambiguation": disambiguation,
-            "notes": notes[:120],
-        })
+        rows.append(
+            {
+                "id": q_id,
+                "level": level,
+                "question": question[:80],
+                "outcome": outcome,
+                "latency_ms": latency,
+                "sources_touched": ",".join(sources),
+                "metadata_present": meta_present,
+                "disambiguation": disambiguation,
+                "notes": notes[:120],
+            }
+        )
         icon = "✅" if outcome == "ok" else ("⚠️" if outcome == "ambiguity" else "❌")
         print(f"  {icon} {q_id} ({latency:.0f}ms) — {outcome}")
 
     # Write eval_report.md
-    report_path = Path(args.output) if hasattr(args, "output") and args.output else Path("eval_report.md")
+    report_path = (
+        Path(args.output)
+        if hasattr(args, "output") and args.output
+        else Path("eval_report.md")
+    )
     _write_report(rows, report_path)
     print(f"\nReport written to: {report_path}")
 
@@ -242,6 +255,7 @@ def _write_report(rows: list[dict], path: Path) -> None:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="fra", description="Fra Semantic Layer CLI")
     parser.add_argument(
@@ -259,7 +273,9 @@ def main() -> None:
     ask_p.add_argument("question", help="The question to ask")
 
     # report
-    rep_p = sub.add_parser("report", help="Run all 25 golden questions and generate eval_report.md")
+    rep_p = sub.add_parser(
+        "report", help="Run all 25 golden questions and generate eval_report.md"
+    )
     rep_p.add_argument("--output", default="eval_report.md", help="Output file path")
 
     args = parser.parse_args()

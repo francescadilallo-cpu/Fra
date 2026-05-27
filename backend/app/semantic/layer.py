@@ -21,6 +21,7 @@ Resolution flow
 NL question → rule-based intent → (fallback Claude API if ANTHROPIC_API_KEY set)
 → QueryPlan → execute via connectors → Result with metadata.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── AmbiguityError ────────────────────────────────────────────────────────────
+
 
 class AmbiguityError(Exception):
     """Raised when a query cannot be resolved without disambiguation."""
@@ -57,6 +59,7 @@ class SemanticSecurityViolationError(SemanticOntologyViolationError):
 
 
 # ── Result ────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Result:
@@ -86,11 +89,12 @@ class Result:
 
 # ── Intent ────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class Intent:
     """Parsed intent from a natural language question."""
 
-    intent_type: str           # e.g. "count_employees", "revenue", "top_products"
+    intent_type: str  # e.g. "count_employees", "revenue", "top_products"
     filters: dict[str, Any] = field(default_factory=dict)
     dimensions: list[str] = field(default_factory=list)
     limit: int | None = None
@@ -162,7 +166,11 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "product_price": {
         "metric": None,
         "entities": ["Product"],
-        "properties": ["Product.displayName", "Product.listPrice", "Product.standardCost"],
+        "properties": [
+            "Product.displayName",
+            "Product.listPrice",
+            "Product.standardCost",
+        ],
         "relations": [],
     },
     "count_make_only": {
@@ -180,7 +188,11 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "list_b2b_active": {
         "metric": None,
         "entities": ["Customer"],
-        "properties": ["Customer.accountType", "Customer.isActive", "Customer.ragioneSociale"],
+        "properties": [
+            "Customer.accountType",
+            "Customer.isActive",
+            "Customer.ragioneSociale",
+        ],
         "relations": [],
     },
     "customers_by_state": {
@@ -192,13 +204,21 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "top_salesperson_by_orders": {
         "metric": None,
         "entities": ["SalesOrder", "Employee"],
-        "properties": ["SalesOrder.salesperson_ref", "SalesOrder.order_id", "Employee.MatricolaDip"],
+        "properties": [
+            "SalesOrder.salesperson_ref",
+            "SalesOrder.order_id",
+            "Employee.MatricolaDip",
+        ],
         "relations": ["SalesOrder.salesperson_ref->Employee"],
     },
     "top_salespersons_by_revenue": {
         "metric": "revenue_with_tax",
         "entities": ["SalesOrder", "Employee"],
-        "properties": ["SalesOrder.salesperson_ref", "SalesOrder.total_due", "Employee.MatricolaDip"],
+        "properties": [
+            "SalesOrder.salesperson_ref",
+            "SalesOrder.total_due",
+            "Employee.MatricolaDip",
+        ],
         "relations": ["SalesOrder.salesperson_ref->Employee"],
     },
     "revenue_by_territory": {
@@ -216,37 +236,68 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "top_customer_by_spend": {
         "metric": "revenue_with_tax",
         "entities": ["SalesOrder", "Customer"],
-        "properties": ["SalesOrder.customer_ref", "SalesOrder.total_due", "Customer.accountId"],
+        "properties": [
+            "SalesOrder.customer_ref",
+            "SalesOrder.total_due",
+            "Customer.accountId",
+        ],
         "relations": ["SalesOrder.customer_ref->Customer"],
     },
     "top_products_by_qty": {
         "metric": None,
         "entities": ["SalesOrderLine", "Product"],
-        "properties": ["SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.displayName"],
+        "properties": [
+            "SalesOrderLine.product_ref",
+            "SalesOrderLine.qty",
+            "Product.displayName",
+        ],
         "relations": ["SalesOrderLine.product_ref->Product"],
     },
     "customer_state_most_orders": {
         "metric": None,
         "entities": ["SalesOrder", "Customer"],
-        "properties": ["SalesOrder.customer_ref", "SalesOrder.order_id", "Customer.accountId"],
+        "properties": [
+            "SalesOrder.customer_ref",
+            "SalesOrder.order_id",
+            "Customer.accountId",
+        ],
         "relations": ["SalesOrder.customer_ref->Customer"],
     },
     "margin_per_salesperson": {
         "metric": "margin",
         "entities": ["SalesOrder", "SalesOrderLine", "Product"],
-        "properties": ["SalesOrder.salesperson_ref", "SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.standardCost", "Product.listPrice"],
-        "relations": ["SalesOrder.hasLine->SalesOrderLine", "SalesOrderLine.product_ref->Product"],
+        "properties": [
+            "SalesOrder.salesperson_ref",
+            "SalesOrderLine.product_ref",
+            "SalesOrderLine.qty",
+            "Product.standardCost",
+            "Product.listPrice",
+        ],
+        "relations": [
+            "SalesOrder.hasLine->SalesOrderLine",
+            "SalesOrderLine.product_ref->Product",
+        ],
     },
     "avg_revenue_by_segment": {
         "metric": "revenue_with_tax",
         "entities": ["SalesOrder", "Customer"],
-        "properties": ["SalesOrder.customer_ref", "SalesOrder.total_due", "Customer.accountType"],
+        "properties": [
+            "SalesOrder.customer_ref",
+            "SalesOrder.total_due",
+            "Customer.accountType",
+        ],
         "relations": ["SalesOrder.customer_ref->Customer"],
     },
     "top_category_by_margin": {
         "metric": "margin",
         "entities": ["SalesOrderLine", "Product"],
-        "properties": ["SalesOrderLine.product_ref", "SalesOrderLine.qty", "Product.categoryPath", "Product.standardCost", "Product.listPrice"],
+        "properties": [
+            "SalesOrderLine.product_ref",
+            "SalesOrderLine.qty",
+            "Product.categoryPath",
+            "Product.standardCost",
+            "Product.listPrice",
+        ],
         "relations": ["SalesOrderLine.product_ref->Product"],
     },
     "orders_with_discount": {
@@ -264,7 +315,11 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "check_duplicate_accounts": {
         "metric": None,
         "entities": ["Customer"],
-        "properties": ["Customer.accountId", "Customer.ragioneSociale", "Customer.nomeContatto"],
+        "properties": [
+            "Customer.accountId",
+            "Customer.ragioneSociale",
+            "Customer.nomeContatto",
+        ],
         "relations": [],
     },
     "data_provenance": {
@@ -282,7 +337,12 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
     "lookup_employee": {
         "metric": None,
         "entities": ["Employee"],
-        "properties": ["Employee.MatricolaDip", "Employee.Nome", "Employee.Cognome", "Employee.Reparto"],
+        "properties": [
+            "Employee.MatricolaDip",
+            "Employee.Nome",
+            "Employee.Cognome",
+            "Employee.Reparto",
+        ],
         "relations": [],
     },
     "impossible": {
@@ -350,13 +410,16 @@ def _extract_json_payload(text: str) -> dict[str, Any]:
 
 # ── Rule-based intent parser ──────────────────────────────────────────────────
 
+
 class _RuleParser:
     """Rule-based intent parser that handles the 25 golden questions."""
 
     # Compiled patterns (order matters — more specific first)
     _YEAR_RE = re.compile(r"\b(20\d{2})\b")
     _LIMIT_RE = re.compile(r"\btop[\s-]?(\d+)\b", re.IGNORECASE)
-    _DEPT_RE = re.compile(r'"([^"]+)"|\'([^\']+)\'|reparto\s+([A-Za-z &]+)', re.IGNORECASE)
+    _DEPT_RE = re.compile(
+        r'"([^"]+)"|\'([^\']+)\'|reparto\s+([A-Za-z &]+)', re.IGNORECASE
+    )
 
     def parse(self, question: str) -> Intent:
         q = question.lower()
@@ -377,10 +440,25 @@ class _RuleParser:
         # are contextually resolved to revenue_with_tax per golden questions hint Q7.
         # Only raise AmbiguityError when "fatturato" appears without a dimensional qualifier.
         _FATTURATO_QUALIFIERS = [
-            "per territorio", "per venditore", "per cliente", "medio", "per categoria",
-            "vs", "quota", "lordo", "netto", "incass", "annualizzato", "fonte",
-            "cliente ", "reparto", "b2b", "b2c",
-            "venditore", "venditori", "top",
+            "per territorio",
+            "per venditore",
+            "per cliente",
+            "medio",
+            "per categoria",
+            "vs",
+            "quota",
+            "lordo",
+            "netto",
+            "incass",
+            "annualizzato",
+            "fonte",
+            "cliente ",
+            "reparto",
+            "b2b",
+            "b2c",
+            "venditore",
+            "venditori",
+            "top",
         ]
         if "fatturato" in q:
             has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
@@ -391,18 +469,31 @@ class _RuleParser:
                     "Il termine 'fatturato' è ambiguo: potrebbe indicare i ricavi puri "
                     "(subtotal_amount, ~$20M) oppure il lordo con tasse e spedizione "
                     "(total_due, ~$22.4M). Specificare quale definizione usare.",
-                    candidates=["revenue (~subtotal_amount)", "revenue_with_tax (~total_due)"],
+                    candidates=[
+                        "revenue (~subtotal_amount)",
+                        "revenue_with_tax (~total_due)",
+                    ],
                 )
 
         # ── Q22: employee lookup by first name ─────────────────────────────
         if "dipendente" in q or "employee" in q:
-            name_m = re.search(r'"([^"]+)"|\'([^\']+)\'|\bdipendente\s+["\']?([A-Za-z]+)', q)
+            name_m = re.search(
+                r'"([^"]+)"|\'([^\']+)\'|\bdipendente\s+["\']?([A-Za-z]+)', q
+            )
             if not name_m:
                 # Try bare name after keyword
-                name_m = re.search(r'(?:mostrami|trova|cerca)\s+(?:il\s+)?dipendente\s+["\']?(\w+)', q, re.IGNORECASE)
+                name_m = re.search(
+                    r'(?:mostrami|trova|cerca)\s+(?:il\s+)?dipendente\s+["\']?(\w+)',
+                    q,
+                    re.IGNORECASE,
+                )
             if name_m:
                 name = next(g for g in name_m.groups() if g)
-                return Intent(intent_type="lookup_employee", filters={"name": name}, raw_question=question)
+                return Intent(
+                    intent_type="lookup_employee",
+                    filters={"name": name},
+                    raw_question=question,
+                )
 
         # ── Q20: unique customers after dedup ─────────────────────────────
         if "clienti unici" in q or ("quanti clienti" in q and "duplicat" in q):
@@ -445,7 +536,9 @@ class _RuleParser:
 
         # ── Q5: average hourly rate ────────────────────────────────────────
         if "retribuzione" in q or "paga" in q or "stipendio" in q or "salario" in q:
-            dept = self._extract_quoted_or_named(question, prefixes=["reparto", "in", "nel"])
+            dept = self._extract_quoted_or_named(
+                question, prefixes=["reparto", "in", "nel"]
+            )
             return Intent(
                 intent_type="avg_hourly_rate",
                 filters={"department": dept},
@@ -474,7 +567,9 @@ class _RuleParser:
             )
 
         # ── Q16: revenue B2B vs B2C — before Q4 ──────────────────────────
-        if ("b2b" in q or "b2c" in q) and ("fatturato" in q or "incass" in q or "medio" in q or "revenue" in q):
+        if ("b2b" in q or "b2c" in q) and (
+            "fatturato" in q or "incass" in q or "medio" in q or "revenue" in q
+        ):
             return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
 
         # ── Q4: B2B active companies ──────────────────────────────────────
@@ -511,9 +606,11 @@ class _RuleParser:
             )
 
         # ── top sellers by revenue (other forms) ──────────────────────────
-        if ("venditore" in q or "venditori" in q) and (
-            "incass" in q or "revenue" in q
-        ) and "top" in q:
+        if (
+            ("venditore" in q or "venditori" in q)
+            and ("incass" in q or "revenue" in q)
+            and "top" in q
+        ):
             return Intent(
                 intent_type="top_salespersons_by_revenue",
                 filters={"year": year},
@@ -543,11 +640,17 @@ class _RuleParser:
             )
 
         # ── Q8: top customer by spend ─────────────────────────────────────
-        if "cliente" in q and ("più" in q or "piu" in q or "top" in q) and ("speso" in q or "spesa" in q or "spend" in q):
+        if (
+            "cliente" in q
+            and ("più" in q or "piu" in q or "top" in q)
+            and ("speso" in q or "spesa" in q or "spend" in q)
+        ):
             return Intent(intent_type="top_customer_by_spend", raw_question=question)
 
         # ── Q9: top products by quantity ──────────────────────────────────
-        if ("prodotti" in q or "prodotto" in q) and ("vendut" in q or "quantit" in q or "top" in q):
+        if ("prodotti" in q or "prodotto" in q) and (
+            "vendut" in q or "quantit" in q or "top" in q
+        ):
             return Intent(
                 intent_type="top_products_by_qty",
                 limit=limit or 5,
@@ -555,10 +658,14 @@ class _RuleParser:
             )
 
         # ── Q10: customer state with most orders ──────────────────────────
-        if ("stato" in q or "provincia" in q or "state" in q) and (
-            "ordini" in q or "orders" in q
-        ) and "client" in q:
-            return Intent(intent_type="customer_state_most_orders", raw_question=question)
+        if (
+            ("stato" in q or "provincia" in q or "state" in q)
+            and ("ordini" in q or "orders" in q)
+            and "client" in q
+        ):
+            return Intent(
+                intent_type="customer_state_most_orders", raw_question=question
+            )
 
         # ── Q15: margin per salesperson ───────────────────────────────────
         if "margine" in q and ("venditore" in q or "venditori" in q):
@@ -616,7 +723,7 @@ class _RuleParser:
         if q:
             return q
         # Try "reparto <DeptName>" pattern (word after reparto keyword)
-        rm = re.search(r'reparto\s+([A-Z][A-Za-z &]+)', text)
+        rm = re.search(r"reparto\s+([A-Z][A-Za-z &]+)", text)
         if rm:
             return rm.group(1).strip().rstrip("?.")
         for prefix in prefixes:
@@ -645,6 +752,7 @@ def _extract_state(text: str) -> str | None:
 
 
 # ── SemanticLayer ─────────────────────────────────────────────────────────────
+
 
 class SemanticLayer:
     """Translates natural-language questions into executable queries."""
@@ -755,7 +863,9 @@ class SemanticLayer:
     ) -> OntologyIntentMapping | None:
         api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         strict = os.getenv("SEMANTIC_REQUIRE_LLM_INTENT", "1").strip().lower() not in {
-            "0", "false", "no"
+            "0",
+            "false",
+            "no",
         }
         if not api_key:
             if strict:
@@ -764,7 +874,11 @@ class SemanticLayer:
                 )
             return None
 
-        entity_names = self._ontology.entity_names() if self._ontology else self._catalog.list_entities()
+        entity_names = (
+            self._ontology.entity_names()
+            if self._ontology
+            else self._catalog.list_entities()
+        )
         metric_names = self._catalog.list_metrics() if self._catalog else []
         relation_hints: list[str] = []
         if self._ontology:
@@ -812,12 +926,24 @@ class SemanticLayer:
             logger.warning("LLM ontology mapping failed, using rule fallback: %s", exc)
             return None
 
-        intent_type = str(payload.get("intent_type", baseline_intent.intent_type)).strip()
+        intent_type = str(
+            payload.get("intent_type", baseline_intent.intent_type)
+        ).strip()
         metric = payload.get("metric")
-        entities = [str(x).strip() for x in payload.get("entities", []) if str(x).strip()]
-        properties = [str(x).strip() for x in payload.get("properties", []) if str(x).strip()]
-        relations = [str(x).strip() for x in payload.get("relations", []) if str(x).strip()]
-        filters = payload.get("filters", {}) if isinstance(payload.get("filters", {}), dict) else {}
+        entities = [
+            str(x).strip() for x in payload.get("entities", []) if str(x).strip()
+        ]
+        properties = [
+            str(x).strip() for x in payload.get("properties", []) if str(x).strip()
+        ]
+        relations = [
+            str(x).strip() for x in payload.get("relations", []) if str(x).strip()
+        ]
+        filters = (
+            payload.get("filters", {})
+            if isinstance(payload.get("filters", {}), dict)
+            else {}
+        )
         year = payload.get("year") if isinstance(payload.get("year"), int) else None
         limit = payload.get("limit") if isinstance(payload.get("limit"), int) else None
 
@@ -825,7 +951,9 @@ class SemanticLayer:
 
         return OntologyIntentMapping(
             intent_type=intent_type,
-            metric=str(metric).strip() if isinstance(metric, str) and metric.strip() else None,
+            metric=str(metric).strip()
+            if isinstance(metric, str) and metric.strip()
+            else None,
             entities=entities,
             properties=properties,
             relations=relations,
@@ -837,7 +965,10 @@ class SemanticLayer:
         )
 
     def _fallback_mapping_from_rule(self, intent: Intent) -> OntologyIntentMapping:
-        contract = _INTENT_CONTRACTS.get(intent.intent_type, {"entities": [], "properties": [], "relations": [], "metric": None})
+        contract = _INTENT_CONTRACTS.get(
+            intent.intent_type,
+            {"entities": [], "properties": [], "relations": [], "metric": None},
+        )
         return OntologyIntentMapping(
             intent_type=intent.intent_type,
             metric=contract.get("metric"),
@@ -919,7 +1050,9 @@ class SemanticLayer:
                     tables.add(table.strip().lower())
         return tables
 
-    def _iter_string_leaves(self, payload: Any, path: str = "$") -> list[tuple[str, str]]:
+    def _iter_string_leaves(
+        self, payload: Any, path: str = "$"
+    ) -> list[tuple[str, str]]:
         leaves: list[tuple[str, str]] = []
         if isinstance(payload, str):
             leaves.append((path, payload))
@@ -941,9 +1074,7 @@ class SemanticLayer:
             path,
             value[:240],
         )
-        raise SemanticSecurityViolationError(
-            f"Blocked unsafe LLM output ({reason})"
-        )
+        raise SemanticSecurityViolationError(f"Blocked unsafe LLM output ({reason})")
 
     def _build_validated_plan(
         self,
@@ -961,8 +1092,14 @@ class SemanticLayer:
             "ontology_contract_selected",
         ]
 
-        catalog_entities = set(self._catalog.list_entities()) if self._catalog else set()
-        ontology_entities = set(self._ontology.entity_names()) if self._ontology else set(catalog_entities)
+        catalog_entities = (
+            set(self._catalog.list_entities()) if self._catalog else set()
+        )
+        ontology_entities = (
+            set(self._ontology.entity_names())
+            if self._ontology
+            else set(catalog_entities)
+        )
         allowed_entities = set(contract.get("entities", []))
         candidate_entities = set(mapping.entities or contract.get("entities", []))
 
@@ -1005,7 +1142,9 @@ class SemanticLayer:
                 )
         validation_steps.append("properties_validated")
 
-        metric = mapping.metric if mapping.metric is not None else contract.get("metric")
+        metric = (
+            mapping.metric if mapping.metric is not None else contract.get("metric")
+        )
         if metric and self._catalog:
             metrics = set(self._catalog.list_metrics())
             if metric not in metrics:
@@ -1031,7 +1170,9 @@ class SemanticLayer:
             for src in ent.sources:
                 if not isinstance(src, dict):
                     continue
-                connector = src.get("source") or src.get("connector") or src.get("system")
+                connector = (
+                    src.get("source") or src.get("connector") or src.get("system")
+                )
                 table = src.get("table")
                 if isinstance(connector, str) and connector:
                     connector_set.add(connector)
@@ -1058,7 +1199,9 @@ class SemanticLayer:
         mapping: OntologyIntentMapping,
     ) -> None:
         original_provenance = result.provenance or {}
-        result.sources_touched = sorted(set(result.sources_touched).union(plan.connectors))
+        result.sources_touched = sorted(
+            set(result.sources_touched).union(plan.connectors)
+        )
         result.provenance = {
             "lineage": {
                 "connectors": plan.connectors,
@@ -1157,7 +1300,7 @@ class SemanticLayer:
         if fn is None:
             return Result(
                 answer=f"Domanda non compresa (intent='{intent.intent_type}'). "
-                       "Prova a essere più specifico.",
+                "Prova a essere più specifico.",
                 notes="unknown_intent",
             )
         return fn(intent)
@@ -1272,7 +1415,9 @@ class SemanticLayer:
             answer={"unique_b2b_active": count, "companies": companies},
             sql_used=sql,
             sources_touched=["crm"],
-            provenance=self._prov("Customer", ["accountType", "isActive", "ragioneSociale"]),
+            provenance=self._prov(
+                "Customer", ["accountType", "isActive", "ragioneSociale"]
+            ),
         )
 
     def _q_customers_by_state(self, intent: Intent) -> Result:
@@ -1549,7 +1694,7 @@ class SemanticLayer:
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY approx_revenue DESC
             """
-            erp_rows = self._erp.execute_query(sql, (str(year),))
+            self._erp.execute_query(sql, (str(year),))
         else:
             sql = """
                 SELECT h.salesperson_ref,
@@ -1559,10 +1704,12 @@ class SemanticLayer:
                 WHERE h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY approx_revenue DESC
             """
-            erp_rows = self._erp.execute_query(sql)
+            self._erp.execute_query(sql)
 
         # Enrich with PIM cost data for true margin calculation
-        cost_sql = "SELECT internal_id, standardCost, listPrice FROM product_catalog_pim"
+        cost_sql = (
+            "SELECT internal_id, standardCost, listPrice FROM product_catalog_pim"
+        )
         pim_rows = {r["internal_id"]: r for r in self._hr_pim.execute_query(cost_sql)}
 
         # Build per-salesperson margin using line data
@@ -1619,7 +1766,9 @@ class SemanticLayer:
         )
         accts = {
             r["accountId"]: r["accountType"]
-            for r in self._crm.execute_query("SELECT accountId, accountType FROM account WHERE accountId > 0")
+            for r in self._crm.execute_query(
+                "SELECT accountId, accountType FROM account WHERE accountId > 0"
+            )
         }
         by_seg: dict[str, list[float]] = {}
         for o in orders:
@@ -1649,7 +1798,9 @@ class SemanticLayer:
     def _q_top_category_by_margin(self, intent: Intent) -> Result:
         # Get per-product qty from ERP
         qty_sql = "SELECT product_ref, SUM(qty) as total_qty FROM sales_order_line GROUP BY product_ref"
-        qty_rows = {r["product_ref"]: r["total_qty"] for r in self._erp.execute_query(qty_sql)}
+        qty_rows = {
+            r["product_ref"]: r["total_qty"] for r in self._erp.execute_query(qty_sql)
+        }
         # PIM products with cost data
         pim_sql = "SELECT internal_id, categoryPath, listPrice, standardCost FROM product_catalog_pim"
         pim_rows = self._hr_pim.execute_query(pim_sql)
@@ -1671,13 +1822,15 @@ class SemanticLayer:
             cost = cat_cost.get(cat, 0)
             margin = rev - cost
             margin_pct = round((margin / rev * 100) if rev > 0 else 0, 2)
-            result.append({
-                "category": cat,
-                "revenue": round(rev, 2),
-                "cost": round(cost, 2),
-                "margin": round(margin, 2),
-                "margin_pct": margin_pct,
-            })
+            result.append(
+                {
+                    "category": cat,
+                    "revenue": round(rev, 2),
+                    "cost": round(cost, 2),
+                    "margin": round(margin, 2),
+                    "margin_pct": margin_pct,
+                }
+            )
         result.sort(key=lambda x: -x["margin_pct"])
         return Result(
             answer=result,
@@ -1751,7 +1904,6 @@ class SemanticLayer:
 
     def _q_data_provenance(self, intent: Intent) -> Result:
         entities = self._catalog.list_entities() if self._catalog else []
-        metrics = self._catalog.list_metrics() if self._catalog else []
         prov_data: dict = {}
         for ent in entities:
             meta = self._catalog.get_entity(ent)
@@ -1784,7 +1936,9 @@ class SemanticLayer:
     def _q_lookup_employee(self, intent: Intent) -> Result:
         name = intent.filters.get("name", "")
         sql = "SELECT * FROM dipendenti_hr WHERE LOWER(Nome) LIKE ? OR LOWER(Cognome) LIKE ?"
-        rows = self._hr_pim.execute_query(sql, (f"%{name.lower()}%", f"%{name.lower()}%"))
+        rows = self._hr_pim.execute_query(
+            sql, (f"%{name.lower()}%", f"%{name.lower()}%")
+        )
         if len(rows) > 1:
             # Multiple matches → disambiguation required
             return Result(
@@ -1792,7 +1946,10 @@ class SemanticLayer:
                 sql_used=sql,
                 sources_touched=["hr_pim"],
                 disambiguation_required=True,
-                candidates=[f"{r['Nome']} {r['Cognome']} (matricola {r['MatricolaDip']}, {r['Reparto']})" for r in rows],
+                candidates=[
+                    f"{r['Nome']} {r['Cognome']} (matricola {r['MatricolaDip']}, {r['Reparto']})"
+                    for r in rows
+                ],
                 provenance=self._prov("Employee", ["MatricolaDip", "Nome", "Cognome"]),
                 notes=f"Multiple employees found matching '{name}'. Please specify.",
             )

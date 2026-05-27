@@ -1,6 +1,7 @@
 """
 SemanticIntelligence – FastAPI application entry point.
 """
+
 import base64
 import hashlib
 import hmac
@@ -34,7 +35,6 @@ from .models import (
     MappingUpdateRequest,
     MappingsResponse,
     MetricCreate,
-    OntologyGraphData,
     PaginatedData,
     RecentOrder,
     SegmentCreate,
@@ -52,7 +52,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173"
 JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+)
 JWT_ISSUER = os.getenv("JWT_ISSUER", "semanticintelligence-api")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "semanticintelligence-clients")
 AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
@@ -135,7 +137,12 @@ def _get_semantic_redis_client() -> Any:
 
 
 def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
-    payload = json.dumps({"q": question.strip(), "ctx": context}, sort_keys=True, ensure_ascii=False, default=str)
+    payload = json.dumps(
+        {"q": question.strip(), "ctx": context},
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return f"semantic:ask:v{_semantic_cache_namespace}:{digest}"
 
@@ -240,7 +247,9 @@ def _authenticate_user(username: str, password: str) -> dict[str, Any] | None:
     return user
 
 
-def _create_access_token(subject: str, role: Literal["admin", "user"]) -> tuple[str, int]:
+def _create_access_token(
+    subject: str, role: Literal["admin", "user"]
+) -> tuple[str, int]:
     secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
@@ -299,7 +308,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
 def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincipal]:
     allowed = set(roles)
 
-    def _checker(current_user: UserPrincipal = Depends(get_current_user)) -> UserPrincipal:
+    def _checker(
+        current_user: UserPrincipal = Depends(get_current_user),
+    ) -> UserPrincipal:
         if current_user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -308,6 +319,7 @@ def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincip
         return current_user
 
     return _checker
+
 
 # ── Semantic Layer global state (lazy-initialised on first /api/semantic/* call) ──
 
@@ -369,25 +381,34 @@ def _ensure_semantic_loaded() -> None:
         layer = SemanticLayer(ontology, kg, catalog, ctx_mgr)
         layer.set_connectors(erp, crm, hr_pim)
 
-        _semantic_state.update({
-            "loaded": True,
-            "layer": layer,
-            "ontology": ontology,
-            "kg": kg,
-            "catalog": catalog,
-            "erp": erp,
-            "crm": crm,
-            "hr_pim": hr_pim,
-        })
+        _semantic_state.update(
+            {
+                "loaded": True,
+                "layer": layer,
+                "ontology": ontology,
+                "kg": kg,
+                "catalog": catalog,
+                "erp": erp,
+                "crm": crm,
+                "hr_pim": hr_pim,
+            }
+        )
 
 
 # ── Pydantic models for semantic endpoints ──────────────────────────────────
 
+
 class SemanticAskRequest(BaseModel):
     question: str | None = Field(default=None, description="Primary NL question field")
-    query: str | None = Field(default=None, description="Alias for question in normalized clients")
-    session_id: str | None = Field(default=None, description="Optional semantic session identifier")
-    context: dict[str, Any] = Field(default_factory=dict, description="Optional normalized semantic context")
+    query: str | None = Field(
+        default=None, description="Alias for question in normalized clients"
+    )
+    session_id: str | None = Field(
+        default=None, description="Optional semantic session identifier"
+    )
+    context: dict[str, Any] = Field(
+        default_factory=dict, description="Optional normalized semantic context"
+    )
 
     @model_validator(mode="after")
     def _validate_normalized_payload(self) -> "SemanticAskRequest":
@@ -435,6 +456,7 @@ def _resolve_ontology_validation_path(raw: str | None) -> Path:
         raise HTTPException(status_code=404, detail="Ontology file not found")
     return candidate
 
+
 # ── Lifespan ───────────────────────────────────────────────────────────────────
 
 
@@ -452,6 +474,7 @@ async def lifespan(app: FastAPI):
     # Warm up the DuckDB snapshot on first boot so queries are instant from the start.
     # On subsequent restarts this just opens the existing file (<100 ms).
     from .connectors.duckdb_source_manager import get_source_manager
+
     get_source_manager(_SCENARIO_PATH)
 
     yield
@@ -543,7 +566,9 @@ def dashboard() -> DashboardData:
         accepted = conn.execute(
             "SELECT COUNT(*) FROM quotes WHERE status='accepted'"
         ).fetchone()[0]
-        conversion_rate = round((accepted / total_quotes * 100) if total_quotes else 0, 1)
+        conversion_rate = round(
+            (accepted / total_quotes * 100) if total_quotes else 0, 1
+        )
 
         open_value = conn.execute(
             "SELECT COALESCE(SUM(total_value),0) FROM quotes WHERE status IN ('draft','sent')"
@@ -635,8 +660,15 @@ def update_ontology_mapping(
             pass
     success = update_mapping(req.table, req.field, req.ontology_path)
     if not success:
-        raise HTTPException(status_code=404, detail="Table or field not found in mappings")
-    return {"success": True, "table": req.table, "field": req.field, "ontology_path": req.ontology_path}
+        raise HTTPException(
+            status_code=404, detail="Table or field not found in mappings"
+        )
+    return {
+        "success": True,
+        "table": req.table,
+        "field": req.field,
+        "ontology_path": req.ontology_path,
+    }
 
 
 @app.post("/api/ontology/validate")
@@ -673,7 +705,14 @@ def get_table_data(
     page_size: int = Query(default=20, ge=1, le=100),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> PaginatedData:
-    allowed_tables = {"customers", "products", "quotes", "quote_lines", "orders", "order_lines"}
+    allowed_tables = {
+        "customers",
+        "products",
+        "quotes",
+        "quote_lines",
+        "orders",
+        "order_lines",
+    }
     if table not in allowed_tables:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
@@ -774,7 +813,11 @@ def semantic_ask(
         )
         if redis_client is not None:
             try:
-                redis_client.setex(cache_key, _semantic_cache_ttl_seconds(), response_model.model_dump_json())
+                redis_client.setex(
+                    cache_key,
+                    _semantic_cache_ttl_seconds(),
+                    response_model.model_dump_json(),
+                )
             except Exception:
                 pass
         return response_model
@@ -819,16 +862,18 @@ def rebuild_knowledge_graph(
                 _semantic_state["layer"].clear_semantic_cache()
             except Exception:
                 pass
-        _semantic_state.update({
-            "loaded": False,
-            "layer": None,
-            "ontology": None,
-            "kg": None,
-            "catalog": None,
-            "erp": None,
-            "crm": None,
-            "hr_pim": None,
-        })
+        _semantic_state.update(
+            {
+                "loaded": False,
+                "layer": None,
+                "ontology": None,
+                "kg": None,
+                "catalog": None,
+                "erp": None,
+                "crm": None,
+                "hr_pim": None,
+            }
+        )
         _ensure_semantic_loaded()
         kg = _semantic_state["kg"]
         catalog = _semantic_state["catalog"]
@@ -925,7 +970,9 @@ def _source_cfg_to_response(cfg) -> SourceResponse:
         id=cfg.id,
         connector_type=cfg.connector_type,
         label=cfg.label,
-        params={k: v for k, v in cfg.params.items() if k not in ("api_key", "password")},
+        params={
+            k: v for k, v in cfg.params.items() if k not in ("api_key", "password")
+        },
         target_tables=cfg.target_tables,
         row_count=cfg.row_count,
         status=cfg.status,
@@ -942,6 +989,7 @@ def list_sources(
 ) -> list[SourceResponse]:
     """List all configured data sources."""
     from .connectors.duckdb_source_manager import get_source_manager
+
     mgr = get_source_manager(_SCENARIO_PATH)
     return [_source_cfg_to_response(s) for s in mgr.registry.list()]
 
@@ -1033,17 +1081,19 @@ def semantic_sources() -> list[dict[str, Any]]:
             total = sum(meta.record_counts.values())
             quality = 97 if key == "erp" else 94 if key == "crm" else 99
             freshness = "fresh"
-            sources.append({
-                "id": key,
-                "name": meta.name,
-                "source_type": meta.source_type,
-                "tables": meta.tables,
-                "record_counts": meta.record_counts,
-                "total_rows": total,
-                "loaded_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
-                "quality_score": quality,
-                "freshness_status": freshness,
-            })
+            sources.append(
+                {
+                    "id": key,
+                    "name": meta.name,
+                    "source_type": meta.source_type,
+                    "tables": meta.tables,
+                    "record_counts": meta.record_counts,
+                    "total_rows": total,
+                    "loaded_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
+                    "quality_score": quality,
+                    "freshness_status": freshness,
+                }
+            )
         except Exception as exc:
             sources.append({"id": key, "name": key, "error": str(exc)})
     return sources
@@ -1058,14 +1108,14 @@ def get_metrics(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
     try:
         rows = conn.execute(
             "SELECT * FROM sl_metrics WHERE sector_id = ? ORDER BY is_builtin DESC, name",
-            (sector_id,)
+            (sector_id,),
         ).fetchall()
         result = []
         for r in rows:
             d = dict(r)
             d["filters"] = json.loads(d.pop("filters_json", "[]"))
-            d["grains"]  = json.loads(d.pop("grains_json",  "[]"))
-            d["tags"]    = json.loads(d.pop("tags_json",    "[]"))
+            d["grains"] = json.loads(d.pop("grains_json", "[]"))
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result
@@ -1083,10 +1133,25 @@ def create_metric(m: MetricCreate) -> dict[str, Any]:
                (id, sector_id, name, description, type, entity, field, numerator, denominator,
                 expression, filters_json, time_dimension, grains_json, format, status, owner, tags_json, is_builtin)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)""",
-            (mid, m.sector_id, m.name, m.description, m.type, m.entity, m.field,
-             m.numerator, m.denominator, m.expression,
-             json.dumps(m.filters), m.time_dimension, json.dumps(m.grains),
-             m.format, m.status, m.owner, json.dumps(m.tags))
+            (
+                mid,
+                m.sector_id,
+                m.name,
+                m.description,
+                m.type,
+                m.entity,
+                m.field,
+                m.numerator,
+                m.denominator,
+                m.expression,
+                json.dumps(m.filters),
+                m.time_dimension,
+                json.dumps(m.grains),
+                m.format,
+                m.status,
+                m.owner,
+                json.dumps(m.tags),
+            ),
         )
         conn.commit()
         return {"id": mid, **m.model_dump(), "is_builtin": False}
@@ -1098,11 +1163,15 @@ def create_metric(m: MetricCreate) -> dict[str, Any]:
 def delete_metric(metric_id: str) -> dict[str, Any]:
     conn = get_connection()
     try:
-        row = conn.execute("SELECT is_builtin FROM sl_metrics WHERE id = ?", (metric_id,)).fetchone()
+        row = conn.execute(
+            "SELECT is_builtin FROM sl_metrics WHERE id = ?", (metric_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Metric not found")
         if row[0]:
-            raise HTTPException(status_code=403, detail="Cannot delete built-in metrics")
+            raise HTTPException(
+                status_code=403, detail="Cannot delete built-in metrics"
+            )
         conn.execute("DELETE FROM sl_metrics WHERE id = ?", (metric_id,))
         conn.commit()
         return {"deleted": metric_id}
@@ -1116,12 +1185,12 @@ def get_hierarchies(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
     try:
         rows = conn.execute(
             "SELECT * FROM sl_hierarchies WHERE sector_id = ? ORDER BY is_builtin DESC, name",
-            (sector_id,)
+            (sector_id,),
         ).fetchall()
         result = []
         for r in rows:
             d = dict(r)
-            d["levels"]     = json.loads(d.pop("levels_json", "[]"))
+            d["levels"] = json.loads(d.pop("levels_json", "[]"))
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result
@@ -1138,7 +1207,15 @@ def create_hierarchy(h: HierarchyCreate) -> dict[str, Any]:
             """INSERT INTO sl_hierarchies
                (id, sector_id, name, entity, description, type, levels_json, is_builtin)
                VALUES (?,?,?,?,?,?,?,0)""",
-            (hid, h.sector_id, h.name, h.entity, h.description, h.type, json.dumps(h.levels))
+            (
+                hid,
+                h.sector_id,
+                h.name,
+                h.entity,
+                h.description,
+                h.type,
+                json.dumps(h.levels),
+            ),
         )
         conn.commit()
         return {"id": hid, **h.model_dump(), "is_builtin": False}
@@ -1150,11 +1227,15 @@ def create_hierarchy(h: HierarchyCreate) -> dict[str, Any]:
 def delete_hierarchy(hierarchy_id: str) -> dict[str, Any]:
     conn = get_connection()
     try:
-        row = conn.execute("SELECT is_builtin FROM sl_hierarchies WHERE id = ?", (hierarchy_id,)).fetchone()
+        row = conn.execute(
+            "SELECT is_builtin FROM sl_hierarchies WHERE id = ?", (hierarchy_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Hierarchy not found")
         if row[0]:
-            raise HTTPException(status_code=403, detail="Cannot delete built-in hierarchies")
+            raise HTTPException(
+                status_code=403, detail="Cannot delete built-in hierarchies"
+            )
         conn.execute("DELETE FROM sl_hierarchies WHERE id = ?", (hierarchy_id,))
         conn.commit()
         return {"deleted": hierarchy_id}
@@ -1168,14 +1249,14 @@ def get_segments(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
     try:
         rows = conn.execute(
             "SELECT * FROM sl_segments WHERE sector_id = ? ORDER BY is_builtin DESC, name",
-            (sector_id,)
+            (sector_id,),
         ).fetchall()
         result = []
         for r in rows:
             d = dict(r)
             d["conditions"] = json.loads(d.pop("conditions_json", "[]"))
-            d["tags"]       = json.loads(d.pop("tags_json",       "[]"))
-            d["used_by"]    = json.loads(d.pop("used_by_json",    "[]"))
+            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            d["used_by"] = json.loads(d.pop("used_by_json", "[]"))
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result
@@ -1192,8 +1273,16 @@ def create_segment(s: SegmentCreate) -> dict[str, Any]:
             """INSERT INTO sl_segments
                (id, sector_id, name, description, entity, conditions_json, tags_json, used_by_json, is_builtin)
                VALUES (?,?,?,?,?,?,?,?,0)""",
-            (sid, s.sector_id, s.name, s.description, s.entity,
-             json.dumps(s.conditions), json.dumps(s.tags), json.dumps(s.used_by))
+            (
+                sid,
+                s.sector_id,
+                s.name,
+                s.description,
+                s.entity,
+                json.dumps(s.conditions),
+                json.dumps(s.tags),
+                json.dumps(s.used_by),
+            ),
         )
         conn.commit()
         return {"id": sid, **s.model_dump(), "is_builtin": False}
@@ -1205,11 +1294,15 @@ def create_segment(s: SegmentCreate) -> dict[str, Any]:
 def delete_segment(segment_id: str) -> dict[str, Any]:
     conn = get_connection()
     try:
-        row = conn.execute("SELECT is_builtin FROM sl_segments WHERE id = ?", (segment_id,)).fetchone()
+        row = conn.execute(
+            "SELECT is_builtin FROM sl_segments WHERE id = ?", (segment_id,)
+        ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Segment not found")
         if row[0]:
-            raise HTTPException(status_code=403, detail="Cannot delete built-in segments")
+            raise HTTPException(
+                status_code=403, detail="Cannot delete built-in segments"
+            )
         conn.execute("DELETE FROM sl_segments WHERE id = ?", (segment_id,))
         conn.commit()
         return {"deleted": segment_id}
@@ -1221,9 +1314,15 @@ def delete_segment(segment_id: str) -> dict[str, Any]:
 def semantic_coverage(sector_id: str = "manufacturing") -> dict[str, Any]:
     conn = get_connection()
     try:
-        n_metrics     = conn.execute("SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?", (sector_id,)).fetchone()[0]
-        n_hierarchies = conn.execute("SELECT COUNT(*) FROM sl_hierarchies WHERE sector_id=?", (sector_id,)).fetchone()[0]
-        n_segments    = conn.execute("SELECT COUNT(*) FROM sl_segments WHERE sector_id=?", (sector_id,)).fetchone()[0]
+        n_metrics = conn.execute(
+            "SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?", (sector_id,)
+        ).fetchone()[0]
+        n_hierarchies = conn.execute(
+            "SELECT COUNT(*) FROM sl_hierarchies WHERE sector_id=?", (sector_id,)
+        ).fetchone()[0]
+        n_segments = conn.execute(
+            "SELECT COUNT(*) FROM sl_segments WHERE sector_id=?", (sector_id,)
+        ).fetchone()[0]
     finally:
         conn.close()
 
@@ -1231,13 +1330,13 @@ def semantic_coverage(sector_id: str = "manufacturing") -> dict[str, Any]:
     n_entities = len(status.get("entities", []))
 
     breakdown = {
-        "sources":     100 if status.get("loaded") else 0,
-        "entities":    min(100, n_entities * 10),
-        "bridges":     100 if status.get("loaded") else 0,
-        "rules":       100 if status.get("loaded") else 0,
-        "metrics":     min(100, n_metrics * 20),
+        "sources": 100 if status.get("loaded") else 0,
+        "entities": min(100, n_entities * 10),
+        "bridges": 100 if status.get("loaded") else 0,
+        "rules": 100 if status.get("loaded") else 0,
+        "metrics": min(100, n_metrics * 20),
         "hierarchies": min(100, n_hierarchies * 34),
-        "segments":    min(100, n_segments * 20),
+        "segments": min(100, n_segments * 20),
     }
     score = round(sum(breakdown.values()) / len(breakdown))
     return {"sector_id": sector_id, "score": score, "breakdown": breakdown}

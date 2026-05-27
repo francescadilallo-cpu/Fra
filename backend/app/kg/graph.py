@@ -17,6 +17,7 @@ CRM accounts with accountId < 0 are duplicates.  They are merged with their
 positive counterpart using normalised email match.  Provenance is stored on
 every node as a list of {source, original_id, table} dicts.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _norm_email(email: str | None) -> str | None:
     if not email:
@@ -43,6 +45,7 @@ def _norm_name(name: str | None) -> str | None:
 
 
 # ── KnowledgeGraph ────────────────────────────────────────────────────────────
+
 
 class KnowledgeGraph:
     """Multi-source knowledge graph with identity resolution and provenance."""
@@ -121,7 +124,9 @@ class KnowledgeGraph:
     def subgraph(self, entity_type: str) -> nx.MultiDiGraph:
         """Return the induced subgraph for nodes of *entity_type*."""
         nodes = [
-            n for n, data in self._g.nodes(data=True) if data.get("entity_type") == entity_type
+            n
+            for n, data in self._g.nodes(data=True)
+            if data.get("entity_type") == entity_type
         ]
         return self._g.subgraph(nodes).copy()
 
@@ -162,7 +167,9 @@ class KnowledgeGraph:
         if src in self._g and dst in self._g:
             self._g.add_edge(src, dst, type=edge_type, **attrs)
         else:
-            logger.debug("Skipping edge %s -[%s]-> %s (node(s) missing)", src, edge_type, dst)
+            logger.debug(
+                "Skipping edge %s -[%s]-> %s (node(s) missing)", src, edge_type, dst
+            )
 
     # ── private: loaders ──────────────────────────────────────────────────────
 
@@ -175,7 +182,9 @@ class KnowledgeGraph:
                 entity_type="Territory",
                 canonical_id=tid,
                 data={k: v for k, v in row.items()},
-                provenance=[{"source": "erp", "original_id": tid, "table": "territory"}],
+                provenance=[
+                    {"source": "erp", "original_id": tid, "table": "territory"}
+                ],
             )
 
     def _load_offers(self, erp) -> None:
@@ -213,7 +222,9 @@ class KnowledgeGraph:
                     self._dedup_count += 1
                 else:
                     # No match found — skip (treat as orphan duplicate)
-                    logger.debug("Orphan duplicate accountId=%d, no canonical found", aid)
+                    logger.debug(
+                        "Orphan duplicate accountId=%d, no canonical found", aid
+                    )
                 continue
 
             display_name = row.get("ragioneSociale") or row.get("nomeContatto")
@@ -265,7 +276,9 @@ class KnowledgeGraph:
                     "hourly_rate": _safe_float(row.get("RetribuzioneOraria")),
                     "pay_frequency": _safe_int(row.get("FrequenzaPaga")),
                 },
-                provenance=[{"source": "hr_pim", "original_id": eid, "table": "dipendenti_hr"}],
+                provenance=[
+                    {"source": "hr_pim", "original_id": eid, "table": "dipendenti_hr"}
+                ],
             )
 
     def _load_pim_products(self, hr_pim) -> None:
@@ -295,7 +308,11 @@ class KnowledgeGraph:
                     "sell_end_date": row.get("sellEndDate"),
                 },
                 provenance=[
-                    {"source": "hr_pim", "original_id": pid, "table": "product_catalog_pim"}
+                    {
+                        "source": "hr_pim",
+                        "original_id": pid,
+                        "table": "product_catalog_pim",
+                    }
                 ],
             )
 
@@ -391,7 +408,11 @@ class KnowledgeGraph:
                 canonical_id=(oid, lid),
                 data={k: v for k, v in row.items()},
                 provenance=[
-                    {"source": "erp", "original_id": (oid, lid), "table": "sales_order_line"}
+                    {
+                        "source": "erp",
+                        "original_id": (oid, lid),
+                        "table": "sales_order_line",
+                    }
                 ],
             )
 
@@ -438,6 +459,7 @@ class KnowledgeGraph:
 
 
 # ── utilities ─────────────────────────────────────────────────────────────────
+
 
 def _safe_float(v: Any) -> float | None:
     if v is None:

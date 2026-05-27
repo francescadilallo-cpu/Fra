@@ -12,6 +12,7 @@ Territory
 Address
 Offer
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,12 +20,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
 # ── Base entity model ─────────────────────────────────────────────────────────
+
 
 class OntologyEntity(BaseModel):
     """Common base for all business entities."""
@@ -33,6 +35,7 @@ class OntologyEntity(BaseModel):
 
 
 # ── Concrete entity models ────────────────────────────────────────────────────
+
 
 class Address(OntologyEntity):
     address_id: int | None = None
@@ -55,7 +58,7 @@ class Territory(OntologyEntity):
 class Customer(OntologyEntity):
     customer_id: int | None = None
     account_type: Literal["B2C", "B2B"] | None = None
-    display_name: str | None = None          # ragioneSociale (B2B) or nomeContatto (B2C)
+    display_name: str | None = None  # ragioneSociale (B2B) or nomeContatto (B2C)
     email: str | None = None
     phone: str | None = None
     territory_hint: str | None = None
@@ -65,15 +68,15 @@ class Customer(OntologyEntity):
 
 
 class Employee(OntologyEntity):
-    employee_id: int | None = None           # = MatricolaDip
+    employee_id: int | None = None  # = MatricolaDip
     first_name: str | None = None
     last_name: str | None = None
     full_name: str | None = None
     job_title: str | None = None
     department: str | None = None
     department_group: str | None = None
-    hire_date: str | None = None             # ISO 8601
-    birth_date: str | None = None            # ISO 8601
+    hire_date: str | None = None  # ISO 8601
+    birth_date: str | None = None  # ISO 8601
     gender: str | None = None
     marital_status: str | None = None
     vacation_hours: float | None = None
@@ -94,7 +97,7 @@ class Salesperson(Employee):
 
 
 class Product(OntologyEntity):
-    product_id: int | None = None            # = internal_id
+    product_id: int | None = None  # = internal_id
     sku: str | None = None
     display_name: str | None = None
     category_path: str | None = None
@@ -107,8 +110,8 @@ class Product(OntologyEntity):
     list_price: float | None = None
     is_make_only: bool | None = None
     is_purchasable: bool | None = None
-    sell_start_date: str | None = None       # ISO 8601
-    sell_end_date: str | None = None         # ISO 8601
+    sell_start_date: str | None = None  # ISO 8601
+    sell_end_date: str | None = None  # ISO 8601
 
 
 class SalesOrder(OntologyEntity):
@@ -187,11 +190,15 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
                 f"Entity '{entity_name}' is not registered in canonical model"
             )
         if not isinstance(entity_cfg, dict):
-            raise OntologyValidationError(f"Entity '{entity_name}' config must be a dictionary")
+            raise OntologyValidationError(
+                f"Entity '{entity_name}' config must be a dictionary"
+            )
 
         attrs = entity_cfg.get("attributes", {})
         if attrs is not None and not isinstance(attrs, dict):
-            raise OntologyValidationError(f"Entity '{entity_name}' attributes must be a dictionary")
+            raise OntologyValidationError(
+                f"Entity '{entity_name}' attributes must be a dictionary"
+            )
 
         for attr_name, attr_cfg in (attrs or {}).items():
             if not isinstance(attr_cfg, dict) or "relation" not in attr_cfg:
@@ -216,10 +223,14 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
 
         sources = entity_cfg.get("sources", [])
         if sources is not None and not isinstance(sources, list):
-            raise OntologyValidationError(f"Entity '{entity_name}' sources must be a list")
+            raise OntologyValidationError(
+                f"Entity '{entity_name}' sources must be a list"
+            )
         for src in sources or []:
             if not isinstance(src, dict):
-                raise OntologyValidationError(f"Entity '{entity_name}' source must be a dictionary")
+                raise OntologyValidationError(
+                    f"Entity '{entity_name}' source must be a dictionary"
+                )
             if not src.get("source") or not src.get("table"):
                 raise OntologyValidationError(
                     f"Entity '{entity_name}' source entry must include 'source' and 'table'"
@@ -237,6 +248,7 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
 
 
 # ── Ontology class ─────────────────────────────────────────────────────────────
+
 
 class Ontology:
     """Loads the YAML ontology definition and provides access to entity schemas.
@@ -261,7 +273,9 @@ class Ontology:
         with p.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
         _validate_yaml_schema(data)
-        logger.info("Ontology loaded from %s (version=%s)", p, data.get("ontology_version"))
+        logger.info(
+            "Ontology loaded from %s (version=%s)", p, data.get("ontology_version")
+        )
         return cls(data)
 
     # ── entity access ────────────────────────────────────────────────────────

@@ -1,7 +1,5 @@
 from pydantic import BaseModel
 from typing import Any, Optional
-from datetime import date
-import json
 
 
 # ── Request / Response models ──────────────────────────────────────────────────
@@ -14,6 +12,7 @@ class MappingUpdateRequest(BaseModel):
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────
+
 
 class RecentOrder(BaseModel):
     id: int
@@ -35,6 +34,7 @@ class DashboardData(BaseModel):
 
 
 # ── Ontology graph ─────────────────────────────────────────────────────────────
+
 
 class OntologyNode(BaseModel):
     id: str
@@ -58,6 +58,7 @@ class OntologyGraphData(BaseModel):
 
 # ── Mappings ───────────────────────────────────────────────────────────────────
 
+
 class MappingEntry(BaseModel):
     table: str
     field: str
@@ -73,6 +74,7 @@ class MappingsResponse(BaseModel):
 
 # ── Paginated data ─────────────────────────────────────────────────────────────
 
+
 class PaginatedData(BaseModel):
     table: str
     total: int
@@ -82,6 +84,7 @@ class PaginatedData(BaseModel):
 
 
 # ── Semantic definitions ───────────────────────────────────────────────────────
+
 
 class MetricCreate(BaseModel):
     sector_id: str = "manufacturing"

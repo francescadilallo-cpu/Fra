@@ -15,7 +15,9 @@ from .executive import (
 
 
 class AgentExecuteRequest(BaseModel):
-    command: str = Field(min_length=5, description="Executive command in natural language")
+    command: str = Field(
+        min_length=5, description="Executive command in natural language"
+    )
 
 
 class AgentApproveRequest(BaseModel):
