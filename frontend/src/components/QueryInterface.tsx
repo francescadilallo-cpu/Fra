@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
   PROVIDERS, type LLMProvider,
 } from '../data/llmQueryEngine'
+import { ask, adaptAskResult, checkBackend, backendErrorMessage } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 
@@ -774,11 +775,23 @@ export default function QueryInterface() {
   const [favorites, setFavorites] = useState<string[]>(() => loadFavorites(sectorId))
   const [showApiPanel, setShowApiPanel] = useState(false)
   const [creds, setCreds] = useState(getStoredCredentials)
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
+  const [useBackend, setUseBackend] = useState(true)
   const queryCount = messages.filter(m => m.role === 'user').length
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const isLLMActive = !!creds.key
+  const isManufacturing = sectorId === 'manufacturing'
+  const canUseBackend = backendOnline === true && isManufacturing
+
+  const checkBackendOnce = useCallback(async () => {
+    const ok = await checkBackend()
+    setBackendOnline(ok)
+    setUseBackend(ok && isManufacturing)
+  }, [isManufacturing])
+
+  useEffect(() => { checkBackendOnce() }, [checkBackendOnce])
 
   // Refresh creds from localStorage when panel closes
   function handleApiPanelClose() {
@@ -820,11 +833,20 @@ export default function QueryInterface() {
     const resolve = async () => {
       let result: EngineResult
 
-      if (isLLMActive) {
-        // LLM path — call provider API with full AW schema context
+      if (canUseBackend && useBackend) {
+        // Backend path — real data, server-side query execution
+        try {
+          const raw = await ask(question, sectorId)
+          result = adaptAskResult(raw)
+        } catch (backendErr) {
+          // Backend failed mid-query — surface the error with detail
+          throw new Error(`Backend: ${backendErrorMessage(backendErr)}`)
+        }
+      } else if (isLLMActive) {
+        // Browser LLM path — direct provider call (Groq/Gemini/Claude)
         result = await executeLLMQuery(question, creds.key, creds.provider)
       } else {
-        // Pattern engine path — synchronous, no API needed
+        // Pattern engine path — local, no API needed
         await new Promise(r => setTimeout(r, 420))
         result = executeQuery(question, ontology.nodes, sectorId)
       }
@@ -880,6 +902,23 @@ export default function QueryInterface() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Backend status indicator */}
+            {isManufacturing && (
+              <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                backendOnline === null ? 'bg-slate-50 border-slate-200 text-slate-400' :
+                backendOnline ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-amber-50 border-amber-200 text-amber-700'
+              }`}>
+                {backendOnline === null
+                  ? <><Loader2 className="w-3 h-3 animate-spin" />Connecting…</>
+                  : backendOnline
+                    ? <><button onClick={() => setUseBackend(v => !v)} className="flex items-center gap-1.5">
+                        {useBackend ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3 opacity-60" />}
+                        {useBackend ? 'Backend AI' : 'Backend off'}
+                      </button></>
+                    : <><WifiOff className="w-3 h-3" />Backend offline</>
+                }
+              </div>
+            )}
             {queryCount > 0 && (
               <button
                 onClick={() => setMessages([])}
@@ -890,18 +929,20 @@ export default function QueryInterface() {
                 Clear
               </button>
             )}
-          <button
-            onClick={() => setShowApiPanel(v => !v)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${
-              isLLMActive
-                ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
-                : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
-            }`}
-          >
-            {isLLMActive
-              ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
-              : <><Key className="w-3.5 h-3.5" />Add API Key</>}
-          </button>
+            {(!canUseBackend || !useBackend) && (
+              <button
+                onClick={() => setShowApiPanel(v => !v)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 ${
+                  isLLMActive
+                    ? 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                {isLLMActive
+                  ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
+                  : <><Key className="w-3.5 h-3.5" />Add API Key</>}
+              </button>
+            )}
           </div>
         </div>
         {showApiPanel && (

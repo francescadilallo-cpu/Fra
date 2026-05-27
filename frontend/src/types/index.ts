@@ -115,6 +115,10 @@ export interface QueryResult {
   summary: string
 }
 
+// ── Semantic Layer status ─────────────────────────────────────────────────────
+
+export type { SemanticStatusResponse } from './semantic'
+
 // ── Paginated data ─────────────────────────────────────────────────────────────
 
 export interface PaginatedData {

@@ -15,3 +15,5 @@ pandas
 duckdb
 pytest
 pytest-asyncio
+python-multipart
+slowapi==0.1.9

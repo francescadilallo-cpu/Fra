@@ -1,10 +1,18 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Database, GitBranch, AlertTriangle, CheckCircle, Info, Plus, Zap, X,
   Network, MessageSquare, ChevronDown, ChevronRight, ArrowRight,
   BookOpen, FileCode, Play, Layers, Server, Trash2, Edit3, Save,
   Table2, Pencil, Check, Search, Tag, BarChart2, Filter, SlidersHorizontal, TrendingUp, Sigma,
 } from 'lucide-react'
+import {
+  checkBackend, semanticSources,
+  getMetrics, createMetric, deleteMetric as apiDeleteMetric,
+  getHierarchies, createHierarchy, deleteHierarchy as apiDeleteHierarchy,
+  getSegments, createSegment, deleteSegment as apiDeleteSegment,
+  ask as backendAsk, adaptAskResult,
+  type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
+} from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
@@ -1917,6 +1925,14 @@ export default function SemanticLayerView() {
   const [savedEdits, setSavedEdits] = useState<Record<string, string>>({})
   const [editCount, setEditCount] = useState(0)
   const [defSearch, setDefSearch] = useState('')
+  // Backend state
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
+  const [backendSources, setBackendSources] = useState<BackendSource[]>([])
+  const [backendMetrics, setBackendMetrics] = useState<BackendMetric[]>([])
+  const [backendHierarchies, setBackendHierarchies] = useState<BackendHierarchy[]>([])
+  const [backendSegments, setBackendSegments] = useState<BackendSegment[]>([])
+  const [_loadingSemantics, setLoadingSemantics] = useState(false)
+  // localStorage fallback (used only when backend offline)
   const [userMetrics, setUserMetrics] = useState<Metric[]>(() => loadMetrics(sectorId))
   const [userHierarchies, setUserHierarchies] = useState<DimHierarchy[]>(() => loadHierarchies(sectorId))
   const [userSegments, setUserSegments] = useState<Segment[]>(() => loadSegments(sectorId))
@@ -1950,6 +1966,31 @@ export default function SemanticLayerView() {
     setPgQuery(''); setPgResult(null); setPgNoMatch(false); setPgRunning(false)
     setSidebarSearch(''); setSearchFocused(false)
   }, [sectorId])
+
+  const loadFromBackend = useCallback(async () => {
+    setLoadingSemantics(true)
+    try {
+      const ok = await checkBackend()
+      setBackendOnline(ok)
+      if (!ok) return
+      const [srcs, mets, hiers, segs] = await Promise.all([
+        semanticSources().catch(() => []),
+        getMetrics(sectorId).catch(() => []),
+        getHierarchies(sectorId).catch(() => []),
+        getSegments(sectorId).catch(() => []),
+      ])
+      setBackendSources(srcs)
+      setBackendMetrics(mets)
+      setBackendHierarchies(hiers)
+      setBackendSegments(segs)
+    } catch {
+      setBackendOnline(false)
+    } finally {
+      setLoadingSemantics(false)
+    }
+  }, [sectorId])
+
+  useEffect(() => { loadFromBackend() }, [loadFromBackend])
 
   const isManufacturing = sectorId === 'manufacturing'
   const baseNodeIds = new Set(SECTORS[sectorId].ontology.nodes.map(n => n.id))
@@ -1986,12 +2027,18 @@ export default function SemanticLayerView() {
   ]
   const progressPct = Math.round((progressItems.filter(p => p.done).length / progressItems.length) * 100)
 
-  const builtinMetrics = isManufacturing ? AW_METRICS : []
-  const builtinHierarchies = isManufacturing ? AW_HIERARCHIES : []
-  const builtinSegments = isManufacturing ? AW_SEGMENTS : []
-  const metricsCount = builtinMetrics.length + userMetrics.length
-  const hierarchiesCount = builtinHierarchies.length + userHierarchies.length
-  const segmentsCount = builtinSegments.length + userSegments.length
+  // When backend is online, use backend data; otherwise fall back to hardcoded + localStorage
+  const useBackendData = backendOnline === true
+  const builtinMetrics = useBackendData ? [] : (isManufacturing ? AW_METRICS : [])
+  const builtinHierarchies = useBackendData ? [] : (isManufacturing ? AW_HIERARCHIES : [])
+  const builtinSegments = useBackendData ? [] : (isManufacturing ? AW_SEGMENTS : [])
+  // Backend data is already split into builtin+user on the server; show as one unified list
+  const allMetricsList = useBackendData ? backendMetrics : [...builtinMetrics, ...userMetrics]
+  const allHierarchiesList = useBackendData ? backendHierarchies : [...builtinHierarchies, ...userHierarchies]
+  const allSegmentsList = useBackendData ? backendSegments : [...builtinSegments, ...userSegments]
+  const metricsCount = allMetricsList.length
+  const hierarchiesCount = allHierarchiesList.length
+  const segmentsCount = allSegmentsList.length
 
   function getBadge(id: SLSection): number {
     if (id === 'sources')     return sourcesCount
@@ -2005,34 +2052,73 @@ export default function SemanticLayerView() {
     return 0
   }
 
-  function addMetric() {
+  async function addMetric() {
     if (!metricForm.name.trim() || !metricForm.entity.trim()) return
-    const m: Metric = { id: `m-${Date.now()}`, ...metricForm, filters: [], grains: ['month', 'quarter', 'year'], status: 'draft', tags: [] }
-    const updated = [...userMetrics, m]; setUserMetrics(updated); saveMetrics(sectorId, updated)
+    if (useBackendData) {
+      try {
+        const created = await createMetric({ sector_id: sectorId as string, name: metricForm.name, description: metricForm.description, type: metricForm.type as BackendMetric['type'], entity: metricForm.entity, field: metricForm.field, format: metricForm.format as BackendMetric['format'], filters: [], grains: ['month', 'quarter', 'year'], status: 'draft', tags: [], time_dimension: '', numerator: '', denominator: '', expression: '', owner: '' })
+        setBackendMetrics(prev => [...prev, created])
+      } catch { /* silent */ }
+    } else {
+      const m: Metric = { id: `m-${Date.now()}`, ...metricForm, filters: [], grains: ['month', 'quarter', 'year'], status: 'draft', tags: [] }
+      const updated = [...userMetrics, m]; setUserMetrics(updated); saveMetrics(sectorId, updated)
+    }
     setMetricForm({ name: '', description: '', type: 'sum', entity: '', field: '', format: 'number' }); setShowAddMetric(false)
   }
-  function removeMetric(id: string) { const u = userMetrics.filter(m => m.id !== id); setUserMetrics(u); saveMetrics(sectorId, u) }
+  async function removeMetric(id: string) {
+    if (useBackendData) {
+      try { await apiDeleteMetric(id); setBackendMetrics(prev => prev.filter(m => m.id !== id)) } catch { /* silent */ }
+    } else {
+      const u = userMetrics.filter(m => m.id !== id); setUserMetrics(u); saveMetrics(sectorId, u)
+    }
+  }
 
-  function addHierarchy() {
+  async function addHierarchy() {
     if (!hierarchyForm.name.trim() || !hierarchyForm.entity.trim()) return
     const levels = hierarchyForm.levels.split(',').map(l => l.trim()).filter(Boolean).map(l => ({ name: l, field: `${hierarchyForm.entity}.${l.toLowerCase()}` }))
-    const h: DimHierarchy = { id: `h-${Date.now()}`, ...hierarchyForm, levels }
-    const updated = [...userHierarchies, h]; setUserHierarchies(updated); saveHierarchies(sectorId, updated)
+    if (useBackendData) {
+      try {
+        const created = await createHierarchy({ sector_id: sectorId as string, ...hierarchyForm, levels })
+        setBackendHierarchies(prev => [...prev, created])
+      } catch { /* silent */ }
+    } else {
+      const h: DimHierarchy = { id: `h-${Date.now()}`, ...hierarchyForm, levels }
+      const updated = [...userHierarchies, h]; setUserHierarchies(updated); saveHierarchies(sectorId, updated)
+    }
     setHierarchyForm({ name: '', entity: '', description: '', type: 'categorical', levels: '' }); setShowAddHierarchy(false)
   }
-  function removeHierarchy(id: string) { const u = userHierarchies.filter(h => h.id !== id); setUserHierarchies(u); saveHierarchies(sectorId, u) }
-
-  function addSegment() {
-    if (!segmentForm.name.trim() || !segmentForm.entity.trim() || !segmentForm.field.trim()) return
-    const s: Segment = {
-      id: `seg-${Date.now()}`, name: segmentForm.name, description: segmentForm.description,
-      entity: segmentForm.entity, conditions: [{ field: segmentForm.field, operator: segmentForm.operator, value: segmentForm.value }],
-      tags: [], usedBy: [],
+  async function removeHierarchy(id: string) {
+    if (useBackendData) {
+      try { await apiDeleteHierarchy(id); setBackendHierarchies(prev => prev.filter(h => h.id !== id)) } catch { /* silent */ }
+    } else {
+      const u = userHierarchies.filter(h => h.id !== id); setUserHierarchies(u); saveHierarchies(sectorId, u)
     }
-    const updated = [...userSegments, s]; setUserSegments(updated); saveSegments(sectorId, updated)
+  }
+
+  async function addSegment() {
+    if (!segmentForm.name.trim() || !segmentForm.entity.trim() || !segmentForm.field.trim()) return
+    const conditions = [{ field: segmentForm.field, operator: segmentForm.operator, value: segmentForm.value }]
+    if (useBackendData) {
+      try {
+        const created = await createSegment({ sector_id: sectorId as string, name: segmentForm.name, description: segmentForm.description, entity: segmentForm.entity, conditions, tags: [], used_by: [] })
+        setBackendSegments(prev => [...prev, created])
+      } catch { /* silent */ }
+    } else {
+      const s: Segment = {
+        id: `seg-${Date.now()}`, name: segmentForm.name, description: segmentForm.description,
+        entity: segmentForm.entity, conditions, tags: [], usedBy: [],
+      }
+      const updated = [...userSegments, s]; setUserSegments(updated); saveSegments(sectorId, updated)
+    }
     setSegmentForm({ name: '', description: '', entity: '', field: '', operator: '=', value: '' }); setShowAddSegment(false)
   }
-  function removeSegment(id: string) { const u = userSegments.filter(s => s.id !== id); setUserSegments(u); saveSegments(sectorId, u) }
+  async function removeSegment(id: string) {
+    if (useBackendData) {
+      try { await apiDeleteSegment(id); setBackendSegments(prev => prev.filter(s => s.id !== id)) } catch { /* silent */ }
+    } else {
+      const u = userSegments.filter(s => s.id !== id); setUserSegments(u); saveSegments(sectorId, u)
+    }
+  }
 
   const allMetricsData = [...builtinMetrics, ...userMetrics]
   const allHierarchiesData = [...builtinHierarchies, ...userHierarchies]
@@ -2054,18 +2140,48 @@ export default function SemanticLayerView() {
       .map(x => x.item)
   }, [searchIndex, sidebarSearch])
 
-  function runPlayground() {
+  async function runPlayground() {
     if (!pgQuery.trim()) return
     setPgRunning(true); setPgNoMatch(false); setPgResult(null)
-    setTimeout(() => {
-      if (isManufacturing) {
-        const match = resolveQuery(pgQuery)
-        if (match) { setPgResult(match) } else { setPgNoMatch(true) }
-      } else {
+    if (useBackendData) {
+      try {
+        const raw = await backendAsk(pgQuery, sectorId)
+        const engineResult = adaptAskResult(raw)
+        // Map backend result to PlaygroundScenario shape for the UI
+        const backendScenario: PlaygroundScenario = {
+          id: 'backend',
+          question: pgQuery,
+          keywords: [],
+          resolution: {
+            metrics:    raw.provenance ? Object.keys(raw.provenance).filter(k => k !== 'sources') : [],
+            dimensions: [],
+            segments:   [],
+          },
+          sql: engineResult.sql,
+          columns: raw.rows.length > 0 ? Object.keys(raw.rows[0]) : [],
+          rows: raw.rows as Record<string, string>[],
+        }
+        if (raw.ambiguity_error || raw.disambiguation_required) {
+          setPgNoMatch(true)
+        } else {
+          setPgResult(backendScenario)
+        }
+      } catch {
         setPgNoMatch(true)
+      } finally {
+        setPgRunning(false)
       }
-      setPgRunning(false)
-    }, 700)
+    } else {
+      setTimeout(() => {
+        if (isManufacturing) {
+          const match = resolveQuery(pgQuery)
+          if (match) { setPgResult(match) } else { setPgNoMatch(true) }
+        } else {
+          setPgNoMatch(true)
+        }
+        setPgRunning(false)
+      }, 700)
+    }
   }
 
   function exportYAML() {
@@ -2600,6 +2716,27 @@ export default function SemanticLayerView() {
                 : undefined
               }
             />
+
+            {/* Backend live freshness bar */}
+            {useBackendData && backendSources.length > 0 && (
+              <div className="grid grid-cols-3 gap-3 pb-1">
+                {backendSources.map(src => (
+                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">{src.name.toUpperCase()}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{src.total_rows.toLocaleString()} rows · {src.source_type}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="h-1.5 w-20 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${src.quality_score >= 95 ? 'bg-teal-400' : src.quality_score >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${src.quality_score}%` }} />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500">{src.quality_score}%</span>
+                      </div>
+                    </div>
+                    <FreshnessBadge status={src.freshness_status} lastSync={src.loaded_at ?? '—'} sla="Live" />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {isManufacturing ? (
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
