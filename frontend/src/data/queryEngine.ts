@@ -559,45 +559,6 @@ LIMIT  10`,
       ],
     }),
   },
-  // ── Revenue disambiguation ────────────────────────────────────────────────────
-  {
-    test: q => /\brevenue\b|fatturato|how much.*sold|total.*sales|sales.*total/i.test(q),
-    result: () => ({
-      sql: `-- "fatturato" disambiguation: two valid interpretations
--- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
--- Use total_due for GROSS amount billed to customer
-
-SELECT
-  SUM(subtotalAmount) AS net_revenue,    -- $20,127,070 — commercial "fatturato"
-  SUM(totalDue)       AS gross_revenue,  -- $22,410,568 — incl. tax + freight
-  COUNT(*)            AS order_count,
-  AVG(subtotalAmount) AS avg_order_net
-FROM erp.SalesOrder
-WHERE YEAR(orderDate) = 2014`,
-      rows: [
-        { metric: 'Net revenue (subtotal)', value: '$20,127,070', note: 'Excl. tax + freight — use for "commercial revenue"' },
-        { metric: 'Gross revenue (total_due)', value: '$22,410,568', note: 'Incl. tax + freight — use for "billed amount"' },
-        { metric: 'Order count (2014)', value: '31,465', note: 'ERP OrionSales · all statuses' },
-        { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
-        { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
-      ],
-      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — choose which definition applies below.',
-      interpreted_as: 'SUM(subtotalAmount) ≠ SUM(totalDue) · SalesOrder 2014 · user resolution required',
-      isDisambiguation: true,
-      sources: [SRC.ERP],
-      steps: [
-        '① Term "revenue" / "fatturato" matched → ambiguity detected',
-        '② Definition A: subtotal_amount = $20,127,070 (commercial net, excl. tax + freight)',
-        '③ Definition B: total_due = $22,410,568 (billed gross, incl. tax + freight)',
-        '④ Semantic layer paused — awaiting user disambiguation choice',
-      ],
-      followUps: [
-        'Who is the top salesperson by revenue in 2014?',
-        'Show orders by territory ranked by sales YTD',
-        'How many unique customers after CRM deduplication?',
-      ],
-    }),
-  },
   // ── Customer / CRM dedup ──────────────────────────────────────────────────────
   {
     test: q => /customer|client|account|how many.*customer|crm|dedup|duplicate/i.test(q),
@@ -693,7 +654,7 @@ ORDER  BY t.salesYTD DESC`,
   },
   // ── Products ──────────────────────────────────────────────────────────────────
   {
-    test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q),
+    test: q => /product|item|sku|catalog|which.*product|product.*revenue|top.*product|best.*product/i.test(q) && !/\bcategor/i.test(q),
     result: () => ({
       sql: `-- ERP × PIM cross-source join
 -- PIM product_catalog (JSON, 504 products) joined to ERP SalesOrderLine
@@ -711,16 +672,16 @@ GROUP BY p.internal_id
 ORDER BY revenue DESC
 LIMIT    10`,
       rows: [
-        { name: 'Mountain-200 Black, 38',  category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 2049.00, revenue: 261435.60, units_sold: 3 },
-        { name: 'Road-150 Red, 62',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice: 3578.27, revenue: 106419.60, units_sold: 2 },
-        { name: 'Touring-1000 Blue, 60',   category: 'Bikes', subcategory: 'Touring Bikes',  listPrice: 2384.07, revenue:  32726.48, units_sold: 1 },
-        { name: 'Mountain-100 Silver, 44', category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 3399.99, revenue:  14289.93, units_sold: 5 },
-        { name: 'Road-650 Red, 58',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice:  782.99, revenue:   8159.97, units_sold: 6 },
-        { name: 'Long-Sleeve Logo Jersey', category: 'Clothing', subcategory: 'Jerseys',     listPrice:   49.99, revenue:   4079.98, units_sold: 2 },
-        { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 1 },
-        { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 1 },
+        { name: 'Mountain-200 Black, 38',  category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 2049.00, revenue: 261435.60, units_sold: 139 },
+        { name: 'Road-150 Red, 62',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice: 3578.27, revenue: 106419.60, units_sold: 32  },
+        { name: 'Touring-1000 Blue, 60',   category: 'Bikes', subcategory: 'Touring Bikes',  listPrice: 2384.07, revenue:  32726.48, units_sold: 15  },
+        { name: 'Mountain-100 Silver, 44', category: 'Bikes', subcategory: 'Mountain Bikes', listPrice: 3399.99, revenue:  14289.93, units_sold: 5   },
+        { name: 'Road-650 Red, 58',        category: 'Bikes', subcategory: 'Road Bikes',     listPrice:  782.99, revenue:   8159.97, units_sold: 11  },
+        { name: 'Long-Sleeve Logo Jersey', category: 'Clothing', subcategory: 'Jerseys',     listPrice:   49.99, revenue:   4079.98, units_sold: 89  },
+        { name: 'Sport-100 Helmet Blue',   category: 'Accessories', subcategory: 'Helmets',  listPrice:   34.99, revenue:   2039.99, units_sold: 63  },
+        { name: 'AWC Logo Cap',            category: 'Accessories', subcategory: 'Caps',     listPrice:    8.99, revenue:   2024.99, units_sold: 245 },
       ],
-      summary: 'Top product: **Mountain-200 Black, 38** ($261K, 3 units). All top 5 are bikes. 47 PIM products had no matching ERP orders (orphans). Cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
+      summary: 'Top product: **Mountain-200 Black, 38** ($261K, 139 units). All top 5 are bikes. 47 PIM products have no ERP order history (orphans). Cross-source: ERP SalesOrderLine × PIM Catalog via `productId ↔ internal_id`.',
       interpreted_as: 'PIM.product_catalog JOIN ERP.SalesOrderLine · SUM(lineTotal) · ORDER BY revenue DESC',
       chartData: {
         type: 'bar',
@@ -732,8 +693,8 @@ LIMIT    10`,
       sources: [SRC.ERP, SRC.PIM],
       steps: [
         '① PIM product_catalog loaded: 504 products (JSON, field: internal_id)',
-        '② Bridge resolved: productId ↔ internal_id (457/504 matched — 99.6%)',
-        '③ 47 orphan products flagged (in PIM, no ERP sales history)',
+        '② Bridge resolved: productId ↔ internal_id (457/459 ERP products matched — 99.6%)',
+        '③ 47 PIM products have no ERP sales history (PIM orphans — unlaunched or discontinued)',
         '④ Cross-join ERP.SalesOrderLine × PIM · GROUP BY product · SUM(lineTotal)',
       ],
       followUps: [
@@ -846,16 +807,16 @@ FROM kg.bridge_validation_report
 ORDER BY match_pct DESC`,
       rows: [
         { bridge_name: 'SOLD_BY',       source_a: 'ERP SalesPerson', field_a: 'salesPersonId', source_b: 'HR CSV',      field_b: 'matricolaDip', total_a: 14,     matched: 14,    unmatched: 0,  match_pct: '100.0%' },
-        { bridge_name: 'OF_PRODUCT',    source_a: 'ERP OrderLine',   field_a: 'productId',     source_b: 'PIM JSON',    field_b: 'internal_id', total_a: 504,    matched: 457,   unmatched: 47, match_pct: '99.6%'  },
+        { bridge_name: 'OF_PRODUCT',    source_a: 'ERP OrderLine',   field_a: 'productId',     source_b: 'PIM JSON',    field_b: 'internal_id', total_a: 459,    matched: 457,   unmatched: 2,  match_pct: '99.6%'  },
         { bridge_name: 'PLACED_BY',     source_a: 'ERP SalesOrder',  field_a: 'customer_ref',  source_b: 'CRM ClientHub', field_b: 'accountId', total_a: 19829,  matched: 18484, unmatched: 1345, match_pct: '93.2%' },
       ],
-      summary: '3 cross-source bridges validated. **SOLD_BY** (ERP × HR): 100% — all 14 sales reps matched. **OF_PRODUCT** (ERP × PIM): 99.6% — 47 orphan products. **PLACED_BY** (ERP × CRM): 93.2% — 1,345 CRM-only prospects. KG: **193,062 nodes · 313,193 edges**.',
+      summary: '3 cross-source bridges validated. **SOLD_BY** (ERP × HR): 100% — all 14 sales reps matched. **OF_PRODUCT** (ERP × PIM): 99.6% (457/459 ERP products) — 47 PIM orphans. **PLACED_BY** (ERP × CRM): 93.2% — 1,345 CRM-only prospects. KG: **193,062 nodes · 313,193 edges**.',
       interpreted_as: 'kg.bridge_validation_report · 3 bridges · match rates',
       sources: [SRC.ERP, SRC.CRM, SRC.HR, SRC.PIM, SRC.KG],
       steps: [
         '① Knowledge Graph loaded: 193,062 nodes · 313,193 edges',
         '② Bridge SOLD_BY: salesPersonId ↔ matricolaDip → 14/14 (100%)',
-        '③ Bridge OF_PRODUCT: productId ↔ internal_id → 457/504 (99.6%, 47 orphans)',
+        '③ Bridge OF_PRODUCT: productId ↔ internal_id → 457/459 ERP products (99.6%) · 47 PIM orphans',
         '④ Bridge PLACED_BY: customer_ref ↔ accountId → 18,484/19,829 (93.2%)',
       ],
       followUps: [
@@ -898,7 +859,7 @@ ORDER BY revenue DESC`,
       sources: [SRC.ERP, SRC.PIM],
       steps: [
         '① PIM product_catalog: 504 products across 4 categories',
-        '② Bridge OF_PRODUCT: productId ↔ internal_id (457/504 — 99.6%)',
+        '② Bridge OF_PRODUCT: productId ↔ internal_id (457/459 ERP products — 99.6%)',
         '③ GROUP BY category · SUM(lineTotal) for revenue · AVG(listPrice)',
         '④ Bikes = 97 SKUs but 98% of revenue — high unit price drives result',
       ],
@@ -1232,19 +1193,19 @@ GROUP BY so.description, so.category, so.discountPct
 ORDER BY discount_given DESC
 LIMIT 8`,
       rows: [
-        { offer: 'Volume Discount 41 to 60',  category: 'Reseller',   discountPct: '0.02', lines_applied: 4_221, net_revenue: 1_847_312, discount_given: 37_702 },
-        { offer: 'Volume Discount 61 to 100', category: 'Reseller',   discountPct: '0.05', lines_applied: 1_843, net_revenue: 1_214_509, discount_given: 63_921 },
         { offer: 'Mountain-100 Clearance',    category: 'Clearance',  discountPct: '0.35', lines_applied:   318, net_revenue:   184_621, discount_given: 99_411 },
+        { offer: 'Volume Discount 61 to 100', category: 'Reseller',   discountPct: '0.05', lines_applied: 1_843, net_revenue: 1_214_509, discount_given: 63_921 },
         { offer: 'Road-650 Overstock',        category: 'Clearance',  discountPct: '0.30', lines_applied:   241, net_revenue:   117_882, discount_given: 50_521 },
         { offer: 'Touring-3000 Promotion',    category: 'Seasonal',   discountPct: '0.10', lines_applied:   892, net_revenue:   413_221, discount_given: 45_913 },
+        { offer: 'Volume Discount 41 to 60',  category: 'Reseller',   discountPct: '0.02', lines_applied: 4_221, net_revenue: 1_847_312, discount_given: 37_702 },
       ],
       summary: '**5 active offer types** applied to 7,515 order lines. Mountain-100 Clearance deepest discount (35%) — $99K given away but cleared aged inventory. Volume discounts (Reseller tier) account for most lines. Total discount given: **$297,468** (~1.5% of net revenue).',
       interpreted_as: 'ERP.SalesOrderLine × SpecialOffer · unitPriceDiscount > 0 · GROUP BY offer',
       chartData: {
         type: 'bar',
         title: 'Discount given by special offer',
-        labels: ['Volume 41-60', 'Volume 61-100', 'Mountain-100', 'Road-650', 'Touring-3000'],
-        values: [37702, 63921, 99411, 50521, 45913],
+        labels: ['Mountain-100', 'Volume 61-100', 'Road-650', 'Touring-3000', 'Volume 41-60'],
+        values: [99411, 63921, 50521, 45913, 37702],
         unit: '$',
       },
       sources: [SRC.ERP],
@@ -1391,6 +1352,45 @@ ORDER BY headcount DESC`,
         'Show salary and bonus for the sales team',
         'Who is the top salesperson by revenue in 2014?',
         'What is the online vs in-store channel split?',
+      ],
+    }),
+  },
+  // ── Revenue disambiguation (last — fires only when no specific pattern matches) ─
+  {
+    test: q => /\brevenue\b|fatturato|how much.*sold|total.*sales|sales.*total/i.test(q),
+    result: () => ({
+      sql: `-- "fatturato" disambiguation: two valid interpretations
+-- Use subtotal_amount for NET commercial revenue (excl. tax + freight)
+-- Use total_due for GROSS amount billed to customer
+
+SELECT
+  SUM(subtotalAmount) AS net_revenue,    -- $20,127,070 — commercial "fatturato"
+  SUM(totalDue)       AS gross_revenue,  -- $22,410,568 — incl. tax + freight
+  COUNT(*)            AS order_count,
+  AVG(subtotalAmount) AS avg_order_net
+FROM erp.SalesOrder
+WHERE YEAR(orderDate) = 2014`,
+      rows: [
+        { metric: 'Net revenue (subtotal)', value: '$20,127,070', note: 'Excl. tax + freight — use for "commercial revenue"' },
+        { metric: 'Gross revenue (total_due)', value: '$22,410,568', note: 'Incl. tax + freight — use for "billed amount"' },
+        { metric: 'Order count (2014)', value: '31,465', note: 'ERP OrionSales · all statuses' },
+        { metric: 'Avg order net', value: '$639.65', note: 'Per order, net of discounts' },
+        { metric: 'Tax + freight delta', value: '+$2,283,498', note: '11.3% of net revenue' },
+      ],
+      summary: '⚠️ **"Revenue" is ambiguous in AdventureWorks.** `subtotal_amount` = **$20.1M** (net, excl. tax+freight) vs `total_due` = **$22.4M** (gross, billed). The semantic layer flags this as a disambiguation point — choose which definition applies below.',
+      interpreted_as: 'SUM(subtotalAmount) ≠ SUM(totalDue) · SalesOrder 2014 · user resolution required',
+      isDisambiguation: true,
+      sources: [SRC.ERP],
+      steps: [
+        '① Term "revenue" / "fatturato" matched → ambiguity detected',
+        '② Definition A: subtotal_amount = $20,127,070 (commercial net, excl. tax + freight)',
+        '③ Definition B: total_due = $22,410,568 (billed gross, incl. tax + freight)',
+        '④ Semantic layer paused — awaiting user disambiguation choice',
+      ],
+      followUps: [
+        'Who is the top salesperson by revenue in 2014?',
+        'Show orders by territory ranked by sales YTD',
+        'How many unique customers after CRM deduplication?',
       ],
     }),
   },
