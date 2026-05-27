@@ -7,18 +7,68 @@ Produces:
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 
 import pytest
+from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).parent.parent.parent
+
+
+def _password_hash(password: str, iterations: int = 120_000) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations
+    )
+    return f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(digest).decode('ascii')}"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _perf_auth_env() -> None:
+    users = [
+        {
+            "username": "perf_user",
+            "password_hash": _password_hash("perf_password"),
+            "role": "admin",
+            "disabled": False,
+        }
+    ]
+    os.environ["AUTH_USERS_JSON"] = json.dumps(users)
+    os.environ["JWT_SECRET_KEY"] = "perf-test-secret-key-not-for-production"
+    os.environ["SEMANTIC_REQUIRE_LLM_INTENT"] = "0"
+
+
+@pytest.fixture(scope="session")
+def client() -> TestClient:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from app.main import app
+
+    limiter = getattr(app.state, "limiter", None)
+    if limiter is not None:
+        setattr(limiter, "enabled", False)
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture(scope="session")
+def auth_headers(client: TestClient) -> dict[str, str]:
+    resp = client.post(
+        "/api/auth/token",
+        data={"username": "perf_user", "password": "perf_password"},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
 GOLDEN_PATH = ROOT / "test_scenario" / "golden_questions.md"
 METRICS_PATH = ROOT / "perf_metrics.json"
 HISTORY_PATH = ROOT / "backend" / "tests" / "perf_history.json"
