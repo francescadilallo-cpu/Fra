@@ -43,6 +43,7 @@ from .agentic.executive import ExecutiveAgenticLayer
 from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
+from .semantic.doc_loader import DocLoader
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -378,7 +379,11 @@ def _ensure_semantic_loaded() -> None:
         catalog.populate([erp, crm, hr_pim], ontology, kg)
 
         ctx_mgr = ContextManager()
-        layer = SemanticLayer(ontology, kg, catalog, ctx_mgr)
+        _DOCS_PATH = (
+            Path(__file__).parent.parent.parent / "test_scenario" / "semantic_docs"
+        )
+        _semantic_docs = DocLoader(_DOCS_PATH).load() if _DOCS_PATH.exists() else None
+        layer = SemanticLayer(ontology, kg, catalog, ctx_mgr, docs=_semantic_docs)
         layer.set_connectors(erp, crm, hr_pim)
 
         _semantic_state.update(

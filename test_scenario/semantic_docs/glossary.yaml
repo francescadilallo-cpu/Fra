@@ -1,0 +1,30 @@
+terms:
+  - term: cliente attivo
+    definition: "Cliente CRM con accountId > 0. I record con accountId negativo sono duplicati e vengono sempre filtrati (Regola R1)."
+
+  - term: fatturato
+    definition: "SUM(total_due) da sales_order_header. Include tasse. Per il valore netto (senza tasse) usa subtotal."
+
+  - term: revenue
+    definition: "Sinonimo di fatturato. SUM(total_due) in USD."
+
+  - term: margine
+    definition: "Revenue meno costo standard PIM per venditore. Approssimazione: costo = standardCost × qty_ordered."
+
+  - term: duplicato
+    definition: "Record CRM con accountId < 0, generati da sistemi legacy. Filtrati automaticamente dalla Regola R1."
+
+  - term: accountid
+    definition: "Identificatore univoco cliente CRM. Positivo = cliente reale. Negativo = duplicato da merger."
+
+  - term: make only
+    definition: "Prodotto PIM con flag make_flag = true. Prodotto internamente, non acquistato da fornitori esterni."
+
+  - term: hr freshness
+    definition: "I dati HR hanno sync status 'Delayed'. Il conteggio dipendenti riflette l'ultimo snapshot disponibile, non il dato in tempo reale."
+
+  - term: revenue_with_tax
+    definition: "Fatturato con IVA calcolata. tax_rate applicata per territorio."
+
+  - term: active_customers
+    definition: "Clienti CRM (accountId > 0) che hanno almeno un ordine in ERP. Calcolato come inner join CRM-ERP."

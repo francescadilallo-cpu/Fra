@@ -32,6 +32,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.semantic.doc_schema import SemanticDocs
+
 logger = logging.getLogger(__name__)
 
 
@@ -889,11 +891,19 @@ def _extract_state(text: str) -> str | None:
 class SemanticLayer:
     """Translates natural-language questions into executable queries."""
 
-    def __init__(self, ontology, kg, catalog, context_manager=None) -> None:
+    def __init__(
+        self,
+        ontology,
+        kg,
+        catalog,
+        context_manager=None,
+        docs: SemanticDocs | None = None,
+    ) -> None:
         self._ontology = ontology
         self._kg = kg
         self._catalog = catalog
         self._ctx_mgr = context_manager
+        self._docs = docs
         self._parser = _RuleParser()
         # Connector references — set by _load_connectors
         self._erp = None
@@ -2131,13 +2141,16 @@ class SemanticLayer:
 
     def _q_entity_not_modeled(self, intent: Intent) -> Result:
         entity = intent.filters.get("entity", "Unknown")
+        if self._docs and self._docs.entities:
+            available = ", ".join(e.display_name for e in self._docs.entities)
+        else:
+            available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
         return Result(
             answer=None,
             sources_touched=[],
             notes=(
                 f"L'entità '{entity}' non è modellata nel semantic layer. "
-                "Le entità disponibili sono: Customer, SalesOrder, SalesOrderLine, "
-                "Product, Employee, Territory, Salesperson. "
+                f"Le entità disponibili sono: {available}. "
                 "I fornitori (Supplier/Vendor) non fanno parte del modello dati corrente."
             ),
             disambiguation_required=False,
@@ -2193,7 +2206,33 @@ class SemanticLayer:
 
     def _q_glossary_lookup(self, intent: Intent) -> Result:
         raw_term = (intent.filters.get("term") or "").lower().strip(" '\"?.,")
-        # Try exact match, then partial match
+
+        if self._docs and self._docs.glossary:
+            # Search through docs glossary first
+            definition: str | None = None
+            for entry in self._docs.glossary:
+                if entry.term.lower() == raw_term:
+                    definition = entry.definition
+                    break
+            if definition is None:
+                for entry in self._docs.glossary:
+                    if raw_term in entry.term.lower() or entry.term.lower() in raw_term:
+                        definition = entry.definition
+                        break
+            if definition is None:
+                available = ", ".join(sorted(e.term for e in self._docs.glossary))
+                definition = (
+                    f"Il termine '{raw_term}' non è presente nel glossario del semantic layer. "
+                    f"Termini disponibili: {available}."
+                )
+            return Result(
+                answer=definition,
+                sources_touched=[],
+                notes="Risposta dal glossario/ontologia del semantic layer.",
+                disambiguation_required=False,
+            )
+
+        # Fallback to hardcoded glossary
         definition = self._GLOSSARY.get(raw_term)
         if definition is None:
             for key, val in self._GLOSSARY.items():
@@ -2215,6 +2254,23 @@ class SemanticLayer:
     # ── DQ-03: disambiguation rules ───────────────────────────────────────────
 
     def _q_disambiguation_rules(self, intent: Intent) -> Result:
+        if self._docs and self._docs.disambiguation_rules:
+            rules = [
+                {
+                    "rule_id": r.id,
+                    "name": r.name,
+                    "description": r.description,
+                }
+                for r in self._docs.disambiguation_rules
+            ]
+            n = len(rules)
+            return Result(
+                answer=rules,
+                sources_touched=[],
+                notes=(f"{n} regole di disambiguazione attive nel semantic layer."),
+                disambiguation_required=False,
+            )
+
         rules = [
             {
                 "rule_id": "R1",
@@ -2362,6 +2418,28 @@ class SemanticLayer:
     ]
 
     def _q_certified_metrics(self, intent: Intent) -> Result:
+        if self._docs and self._docs.metrics:
+            certified = [m for m in self._docs.metrics if m.certified]
+            answer = [
+                {
+                    "name": m.name,
+                    "display_name": m.display_name,
+                    "description": m.description,
+                    "unit": m.unit,
+                    "status": "certified",
+                }
+                for m in certified
+            ]
+            return Result(
+                answer=answer,
+                sources_touched=[],
+                notes=(
+                    f"{len(certified)} metriche certificate disponibili nel semantic layer. "
+                    "Lista fissa e deterministica."
+                ),
+                disambiguation_required=False,
+            )
+
         return Result(
             answer=self._CERTIFIED_METRICS,
             sources_touched=[],

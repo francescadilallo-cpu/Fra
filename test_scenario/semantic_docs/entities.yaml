@@ -1,0 +1,51 @@
+entities:
+  - name: Customer
+    display_name: Cliente
+    synonyms: [cliente, clienti, customer, customers, account, accounts]
+    description: "Clienti CRM con accountId positivo"
+    source: crm
+    primary_key: accountId
+    filter_active: "accountId > 0"
+
+  - name: SalesOrder
+    display_name: Ordine
+    synonyms: [ordine, ordini, order, orders, vendita, vendite, transazione]
+    description: "Ordini ERP da sales_order_header"
+    source: erp
+    primary_key: order_id
+
+  - name: Employee
+    display_name: Dipendente
+    synonyms: [dipendente, dipendenti, employee, employees, persona, persone]
+    description: "Dipendenti HR"
+    source: hr
+    primary_key: employee_id
+    freshness: delayed
+
+  - name: Product
+    display_name: Prodotto
+    synonyms: [prodotto, prodotti, product, products, articolo, articoli, sku]
+    description: "Prodotti PIM"
+    source: hr_pim
+    primary_key: internal_id
+
+  - name: Territory
+    display_name: Territorio
+    synonyms: [territorio, territori, territory, territories, area, regione]
+    description: "Territori di vendita ERP"
+    source: erp
+    primary_key: territory_id
+
+  - name: Salesperson
+    display_name: Venditore
+    synonyms: [venditore, venditori, salesperson, salespersons, agente, agenti]
+    description: "Venditori ERP (salesperson_ref su sales_order_header)"
+    source: erp
+    primary_key: salesperson_ref
+
+  - name: ProductCategory
+    display_name: Categoria Prodotto
+    synonyms: [categoria, categorie, category, categories]
+    description: "Categorie prodotto PIM"
+    source: hr_pim
+    primary_key: category
