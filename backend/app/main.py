@@ -44,6 +44,8 @@ from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
+from .context.router import router as context_router
+from .context.store import ContextStore
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -322,6 +324,10 @@ def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincip
     return _checker
 
 
+# ── User context store (singleton) ────────────────────────────────────────────
+
+_context_store = ContextStore()
+
 # ── Semantic Layer global state (lazy-initialised on first /api/semantic/* call) ──
 
 _semantic_state: dict[str, Any] = {
@@ -516,6 +522,7 @@ _agentic_layer = ExecutiveAgenticLayer(
     get_db_connection=get_connection,
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
+app.include_router(context_router)
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
@@ -802,6 +809,23 @@ def semantic_ask(
 
     _ensure_semantic_loaded()
     layer = _semantic_state["layer"]
+
+    # Merge user-provided context (entities, metrics, glossary) with YAML docs.
+    # User context takes priority (prepended so it is matched first).
+    try:
+        user_docs = _context_store.to_semantic_docs_override()
+        from .semantic.doc_schema import SemanticDocs  # noqa: PLC0415
+
+        _yaml_docs = layer._docs  # type: ignore[attr-defined]
+        merged_docs = SemanticDocs(
+            entities=user_docs.entities + (_yaml_docs.entities if _yaml_docs else []),
+            metrics=user_docs.metrics + (_yaml_docs.metrics if _yaml_docs else []),
+            glossary=user_docs.glossary + (_yaml_docs.glossary if _yaml_docs else []),
+            disambiguation_rules=_yaml_docs.disambiguation_rules if _yaml_docs else [],
+        )
+        layer._docs = merged_docs  # type: ignore[attr-defined]
+    except Exception as _merge_exc:
+        logger.warning("Context merge failed, proceeding without user docs: %s", _merge_exc)
 
     try:
         result = layer.ask(question, context=merged_context)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Network } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Network, BookOpenCheck } from 'lucide-react'
 import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
@@ -31,6 +31,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: 'item', id: 'ontology',    label: 'Ontology',          icon: GitBranch },
   { kind: 'item', id: 'builder',     label: 'Ontology Builder',  icon: Wand2 },
   { kind: 'item', id: 'sembuilder',  label: 'Knowledge Graph',   icon: Network },
+  { kind: 'item', id: 'context',    label: 'Contesto',          icon: BookOpenCheck },
 
   { kind: 'section', label: 'Query & Act' },
   { kind: 'item', id: 'query',       label: 'Query AI',          icon: MessageSquare },
