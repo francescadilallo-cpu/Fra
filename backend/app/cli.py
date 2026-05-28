@@ -119,7 +119,6 @@ def cmd_ask(args) -> None:
 
 
 def _print_result(result) -> None:
-
     answer = result.answer
     if isinstance(answer, (list, dict)):
         print(

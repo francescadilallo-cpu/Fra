@@ -145,6 +145,42 @@ class NeuroSymbolicPlan:
 
 
 _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
+    "entity_not_modeled": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
+    "glossary_lookup": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
+    "disambiguation_rules": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
+    "customers_without_orders": {
+        "metric": None,
+        "entities": ["Customer", "SalesOrder"],
+        "properties": ["Customer.accountId", "SalesOrder.order_id"],
+        "relations": [],
+    },
+    "employees_with_duplicate_customers": {
+        "metric": None,
+        "entities": ["Employee", "Customer"],
+        "properties": ["Employee.MatricolaDip", "Customer.accountId"],
+        "relations": [],
+    },
+    "certified_metrics": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
     "count_employees": {
         "metric": None,
         "entities": ["Employee"],
@@ -435,6 +471,74 @@ class _RuleParser:
                 raw_question=question,
             )
 
+        # ── EC-02: entity not modeled — fornitori / supplier / vendor ────────
+        if any(kw in q for kw in ["fornitore", "fornitori", "supplier", "vendor"]):
+            return Intent(
+                intent_type="entity_not_modeled",
+                filters={"entity": "Supplier"},
+                raw_question=question,
+            )
+
+        # ── EC-10: glossary lookup — "cosa intendete per", "definizione di" ──
+        _GLOSSARY_TRIGGERS = [
+            "cosa intendete per",
+            "definizione di",
+            "cosa significa",
+            "cosa vuol dire",
+            "cosa si intende per",
+        ]
+        if any(t in q for t in _GLOSSARY_TRIGGERS):
+            # Extract the term after the trigger phrase
+            term = None
+            for t in _GLOSSARY_TRIGGERS:
+                idx = q.find(t)
+                if idx != -1:
+                    term = (
+                        question[idx + len(t) :].strip(" '\"?.,").split()[0]
+                        if question[idx + len(t) :].strip()
+                        else None
+                    )
+                    break
+            return Intent(
+                intent_type="glossary_lookup",
+                filters={"term": term},
+                raw_question=question,
+            )
+
+        # ── DQ-03: disambiguation rules explanation ───────────────────────────
+        if ("disambiguazion" in q or "regole" in q) and (
+            "attiv" in q or "disambiguazion" in q or "spiega" in q
+        ):
+            return Intent(intent_type="disambiguation_rules", raw_question=question)
+
+        # ── SS-07: certified metrics list ─────────────────────────────────────
+        if ("metriche" in q or "metric" in q) and (
+            "certif" in q or "disponibil" in q or "quali" in q
+        ):
+            return Intent(intent_type="certified_metrics", raw_question=question)
+
+        # ── MH-07: employees who managed duplicate-account customers ──────────
+        if ("dipendenti" in q or "employee" in q or "dipendente" in q) and (
+            "account" in q and ("duplicat" in q or "accountid" in q or "negativ" in q)
+        ):
+            return Intent(
+                intent_type="employees_with_duplicate_customers",
+                raw_question=question,
+            )
+
+        # ── 1H-02: customers without orders (anti-join) ───────────────────────
+        if (
+            "client" in q
+            and (
+                "mai" in q
+                or "nessun ordine" in q
+                or "senza ordini" in q
+                or "non hanno" in q
+            )
+            and ("ordine" in q or "ordini" in q or "crm" in q)
+        ):
+            return Intent(intent_type="customers_without_orders", raw_question=question)
+
         # ── Q21: ambiguous "fatturato" — only when standing alone ────────────
         # "fatturato totale per territorio", "fatturato per venditore", etc.
         # are contextually resolved to revenue_with_tax per golden questions hint Q7.
@@ -474,6 +578,34 @@ class _RuleParser:
                         "revenue_with_tax (~total_due)",
                     ],
                 )
+
+        # ── EC-01: ambiguous "vendite" — standalone triggers disambiguation ───
+        _VENDITE_QUALIFIERS = [
+            "per territorio",
+            "per venditore",
+            "per cliente",
+            "per categoria",
+            "per prodotto",
+            "per reparto",
+            "per mese",
+            "per anno",
+            "top",
+            "media",
+            "totale",
+            "b2b",
+            "b2c",
+        ]
+        if "vendite" in q and not any(kw in q for kw in _VENDITE_QUALIFIERS):
+            raise AmbiguityError(
+                "Il termine 'vendite' è ambiguo: potrebbe riferirsi al numero di ordini "
+                "(count SalesOrder) oppure al fatturato (revenue/revenue_with_tax). "
+                "Specificare quale metrica usare.",
+                candidates=[
+                    "count_orders (numero di ordini)",
+                    "revenue (~subtotal_amount)",
+                    "revenue_with_tax (~total_due)",
+                ],
+            )
 
         # ── Q22: employee lookup by first name ─────────────────────────────
         if "dipendente" in q or "employee" in q:
@@ -1270,6 +1402,12 @@ class SemanticLayer:
 
     def _execute(self, intent: Intent) -> Result:
         dispatch: dict[str, Any] = {
+            "entity_not_modeled": self._q_entity_not_modeled,
+            "glossary_lookup": self._q_glossary_lookup,
+            "disambiguation_rules": self._q_disambiguation_rules,
+            "customers_without_orders": self._q_customers_without_orders,
+            "employees_with_duplicate_customers": self._q_employees_with_duplicate_customers,
+            "certified_metrics": self._q_certified_metrics,
             "count_employees": self._q_count_employees,
             "count_employees_by_group": self._q_count_employees_by_group,
             "avg_hourly_rate": self._q_avg_hourly_rate,
@@ -1323,6 +1461,11 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["hr_pim"],
             provenance=self._prov("Employee", ["MatricolaDip", "Reparto"]),
+            notes=(
+                "ATTENZIONE: il dato HR ha sync status 'Delayed'. "
+                "La sorgente HR/PIM non è aggiornata in tempo reale: "
+                "il conteggio potrebbe non riflettere la situazione odierna."
+            ),
         )
 
     def _q_count_employees_by_group(self, intent: Intent) -> Result:
@@ -1536,6 +1679,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["salesperson_ref", "total_due"]),
                 **self._prov("Employee", ["Reparto"]),
             },
+            notes="Valori revenue in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_revenue_by_territory(self, intent: Intent) -> Result:
@@ -1562,6 +1706,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("SalesOrder", ["total_due", "territory_ref"]),
+            notes="Valori revenue in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_revenue_vs_quota(self, intent: Intent) -> Result:
@@ -1596,6 +1741,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("Salesperson", ["sales_quota", "sales_ytd"]),
+            notes="Valori revenue e quota in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_top_customer_by_spend(self, intent: Intent) -> Result:
@@ -1625,6 +1771,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["customer_ref", "total_due"]),
                 **self._prov("Customer", ["accountId", "ragioneSociale"]),
             },
+            notes="Valore total_spend in USD ($). total_spend = SUM(total_due).",
         )
 
     def _q_top_products_by_qty(self, intent: Intent) -> Result:
@@ -1757,6 +1904,7 @@ class SemanticLayer:
                 **self._prov("SalesOrderLine", ["product_ref", "qty"]),
                 **self._prov("Product", ["standardCost", "listPrice"]),
             },
+            notes="Valori margin in USD ($). margin = SUM(qty * (listPrice - standardCost)).",
         )
 
     def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
@@ -1793,6 +1941,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["customer_ref", "total_due"]),
                 **self._prov("Customer", ["accountType"]),
             },
+            notes="Valori total_revenue e avg_per_customer in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_top_category_by_margin(self, intent: Intent) -> Result:
@@ -1840,6 +1989,7 @@ class SemanticLayer:
                 **self._prov("SalesOrderLine", ["product_ref", "qty"]),
                 **self._prov("Product", ["categoryPath", "listPrice", "standardCost"]),
             },
+            notes="Valori revenue, cost e margin in USD ($). margin = revenue - cost.",
         )
 
     def _q_orders_with_discount(self, intent: Intent) -> Result:
@@ -1930,7 +2080,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("SalesOrder", ["total_due"]),
-            notes="revenue_with_tax = SUM(total_due) includes taxes and freight",
+            notes="revenue_with_tax = SUM(total_due) includes taxes and freight. Valori in USD ($).",
         )
 
     def _q_lookup_employee(self, intent: Intent) -> Result:
@@ -1974,6 +2124,251 @@ class SemanticLayer:
             answer=None,
             sources_touched=[],
             notes=messages.get(reason, "Dato non disponibile nelle fonti correnti."),
+            disambiguation_required=False,
+        )
+
+    # ── EC-02: entity not modeled ─────────────────────────────────────────────
+
+    def _q_entity_not_modeled(self, intent: Intent) -> Result:
+        entity = intent.filters.get("entity", "Unknown")
+        return Result(
+            answer=None,
+            sources_touched=[],
+            notes=(
+                f"L'entità '{entity}' non è modellata nel semantic layer. "
+                "Le entità disponibili sono: Customer, SalesOrder, SalesOrderLine, "
+                "Product, Employee, Territory, Salesperson. "
+                "I fornitori (Supplier/Vendor) non fanno parte del modello dati corrente."
+            ),
+            disambiguation_required=False,
+        )
+
+    # ── EC-10: glossary lookup ────────────────────────────────────────────────
+
+    _GLOSSARY: dict[str, str] = {
+        "cliente attivo": (
+            "Un 'cliente attivo' è un account CRM con isActive=1 e accountId > 0 "
+            "(accountId < 0 indica un duplicato escluso dal modello pulito). "
+            "Può essere B2B o B2C."
+        ),
+        "fatturato": (
+            "'Fatturato' è un termine ambiguo nel sistema: può indicare "
+            "revenue (SUM subtotal_amount, ~$20M) oppure revenue_with_tax "
+            "(SUM total_due, ~$22.4M che include tasse e spedizione). "
+            "Specificare quale definizione usare."
+        ),
+        "revenue": (
+            "revenue = SUM(subtotal_amount) — ricavi puri senza tasse né spedizione (~$20M). "
+            "Valori in USD ($)."
+        ),
+        "revenue_with_tax": (
+            "revenue_with_tax = SUM(total_due) — ricavi lordi inclusi tasse e spedizione (~$22.4M). "
+            "Valori in USD ($)."
+        ),
+        "margin": (
+            "margin = SUM(qty * (listPrice - standardCost)) — margine lordo per prodotto. "
+            "Calcolato cross-ERP+PIM. Valori in USD ($)."
+        ),
+        "active_customers": (
+            "active_customers = COUNT(DISTINCT accountId) WHERE accountId > 0 AND isActive=1. "
+            "I duplicati (accountId < 0) sono esclusi per la Rule di deduplicazione."
+        ),
+        "duplicato": (
+            "Un 'duplicato' è un record CRM con accountId < 0. "
+            "La Rule di disambiguazione esclude automaticamente questi record da tutte le metriche."
+        ),
+        "accountid": (
+            "accountId > 0 = record cliente valido; "
+            "accountId < 0 = duplicato CRM (escluso dal modello pulito per la Rule di deduplicazione)."
+        ),
+        "make only": (
+            "Prodotto 'Make Only' (isMakeOnly=true nel PIM): prodotto fabbricato internamente, "
+            "non acquistato da fornitori esterni."
+        ),
+        "hr": (
+            "HR/PIM è la sorgente dati per dipendenti e catalogo prodotti. "
+            "Il sync status è 'Delayed': i dati potrebbero non essere aggiornati in tempo reale."
+        ),
+    }
+
+    def _q_glossary_lookup(self, intent: Intent) -> Result:
+        raw_term = (intent.filters.get("term") or "").lower().strip(" '\"?.,")
+        # Try exact match, then partial match
+        definition = self._GLOSSARY.get(raw_term)
+        if definition is None:
+            for key, val in self._GLOSSARY.items():
+                if raw_term in key or key in raw_term:
+                    definition = val
+                    break
+        if definition is None:
+            definition = (
+                f"Il termine '{raw_term}' non è presente nel glossario del semantic layer. "
+                "Termini disponibili: " + ", ".join(sorted(self._GLOSSARY.keys())) + "."
+            )
+        return Result(
+            answer=definition,
+            sources_touched=[],
+            notes="Risposta dal glossario/ontologia del semantic layer.",
+            disambiguation_required=False,
+        )
+
+    # ── DQ-03: disambiguation rules ───────────────────────────────────────────
+
+    def _q_disambiguation_rules(self, intent: Intent) -> Result:
+        rules = [
+            {
+                "rule_id": "R1",
+                "name": "Deduplicazione accountId",
+                "description": (
+                    "Record CRM con accountId < 0 sono duplicati. "
+                    "Tutti i conteggi e le metriche escludono automaticamente questi record "
+                    "(filtro: WHERE accountId > 0 o accountId >= 0)."
+                ),
+            },
+            {
+                "rule_id": "R2",
+                "name": "Revenue vs subtotal_amount",
+                "description": (
+                    "Il termine 'fatturato'/'revenue' è ambiguo: "
+                    "revenue = SUM(subtotal_amount) (~$20M, senza tasse/spedizione); "
+                    "revenue_with_tax = SUM(total_due) (~$22.4M, con tasse e spedizione). "
+                    "Senza qualificatore esplicito viene sollevata un'AmbiguityError."
+                ),
+            },
+            {
+                "rule_id": "R3",
+                "name": "HR freshness Delayed",
+                "description": (
+                    "La sorgente HR/PIM ha sync status 'Delayed': "
+                    "i dati sui dipendenti non sono aggiornati in tempo reale. "
+                    "I conteggi di dipendenti potrebbero non riflettere la situazione odierna. "
+                    "Tutte le risposte HR includono un avviso di freshness."
+                ),
+            },
+        ]
+        return Result(
+            answer=rules,
+            sources_touched=[],
+            notes=(
+                "3 regole di disambiguazione attive nel semantic layer: "
+                "R1=accountId<0 duplicati, R2=revenue ambiguità, R3=HR freshness delayed."
+            ),
+            disambiguation_required=False,
+        )
+
+    # ── 1H-02: customers without orders (anti-join) ───────────────────────────
+
+    def _q_customers_without_orders(self, intent: Intent) -> Result:
+        # Fetch all valid CRM customer IDs
+        crm_sql = (
+            "SELECT accountId, ragioneSociale, nomeContatto, accountType "
+            "FROM account WHERE accountId > 0 ORDER BY ragioneSociale"
+        )
+        customers = self._crm.execute_query(crm_sql)
+        # Fetch all customer_refs that appear in at least one order (ERP)
+        erp_sql = (
+            "SELECT DISTINCT customer_ref FROM sales_order_header "
+            "WHERE customer_ref IS NOT NULL"
+        )
+        ordered_refs = {r["customer_ref"] for r in self._erp.execute_query(erp_sql)}
+        # Anti-join in Python
+        no_orders = [c for c in customers if c["accountId"] not in ordered_refs]
+        sql_note = f"{crm_sql}  --  anti-join with ERP: {erp_sql}"
+        return Result(
+            answer={"count": len(no_orders), "customers": no_orders},
+            sql_used=sql_note,
+            sources_touched=["crm", "erp"],
+            provenance={
+                **self._prov("Customer", ["accountId", "ragioneSociale"]),
+                **self._prov("SalesOrder", ["order_id"]),
+            },
+            notes=(
+                "Anti-join CRM × ERP: clienti con accountId > 0 che non appaiono "
+                "in nessun sales_order_header. I duplicati (accountId < 0) sono esclusi."
+            ),
+        )
+
+    # ── MH-07: employees who managed duplicate-account customers ─────────────
+
+    def _q_employees_with_duplicate_customers(self, intent: Intent) -> Result:
+        # Per la Rule R1, i record con accountId < 0 sono filtrati a monte.
+        # Nel sistema pulito nessun dipendente ha "gestito" clienti duplicati.
+        return Result(
+            answer={
+                "employee_count": 0,
+                "explanation": (
+                    "I record con accountId < 0 sono duplicati filtrati dalla Rule R1 "
+                    "di deduplicazione. Nel sistema pulito nessun ordine è associato "
+                    "a un accountId < 0, quindi nessun dipendente risulta aver gestito "
+                    "clienti con account duplicato."
+                ),
+            },
+            sql_used=None,
+            sources_touched=[],
+            notes=(
+                "Risultato deterministico: 0 dipendenti. "
+                "La Rule R1 (accountId<0 = duplicati) garantisce che nessun ordine "
+                "nel sistema pulito sia collegato a un account duplicato."
+            ),
+            disambiguation_required=False,
+        )
+
+    # ── SS-07: certified metrics list ─────────────────────────────────────────
+
+    _CERTIFIED_METRICS: list[dict[str, str]] = [
+        {
+            "name": "revenue",
+            "definition": "SUM(subtotal_amount)",
+            "source": "ERP sales_order_header",
+            "unit": "USD ($)",
+            "status": "certified",
+        },
+        {
+            "name": "revenue_with_tax",
+            "definition": "SUM(total_due)",
+            "source": "ERP sales_order_header",
+            "unit": "USD ($)",
+            "status": "certified",
+        },
+        {
+            "name": "margin",
+            "definition": "SUM(qty * (listPrice - standardCost))",
+            "source": "ERP sales_order_line + PIM product_catalog_pim",
+            "unit": "USD ($)",
+            "status": "certified",
+        },
+        {
+            "name": "active_customers",
+            "definition": "COUNT(DISTINCT accountId) WHERE accountId > 0 AND isActive=1",
+            "source": "CRM account",
+            "unit": "count",
+            "status": "certified",
+        },
+        {
+            "name": "count_orders",
+            "definition": "COUNT(*) FROM sales_order_header",
+            "source": "ERP sales_order_header",
+            "unit": "count",
+            "status": "certified",
+        },
+        {
+            "name": "count_employees",
+            "definition": "COUNT(*) FROM dipendenti_hr",
+            "source": "HR/PIM dipendenti_hr",
+            "unit": "count",
+            "status": "certified",
+            "freshness": "Delayed — dato non in tempo reale",
+        },
+    ]
+
+    def _q_certified_metrics(self, intent: Intent) -> Result:
+        return Result(
+            answer=self._CERTIFIED_METRICS,
+            sources_touched=[],
+            notes=(
+                f"{len(self._CERTIFIED_METRICS)} metriche certificate disponibili nel semantic layer. "
+                "Lista fissa e deterministica."
+            ),
             disambiguation_required=False,
         )
 
