@@ -112,7 +112,7 @@ class DuckDBSourceManager:
         self._init_lock = threading.RLock()
         self._row_counts: dict[str, int] = {}
         self._built_at: datetime | None = None
-        mode = os.getenv("FRA_STORAGE_MODE", "nostore").strip().lower()
+        mode = os.getenv("FRA_STORAGE_MODE", "snapshot").strip().lower()
         self._storage_mode = mode if mode in {"nostore", "snapshot"} else "nostore"
 
         self._seed_defaults()
