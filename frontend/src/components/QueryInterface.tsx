@@ -35,7 +35,9 @@ function loadHistory(sectorId: string): string[] {
 
 function saveToHistory(sectorId: string, query: string, current: string[]): string[] {
   const next = [query, ...current.filter(q => q !== query)].slice(0, HISTORY_MAX)
-  localStorage.setItem(`query-history-${sectorId}`, JSON.stringify(next))
+  try {
+    localStorage.setItem(`query-history-${sectorId}`, JSON.stringify(next))
+  } catch { /* private browsing / quota */ }
   return next
 }
 
@@ -50,7 +52,9 @@ function toggleFavorite(sectorId: string, query: string, current: string[]): str
   const next = current.includes(query)
     ? current.filter(q => q !== query)
     : [query, ...current].slice(0, FAVORITES_MAX)
-  localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(next))
+  try {
+    localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(next))
+  } catch { /* private browsing / quota */ }
   return next
 }
 

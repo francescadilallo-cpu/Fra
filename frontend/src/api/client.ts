@@ -32,7 +32,11 @@ export const getAuthToken = (): string | null => {
 }
 
 export const setAuthToken = (token: string): void => {
-  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+  try {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token)
+  } catch {
+    // Private browsing or storage quota exceeded — token held only in memory
+  }
 }
 
 export const clearAuthToken = (): void => {
@@ -58,6 +62,8 @@ api.interceptors.response.use(
     const maybeResponse = error as { response?: { status?: number } }
     if (maybeResponse.response?.status === 401) {
       clearAuthToken()
+      // Signal App.tsx to drop the auth gate back to login
+      window.dispatchEvent(new CustomEvent('logout-requested'))
     }
     return Promise.reject(error)
   },

@@ -826,8 +826,9 @@ def semantic_ask(
     layer = _semantic_state["layer"]
 
     # Merge user-provided context (entities, metrics, glossary) with YAML docs.
-    # Always merge from the stable base_docs loaded at startup — never from
-    # layer._docs — to avoid accumulating duplicates across requests.
+    # Pass the merged docs directly to ask() instead of mutating the shared layer
+    # object, which would cause a race condition under concurrent requests.
+    merged_docs = None
     try:
         user_docs = _context_store.to_semantic_docs_override()
         from .semantic.doc_schema import SemanticDocs  # noqa: PLC0415
@@ -839,14 +840,13 @@ def semantic_ask(
             glossary=user_docs.glossary + (_base_docs.glossary if _base_docs else []),
             disambiguation_rules=_base_docs.disambiguation_rules if _base_docs else [],
         )
-        layer._docs = merged_docs  # type: ignore[attr-defined]
     except Exception as _merge_exc:
         logger.warning(
             "Context merge failed, proceeding without user docs: %s", _merge_exc
         )
 
     try:
-        result = layer.ask(question, context=merged_context)
+        result = layer.ask(question, context=merged_context, docs_override=merged_docs)
         response_model = SemanticAskResponse(
             answer=result.answer,
             sql_used=result.sql_used,

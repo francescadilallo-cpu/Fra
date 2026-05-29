@@ -458,27 +458,35 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
     import httpx
 
     api_key = os.getenv("GROQ_API_KEY", "").strip()
-    resp = httpx.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": _groq_model(),
-            "max_tokens": 500,
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-        },
-        # 15 s keeps a slow Groq response from tying up the FastAPI threadpool
-        # thread for too long. The route is sync (threadpool), so a long block
-        # here delays other requests queued behind it.
-        timeout=15.0,
-    )
+    payload = {
+        "model": _groq_model(),
+        "max_tokens": 500,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+    }
+    resp = None
+    for attempt in range(3):
+        resp = httpx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            # 15 s keeps a slow Groq response from tying up the FastAPI threadpool
+            # thread for too long. The route is sync (threadpool), so a long block
+            # here delays other requests queued behind it.
+            timeout=15.0,
+        )
+        if resp.status_code == 429 and attempt < 2:
+            # Groq rate-limited — back off and retry (1 s, 2 s)
+            time.sleep(2 ** attempt)
+            continue
+        break
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
 
@@ -1017,6 +1025,10 @@ def _extract_state(text: str) -> str | None:
 class SemanticLayer:
     """Translates natural-language questions into executable queries."""
 
+    # Per-thread docs override — set at the top of ask() so that concurrent
+    # requests each see their own merged docs without mutating shared state.
+    _thread_local: threading.local = threading.local()
+
     def __init__(
         self,
         ontology,
@@ -1036,6 +1048,13 @@ class SemanticLayer:
         self._crm = None
         self._hr_pim = None
 
+    @property
+    def _effective_docs(self) -> SemanticDocs | None:
+        """Return the per-request docs override if set, otherwise the instance default."""
+        tl = SemanticLayer._thread_local
+        override = getattr(tl, "docs", None)
+        return override if override is not None else self._docs
+
     def set_connectors(self, erp, crm, hr_pim) -> None:
         self._erp = erp
         self._crm = crm
@@ -1049,11 +1068,13 @@ class SemanticLayer:
         """
         return None
 
-    def ask(self, question: str, context=None) -> Result:
+    def ask(self, question: str, context=None, docs_override: SemanticDocs | None = None) -> Result:
         """Resolve *question* and return a Result."""
+        SemanticLayer._thread_local.docs = docs_override
         t0 = time.perf_counter()
         try:
             result = self._resolve(question, context)
+
         except AmbiguityError:
             raise
         except SemanticOntologyViolationError:
@@ -2247,8 +2268,8 @@ class SemanticLayer:
 
     def _q_entity_not_modeled(self, intent: Intent) -> Result:
         entity = intent.filters.get("entity", "Unknown")
-        if self._docs and self._docs.entities:
-            available = ", ".join(e.display_name for e in self._docs.entities)
+        if self._effective_docs and self._effective_docs.entities:
+            available = ", ".join(e.display_name for e in self._effective_docs.entities)
         else:
             available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
         return Result(
@@ -2313,20 +2334,20 @@ class SemanticLayer:
     def _q_glossary_lookup(self, intent: Intent) -> Result:
         raw_term = (intent.filters.get("term") or "").lower().strip(" '\"?.,")
 
-        if self._docs and self._docs.glossary:
+        if self._effective_docs and self._effective_docs.glossary:
             # Search through docs glossary first
             definition: str | None = None
-            for entry in self._docs.glossary:
+            for entry in self._effective_docs.glossary:
                 if entry.term.lower() == raw_term:
                     definition = entry.definition
                     break
             if definition is None:
-                for entry in self._docs.glossary:
+                for entry in self._effective_docs.glossary:
                     if raw_term in entry.term.lower() or entry.term.lower() in raw_term:
                         definition = entry.definition
                         break
             if definition is None:
-                available = ", ".join(sorted(e.term for e in self._docs.glossary))
+                available = ", ".join(sorted(e.term for e in self._effective_docs.glossary))
                 definition = (
                     f"The term '{raw_term}' is not present in the semantic layer glossary. "
                     f"Available terms: {available}."
@@ -2360,14 +2381,14 @@ class SemanticLayer:
     # ── DQ-03: disambiguation rules ───────────────────────────────────────────
 
     def _q_disambiguation_rules(self, intent: Intent) -> Result:
-        if self._docs and self._docs.disambiguation_rules:
+        if self._effective_docs and self._effective_docs.disambiguation_rules:
             rules = [
                 {
                     "rule_id": r.id,
                     "name": r.name,
                     "description": r.description,
                 }
-                for r in self._docs.disambiguation_rules
+                for r in self._effective_docs.disambiguation_rules
             ]
             n = len(rules)
             return Result(
@@ -2523,8 +2544,8 @@ class SemanticLayer:
     ]
 
     def _q_certified_metrics(self, intent: Intent) -> Result:
-        if self._docs and self._docs.metrics:
-            certified = [m for m in self._docs.metrics if m.certified]
+        if self._effective_docs and self._effective_docs.metrics:
+            certified = [m for m in self._effective_docs.metrics if m.certified]
             answer = [
                 {
                     "name": m.name,

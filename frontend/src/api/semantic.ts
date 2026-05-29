@@ -207,14 +207,16 @@ function mapChartHint(
   rows: Record<string, unknown>[],
 ): ChartData | undefined {
   if (!hint || rows.length === 0) return undefined
-  const labels = rows.map(r => String(r[hint.label_col] ?? ''))
-  const values = rows.map(r => Number(r[hint.value_col] ?? 0))
-  if (labels.length === 0) return undefined
+  const raw = rows.map(r => ({
+    label: String(r[hint.label_col] ?? ''),
+    value: Number(r[hint.value_col] ?? 0),
+  })).filter(p => !isNaN(p.value))
+  if (raw.length === 0) return undefined
   return {
     type: (hint.type === 'line' || hint.type === 'pie') ? hint.type : 'bar',
     title: `${hint.value_col} by ${hint.label_col}`,
-    labels,
-    values,
+    labels: raw.map(p => p.label),
+    values: raw.map(p => p.value),
   }
 }
 
