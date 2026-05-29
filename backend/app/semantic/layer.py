@@ -471,8 +471,9 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
             {"role": "user", "content": user_content},
         ],
     }
+    _MAX_ATTEMPTS = 3
     resp = None
-    for attempt in range(3):
+    for attempt in range(_MAX_ATTEMPTS):
         resp = httpx.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -485,7 +486,7 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
             # here delays other requests queued behind it.
             timeout=15.0,
         )
-        if resp.status_code == 429 and attempt < 2:
+        if resp.status_code == 429 and attempt < _MAX_ATTEMPTS - 1:
             # Groq rate-limited — back off and retry (1 s, 2 s)
             time.sleep(2**attempt)
             continue
@@ -1079,7 +1080,6 @@ class SemanticLayer:
         t0 = time.perf_counter()
         try:
             result = self._resolve(question, context)
-
         except AmbiguityError:
             raise
         except SemanticOntologyViolationError:
@@ -1091,6 +1091,10 @@ class SemanticLayer:
                 sources_touched=[],
                 notes=str(exc),
             )
+        finally:
+            # Always clear the thread-local so docs never bleed into the next
+            # request that runs on this thread without a docs_override.
+            SemanticLayer._thread_local.docs = None
         result.latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         return result
 

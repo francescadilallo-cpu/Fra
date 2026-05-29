@@ -4,7 +4,7 @@
  */
 import axios, { AxiosError } from 'axios'
 import type { EngineResult, ChartData, SourceBadge } from '../data/queryEngine'
-import { getAuthToken } from './client'
+import { getAuthToken, clearAuthToken } from './client'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -22,6 +22,19 @@ http.interceptors.request.use((config) => {
   }
   return config
 })
+
+// Mirror the 401 handler from client.ts so that /api/ask 401s also trigger logout
+http.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    const maybeResponse = error as { response?: { status?: number } }
+    if (maybeResponse.response?.status === 401) {
+      clearAuthToken()
+      window.dispatchEvent(new CustomEvent('logout-requested'))
+    }
+    return Promise.reject(error)
+  },
+)
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
