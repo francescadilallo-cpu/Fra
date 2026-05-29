@@ -441,11 +441,15 @@ class MetadataCatalog:
 
         # SalesOrder — use COUNT + sample to avoid loading 31k rows into Python memory
         try:
-            orders_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_header"')[0]["n"]
+            orders_count: int = erp.execute_query(
+                'SELECT COUNT(*) AS n FROM "sales_order_header"'
+            )[0]["n"]
         except Exception:
             orders_count = 0
         try:
-            orders_sample = erp.execute_query('SELECT * FROM "sales_order_header" LIMIT 200')
+            orders_sample = erp.execute_query(
+                'SELECT * FROM "sales_order_header" LIMIT 200'
+            )
         except Exception:
             orders_sample = []
         self._upsert_entity(
@@ -497,11 +501,15 @@ class MetadataCatalog:
 
         # SalesOrderLine — use COUNT + sample to avoid loading 121k rows into Python memory
         try:
-            lines_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_line"')[0]["n"]
+            lines_count: int = erp.execute_query(
+                'SELECT COUNT(*) AS n FROM "sales_order_line"'
+            )[0]["n"]
         except Exception:
             lines_count = 0
         try:
-            lines_sample = erp.execute_query('SELECT * FROM "sales_order_line" LIMIT 200')
+            lines_sample = erp.execute_query(
+                'SELECT * FROM "sales_order_line" LIMIT 200'
+            )
         except Exception:
             lines_sample = []
         self._upsert_entity(

@@ -430,7 +430,9 @@ _SYSTEM_TABLE_MARKERS = {
 
 def _anthropic_model() -> str:
     """Model ID for LLM intent mapping. Overridable via env without a redeploy."""
-    return os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+    return (
+        os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+    )
 
 
 def _groq_model() -> str:
@@ -485,7 +487,7 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
         )
         if resp.status_code == 429 and attempt < 2:
             # Groq rate-limited — back off and retry (1 s, 2 s)
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
             continue
         break
     resp.raise_for_status()
@@ -1069,7 +1071,9 @@ class SemanticLayer:
         """
         return None
 
-    def ask(self, question: str, context=None, docs_override: SemanticDocs | None = None) -> Result:
+    def ask(
+        self, question: str, context=None, docs_override: SemanticDocs | None = None
+    ) -> Result:
         """Resolve *question* and return a Result."""
         SemanticLayer._thread_local.docs = docs_override
         t0 = time.perf_counter()
@@ -2348,7 +2352,9 @@ class SemanticLayer:
                         definition = entry.definition
                         break
             if definition is None:
-                available = ", ".join(sorted(e.term for e in self._effective_docs.glossary))
+                available = ", ".join(
+                    sorted(e.term for e in self._effective_docs.glossary)
+                )
                 definition = (
                     f"The term '{raw_term}' is not present in the semantic layer glossary. "
                     f"Available terms: {available}."
