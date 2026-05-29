@@ -910,6 +910,7 @@ _EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bterritor(?:y|ies)\b"), "territorio"),
     (re.compile(r"\bdepartments?\b"), "reparto"),
     (re.compile(r"\bsalary|salaries|wage|pay rate\b"), "retribuzione"),
+    (re.compile(r"\brevenue\b"), "incassi"),
 ]
 
 
