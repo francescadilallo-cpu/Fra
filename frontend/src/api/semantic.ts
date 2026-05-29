@@ -219,7 +219,36 @@ function mapChartHint(
 }
 
 export function adaptAskResult(result: AskResult): EngineResult {
-  const sources: SourceBadge[] = result.sources_touched.map(s => ({
+  // The backend returns `answer: Any` (SemanticAskResponse shape) rather than
+  // separate rows/summary/total_rows fields. Normalise here so the UI never
+  // receives undefined for array or string props.
+  const rawAnswer = (result as unknown as Record<string, unknown>).answer
+
+  let rows: Record<string, unknown>[] = result.rows ?? []
+  let summary = result.summary ?? ''
+
+  if (rows.length === 0 && rawAnswer !== undefined && rawAnswer !== null) {
+    if (Array.isArray(rawAnswer)) {
+      rows = rawAnswer as Record<string, unknown>[]
+    } else if (typeof rawAnswer === 'object') {
+      rows = [rawAnswer as Record<string, unknown>]
+    }
+  }
+
+  if (!summary) {
+    if (typeof rawAnswer === 'string') {
+      summary = rawAnswer
+    } else if (typeof rawAnswer === 'number') {
+      summary = `**${rawAnswer.toLocaleString('en-US')}**`
+    } else if (rows.length > 0) {
+      summary = `${rows.length} result${rows.length !== 1 ? 's' : ''} returned`
+    }
+  }
+
+  const totalRows = result.total_rows ?? rows.length
+  const touched = result.sources_touched ?? []
+
+  const sources: SourceBadge[] = touched.map(s => ({
     id: s,
     label: SOURCE_META[s]?.label ?? s.toUpperCase(),
     bg:    SOURCE_META[s]?.bg    ?? 'bg-slate-100',
@@ -228,15 +257,15 @@ export function adaptAskResult(result: AskResult): EngineResult {
 
   return {
     sql: result.sql_used ?? '-- no SQL generated',
-    rows: result.rows,
-    summary: result.summary || (result.ambiguity_error ? `Ambiguity: ${result.candidates.join(', ')}` : ''),
-    interpreted_as: result.interpreted_as,
-    chartData: result.chart_hint ? mapChartHint(result.chart_hint, result.rows) : undefined,
+    rows,
+    summary: summary || (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : ''),
+    interpreted_as: result.interpreted_as ?? '',
+    chartData: result.chart_hint ? mapChartHint(result.chart_hint, rows) : undefined,
     sources,
     isDisambiguation: result.disambiguation_required || result.ambiguity_error,
     followUps: [],
-    steps: result.sources_touched.length > 0
-      ? [`Queried: ${result.sources_touched.join(', ')} — ${result.total_rows} rows in ${result.latency_ms.toFixed(0)}ms`]
+    steps: touched.length > 0
+      ? [`Queried: ${touched.join(', ')} — ${totalRows} rows in ${result.latency_ms?.toFixed(0) ?? '?'}ms`]
       : undefined,
   }
 }

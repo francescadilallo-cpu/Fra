@@ -611,7 +611,7 @@ function MessageBubble({ message, onFollowUp, isFavorite, onToggleFavorite }: {
         )}
 
         {/* Results table */}
-        {r.rows.length > 0 && (
+        {(r.rows ?? []).length > 0 && (
           <div>
             <span className="text-[10px] text-slate-400 uppercase tracking-wide">
               Results ({r.rows.length} rows)
