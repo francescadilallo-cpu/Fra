@@ -54,6 +54,7 @@ logger = logging.getLogger(__name__)
 # ── Security config ────────────────────────────────────────────────────────────
 
 DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173"
+GITHUB_PAGES_ORIGIN = "https://francescadilallo-cpu.github.io"
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
@@ -97,7 +98,11 @@ def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
 def _parse_allowed_origins() -> list[str]:
     raw = os.getenv("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGIN)
     origins = [o.strip() for o in raw.split(",") if o.strip()]
-    return origins or [DEFAULT_ALLOWED_ORIGIN]
+    if not origins:
+        origins = [DEFAULT_ALLOWED_ORIGIN]
+    if GITHUB_PAGES_ORIGIN not in origins:
+        origins.append(GITHUB_PAGES_ORIGIN)
+    return origins
 
 
 def _semantic_cache_ttl_seconds() -> int:
