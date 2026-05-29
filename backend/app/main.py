@@ -62,6 +62,12 @@ JWT_ISSUER = os.getenv("JWT_ISSUER", "semanticintelligence-api")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "semanticintelligence-clients")
 AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
 
+# Rate limits (configurable via env so the platform can scale without a redeploy).
+# Login stays strict to deter brute-force; the query endpoints are generous so
+# normal bursts of questions don't trip a 429.
+LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "10/minute").strip()
+SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "60/minute").strip()
+
 
 def _login_limit_key(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
@@ -543,7 +549,7 @@ def health() -> dict[str, str]:
 
 @app.post("/api/auth/login", response_model=TokenResponse)
 @app.post("/api/auth/token", response_model=TokenResponse)
-@limiter.limit("5/minute", key_func=_login_limit_key)
+@limiter.limit(LOGIN_RATE_LIMIT, key_func=_login_limit_key)
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -788,7 +794,7 @@ def semantic_status(
 
 
 @app.post("/api/semantic/ask")
-@limiter.limit("5/minute", key_func=_semantic_limit_key)
+@limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def semantic_ask(
     request: Request,
     req: SemanticAskRequest,
@@ -931,7 +937,7 @@ def rebuild_knowledge_graph(
 
 
 @app.post("/api/ask")
-@limiter.limit("5/minute", key_func=_semantic_limit_key)
+@limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def ask_legacy_alias(
     request: Request,
     req: SemanticAskRequest,

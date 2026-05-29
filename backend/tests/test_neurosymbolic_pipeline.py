@@ -84,8 +84,13 @@ def test_ask_includes_complete_lineage(layer, monkeypatch):
     assert validation.get("status") == "validated"
 
 
-def test_invalid_model_mapping_raises_semantic_violation(layer, monkeypatch):
-    from app.semantic.layer import OntologyIntentMapping, SemanticOntologyViolationError
+def test_mismatched_model_entities_self_heal_from_contract(layer, monkeypatch):
+    """If the LLM returns entities/properties that don't match the chosen
+    intent's contract, the server re-derives them from the trusted contract
+    rather than raising. The executor dispatches purely on intent_type, so a
+    valid intent_type must always produce a valid, executable plan — this keeps
+    the user-facing platform stable instead of surfacing a 422."""
+    from app.semantic.layer import OntologyIntentMapping
 
     monkeypatch.setenv("SEMANTIC_REQUIRE_LLM_INTENT", "0")
 
@@ -93,7 +98,7 @@ def test_invalid_model_mapping_raises_semantic_violation(layer, monkeypatch):
         return OntologyIntentMapping(
             intent_type="count_orders",
             metric=None,
-            entities=["Customer"],
+            entities=["Customer"],  # wrong entity for count_orders
             properties=["Customer.accountId"],
             relations=[],
             filters={},
@@ -105,8 +110,14 @@ def test_invalid_model_mapping_raises_semantic_violation(layer, monkeypatch):
 
     monkeypatch.setattr(layer, "_llm_ontology_mapping", _fake_mapping)
 
-    with pytest.raises(SemanticOntologyViolationError):
-        layer.ask("Quanti ordini abbiamo?")
+    result = layer.ask("Quanti ordini abbiamo?")
+
+    # Plan is built from the count_orders contract (SalesOrder), not the
+    # mismatched Customer entity the model supplied.
+    ontology_intent = result.provenance["ontology_intent"]
+    assert ontology_intent["intent_type"] == "count_orders"
+    assert ontology_intent["entities"] == ["SalesOrder"]
+    assert "Customer" not in ontology_intent["entities"]
 
 
 def test_guardrail_blocks_destructive_sql_keywords(layer):

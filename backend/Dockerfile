@@ -15,6 +15,13 @@ RUN mkdir -p data
 # (surfaced as "Network Error" in the browser).
 ENV FRA_STORAGE_MODE=snapshot
 
+# LLM intent mapping: when ANTHROPIC_API_KEY is set (in Render's env), the
+# semantic layer uses Claude to understand any phrasing of a question. With
+# this flag at 0 the behaviour is "use the LLM when available, otherwise fall
+# back to the deterministic rule parser" — so a missing or failing key degrades
+# gracefully to rules instead of returning 422 errors.
+ENV SEMANTIC_REQUIRE_LLM_INTENT=0
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -427,6 +427,11 @@ _SYSTEM_TABLE_MARKERS = {
 }
 
 
+def _anthropic_model() -> str:
+    """Model ID for LLM intent mapping. Overridable via env without a redeploy."""
+    return os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
+
+
 def _extract_json_payload(text: str) -> dict[str, Any]:
     """Extract a JSON object from model text output."""
     raw = text.strip()
@@ -1038,9 +1043,21 @@ class SemanticLayer:
 
         intent_type = mapping.intent_type or baseline_intent.intent_type
         if intent_type not in _INTENT_CONTRACTS:
-            raise SemanticOntologyViolationError(
-                f"Model mapped to unsupported intent '{intent_type}'"
-            )
+            # The model picked an intent we don't support: treat it as 'unknown'
+            # so the executor returns a friendly hint rather than raising a 422.
+            logger.info("LLM mapped to unsupported intent '%s' → unknown", intent_type)
+            intent_type = "unknown"
+
+        # The executor dispatches purely on intent_type and uses only
+        # filters/year/limit. The LLM-supplied entities/properties/relations are
+        # NOT needed for execution and only risk failing strict ontology
+        # validation. Re-derive them from the trusted intent contract so a valid
+        # intent_type always produces a valid, executable plan.
+        contract = _INTENT_CONTRACTS.get(intent_type, {})
+        mapping.entities = list(contract.get("entities", []))
+        mapping.properties = list(contract.get("properties", []))
+        mapping.relations = list(contract.get("relations", []))
+        mapping.metric = contract.get("metric")
 
         merged_filters = dict(baseline_intent.filters)
         merged_filters.update(mapping.filters)
@@ -1089,9 +1106,16 @@ class SemanticLayer:
 
         system_prompt = (
             "You are an ontology intent mapper for a neuro-symbolic semantic layer. "
-            "Your job is ONLY to map user questions to ontology concepts. "
+            "Your job is ONLY to map a user's natural-language business question "
+            "(English or Italian) to ONE of the allowed intent_type values. "
             "Never generate SQL, code, or executable statements. "
-            "Return STRICT JSON with keys: intent_type, metric, entities, properties, relations, filters, limit, year. "
+            "Pick the single closest matching intent_type. Only use 'unknown' when "
+            "the question genuinely does not correspond to any allowed intent. "
+            "When you choose an intent, set entities/properties/relations/metric to "
+            "values consistent with that intent (leaving them empty is acceptable — "
+            "the server fills defaults from the intent contract). "
+            "Return STRICT JSON with keys: intent_type, metric, entities, properties, "
+            "relations, filters, limit, year. "
             f"Allowed intent_type values: {sorted(_INTENT_CONTRACTS.keys())}. "
             f"Allowed ontology entities: {sorted(entity_names)}. "
             f"Known metrics from metadata catalog: {sorted(metric_names)}. "
@@ -1110,7 +1134,7 @@ class SemanticLayer:
 
             client = anthropic.Anthropic(api_key=api_key)
             msg = client.messages.create(
-                model="claude-sonnet-4-6",
+                model=_anthropic_model(),
                 max_tokens=500,
                 system=system_prompt,
                 messages=[{"role": "user", "content": json.dumps(user_prompt)}],
@@ -1158,7 +1182,7 @@ class SemanticLayer:
             filters=filters,
             limit=limit,
             year=year,
-            model="claude-sonnet-4-6",
+            model=_anthropic_model(),
             raw_payload=payload,
         )
 
@@ -1447,7 +1471,7 @@ class SemanticLayer:
                 "Return ONLY the intent type string."
             )
             msg = client.messages.create(
-                model="claude-sonnet-4-6",
+                model=_anthropic_model(),
                 max_tokens=20,
                 system=sys_prompt,
                 messages=[{"role": "user", "content": question}],
