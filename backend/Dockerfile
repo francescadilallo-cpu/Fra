@@ -22,6 +22,11 @@ ENV FRA_STORAGE_MODE=snapshot
 # missing or failing key degrades gracefully to rules instead of 422 errors.
 ENV SEMANTIC_REQUIRE_LLM_INTENT=0
 
+# Auth session length. The default of 30 minutes forced a re-login mid-session;
+# 7 days (10080 min) keeps users signed in across normal usage. Override via
+# Render's env if a shorter/longer session is required.
+ENV JWT_ACCESS_TOKEN_EXPIRE_MINUTES=10080
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
