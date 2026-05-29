@@ -432,6 +432,68 @@ def _anthropic_model() -> str:
     return os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip() or "claude-sonnet-4-6"
 
 
+def _groq_model() -> str:
+    """Groq model ID. Overridable via env without a redeploy."""
+    return (
+        os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+        or "llama-3.3-70b-versatile"
+    )
+
+
+def _llm_intent_provider() -> str | None:
+    """Pick the LLM provider for intent mapping based on configured keys.
+
+    Groq is preferred when present because it is free; Anthropic is used as a
+    fallback. Returns None when no provider key is configured.
+    """
+    if os.getenv("GROQ_API_KEY", "").strip():
+        return "groq"
+    if os.getenv("ANTHROPIC_API_KEY", "").strip():
+        return "anthropic"
+    return None
+
+
+def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
+    """Call Groq's OpenAI-compatible chat endpoint and return the raw text."""
+    import httpx
+
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    resp = httpx.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": _groq_model(),
+            "max_tokens": 500,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+        },
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
+
+
+def _complete_json_via_anthropic(system_prompt: str, user_content: str) -> str:
+    """Call Anthropic's Messages API and return the raw text."""
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "").strip())
+    msg = client.messages.create(
+        model=_anthropic_model(),
+        max_tokens=500,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_content}],
+    )
+    return msg.content[0].text
+
+
 def _extract_json_payload(text: str) -> dict[str, Any]:
     """Extract a JSON object from model text output."""
     raw = text.strip()
@@ -1076,16 +1138,17 @@ class SemanticLayer:
         question: str,
         baseline_intent: Intent,
     ) -> OntologyIntentMapping | None:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        provider = _llm_intent_provider()
         strict = os.getenv("SEMANTIC_REQUIRE_LLM_INTENT", "1").strip().lower() not in {
             "0",
             "false",
             "no",
         }
-        if not api_key:
+        if provider is None:
             if strict:
                 raise SemanticOntologyViolationError(
-                    "ANTHROPIC_API_KEY is required for ontology intent mapping"
+                    "An LLM key (GROQ_API_KEY or ANTHROPIC_API_KEY) is required "
+                    "for ontology intent mapping"
                 )
             return None
 
@@ -1130,20 +1193,16 @@ class SemanticLayer:
         }
 
         try:
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=api_key)
-            msg = client.messages.create(
-                model=_anthropic_model(),
-                max_tokens=500,
-                system=system_prompt,
-                messages=[{"role": "user", "content": json.dumps(user_prompt)}],
-            )
-            payload = _extract_json_payload(msg.content[0].text)
+            user_content = json.dumps(user_prompt)
+            if provider == "groq":
+                raw_text = _complete_json_via_groq(system_prompt, user_content)
+            else:
+                raw_text = _complete_json_via_anthropic(system_prompt, user_content)
+            payload = _extract_json_payload(raw_text)
         except Exception as exc:
             if strict:
                 raise SemanticOntologyViolationError(
-                    f"Failed ontology intent mapping with Anthropic: {exc}"
+                    f"Failed ontology intent mapping with {provider}: {exc}"
                 ) from exc
             logger.warning("LLM ontology mapping failed, using rule fallback: %s", exc)
             return None
@@ -1182,7 +1241,7 @@ class SemanticLayer:
             filters=filters,
             limit=limit,
             year=year,
-            model=_anthropic_model(),
+            model=_groq_model() if provider == "groq" else _anthropic_model(),
             raw_payload=payload,
         )
 
