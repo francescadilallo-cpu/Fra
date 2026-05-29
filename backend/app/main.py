@@ -54,7 +54,6 @@ logger = logging.getLogger(__name__)
 # ── Security config ────────────────────────────────────────────────────────────
 
 DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173"
-GITHUB_PAGES_ORIGIN = "https://francescadilallo-cpu.github.io"
 JWT_ALGORITHM = "HS256"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
@@ -96,13 +95,10 @@ def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
 
 
 def _parse_allowed_origins() -> list[str]:
-    raw = os.getenv("ALLOWED_ORIGINS", DEFAULT_ALLOWED_ORIGIN)
-    origins = [o.strip() for o in raw.split(",") if o.strip()]
-    if not origins:
-        origins = [DEFAULT_ALLOWED_ORIGIN]
-    if GITHUB_PAGES_ORIGIN not in origins:
-        origins.append(GITHUB_PAGES_ORIGIN)
-    return origins
+    raw = os.getenv("ALLOWED_ORIGINS", "").strip().strip("\"'")
+    if not raw:
+        return []  # empty → allow_origins=["*"] branch below
+    return [o.strip().strip("\"'") for o in raw.split(",") if o.strip()]
 
 
 def _semantic_cache_ttl_seconds() -> int:
@@ -504,14 +500,25 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-allowed_origins = _parse_allowed_origins()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_explicit_origins = _parse_allowed_origins()
+if _explicit_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_explicit_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # No ALLOWED_ORIGINS env var → open CORS for all origins.
+    # Safe because all data endpoints require a JWT Bearer token.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 def _get_agentic_ontology() -> Any:
