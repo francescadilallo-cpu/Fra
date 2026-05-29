@@ -65,8 +65,8 @@ AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
 # Rate limits (configurable via env so the platform can scale without a redeploy).
 # Login stays strict to deter brute-force; the query endpoints are generous so
 # normal bursts of questions don't trip a 429.
-LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "10/minute").strip()
-SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "60/minute").strip()
+LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "").strip() or "10/minute"
+SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "").strip() or "60/minute"
 
 
 def _login_limit_key(request: Request) -> str:

@@ -231,6 +231,8 @@ export function adaptAskResult(result: AskResult): EngineResult {
     if (Array.isArray(rawAnswer)) {
       rows = rawAnswer as Record<string, unknown>[]
     } else if (typeof rawAnswer === 'object') {
+      // A plain dict answer (e.g. {total: 20201, duplicates: 381, unique: 19820})
+      // is a single-row result — wrap it so the table renderer gets an array.
       rows = [rawAnswer as Record<string, unknown>]
     }
   }
@@ -240,8 +242,18 @@ export function adaptAskResult(result: AskResult): EngineResult {
       summary = rawAnswer
     } else if (typeof rawAnswer === 'number') {
       summary = `**${rawAnswer.toLocaleString('en-US')}**`
+    } else if (rows.length === 1 && typeof rawAnswer === 'object' && rawAnswer !== null && !Array.isArray(rawAnswer)) {
+      // Single-row dict: build summary from the first numeric field, if any
+      const entries = Object.entries(rawAnswer as Record<string, unknown>)
+      const firstNumeric = entries.find(([, v]) => typeof v === 'number')
+      if (firstNumeric) {
+        const [col, val] = firstNumeric
+        summary = `**${(val as number).toLocaleString('en-US')}** (${col})`
+      } else {
+        summary = `${rows.length} result returned`
+      }
     } else if (rows.length > 0) {
-      summary = `${rows.length} result${rows.length !== 1 ? 's' : ''} returned`
+      summary = `**${rows.length}** result${rows.length !== 1 ? 's' : ''} returned`
     }
   }
 

@@ -474,7 +474,10 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
                 {"role": "user", "content": user_content},
             ],
         },
-        timeout=30.0,
+        # 15 s keeps a slow Groq response from tying up the FastAPI threadpool
+        # thread for too long. The route is sync (threadpool), so a long block
+        # here delays other requests queued behind it.
+        timeout=15.0,
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"]
@@ -976,7 +979,7 @@ _EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bsellers?\b"), "venditori"),
     (re.compile(r"\bterritor(?:y|ies)\b"), "territorio"),
     (re.compile(r"\bdepartments?\b"), "reparto"),
-    (re.compile(r"\bsalary|salaries|wage|pay rate\b"), "retribuzione"),
+    (re.compile(r"\b(?:salary|salaries|wage|pay rate)\b"), "retribuzione"),
     (re.compile(r"\brevenue\b"), "incassi"),
 ]
 
@@ -1506,46 +1509,6 @@ class SemanticLayer:
             },
             "resolved_provenance": original_provenance,
         }
-
-    def _claude_fallback(self, question: str) -> Intent:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        if not api_key:
-            return Intent(intent_type="unknown", raw_question=question)
-        try:
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=api_key)
-            sys_prompt = (
-                "You are an intent parser for a semantic layer. "
-                "Given a natural-language business question, output ONE of these intent types "
-                "as plain text (no JSON, just the type name): "
-                "count_employees, avg_hourly_rate, product_price, count_make_only, "
-                "count_orders, list_b2b_active, customers_by_state, "
-                "top_salesperson_by_orders, top_salespersons_by_revenue, "
-                "revenue_by_territory, revenue_vs_quota, top_customer_by_spend, "
-                "top_products_by_qty, customer_state_most_orders, margin_per_salesperson, "
-                "avg_revenue_by_segment, top_category_by_margin, orders_with_discount, "
-                "count_customers_unique, check_duplicate_accounts, data_provenance, "
-                "revenue_with_tax, lookup_employee, impossible, unknown. "
-                "Return ONLY the intent type string."
-            )
-            msg = client.messages.create(
-                model=_anthropic_model(),
-                max_tokens=20,
-                system=sys_prompt,
-                messages=[{"role": "user", "content": question}],
-            )
-            intent_type = msg.content[0].text.strip()
-            logger.info("Claude returned intent: %s", intent_type)
-            year_m = re.search(r"\b(20\d{2})\b", question)
-            return Intent(
-                intent_type=intent_type,
-                year=int(year_m.group(1)) if year_m else None,
-                raw_question=question,
-            )
-        except Exception as exc:
-            logger.warning("Claude fallback failed: %s", exc)
-            return Intent(intent_type="unknown", raw_question=question)
 
     # ── executor dispatch ─────────────────────────────────────────────────────
 

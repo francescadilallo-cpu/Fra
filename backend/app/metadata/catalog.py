@@ -444,7 +444,10 @@ class MetadataCatalog:
             orders_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_header"')[0]["n"]
         except Exception:
             orders_count = 0
-        orders_sample = erp.execute_query('SELECT * FROM "sales_order_header" LIMIT 200')
+        try:
+            orders_sample = erp.execute_query('SELECT * FROM "sales_order_header" LIMIT 200')
+        except Exception:
+            orders_sample = []
         self._upsert_entity(
             session,
             name="SalesOrder",
@@ -497,7 +500,10 @@ class MetadataCatalog:
             lines_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_line"')[0]["n"]
         except Exception:
             lines_count = 0
-        lines_sample = erp.execute_query('SELECT * FROM "sales_order_line" LIMIT 200')
+        try:
+            lines_sample = erp.execute_query('SELECT * FROM "sales_order_line" LIMIT 200')
+        except Exception:
+            lines_sample = []
         self._upsert_entity(
             session,
             name="SalesOrderLine",
