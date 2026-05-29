@@ -1,0 +1,187 @@
+{
+  "questions": 12,
+  "faithful": 12,
+  "score": 1.0,
+  "threshold": 0.9,
+  "passed": true,
+  "details": [
+    {
+      "id": "F1",
+      "status": 200,
+      "intent": "revenue_with_tax",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp"
+      ],
+      "tables": [
+        "sales_order_header"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "F2",
+      "status": 200,
+      "intent": "margin_per_salesperson",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp",
+        "hr_pim"
+      ],
+      "tables": [
+        "product_catalog_pim",
+        "sales_order_header",
+        "sales_order_line"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "F3",
+      "status": 200,
+      "intent": "top_salespersons_by_revenue",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp",
+        "hr_pim"
+      ],
+      "tables": [
+        "dipendenti_hr",
+        "sales_order_header"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "F4",
+      "status": 200,
+      "intent": "top_customer_by_spend",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "crm",
+        "erp"
+      ],
+      "tables": [
+        "account",
+        "sales_order_header"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "L1",
+      "status": 200,
+      "intent": "count_orders",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp"
+      ],
+      "tables": [
+        "sales_order_header"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "L2",
+      "status": 200,
+      "intent": "revenue_by_territory",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp"
+      ],
+      "tables": [
+        "sales_order_header",
+        "territory"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "L3",
+      "status": 200,
+      "intent": "customers_by_state",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "crm"
+      ],
+      "tables": [
+        "account"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "L4",
+      "status": 200,
+      "intent": "orders_with_discount",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp"
+      ],
+      "tables": [
+        "sales_order_line"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "P1",
+      "status": 200,
+      "intent": "count_make_only",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "hr_pim"
+      ],
+      "tables": [
+        "product_catalog_pim"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "P2",
+      "status": 200,
+      "intent": "top_category_by_margin",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "erp",
+        "hr_pim"
+      ],
+      "tables": [
+        "product_catalog_pim",
+        "sales_order_line"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "P3",
+      "status": 200,
+      "intent": "product_price",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "hr_pim"
+      ],
+      "tables": [
+        "product_catalog_pim"
+      ],
+      "faithful": true
+    },
+    {
+      "id": "P4",
+      "status": 200,
+      "intent": "count_employees",
+      "intent_ok": true,
+      "grounded": true,
+      "connectors": [
+        "hr_pim"
+      ],
+      "tables": [
+        "dipendenti_hr"
+      ],
+      "faithful": true
+    }
+  ]
+}

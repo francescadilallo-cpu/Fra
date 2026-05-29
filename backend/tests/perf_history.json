@@ -17,5 +17,24 @@
       "p50_ms": 3919.63,
       "p95_ms": 19890.72
     }
+  },
+  {
+    "timestamp_utc": "2026-05-29T22:13:58.066987+00:00",
+    "git_commit_short": "df6c006",
+    "question_count": 21,
+    "status_summary": {
+      "ok_200": 21,
+      "non_200": 0
+    },
+    "pure_deterministic_layer": {
+      "average_ms": 223.17,
+      "p50_ms": 141.81,
+      "p95_ms": 256.92
+    },
+    "llm_fallback_layer": {
+      "average_ms": 223.17,
+      "p50_ms": 141.81,
+      "p95_ms": 256.92
+    }
   }
 ]
