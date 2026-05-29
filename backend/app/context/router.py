@@ -8,18 +8,15 @@ import logging
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 
-from .store import ContextStore
+from .store import ContextStore, default_store
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/context", tags=["context"])
 
-# Singleton store — shared with main.py
-_store = ContextStore()
-
 
 def _get_store() -> ContextStore:
-    return _store
+    return default_store
 
 
 def _get_current_user_dep():

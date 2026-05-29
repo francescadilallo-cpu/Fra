@@ -306,3 +306,7 @@ class ContextStore:
             glossary=glossary,
             disambiguation_rules=[],
         )
+
+
+# Module-level singleton — import this instead of constructing a new instance
+default_store = ContextStore()
