@@ -37,7 +37,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_USE_MOCK: 'false'
-          VITE_API_BASE_URL: 'https://fra-backend-mhjs.onrender.com'
+          VITE_API_URL: 'https://fra-backend-mhjs.onrender.com'
           VITE_BASE_PATH: /Fra/
         run: npm run build
 
