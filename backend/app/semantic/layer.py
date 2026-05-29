@@ -389,6 +389,12 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "properties": [],
         "relations": [],
     },
+    "unknown": {
+        "metric": None,
+        "entities": [],
+        "properties": [],
+        "relations": [],
+    },
 }
 
 
@@ -1496,8 +1502,12 @@ class SemanticLayer:
         fn = dispatch.get(intent.intent_type)
         if fn is None:
             return Result(
-                answer=f"Question not understood (intent='{intent.intent_type}'). "
-                "Try being more specific.",
+                answer=(
+                    "I don't recognize this question. Try asking about: "
+                    "orders, customers, employees, products, revenue, or territories. "
+                    "Examples: 'How many orders in 2014?', 'Top 5 products by quantity', "
+                    "'Revenue by territory', 'How many employees?'"
+                ),
                 notes="unknown_intent",
             )
         return fn(intent)

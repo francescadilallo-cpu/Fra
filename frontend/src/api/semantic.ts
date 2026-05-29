@@ -251,6 +251,7 @@ export function backendErrorMessage(e: unknown): string {
   if (e instanceof AxiosError) {
     const detail = e.response?.data?.detail
     if (typeof detail === 'string') return detail
+    if (detail && typeof detail === 'object' && 'message' in detail) return String(detail.message)
     return e.message
   }
   return String(e)
