@@ -31,7 +31,7 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: 'item', id: 'ontology',    label: 'Ontology',          icon: GitBranch },
   { kind: 'item', id: 'builder',     label: 'Ontology Builder',  icon: Wand2 },
   { kind: 'item', id: 'sembuilder',  label: 'Knowledge Graph',   icon: Network },
-  { kind: 'item', id: 'context',    label: 'Contesto',          icon: BookOpenCheck },
+  { kind: 'item', id: 'context',    label: 'Context',           icon: BookOpenCheck },
 
   { kind: 'section', label: 'Query & Act' },
   { kind: 'item', id: 'query',       label: 'Query AI',          icon: MessageSquare },

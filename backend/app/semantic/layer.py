@@ -572,9 +572,9 @@ class _RuleParser:
             is_standalone = not has_qualifier
             if is_standalone:
                 raise AmbiguityError(
-                    "Il termine 'fatturato' è ambiguo: potrebbe indicare i ricavi puri "
-                    "(subtotal_amount, ~$20M) oppure il lordo con tasse e spedizione "
-                    "(total_due, ~$22.4M). Specificare quale definizione usare.",
+                    "The term 'fatturato' is ambiguous: it could refer to pure revenue "
+                    "(subtotal_amount, ~$20M) or gross revenue including taxes and shipping "
+                    "(total_due, ~$22.4M). Please specify which definition to use.",
                     candidates=[
                         "revenue (~subtotal_amount)",
                         "revenue_with_tax (~total_due)",
@@ -599,11 +599,11 @@ class _RuleParser:
         ]
         if "vendite" in q and not any(kw in q for kw in _VENDITE_QUALIFIERS):
             raise AmbiguityError(
-                "Il termine 'vendite' è ambiguo: potrebbe riferirsi al numero di ordini "
-                "(count SalesOrder) oppure al fatturato (revenue/revenue_with_tax). "
-                "Specificare quale metrica usare.",
+                "The term 'vendite' is ambiguous: it could refer to the number of orders "
+                "(count SalesOrder) or to revenue (revenue/revenue_with_tax). "
+                "Please specify which metric to use.",
                 candidates=[
-                    "count_orders (numero di ordini)",
+                    "count_orders (number of orders)",
                     "revenue (~subtotal_amount)",
                     "revenue_with_tax (~total_due)",
                 ],
@@ -935,7 +935,7 @@ class SemanticLayer:
         except Exception as exc:
             logger.exception("SemanticLayer.ask error: %s", exc)
             result = Result(
-                answer=f"Errore interno: {exc}",
+                answer=f"Internal error: {exc}",
                 sources_touched=[],
                 notes=str(exc),
             )
@@ -1447,8 +1447,8 @@ class SemanticLayer:
         fn = dispatch.get(intent.intent_type)
         if fn is None:
             return Result(
-                answer=f"Domanda non compresa (intent='{intent.intent_type}'). "
-                "Prova a essere più specifico.",
+                answer=f"Question not understood (intent='{intent.intent_type}'). "
+                "Try being more specific.",
                 notes="unknown_intent",
             )
         return fn(intent)
@@ -1472,9 +1472,9 @@ class SemanticLayer:
             sources_touched=["hr_pim"],
             provenance=self._prov("Employee", ["MatricolaDip", "Reparto"]),
             notes=(
-                "ATTENZIONE: il dato HR ha sync status 'Delayed'. "
-                "La sorgente HR/PIM non è aggiornata in tempo reale: "
-                "il conteggio potrebbe non riflettere la situazione odierna."
+                "WARNING: HR data has sync status 'Delayed'. "
+                "The HR/PIM source is not updated in real time: "
+                "the count may not reflect the current situation."
             ),
         )
 
@@ -1689,7 +1689,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["salesperson_ref", "total_due"]),
                 **self._prov("Employee", ["Reparto"]),
             },
-            notes="Valori revenue in USD ($). revenue = SUM(total_due).",
+            notes="Revenue values in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_revenue_by_territory(self, intent: Intent) -> Result:
@@ -1716,7 +1716,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("SalesOrder", ["total_due", "territory_ref"]),
-            notes="Valori revenue in USD ($). revenue = SUM(total_due).",
+            notes="Revenue values in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_revenue_vs_quota(self, intent: Intent) -> Result:
@@ -1751,7 +1751,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("Salesperson", ["sales_quota", "sales_ytd"]),
-            notes="Valori revenue e quota in USD ($). revenue = SUM(total_due).",
+            notes="Revenue and quota values in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_top_customer_by_spend(self, intent: Intent) -> Result:
@@ -1781,7 +1781,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["customer_ref", "total_due"]),
                 **self._prov("Customer", ["accountId", "ragioneSociale"]),
             },
-            notes="Valore total_spend in USD ($). total_spend = SUM(total_due).",
+            notes="total_spend value in USD ($). total_spend = SUM(total_due).",
         )
 
     def _q_top_products_by_qty(self, intent: Intent) -> Result:
@@ -1914,7 +1914,7 @@ class SemanticLayer:
                 **self._prov("SalesOrderLine", ["product_ref", "qty"]),
                 **self._prov("Product", ["standardCost", "listPrice"]),
             },
-            notes="Valori margin in USD ($). margin = SUM(qty * (listPrice - standardCost)).",
+            notes="Margin values in USD ($). margin = SUM(qty * (listPrice - standardCost)).",
         )
 
     def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
@@ -1951,7 +1951,7 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["customer_ref", "total_due"]),
                 **self._prov("Customer", ["accountType"]),
             },
-            notes="Valori total_revenue e avg_per_customer in USD ($). revenue = SUM(total_due).",
+            notes="total_revenue and avg_per_customer values in USD ($). revenue = SUM(total_due).",
         )
 
     def _q_top_category_by_margin(self, intent: Intent) -> Result:
@@ -1999,7 +1999,7 @@ class SemanticLayer:
                 **self._prov("SalesOrderLine", ["product_ref", "qty"]),
                 **self._prov("Product", ["categoryPath", "listPrice", "standardCost"]),
             },
-            notes="Valori revenue, cost e margin in USD ($). margin = revenue - cost.",
+            notes="Revenue, cost, and margin values in USD ($). margin = revenue - cost.",
         )
 
     def _q_orders_with_discount(self, intent: Intent) -> Result:
@@ -2090,7 +2090,7 @@ class SemanticLayer:
             sql_used=sql,
             sources_touched=["erp"],
             provenance=self._prov("SalesOrder", ["total_due"]),
-            notes="revenue_with_tax = SUM(total_due) includes taxes and freight. Valori in USD ($).",
+            notes="revenue_with_tax = SUM(total_due) includes taxes and freight. Values in USD ($).",
         )
 
     def _q_lookup_employee(self, intent: Intent) -> Result:
@@ -2125,15 +2125,15 @@ class SemanticLayer:
         reason = intent.filters.get("reason", "unknown")
         messages = {
             "nationality_not_available": (
-                "Il campo 'nazionalità dipendente' non è disponibile in nessuna delle fonti dati "
-                "(ERP, CRM, HR/PIM). AdventureWorks non contiene questo attributo. "
-                "Impossibile rispondere alla domanda."
+                "The field 'employee nationality' is not available in any of the data sources "
+                "(ERP, CRM, HR/PIM). AdventureWorks does not contain this attribute. "
+                "Unable to answer the question."
             ),
         }
         return Result(
             answer=None,
             sources_touched=[],
-            notes=messages.get(reason, "Dato non disponibile nelle fonti correnti."),
+            notes=messages.get(reason, "Data not available in the current sources."),
             disambiguation_required=False,
         )
 
@@ -2149,9 +2149,9 @@ class SemanticLayer:
             answer=None,
             sources_touched=[],
             notes=(
-                f"L'entità '{entity}' non è modellata nel semantic layer. "
-                f"Le entità disponibili sono: {available}. "
-                "I fornitori (Supplier/Vendor) non fanno parte del modello dati corrente."
+                f"The entity '{entity}' is not modeled in the semantic layer. "
+                f"Available entities are: {available}. "
+                "Suppliers (Supplier/Vendor) are not part of the current data model."
             ),
             disambiguation_required=False,
         )
@@ -2160,47 +2160,47 @@ class SemanticLayer:
 
     _GLOSSARY: dict[str, str] = {
         "cliente attivo": (
-            "Un 'cliente attivo' è un account CRM con isActive=1 e accountId > 0 "
-            "(accountId < 0 indica un duplicato escluso dal modello pulito). "
-            "Può essere B2B o B2C."
+            "An 'active customer' is a CRM account with isActive=1 and accountId > 0 "
+            "(accountId < 0 indicates a duplicate excluded from the clean model). "
+            "Can be B2B or B2C."
         ),
         "fatturato": (
-            "'Fatturato' è un termine ambiguo nel sistema: può indicare "
-            "revenue (SUM subtotal_amount, ~$20M) oppure revenue_with_tax "
-            "(SUM total_due, ~$22.4M che include tasse e spedizione). "
-            "Specificare quale definizione usare."
+            "'Fatturato' is an ambiguous term in the system: it can refer to "
+            "revenue (SUM subtotal_amount, ~$20M) or revenue_with_tax "
+            "(SUM total_due, ~$22.4M which includes taxes and shipping). "
+            "Please specify which definition to use."
         ),
         "revenue": (
-            "revenue = SUM(subtotal_amount) — ricavi puri senza tasse né spedizione (~$20M). "
-            "Valori in USD ($)."
+            "revenue = SUM(subtotal_amount) — pure revenue without taxes or shipping (~$20M). "
+            "Values in USD ($)."
         ),
         "revenue_with_tax": (
-            "revenue_with_tax = SUM(total_due) — ricavi lordi inclusi tasse e spedizione (~$22.4M). "
-            "Valori in USD ($)."
+            "revenue_with_tax = SUM(total_due) — gross revenue including taxes and shipping (~$22.4M). "
+            "Values in USD ($)."
         ),
         "margin": (
-            "margin = SUM(qty * (listPrice - standardCost)) — margine lordo per prodotto. "
-            "Calcolato cross-ERP+PIM. Valori in USD ($)."
+            "margin = SUM(qty * (listPrice - standardCost)) — gross margin per product. "
+            "Calculated cross-ERP+PIM. Values in USD ($)."
         ),
         "active_customers": (
             "active_customers = COUNT(DISTINCT accountId) WHERE accountId > 0 AND isActive=1. "
-            "I duplicati (accountId < 0) sono esclusi per la Rule di deduplicazione."
+            "Duplicates (accountId < 0) are excluded by the deduplication Rule."
         ),
         "duplicato": (
-            "Un 'duplicato' è un record CRM con accountId < 0. "
-            "La Rule di disambiguazione esclude automaticamente questi record da tutte le metriche."
+            "A 'duplicate' is a CRM record with accountId < 0. "
+            "The disambiguation Rule automatically excludes these records from all metrics."
         ),
         "accountid": (
-            "accountId > 0 = record cliente valido; "
-            "accountId < 0 = duplicato CRM (escluso dal modello pulito per la Rule di deduplicazione)."
+            "accountId > 0 = valid customer record; "
+            "accountId < 0 = CRM duplicate (excluded from the clean model by the deduplication Rule)."
         ),
         "make only": (
-            "Prodotto 'Make Only' (isMakeOnly=true nel PIM): prodotto fabbricato internamente, "
-            "non acquistato da fornitori esterni."
+            "'Make Only' product (isMakeOnly=true in PIM): product manufactured internally, "
+            "not purchased from external suppliers."
         ),
         "hr": (
-            "HR/PIM è la sorgente dati per dipendenti e catalogo prodotti. "
-            "Il sync status è 'Delayed': i dati potrebbero non essere aggiornati in tempo reale."
+            "HR/PIM is the data source for employees and product catalog. "
+            "Sync status is 'Delayed': data may not be updated in real time."
         ),
     }
 
@@ -2222,13 +2222,13 @@ class SemanticLayer:
             if definition is None:
                 available = ", ".join(sorted(e.term for e in self._docs.glossary))
                 definition = (
-                    f"Il termine '{raw_term}' non è presente nel glossario del semantic layer. "
-                    f"Termini disponibili: {available}."
+                    f"The term '{raw_term}' is not present in the semantic layer glossary. "
+                    f"Available terms: {available}."
                 )
             return Result(
                 answer=definition,
                 sources_touched=[],
-                notes="Risposta dal glossario/ontologia del semantic layer.",
+                notes="Response from the semantic layer glossary/ontology.",
                 disambiguation_required=False,
             )
 
@@ -2241,13 +2241,13 @@ class SemanticLayer:
                     break
         if definition is None:
             definition = (
-                f"Il termine '{raw_term}' non è presente nel glossario del semantic layer. "
-                "Termini disponibili: " + ", ".join(sorted(self._GLOSSARY.keys())) + "."
+                f"The term '{raw_term}' is not present in the semantic layer glossary. "
+                "Available terms: " + ", ".join(sorted(self._GLOSSARY.keys())) + "."
             )
         return Result(
             answer=definition,
             sources_touched=[],
-            notes="Risposta dal glossario/ontologia del semantic layer.",
+            notes="Response from the semantic layer glossary/ontology.",
             disambiguation_required=False,
         )
 
@@ -2267,38 +2267,38 @@ class SemanticLayer:
             return Result(
                 answer=rules,
                 sources_touched=[],
-                notes=(f"{n} regole di disambiguazione attive nel semantic layer."),
+                notes=(f"{n} active disambiguation rules in the semantic layer."),
                 disambiguation_required=False,
             )
 
         rules = [
             {
                 "rule_id": "R1",
-                "name": "Deduplicazione accountId",
+                "name": "accountId deduplication",
                 "description": (
-                    "Record CRM con accountId < 0 sono duplicati. "
-                    "Tutti i conteggi e le metriche escludono automaticamente questi record "
-                    "(filtro: WHERE accountId > 0 o accountId >= 0)."
+                    "CRM records with accountId < 0 are duplicates. "
+                    "All counts and metrics automatically exclude these records "
+                    "(filter: WHERE accountId > 0 or accountId >= 0)."
                 ),
             },
             {
                 "rule_id": "R2",
                 "name": "Revenue vs subtotal_amount",
                 "description": (
-                    "Il termine 'fatturato'/'revenue' è ambiguo: "
-                    "revenue = SUM(subtotal_amount) (~$20M, senza tasse/spedizione); "
-                    "revenue_with_tax = SUM(total_due) (~$22.4M, con tasse e spedizione). "
-                    "Senza qualificatore esplicito viene sollevata un'AmbiguityError."
+                    "The term 'fatturato'/'revenue' is ambiguous: "
+                    "revenue = SUM(subtotal_amount) (~$20M, without taxes/shipping); "
+                    "revenue_with_tax = SUM(total_due) (~$22.4M, with taxes and shipping). "
+                    "Without an explicit qualifier, an AmbiguityError is raised."
                 ),
             },
             {
                 "rule_id": "R3",
                 "name": "HR freshness Delayed",
                 "description": (
-                    "La sorgente HR/PIM ha sync status 'Delayed': "
-                    "i dati sui dipendenti non sono aggiornati in tempo reale. "
-                    "I conteggi di dipendenti potrebbero non riflettere la situazione odierna. "
-                    "Tutte le risposte HR includono un avviso di freshness."
+                    "The HR/PIM source has sync status 'Delayed': "
+                    "employee data is not updated in real time. "
+                    "Employee counts may not reflect the current situation. "
+                    "All HR responses include a freshness warning."
                 ),
             },
         ]
@@ -2306,8 +2306,8 @@ class SemanticLayer:
             answer=rules,
             sources_touched=[],
             notes=(
-                "3 regole di disambiguazione attive nel semantic layer: "
-                "R1=accountId<0 duplicati, R2=revenue ambiguità, R3=HR freshness delayed."
+                "3 active disambiguation rules in the semantic layer: "
+                "R1=accountId<0 duplicates, R2=revenue ambiguity, R3=HR freshness delayed."
             ),
             disambiguation_required=False,
         )
@@ -2339,32 +2339,31 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["order_id"]),
             },
             notes=(
-                "Anti-join CRM × ERP: clienti con accountId > 0 che non appaiono "
-                "in nessun sales_order_header. I duplicati (accountId < 0) sono esclusi."
+                "Anti-join CRM × ERP: customers with accountId > 0 that do not appear "
+                "in any sales_order_header. Duplicates (accountId < 0) are excluded."
             ),
         )
 
     # ── MH-07: employees who managed duplicate-account customers ─────────────
 
     def _q_employees_with_duplicate_customers(self, intent: Intent) -> Result:
-        # Per la Rule R1, i record con accountId < 0 sono filtrati a monte.
-        # Nel sistema pulito nessun dipendente ha "gestito" clienti duplicati.
+        # Per Rule R1, records with accountId < 0 are filtered upstream.
+        # In the clean system no employee has "managed" duplicate customers.
         return Result(
             answer={
                 "employee_count": 0,
                 "explanation": (
-                    "I record con accountId < 0 sono duplicati filtrati dalla Rule R1 "
-                    "di deduplicazione. Nel sistema pulito nessun ordine è associato "
-                    "a un accountId < 0, quindi nessun dipendente risulta aver gestito "
-                    "clienti con account duplicato."
+                    "Records with accountId < 0 are duplicates filtered by deduplication Rule R1. "
+                    "In the clean system no order is associated with accountId < 0, "
+                    "so no employee is found to have managed customers with duplicate accounts."
                 ),
             },
             sql_used=None,
             sources_touched=[],
             notes=(
-                "Risultato deterministico: 0 dipendenti. "
-                "La Rule R1 (accountId<0 = duplicati) garantisce che nessun ordine "
-                "nel sistema pulito sia collegato a un account duplicato."
+                "Deterministic result: 0 employees. "
+                "Rule R1 (accountId<0 = duplicates) ensures that no order "
+                "in the clean system is linked to a duplicate account."
             ),
             disambiguation_required=False,
         )
@@ -2413,7 +2412,7 @@ class SemanticLayer:
             "source": "HR/PIM dipendenti_hr",
             "unit": "count",
             "status": "certified",
-            "freshness": "Delayed — dato non in tempo reale",
+            "freshness": "Delayed — data not in real time",
         },
     ]
 
@@ -2434,8 +2433,8 @@ class SemanticLayer:
                 answer=answer,
                 sources_touched=[],
                 notes=(
-                    f"{len(certified)} metriche certificate disponibili nel semantic layer. "
-                    "Lista fissa e deterministica."
+                    f"{len(certified)} certified metrics available in the semantic layer. "
+                    "Fixed and deterministic list."
                 ),
                 disambiguation_required=False,
             )
@@ -2444,8 +2443,8 @@ class SemanticLayer:
             answer=self._CERTIFIED_METRICS,
             sources_touched=[],
             notes=(
-                f"{len(self._CERTIFIED_METRICS)} metriche certificate disponibili nel semantic layer. "
-                "Lista fissa e deterministica."
+                f"{len(self._CERTIFIED_METRICS)} certified metrics available in the semantic layer. "
+                "Fixed and deterministic list."
             ),
             disambiguation_required=False,
         )

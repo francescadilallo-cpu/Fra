@@ -22,10 +22,10 @@ import {
 type SubTab = 'documenti' | 'entita' | 'metriche' | 'glossario'
 
 const SUB_TABS: { id: SubTab; label: string; icon: typeof FileText }[] = [
-  { id: 'documenti', label: 'Documenti', icon: FileText },
-  { id: 'entita', label: 'Entità', icon: Tag },
-  { id: 'metriche', label: 'Metriche', icon: BarChart2 },
-  { id: 'glossario', label: 'Glossario', icon: BookOpen },
+  { id: 'documenti', label: 'Documents', icon: FileText },
+  { id: 'entita', label: 'Entities', icon: Tag },
+  { id: 'metriche', label: 'Metrics', icon: BarChart2 },
+  { id: 'glossario', label: 'Glossary', icon: BookOpen },
 ]
 
 function SectionCard({ children }: { children: React.ReactNode }) {
@@ -70,7 +70,7 @@ function DocumentiTab() {
     try {
       setDocs(await listDocuments())
     } catch {
-      setError('Impossibile caricare i documenti.')
+      setError('Unable to load documents.')
     } finally {
       setLoading(false)
     }
@@ -86,7 +86,7 @@ function DocumentiTab() {
       await reload()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Upload fallito. Controlla il formato del file.')
+      setError(msg ?? 'Upload failed. Check the file format.')
     } finally {
       setUploading(false)
     }
@@ -111,7 +111,7 @@ function DocumentiTab() {
       await deleteDocument(id)
       await reload()
     } catch {
-      setError('Impossibile eliminare il documento.')
+      setError('Unable to delete the document.')
     }
   }
 
@@ -121,8 +121,8 @@ function DocumentiTab() {
 
       <SectionCard>
         <SectionHeader
-          title="Carica documenti"
-          subtitle="Supportati: .txt, .md, .pdf — il contenuto arricchisce le risposte del livello semantico"
+          title="Upload documents"
+          subtitle="Supported: .txt, .md, .pdf — content enriches semantic layer responses"
         />
         <div className="p-5">
           <input
@@ -147,11 +147,11 @@ function DocumentiTab() {
           >
             <Upload className={`w-8 h-8 mx-auto mb-2 ${dragging ? 'text-teal-500' : 'text-slate-300'}`} />
             {uploading ? (
-              <p className="text-sm text-slate-500">Caricamento in corso…</p>
+              <p className="text-sm text-slate-500">Uploading…</p>
             ) : (
               <>
                 <p className="text-sm font-medium text-slate-700">
-                  Trascina un file qui o <span className="text-teal-600 underline">clicca per selezionare</span>
+                  Drag a file here or <span className="text-teal-600 underline">click to select</span>
                 </p>
                 <p className="text-xs text-slate-400 mt-1">.txt · .md · .pdf</p>
               </>
@@ -161,12 +161,12 @@ function DocumentiTab() {
       </SectionCard>
 
       <SectionCard>
-        <SectionHeader title="Documenti caricati" subtitle={`${docs.length} documento${docs.length !== 1 ? 'i' : ''}`} />
+        <SectionHeader title="Uploaded documents" subtitle={`${docs.length} document${docs.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Caricamento…</div>
+          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
         ) : docs.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
-            Nessun documento caricato. Aggiungi un file sopra.
+            No documents uploaded. Add a file above.
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -176,13 +176,13 @@ function DocumentiTab() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800 truncate">{doc.filename}</p>
                   <p className="text-xs text-slate-400">
-                    {doc.file_type.toUpperCase()} · {new Date(doc.created_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
+                    {doc.file_type.toUpperCase()} · {new Date(doc.created_at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
                 </div>
                 <button
                   onClick={() => handleDelete(doc.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                  title="Elimina"
+                  title="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -195,7 +195,7 @@ function DocumentiTab() {
   )
 }
 
-// ── Entità sub-tab ────────────────────────────────────────────────────────────
+// ── Entities sub-tab ──────────────────────────────────────────────────────────
 
 const EMPTY_ENTITY = { name: '', display_name: '', synonyms: '', description: '', source: '' }
 
@@ -211,7 +211,7 @@ function EntitaTab() {
     try {
       setEntities(await listEntities())
     } catch {
-      setError('Impossibile caricare le entità.')
+      setError('Unable to load entities.')
     } finally {
       setLoading(false)
     }
@@ -222,7 +222,7 @@ function EntitaTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim() || !form.display_name.trim()) {
-      setError('Nome e nome visualizzato sono obbligatori.')
+      setError('Name and display name are required.')
       return
     }
     setError(null)
@@ -240,7 +240,7 @@ function EntitaTab() {
       await reload()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Salvataggio fallito.')
+      setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)
     }
@@ -252,7 +252,7 @@ function EntitaTab() {
       await deleteEntity(id)
       await reload()
     } catch {
-      setError("Impossibile eliminare l'entità.")
+      setError('Unable to delete the entity.')
     }
   }
 
@@ -261,61 +261,61 @@ function EntitaTab() {
       {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
 
       <SectionCard>
-        <SectionHeader title="Nuova entità" subtitle="Definisci un'entità del dominio con sinonimi e descrizione" />
+        <SectionHeader title="New entity" subtitle="Define a domain entity with synonyms and description" />
         <div className="p-5">
           {!showForm ? (
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 text-sm font-medium hover:bg-teal-100 transition-colors"
             >
-              <Plus className="w-4 h-4" /> Aggiungi entità
+              <Plus className="w-4 h-4" /> Add entity
             </button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Nome tecnico *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Technical name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. SalesOrder"
+                    placeholder="e.g. SalesOrder"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Nome visualizzato *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Display name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. Ordine di vendita"
+                    placeholder="e.g. Sales Order"
                     value={form.display_name}
                     onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Sinonimi (separati da virgola)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Synonyms (comma-separated)</label>
                 <input
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                  placeholder="es. ordine, order, vendita"
+                  placeholder="e.g. order, sale, transaction"
                   value={form.synonyms}
                   onChange={e => setForm(f => ({ ...f, synonyms: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Descrizione</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
                 <textarea
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 resize-none"
                   rows={2}
-                  placeholder="Descrizione dell'entità nel dominio aziendale"
+                  placeholder="Description of the entity in the business domain"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Sorgente dati</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Data source</label>
                 <input
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                  placeholder="es. erp, crm"
+                  placeholder="e.g. erp, crm"
                   value={form.source}
                   onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
                 />
@@ -326,14 +326,14 @@ function EntitaTab() {
                   disabled={saving}
                   className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
                 >
-                  {saving ? 'Salvataggio…' : 'Salva entità'}
+                  {saving ? 'Saving…' : 'Save entity'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setForm(EMPTY_ENTITY); setError(null) }}
                   className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
                 >
-                  Annulla
+                  Cancel
                 </button>
               </div>
             </form>
@@ -342,12 +342,12 @@ function EntitaTab() {
       </SectionCard>
 
       <SectionCard>
-        <SectionHeader title="Entità definite" subtitle={`${entities.length} entità`} />
+        <SectionHeader title="Defined entities" subtitle={`${entities.length} ${entities.length !== 1 ? 'entities' : 'entity'}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Caricamento…</div>
+          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
         ) : entities.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
-            Nessuna entità definita. Aggiungine una sopra.
+            No entities defined. Add one above.
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -365,14 +365,14 @@ function EntitaTab() {
                   {e.description && <p className="text-xs text-slate-500 mt-0.5">{e.description}</p>}
                   {e.synonyms.length > 0 && (
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Sinonimi: {e.synonyms.join(', ')}
+                      Synonyms: {e.synonyms.join(', ')}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={() => handleDelete(e.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Elimina"
+                  title="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -385,7 +385,7 @@ function EntitaTab() {
   )
 }
 
-// ── Metriche sub-tab ──────────────────────────────────────────────────────────
+// ── Metrics sub-tab ───────────────────────────────────────────────────────────
 
 const EMPTY_METRIC = { name: '', display_name: '', synonyms: '', description: '', unit: '', certified: false }
 
@@ -401,7 +401,7 @@ function MetricheTab() {
     try {
       setMetrics(await listMetrics())
     } catch {
-      setError('Impossibile caricare le metriche.')
+      setError('Unable to load metrics.')
     } finally {
       setLoading(false)
     }
@@ -412,7 +412,7 @@ function MetricheTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim() || !form.display_name.trim()) {
-      setError('Nome e nome visualizzato sono obbligatori.')
+      setError('Name and display name are required.')
       return
     }
     setError(null)
@@ -431,7 +431,7 @@ function MetricheTab() {
       await reload()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Salvataggio fallito.')
+      setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)
     }
@@ -443,7 +443,7 @@ function MetricheTab() {
       await deleteMetric(id)
       await reload()
     } catch {
-      setError('Impossibile eliminare la metrica.')
+      setError('Unable to delete the metric.')
     }
   }
 
@@ -452,32 +452,32 @@ function MetricheTab() {
       {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
 
       <SectionCard>
-        <SectionHeader title="Nuova metrica" subtitle="Definisci una metrica aziendale con unità e certificazione" />
+        <SectionHeader title="New metric" subtitle="Define a business metric with unit and certification" />
         <div className="p-5">
           {!showForm ? (
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 text-sm font-medium hover:bg-teal-100 transition-colors"
             >
-              <Plus className="w-4 h-4" /> Aggiungi metrica
+              <Plus className="w-4 h-4" /> Add metric
             </button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Nome tecnico *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Technical name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. total_revenue"
+                    placeholder="e.g. total_revenue"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Nome visualizzato *</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Display name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. Fatturato totale"
+                    placeholder="e.g. Total Revenue"
                     value={form.display_name}
                     onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
                   />
@@ -485,30 +485,30 @@ function MetricheTab() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Sinonimi (separati da virgola)</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Synonyms (comma-separated)</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. ricavi, revenue"
+                    placeholder="e.g. revenue, income, sales"
                     value={form.synonyms}
                     onChange={e => setForm(f => ({ ...f, synonyms: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Unità di misura</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Unit of measure</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="es. EUR, %, pezzi"
+                    placeholder="e.g. EUR, %, units"
                     value={form.unit}
                     onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Descrizione</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
                 <textarea
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 resize-none"
                   rows={2}
-                  placeholder="Come viene calcolata questa metrica?"
+                  placeholder="How is this metric calculated?"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 />
@@ -520,7 +520,7 @@ function MetricheTab() {
                   checked={form.certified}
                   onChange={e => setForm(f => ({ ...f, certified: e.target.checked }))}
                 />
-                <span className="text-sm text-slate-700">Metrica certificata</span>
+                <span className="text-sm text-slate-700">Certified metric</span>
               </label>
               <div className="flex gap-2 pt-1">
                 <button
@@ -528,14 +528,14 @@ function MetricheTab() {
                   disabled={saving}
                   className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
                 >
-                  {saving ? 'Salvataggio…' : 'Salva metrica'}
+                  {saving ? 'Saving…' : 'Save metric'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setForm(EMPTY_METRIC); setError(null) }}
                   className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
                 >
-                  Annulla
+                  Cancel
                 </button>
               </div>
             </form>
@@ -544,12 +544,12 @@ function MetricheTab() {
       </SectionCard>
 
       <SectionCard>
-        <SectionHeader title="Metriche definite" subtitle={`${metrics.length} metrica${metrics.length !== 1 ? 'he' : ''}`} />
+        <SectionHeader title="Defined metrics" subtitle={`${metrics.length} metric${metrics.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Caricamento…</div>
+          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
         ) : metrics.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
-            Nessuna metrica definita. Aggiungine una sopra.
+            No metrics defined. Add one above.
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -564,20 +564,20 @@ function MetricheTab() {
                       <span className="text-[10px] bg-amber-50 text-amber-600 rounded px-1.5 py-0.5">{m.unit}</span>
                     )}
                     {m.certified && (
-                      <span className="text-[10px] bg-green-50 text-green-700 rounded px-1.5 py-0.5 font-semibold">CERTIFICATA</span>
+                      <span className="text-[10px] bg-green-50 text-green-700 rounded px-1.5 py-0.5 font-semibold">CERTIFIED</span>
                     )}
                   </div>
                   {m.description && <p className="text-xs text-slate-500 mt-0.5">{m.description}</p>}
                   {m.synonyms.length > 0 && (
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Sinonimi: {m.synonyms.join(', ')}
+                      Synonyms: {m.synonyms.join(', ')}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={() => handleDelete(m.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Elimina"
+                  title="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -590,7 +590,7 @@ function MetricheTab() {
   )
 }
 
-// ── Glossario sub-tab ─────────────────────────────────────────────────────────
+// ── Glossary sub-tab ──────────────────────────────────────────────────────────
 
 const EMPTY_GLOSSARY = { term: '', definition: '' }
 
@@ -606,7 +606,7 @@ function GlossarioTab() {
     try {
       setTerms(await listGlossary())
     } catch {
-      setError('Impossibile caricare il glossario.')
+      setError('Unable to load the glossary.')
     } finally {
       setLoading(false)
     }
@@ -617,7 +617,7 @@ function GlossarioTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.term.trim() || !form.definition.trim()) {
-      setError('Termine e definizione sono obbligatori.')
+      setError('Term and definition are required.')
       return
     }
     setError(null)
@@ -629,7 +629,7 @@ function GlossarioTab() {
       await reload()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Salvataggio fallito.')
+      setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)
     }
@@ -641,7 +641,7 @@ function GlossarioTab() {
       await deleteGlossaryTerm(id)
       await reload()
     } catch {
-      setError('Impossibile eliminare il termine.')
+      setError('Unable to delete the term.')
     }
   }
 
@@ -650,32 +650,32 @@ function GlossarioTab() {
       {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
 
       <SectionCard>
-        <SectionHeader title="Nuovo termine" subtitle="Aggiungi una definizione al glossario aziendale" />
+        <SectionHeader title="New term" subtitle="Add a definition to the business glossary" />
         <div className="p-5">
           {!showForm ? (
             <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 text-sm font-medium hover:bg-teal-100 transition-colors"
             >
-              <Plus className="w-4 h-4" /> Aggiungi termine
+              <Plus className="w-4 h-4" /> Add term
             </button>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Termine *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Term *</label>
                 <input
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                  placeholder="es. fatturato netto"
+                  placeholder="e.g. net revenue"
                   value={form.term}
                   onChange={e => setForm(f => ({ ...f, term: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Definizione *</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Definition *</label>
                 <textarea
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 resize-none"
                   rows={3}
-                  placeholder="Definisci il significato aziendale di questo termine"
+                  placeholder="Define the business meaning of this term"
                   value={form.definition}
                   onChange={e => setForm(f => ({ ...f, definition: e.target.value }))}
                 />
@@ -686,14 +686,14 @@ function GlossarioTab() {
                   disabled={saving}
                   className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
                 >
-                  {saving ? 'Salvataggio…' : 'Salva termine'}
+                  {saving ? 'Saving…' : 'Save term'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowForm(false); setForm(EMPTY_GLOSSARY); setError(null) }}
                   className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
                 >
-                  Annulla
+                  Cancel
                 </button>
               </div>
             </form>
@@ -702,12 +702,12 @@ function GlossarioTab() {
       </SectionCard>
 
       <SectionCard>
-        <SectionHeader title="Glossario" subtitle={`${terms.length} termine${terms.length !== 1 ? 'i' : ''}`} />
+        <SectionHeader title="Glossary" subtitle={`${terms.length} term${terms.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Caricamento…</div>
+          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
         ) : terms.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
-            Nessun termine nel glossario. Aggiungine uno sopra.
+            No terms in the glossary. Add one above.
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -721,7 +721,7 @@ function GlossarioTab() {
                 <button
                   onClick={() => handleDelete(t.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Elimina"
+                  title="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -743,9 +743,9 @@ export default function ContextTab() {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Page header */}
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-900">Contesto</h2>
+        <h2 className="text-xl font-bold text-slate-900">Context</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Arricchisci il livello semantico con documenti e definizioni. Il contesto utente ha priorità sui metadati YAML predefiniti.
+          Enrich the semantic layer with documents and definitions. User context takes priority over default YAML metadata.
         </p>
       </div>
 

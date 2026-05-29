@@ -1,51 +1,51 @@
 entities:
   - name: Customer
-    display_name: Cliente
+    display_name: Customer
     synonyms: [cliente, clienti, customer, customers, account, accounts]
-    description: "Clienti CRM con accountId positivo"
+    description: "CRM customers with positive accountId"
     source: crm
     primary_key: accountId
     filter_active: "accountId > 0"
 
   - name: SalesOrder
-    display_name: Ordine
+    display_name: Order
     synonyms: [ordine, ordini, order, orders, vendita, vendite, transazione]
-    description: "Ordini ERP da sales_order_header"
+    description: "ERP orders from sales_order_header"
     source: erp
     primary_key: order_id
 
   - name: Employee
-    display_name: Dipendente
+    display_name: Employee
     synonyms: [dipendente, dipendenti, employee, employees, persona, persone]
-    description: "Dipendenti HR"
+    description: "HR employees"
     source: hr
     primary_key: employee_id
     freshness: delayed
 
   - name: Product
-    display_name: Prodotto
+    display_name: Product
     synonyms: [prodotto, prodotti, product, products, articolo, articoli, sku]
-    description: "Prodotti PIM"
+    description: "PIM products"
     source: hr_pim
     primary_key: internal_id
 
   - name: Territory
-    display_name: Territorio
+    display_name: Territory
     synonyms: [territorio, territori, territory, territories, area, regione]
-    description: "Territori di vendita ERP"
+    description: "ERP sales territories"
     source: erp
     primary_key: territory_id
 
   - name: Salesperson
-    display_name: Venditore
+    display_name: Salesperson
     synonyms: [venditore, venditori, salesperson, salespersons, agente, agenti]
-    description: "Venditori ERP (salesperson_ref su sales_order_header)"
+    description: "ERP salespersons (salesperson_ref on sales_order_header)"
     source: erp
     primary_key: salesperson_ref
 
   - name: ProductCategory
-    display_name: Categoria Prodotto
+    display_name: Product Category
     synonyms: [categoria, categorie, category, categories]
-    description: "Categorie prodotto PIM"
+    description: "PIM product categories"
     source: hr_pim
     primary_key: category

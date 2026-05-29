@@ -1,39 +1,39 @@
 metrics:
   - name: revenue
-    display_name: Fatturato
+    display_name: Revenue
     synonyms: [fatturato, revenue, ricavi, vendite totali, total due, total_due]
-    description: "Somma di total_due dagli ordini ERP (include tasse)"
+    description: "Sum of total_due from ERP orders (includes taxes)"
     unit: USD
     certified: true
 
   - name: revenue_with_tax
-    display_name: Fatturato con IVA
+    display_name: Revenue with Tax
     synonyms: [fatturato con iva, revenue with tax, totale con tasse]
-    description: "Fatturato comprensivo di IVA"
+    description: "Revenue including VAT"
     unit: USD
     certified: true
 
   - name: margin
-    display_name: Margine
+    display_name: Margin
     synonyms: [margine, margin, profitto, profit]
-    description: "Margine per venditore (revenue - costo PIM)"
+    description: "Margin per salesperson (revenue - PIM cost)"
     unit: USD
     certified: true
 
   - name: active_customers
-    display_name: Clienti Attivi
+    display_name: Active Customers
     synonyms: [clienti attivi, active customers, clienti con ordini]
-    description: "Clienti CRM con almeno un ordine ERP (accountId > 0)"
+    description: "CRM customers with at least one ERP order (accountId > 0)"
     certified: true
 
   - name: count_orders
-    display_name: Numero Ordini
+    display_name: Order Count
     synonyms: [numero ordini, count orders, quanti ordini, ordini totali]
-    description: "Conteggio ordini ERP"
+    description: "ERP order count"
     certified: true
 
   - name: count_employees
-    display_name: Numero Dipendenti
+    display_name: Employee Count
     synonyms: [numero dipendenti, count employees, quanti dipendenti, headcount]
-    description: "Conteggio dipendenti HR (nota: freshness Delayed)"
+    description: "HR employee count (note: freshness Delayed)"
     certified: true
