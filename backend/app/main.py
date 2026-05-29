@@ -88,6 +88,7 @@ _semantic_redis_client: Any = None
 _semantic_redis_client_initialized = False
 _semantic_redis_lock = threading.Lock()
 _semantic_cache_namespace = 0
+_semantic_ns_lock = threading.Lock()
 
 
 def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
@@ -159,7 +160,8 @@ def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
 
 def _bump_semantic_cache_namespace() -> None:
     global _semantic_cache_namespace
-    _semantic_cache_namespace += 1
+    with _semantic_ns_lock:
+        _semantic_cache_namespace += 1
 
 
 def _get_jwt_secret() -> str:
