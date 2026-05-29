@@ -240,7 +240,9 @@ def test_semantic_ask_redis_cache_short_circuits_repeated_layer_execution(
     calls = {"count": 0}
 
     class DummyLayer:
-        def ask(self, question: str, context: dict[str, str]) -> SimpleNamespace:
+        def ask(
+            self, question: str, context: dict[str, str], docs_override=None
+        ) -> SimpleNamespace:
             calls["count"] += 1
             return SimpleNamespace(
                 answer=f"ok:{question}",
