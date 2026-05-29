@@ -1,1 +1,4 @@
 context.db
+# Runtime registry: re-seeded with environment-correct source paths on each
+# deploy. Committing it would bake in absolute paths from the build machine.
+source_registry.db

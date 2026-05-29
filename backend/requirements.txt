@@ -12,7 +12,10 @@ networkx
 sqlalchemy
 pyyaml
 pandas
-duckdb
+# Pinned: the committed fra_unified.duckdb snapshot uses DuckDB's v1.5.3
+# on-disk storage format. A different DuckDB version on the server cannot
+# read it and would fall back to rebuilding from source.
+duckdb==1.5.3
 pytest
 pytest-asyncio
 python-multipart
