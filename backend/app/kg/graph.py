@@ -70,8 +70,9 @@ class KnowledgeGraph:
         self._load_hr_employees(hr_pim)
         self._load_pim_products(hr_pim)
         self._load_erp_salespersons(erp)
-        self._load_sales_orders(erp)
-        self._load_sales_order_lines(erp)
+        # SalesOrder and SalesOrderLine are NOT loaded into the in-memory graph:
+        # they are queried directly via DuckDB SQL. Loading them would create
+        # 150k+ networkx nodes (~400MB RAM) and crash Render's free-tier instance.
         self._load_crm_addresses(crm)
 
         logger.info(

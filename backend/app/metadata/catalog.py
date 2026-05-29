@@ -439,27 +439,30 @@ class MetadataCatalog:
         if erp is None:
             return
 
-        # SalesOrder
-        orders = list(erp.load_entity("SalesOrder"))
-        kg_count = kg.subgraph("SalesOrder").number_of_nodes()
+        # SalesOrder — use COUNT + sample to avoid loading 31k rows into Python memory
+        try:
+            orders_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_header"')[0]["n"]
+        except Exception:
+            orders_count = 0
+        orders_sample = erp.execute_query('SELECT * FROM "sales_order_header" LIMIT 200')
         self._upsert_entity(
             session,
             name="SalesOrder",
-            description="Ordine di vendita completo (header).",
+            description="Sales order header.",
             primary_key="order_id",
             sources=[
                 {"source": "erp", "table": "sales_order_header", "key": "order_id"}
             ],
-            record_count=len(orders),
+            record_count=orders_count,
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=kg_count,
+            kg_node_count=0,
         )
         _catalog_columns(
             session,
             self._upsert_attribute,
             entity="SalesOrder",
-            rows=orders,
+            rows=orders_sample,
             source_prefix="erp.sales_order_header",
             field_definitions={
                 "order_id": "Identificatore ordine",
@@ -489,25 +492,28 @@ class MetadataCatalog:
             },
         )
 
-        # SalesOrderLine
-        lines = list(erp.load_entity("SalesOrderLine"))
-        kg_count_l = kg.subgraph("SalesOrderLine").number_of_nodes()
+        # SalesOrderLine — use COUNT + sample to avoid loading 121k rows into Python memory
+        try:
+            lines_count: int = erp.execute_query('SELECT COUNT(*) AS n FROM "sales_order_line"')[0]["n"]
+        except Exception:
+            lines_count = 0
+        lines_sample = erp.execute_query('SELECT * FROM "sales_order_line" LIMIT 200')
         self._upsert_entity(
             session,
             name="SalesOrderLine",
-            description="Riga di un ordine di vendita.",
+            description="Sales order line item.",
             primary_key="(order_id, line_id)",
             sources=[{"source": "erp", "table": "sales_order_line"}],
-            record_count=len(lines),
+            record_count=lines_count,
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=kg_count_l,
+            kg_node_count=0,
         )
         _catalog_columns(
             session,
             self._upsert_attribute,
             entity="SalesOrderLine",
-            rows=lines,
+            rows=lines_sample,
             source_prefix="erp.sales_order_line",
             field_definitions={
                 "product_ref": "Riferimento prodotto (PIM internal_id)",
