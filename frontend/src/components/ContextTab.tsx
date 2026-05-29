@@ -19,13 +19,13 @@ import {
   type GlossaryTerm,
 } from '../api/context'
 
-type SubTab = 'documenti' | 'entita' | 'metriche' | 'glossario'
+type SubTab = 'documents' | 'entities' | 'metrics' | 'glossary'
 
 const SUB_TABS: { id: SubTab; label: string; icon: typeof FileText }[] = [
-  { id: 'documenti', label: 'Documents', icon: FileText },
-  { id: 'entita', label: 'Entities', icon: Tag },
-  { id: 'metriche', label: 'Metrics', icon: BarChart2 },
-  { id: 'glossario', label: 'Glossary', icon: BookOpen },
+  { id: 'documents', label: 'Documents', icon: FileText },
+  { id: 'entities', label: 'Entities', icon: Tag },
+  { id: 'metrics', label: 'Metrics', icon: BarChart2 },
+  { id: 'glossary', label: 'Glossary', icon: BookOpen },
 ]
 
 function SectionCard({ children }: { children: React.ReactNode }) {
@@ -58,7 +58,7 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
 
 // ── Documenti sub-tab ─────────────────────────────────────────────────────────
 
-function DocumentiTab() {
+function DocumentsTab() {
   const [docs, setDocs] = useState<ContextDocumentMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -199,7 +199,7 @@ function DocumentiTab() {
 
 const EMPTY_ENTITY = { name: '', display_name: '', synonyms: '', description: '', source: '' }
 
-function EntitaTab() {
+function EntitiesTab() {
   const [entities, setEntities] = useState<ContextEntity[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -389,7 +389,7 @@ function EntitaTab() {
 
 const EMPTY_METRIC = { name: '', display_name: '', synonyms: '', description: '', unit: '', certified: false }
 
-function MetricheTab() {
+function MetricsTab() {
   const [metrics, setMetrics] = useState<ContextMetric[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -594,7 +594,7 @@ function MetricheTab() {
 
 const EMPTY_GLOSSARY = { term: '', definition: '' }
 
-function GlossarioTab() {
+function GlossaryTab() {
   const [terms, setTerms] = useState<GlossaryTerm[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -737,7 +737,7 @@ function GlossarioTab() {
 // ── Main ContextTab ───────────────────────────────────────────────────────────
 
 export default function ContextTab() {
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>('documenti')
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>('documents')
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -768,10 +768,10 @@ export default function ContextTab() {
       </div>
 
       {/* Sub-tab content */}
-      {activeSubTab === 'documenti' && <DocumentiTab />}
-      {activeSubTab === 'entita' && <EntitaTab />}
-      {activeSubTab === 'metriche' && <MetricheTab />}
-      {activeSubTab === 'glossario' && <GlossarioTab />}
+      {activeSubTab === 'documents' && <DocumentsTab />}
+      {activeSubTab === 'entities' && <EntitiesTab />}
+      {activeSubTab === 'metrics' && <MetricsTab />}
+      {activeSubTab === 'glossary' && <GlossaryTab />}
     </div>
   )
 }
