@@ -1115,7 +1115,9 @@ def sync_source(
 
 
 @app.get("/api/semantic/sources")
-def semantic_sources() -> list[dict[str, Any]]:
+def semantic_sources(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
     """Return real data source metadata with freshness."""
     _ensure_semantic_loaded()
     sources = []
@@ -1150,7 +1152,10 @@ def semantic_sources() -> list[dict[str, Any]]:
 
 
 @app.get("/api/semantic/metrics")
-def get_metrics(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
+def get_metrics(
+    sector_id: str = "manufacturing",
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -1171,7 +1176,10 @@ def get_metrics(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
 
 
 @app.post("/api/semantic/metrics", status_code=201)
-def create_metric(m: MetricCreate) -> dict[str, Any]:
+def create_metric(
+    m: MetricCreate,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     mid = f"m-{int(__import__('time').time() * 1000)}"
     conn = get_connection()
     try:
@@ -1207,7 +1215,10 @@ def create_metric(m: MetricCreate) -> dict[str, Any]:
 
 
 @app.delete("/api/semantic/metrics/{metric_id}")
-def delete_metric(metric_id: str) -> dict[str, Any]:
+def delete_metric(
+    metric_id: str,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1227,7 +1238,10 @@ def delete_metric(metric_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/semantic/hierarchies")
-def get_hierarchies(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
+def get_hierarchies(
+    sector_id: str = "manufacturing",
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -1246,7 +1260,10 @@ def get_hierarchies(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
 
 
 @app.post("/api/semantic/hierarchies", status_code=201)
-def create_hierarchy(h: HierarchyCreate) -> dict[str, Any]:
+def create_hierarchy(
+    h: HierarchyCreate,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     hid = f"h-{int(__import__('time').time() * 1000)}"
     conn = get_connection()
     try:
@@ -1271,7 +1288,10 @@ def create_hierarchy(h: HierarchyCreate) -> dict[str, Any]:
 
 
 @app.delete("/api/semantic/hierarchies/{hierarchy_id}")
-def delete_hierarchy(hierarchy_id: str) -> dict[str, Any]:
+def delete_hierarchy(
+    hierarchy_id: str,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1291,7 +1311,10 @@ def delete_hierarchy(hierarchy_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/semantic/segments")
-def get_segments(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
+def get_segments(
+    sector_id: str = "manufacturing",
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -1312,7 +1335,10 @@ def get_segments(sector_id: str = "manufacturing") -> list[dict[str, Any]]:
 
 
 @app.post("/api/semantic/segments", status_code=201)
-def create_segment(s: SegmentCreate) -> dict[str, Any]:
+def create_segment(
+    s: SegmentCreate,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     sid = f"seg-{int(__import__('time').time() * 1000)}"
     conn = get_connection()
     try:
@@ -1338,7 +1364,10 @@ def create_segment(s: SegmentCreate) -> dict[str, Any]:
 
 
 @app.delete("/api/semantic/segments/{segment_id}")
-def delete_segment(segment_id: str) -> dict[str, Any]:
+def delete_segment(
+    segment_id: str,
+    _: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1358,7 +1387,10 @@ def delete_segment(segment_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/semantic/coverage")
-def semantic_coverage(sector_id: str = "manufacturing") -> dict[str, Any]:
+def semantic_coverage(
+    sector_id: str = "manufacturing",
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
     conn = get_connection()
     try:
         n_metrics = conn.execute(

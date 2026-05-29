@@ -1790,7 +1790,7 @@ class SemanticLayer:
 
     def _q_top_salespersons_by_revenue(self, intent: Intent) -> Result:
         year = intent.year or intent.filters.get("year")
-        limit = intent.limit or 3
+        limit = max(1, min(int(intent.limit or 3), 50))
         if year:
             sql = """
                 SELECT salesperson_ref, ROUND(SUM(total_due), 2) as revenue
@@ -1921,7 +1921,7 @@ class SemanticLayer:
         )
 
     def _q_top_products_by_qty(self, intent: Intent) -> Result:
-        limit = intent.limit or 5
+        limit = max(1, min(int(intent.limit or 5), 50))
         sql = """
             SELECT product_ref, SUM(qty) as qty_totale
             FROM sales_order_line GROUP BY product_ref ORDER BY qty_totale DESC LIMIT ?
