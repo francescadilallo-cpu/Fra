@@ -461,6 +461,12 @@ class _RuleParser:
 
     def parse(self, question: str) -> Intent:
         q = question.lower()
+        # The deterministic patterns below were authored for Italian questions.
+        # The product UI is now English, so normalise the most common English
+        # business terms to the Italian tokens the patterns already match.
+        # This is additive: Italian questions are unaffected (terms map to
+        # themselves), and it lets English questions hit the same intents.
+        q = _normalize_english_terms(q)
 
         year = self._extract_year(question)
         limit = self._extract_limit(q)
@@ -681,7 +687,7 @@ class _RuleParser:
 
         # ── Q2: product price lookup ──────────────────────────────────────
         if "prezzo" in q or "listino" in q or "price" in q:
-            prod = self._extract_quoted(question)
+            prod = self._extract_quoted(question) or _extract_product_code(question)
             return Intent(
                 intent_type="product_price",
                 filters={"product_name": prod},
@@ -833,6 +839,11 @@ class _RuleParser:
                 raw_question=question,
             )
 
+        # ── Plain customer count (e.g. "How many customers are there?") ───
+        # Placed late so state/segment/spend customer questions match first.
+        if "quanti clienti" in q or "numero clienti" in q:
+            return Intent(intent_type="count_customers_unique", raw_question=question)
+
         # Fallback — unknown
         return Intent(intent_type="unknown", raw_question=question)
 
@@ -873,6 +884,44 @@ class _RuleParser:
                 if candidate.lower() not in stop:
                     return candidate
         return None
+
+
+# English → Italian term normalisation for the deterministic parser.
+# Applied to the lowercased question before pattern matching. Replacements use
+# word boundaries and only rewrite English tokens, so Italian questions (which
+# never contain these English words) are left unchanged.
+_EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bhow many\b"), "quanti"),
+    (re.compile(r"\bnumber of\b"), "numero"),
+    (re.compile(r"\bcustomers?\b"), "clienti"),
+    (re.compile(r"\bclients?\b"), "clienti"),
+    (re.compile(r"\borders?\b"), "ordini"),
+    (re.compile(r"\bemployees?\b"), "dipendenti"),
+    (re.compile(r"\bstaff\b"), "dipendenti"),
+    (re.compile(r"\bproducts?\b"), "prodotti"),
+    (re.compile(r"\bsalespe(?:rson|ople)\b"), "venditori"),
+    (re.compile(r"\bsellers?\b"), "venditori"),
+    (re.compile(r"\bterritor(?:y|ies)\b"), "territorio"),
+    (re.compile(r"\bdepartments?\b"), "reparto"),
+    (re.compile(r"\bsalary|salaries|wage|pay rate\b"), "retribuzione"),
+]
+
+
+def _normalize_english_terms(q: str) -> str:
+    """Rewrite common English business terms to the Italian tokens the
+    deterministic patterns expect. No-op for Italian input."""
+    for pattern, replacement in _EN_TERM_MAP:
+        q = pattern.sub(replacement, q)
+    return q
+
+
+_PRODUCT_CODE_RE = re.compile(r"\b([A-Z][A-Za-z]+-\d{2,4})\b")
+
+
+def _extract_product_code(text: str) -> str | None:
+    """Extract an AdventureWorks-style product code like 'Road-650'."""
+    m = _PRODUCT_CODE_RE.search(text)
+    return m.group(1) if m else None
 
 
 def _extract_state(text: str) -> str | None:
