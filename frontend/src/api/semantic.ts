@@ -4,6 +4,7 @@
  */
 import axios, { AxiosError } from 'axios'
 import type { EngineResult, ChartData, SourceBadge } from '../data/queryEngine'
+import { getAuthToken } from './client'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -11,6 +12,15 @@ const http = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 120_000,
+})
+
+http.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 // ── Types ──────────────────────────────────────────────────────────────────────
