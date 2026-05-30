@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _MAX_HISTORY = 20  # keep last N intents per session
+_MAX_SESSIONS = 500  # evict oldest sessions when store exceeds this
 
 
 @dataclass
@@ -27,6 +29,7 @@ class Context:
     role: str = "viewer"
     history: list[Any] = field(default_factory=list)  # list[Intent]
     resolved_entities: dict[str, str] = field(default_factory=dict)
+    last_accessed: float = field(default_factory=time.monotonic)
     # e.g. {"fatturato": "revenue_with_tax"}
 
     def add_history(self, intent: Any, result: Any) -> None:
@@ -51,10 +54,22 @@ class ContextManager:
             session_id = str(uuid.uuid4())
         with self._lock:
             if session_id not in self._store:
+                self._evict_if_needed()
                 ctx = Context(session_id=session_id, user=user)
                 self._store[session_id] = ctx
                 logger.debug("Created new context for session %s", session_id)
-            return self._store[session_id]
+            ctx = self._store[session_id]
+            ctx.last_accessed = time.monotonic()
+            return ctx
+
+    def _evict_if_needed(self) -> None:
+        """Drop the oldest half of sessions when store is at capacity."""
+        if len(self._store) < _MAX_SESSIONS:
+            return
+        sorted_ids = sorted(self._store, key=lambda sid: self._store[sid].last_accessed)
+        for sid in sorted_ids[: _MAX_SESSIONS // 2]:
+            del self._store[sid]
+        logger.info("ContextManager: evicted %d stale sessions", _MAX_SESSIONS // 2)
 
     def update(self, session_id: str, intent: Any, result: Any) -> None:
         """Record intent + result into the session history."""
@@ -62,6 +77,7 @@ class ContextManager:
             ctx = self._store.get(session_id)
             if ctx:
                 ctx.add_history(intent, result)
+                ctx.last_accessed = time.monotonic()
 
     def resolve(self, session_id: str, term: str) -> str | None:
         """Look up a previously resolved entity alias.

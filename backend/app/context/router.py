@@ -111,19 +111,19 @@ async def upload_document(
     )
     if ext not in allowed:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"File type not supported. Allowed: {', '.join(allowed)}",
         )
     raw = await file.read()
     if len(raw) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"File exceeds {_MAX_UPLOAD_BYTES // 1024 // 1024} MB limit",
         )
     content = _extract_text(raw, file.filename or "upload")
     if not content.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File appears to be empty or unreadable.",
         )
     doc = store.add_document(file.filename or "upload", content, ext.lstrip("."))

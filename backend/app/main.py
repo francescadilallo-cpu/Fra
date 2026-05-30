@@ -1239,11 +1239,11 @@ def create_metric(
         conn.close()
 
 
-@app.delete("/api/semantic/metrics/{metric_id}")
+@app.delete("/api/semantic/metrics/{metric_id}", status_code=204)
 def delete_metric(
     metric_id: str,
     _: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
+) -> None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1257,7 +1257,6 @@ def delete_metric(
             )
         conn.execute("DELETE FROM sl_metrics WHERE id = ?", (metric_id,))
         conn.commit()
-        return {"deleted": metric_id}
     finally:
         conn.close()
 
@@ -1312,11 +1311,11 @@ def create_hierarchy(
         conn.close()
 
 
-@app.delete("/api/semantic/hierarchies/{hierarchy_id}")
+@app.delete("/api/semantic/hierarchies/{hierarchy_id}", status_code=204)
 def delete_hierarchy(
     hierarchy_id: str,
     _: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
+) -> None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1330,7 +1329,6 @@ def delete_hierarchy(
             )
         conn.execute("DELETE FROM sl_hierarchies WHERE id = ?", (hierarchy_id,))
         conn.commit()
-        return {"deleted": hierarchy_id}
     finally:
         conn.close()
 
@@ -1388,11 +1386,11 @@ def create_segment(
         conn.close()
 
 
-@app.delete("/api/semantic/segments/{segment_id}")
+@app.delete("/api/semantic/segments/{segment_id}", status_code=204)
 def delete_segment(
     segment_id: str,
     _: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
+) -> None:
     conn = get_connection()
     try:
         row = conn.execute(
@@ -1406,7 +1404,6 @@ def delete_segment(
             )
         conn.execute("DELETE FROM sl_segments WHERE id = ?", (segment_id,))
         conn.commit()
-        return {"deleted": segment_id}
     finally:
         conn.close()
 
