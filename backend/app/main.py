@@ -396,7 +396,11 @@ def _ensure_semantic_loaded() -> None:
         hr_pim = HRPIMDuckDBAdapter(_mgr)
 
         ontology_path = _SCENARIO_PATH / "ontology_example.yaml"
-        ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
+        try:
+            ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
+        except Exception as exc:
+            logger.warning("Could not load ontology from %s: %s — running without ontology", ontology_path, exc)
+            ontology = None
 
         kg = KnowledgeGraph()
         kg.build(erp, crm, hr_pim)
@@ -761,6 +765,14 @@ def validate_ontology_configuration(
             detail={
                 "error": "ONTOLOGY_VALIDATION_ERROR",
                 "message": str(exc),
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "error": "ONTOLOGY_PARSE_ERROR",
+                "message": f"Failed to parse ontology file: {exc}",
             },
         )
 

@@ -741,8 +741,9 @@ def _find_connector(connectors: list, name: str):
             meta = c.describe()
             if meta.name == name:
                 return c
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).debug("_find_connector: describe() failed: %s", exc)
     return None
 
 
