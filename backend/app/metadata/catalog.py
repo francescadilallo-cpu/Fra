@@ -250,16 +250,22 @@ class MetadataCatalog:
 
     # ── population ────────────────────────────────────────────────────────────
 
-    def populate(self, connectors: list, ontology, kg) -> None:
-        """Populate the catalog from connectors, ontology, and KG."""
+    def populate(self, connectors: list, ontology, kg, mgr=None) -> None:
+        """Populate the catalog from connectors, ontology, and KG.
+
+        When *mgr* is provided, all row counts and column samples are fetched
+        via ``mgr.execute()`` (unified DuckDB path) so the method works even
+        when the per-domain adapter methods (``load_entity``) are not available.
+        The adapters are used as a fallback when *mgr* is not supplied.
+        """
         logger.info("Populating metadata catalog…")
         now = datetime.utcnow().isoformat()
 
         with self._Session() as session:
             self._populate_metrics(session, ontology)
-            self._populate_erp(session, connectors, ontology, kg, now)
-            self._populate_crm(session, connectors, ontology, kg, now)
-            self._populate_hr_pim(session, connectors, ontology, kg, now)
+            self._populate_erp(session, connectors, ontology, kg, now, mgr)
+            self._populate_crm(session, connectors, ontology, kg, now, mgr)
+            self._populate_hr_pim(session, connectors, ontology, kg, now, mgr)
             session.commit()
 
         self._populated = True
@@ -585,26 +591,15 @@ class MetadataCatalog:
                 session.add(m)
 
     def _populate_erp(
-        self, session: Session, connectors: list, ontology, kg, now: str
+        self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
-        # Find ERP connector
         erp = _find_connector(connectors, "erp")
-        if erp is None:
+        if erp is None and mgr is None:
             return
 
-        # SalesOrder — use COUNT + sample to avoid loading 31k rows into Python memory
-        try:
-            orders_count: int = erp.execute_query(
-                'SELECT COUNT(*) AS n FROM "sales_order_header"'
-            )[0]["n"]
-        except Exception:
-            orders_count = 0
-        try:
-            orders_sample = erp.execute_query(
-                'SELECT * FROM "sales_order_header" LIMIT 200'
-            )
-        except Exception:
-            orders_sample = []
+        # SalesOrder
+        orders_count = _count_rows("sales_order_header", erp, mgr)
+        orders_sample = _sample_rows("sales_order_header", erp, mgr)
         self._upsert_entity(
             session,
             name="SalesOrder",
@@ -652,19 +647,9 @@ class MetadataCatalog:
             },
         )
 
-        # SalesOrderLine — use COUNT + sample to avoid loading 121k rows into Python memory
-        try:
-            lines_count: int = erp.execute_query(
-                'SELECT COUNT(*) AS n FROM "sales_order_line"'
-            )[0]["n"]
-        except Exception:
-            lines_count = 0
-        try:
-            lines_sample = erp.execute_query(
-                'SELECT * FROM "sales_order_line" LIMIT 200'
-            )
-        except Exception:
-            lines_sample = []
+        # SalesOrderLine
+        lines_count = _count_rows("sales_order_line", erp, mgr)
+        lines_sample = _sample_rows("sales_order_line", erp, mgr)
         self._upsert_entity(
             session,
             name="SalesOrderLine",
@@ -708,7 +693,6 @@ class MetadataCatalog:
         )
 
         # Salesperson
-        sps = list(erp.load_entity("Salesperson"))
         kg_count_sp = kg.subgraph("Salesperson").number_of_nodes()
         self._upsert_entity(
             session,
@@ -719,14 +703,13 @@ class MetadataCatalog:
                 {"source": "erp", "table": "salesperson", "key": "salesperson_id"},
                 {"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"},
             ],
-            record_count=len(sps),
+            record_count=_count_rows("salesperson", erp, mgr),
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
             kg_node_count=kg_count_sp,
         )
 
         # Territory
-        territories = list(erp.load_entity("Territory"))
         kg_count_t = kg.subgraph("Territory").number_of_nodes()
         self._upsert_entity(
             session,
@@ -734,23 +717,24 @@ class MetadataCatalog:
             description="Territorio commerciale.",
             primary_key="territory_id",
             sources=[{"source": "erp", "table": "territory", "key": "territory_id"}],
-            record_count=len(territories),
+            record_count=_count_rows("territory", erp, mgr),
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
             kg_node_count=kg_count_t,
         )
 
     def _populate_crm(
-        self, session: Session, connectors: list, ontology, kg, now: str
+        self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
         crm = _find_connector(connectors, "crm")
-        if crm is None:
+        if crm is None and mgr is None:
             return
 
-        customers = list(crm.load_entity("Customer"))
-        duplicates = [r for r in customers if r["accountId"] < 0]
+        total_count = _count_rows("account", crm, mgr)
+        dup_count = _count_rows("account", crm, mgr, where="accountId < 0")
+        sample = _sample_rows("account", crm, mgr)
         kg_count = kg.subgraph("Customer").number_of_nodes()
-        null_email_rate = _null_rate(customers, "emailContatto")
+        null_email_rate = _null_rate(sample, "emailContatto")
 
         self._upsert_entity(
             session,
@@ -758,12 +742,12 @@ class MetadataCatalog:
             description="Cliente B2C o B2B. accountId < 0 indica duplicato.",
             primary_key="accountId",
             sources=[{"source": "crm", "table": "account", "key": "accountId"}],
-            record_count=len(customers),
+            record_count=total_count,
             freshness=now,
             quality_flags={
-                "duplicates_detected": len(duplicates) > 0,
+                "duplicates_detected": dup_count > 0,
                 "null_rate_warning": null_email_rate > NULL_RATE_WARN_THRESHOLD,
-                "duplicate_count": len(duplicates),
+                "duplicate_count": dup_count,
                 "dedup_rule": "accountId < 0 → duplicato; merge per email normalizzata",
             },
             kg_node_count=kg_count,
@@ -772,7 +756,7 @@ class MetadataCatalog:
             session,
             self._upsert_attribute,
             entity="Customer",
-            rows=customers,
+            rows=sample,
             source_prefix="crm.account",
             field_definitions={
                 "accountId": "Identificatore account CRM",
@@ -787,15 +771,16 @@ class MetadataCatalog:
         )
 
     def _populate_hr_pim(
-        self, session: Session, connectors: list, ontology, kg, now: str
+        self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
         hr_pim = _find_connector(connectors, "hr_pim")
-        if hr_pim is None:
+        if hr_pim is None and mgr is None:
             return
 
-        employees = list(hr_pim.load_entity("Employee"))
+        emp_count = _count_rows("dipendenti_hr", hr_pim, mgr)
+        emp_sample = _sample_rows("dipendenti_hr", hr_pim, mgr)
         kg_count_e = kg.subgraph("Employee").number_of_nodes()
-        null_rate_pay = _null_rate(employees, "RetribuzioneOraria")
+        null_rate_pay = _null_rate(emp_sample, "RetribuzioneOraria")
 
         self._upsert_entity(
             session,
@@ -805,7 +790,7 @@ class MetadataCatalog:
             sources=[
                 {"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"}
             ],
-            record_count=len(employees),
+            record_count=emp_count,
             freshness=now,
             quality_flags={
                 "duplicates_detected": False,
@@ -817,7 +802,7 @@ class MetadataCatalog:
             session,
             self._upsert_attribute,
             entity="Employee",
-            rows=employees,
+            rows=emp_sample,
             source_prefix="hr_pim.dipendenti_hr",
             field_definitions={
                 "MatricolaDip": "Matricola dipendente (= salesperson_id ERP)",
@@ -831,7 +816,8 @@ class MetadataCatalog:
             lineage={},
         )
 
-        products = list(hr_pim.load_entity("Product"))
+        prod_count = _count_rows("product_catalog_pim", hr_pim, mgr)
+        prod_sample = _sample_rows("product_catalog_pim", hr_pim, mgr)
         kg_count_p = kg.subgraph("Product").number_of_nodes()
         self._upsert_entity(
             session,
@@ -845,7 +831,7 @@ class MetadataCatalog:
                     "key": "internal_id",
                 }
             ],
-            record_count=len(products),
+            record_count=prod_count,
             freshness=now,
             quality_flags={"duplicates_detected": False, "null_rate_warning": False},
             kg_node_count=kg_count_p,
@@ -854,7 +840,7 @@ class MetadataCatalog:
             session,
             self._upsert_attribute,
             entity="Product",
-            rows=products,
+            rows=prod_sample,
             source_prefix="hr_pim.product_catalog_pim",
             field_definitions={
                 "internal_id": "ID prodotto (= product_ref ERP)",
@@ -886,6 +872,47 @@ class MetadataCatalog:
 
 
 # ── module-level helpers ──────────────────────────────────────────────────────
+
+
+def _count_rows(table: str, adapter, mgr, where: str = "") -> int:
+    """Return COUNT(*) for *table*, preferring *mgr* over the legacy *adapter*.
+
+    Falls back gracefully to 0 on any error so the catalog population never
+    aborts due to a missing table (phantom tables are pruned by
+    prune_phantom_entities() afterwards).
+    """
+    sql = f'SELECT COUNT(*) AS n FROM "{table}"'
+    if where:
+        sql += f" WHERE {where}"
+    if mgr is not None:
+        try:
+            rows = mgr.execute(sql)
+            return int(rows[0]["n"]) if rows else 0
+        except Exception:
+            return 0
+    if adapter is not None:
+        try:
+            rows = adapter.execute_query(sql)
+            return int(rows[0]["n"]) if rows else 0
+        except Exception:
+            return 0
+    return 0
+
+
+def _sample_rows(table: str, adapter, mgr, limit: int = 200) -> list[dict]:
+    """Return up to *limit* rows from *table*, preferring *mgr* over *adapter*."""
+    sql = f'SELECT * FROM "{table}" LIMIT {limit}'
+    if mgr is not None:
+        try:
+            return list(mgr.execute(sql) or [])
+        except Exception:
+            return []
+    if adapter is not None:
+        try:
+            return list(adapter.execute_query(sql) or [])
+        except Exception:
+            return []
+    return []
 
 
 def _find_connector(connectors: list, name: str):

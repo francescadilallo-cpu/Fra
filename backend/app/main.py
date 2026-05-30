@@ -422,7 +422,7 @@ def _ensure_semantic_loaded() -> None:
         # Running populate() first would create phantom entities for tables not
         # yet in DuckDB, which corrupt the LLM SQL schema context.
         catalog.populate_from_manager(_mgr)
-        catalog.populate([erp, crm, hr_pim], ontology, kg)
+        catalog.populate([erp, crm, hr_pim], ontology, kg, mgr=_mgr)
         # Remove entities created by populate() whose tables aren't in the actual
         # DuckDB snapshot — prevents them from appearing in the LLM schema context.
         try:
