@@ -26,6 +26,7 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,12 @@ class MetadataCatalog:
     """
 
     def __init__(self, db_url: str = "sqlite:///:memory:") -> None:
-        self._engine = create_engine(db_url, echo=False)
+        in_memory = ":memory:" in db_url
+        engine_kwargs: dict = {"echo": False}
+        if in_memory:
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            engine_kwargs["poolclass"] = StaticPool
+        self._engine = create_engine(db_url, **engine_kwargs)
         Base.metadata.create_all(self._engine)
         self._migrate_schema()
         self._Session = sessionmaker(bind=self._engine)
