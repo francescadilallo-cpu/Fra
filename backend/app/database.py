@@ -210,7 +210,14 @@ def _random_date(start_days_ago: int, end_days_ago: int = 0) -> str:
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
+    # WAL mode: concurrent readers don't block a writer, and a writer doesn't
+    # block readers. Critical under FastAPI's multi-threaded request handling.
+    conn.execute("PRAGMA journal_mode = WAL")
+    # NORMAL is crash-safe (data survives OS crash) and much faster than FULL.
+    conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    # Wait up to 5 s instead of raising "database is locked" immediately.
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

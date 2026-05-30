@@ -416,12 +416,16 @@ def _ensure_semantic_loaded() -> None:
 
 
 class SemanticAskRequest(BaseModel):
-    question: str | None = Field(default=None, description="Primary NL question field")
+    question: str | None = Field(
+        default=None, max_length=2000, description="Primary NL question field"
+    )
     query: str | None = Field(
-        default=None, description="Alias for question in normalized clients"
+        default=None,
+        max_length=2000,
+        description="Alias for question in normalized clients",
     )
     session_id: str | None = Field(
-        default=None, description="Optional semantic session identifier"
+        default=None, max_length=128, description="Optional semantic session identifier"
     )
     context: dict[str, Any] = Field(
         default_factory=dict, description="Optional normalized semantic context"
@@ -995,8 +999,8 @@ def rebuild_data_store(
 
 
 class SourceAddRequest(BaseModel):
-    connector_type: str
-    label: str
+    connector_type: str = Field(max_length=64)
+    label: str = Field(min_length=1, max_length=128)
     params: dict[str, Any] = Field(default_factory=dict)
 
 

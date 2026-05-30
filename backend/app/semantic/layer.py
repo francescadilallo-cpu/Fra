@@ -1807,16 +1807,23 @@ class SemanticLayer:
                 GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
             """
             rows = self._erp.execute_query(sql, (limit,))
-        # Enrich with HR
-        enriched = []
-        for r in rows:
-            sid = r["salesperson_ref"]
-            hr_rows = self._hr_pim.execute_query(
-                "SELECT Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) = ?",
-                (int(sid),),
+        # Batch HR enrichment: one query for all salesperson IDs instead of N queries.
+        if not rows:
+            return Result(
+                answer=[],
+                sql_used=sql,
+                sources_touched=["erp", "hr_pim"],
+                provenance=self._prov("SalesOrder", ["salesperson_ref", "total_due"]),
+                notes="Revenue values in USD ($). revenue = SUM(total_due).",
             )
-            info = hr_rows[0] if hr_rows else {}
-            enriched.append({**r, **info})
+        sp_ids = [int(r["salesperson_ref"]) for r in rows]
+        placeholders = ",".join("?" * len(sp_ids))
+        hr_rows = self._hr_pim.execute_query(
+            f"SELECT CAST(MatricolaDip AS INTEGER) as mid, Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) IN ({placeholders})",
+            tuple(sp_ids),
+        )
+        hr_map = {r["mid"]: r for r in hr_rows}
+        enriched = [{**r, **hr_map.get(int(r["salesperson_ref"]), {})} for r in rows]
         return Result(
             answer=enriched,
             sql_used=sql,
@@ -1927,15 +1934,22 @@ class SemanticLayer:
             FROM sales_order_line GROUP BY product_ref ORDER BY qty_totale DESC LIMIT ?
         """
         rows = self._erp.execute_query(sql, (limit,))
-        enriched = []
-        for r in rows:
-            pid = r["product_ref"]
-            pim_rows = self._hr_pim.execute_query(
-                "SELECT displayName, categoryPath FROM product_catalog_pim WHERE internal_id = ?",
-                (pid,),
+        if not rows:
+            return Result(
+                answer=[],
+                sql_used=sql,
+                sources_touched=["erp", "hr_pim"],
+                provenance=self._prov("SalesOrderLine", ["product_ref", "qty"]),
             )
-            pinfo = pim_rows[0] if pim_rows else {}
-            enriched.append({**r, **pinfo})
+        # Batch PIM enrichment: one query for all product IDs instead of N queries.
+        product_ids = [r["product_ref"] for r in rows]
+        placeholders = ",".join("?" * len(product_ids))
+        pim_rows = self._hr_pim.execute_query(
+            f"SELECT internal_id, displayName, categoryPath FROM product_catalog_pim WHERE internal_id IN ({placeholders})",
+            tuple(product_ids),
+        )
+        pim_map = {r["internal_id"]: r for r in pim_rows}
+        enriched = [{**r, **pim_map.get(r["product_ref"], {})} for r in rows]
         return Result(
             answer=enriched,
             sql_used=sql,
@@ -2432,23 +2446,25 @@ class SemanticLayer:
     # ── 1H-02: customers without orders (anti-join) ───────────────────────────
 
     def _q_customers_without_orders(self, intent: Intent) -> Result:
-        # Fetch all valid CRM customer IDs
+        # Fetch valid CRM customers in batches; cap at 10 000 to avoid OOM.
         crm_sql = (
             "SELECT accountId, ragioneSociale, nomeContatto, accountType "
-            "FROM account WHERE accountId > 0 ORDER BY ragioneSociale"
+            "FROM account WHERE accountId > 0 ORDER BY ragioneSociale LIMIT 10000"
         )
         customers = self._crm.execute_query(crm_sql)
-        # Fetch all customer_refs that appear in at least one order (ERP)
+        # All customer_refs that appear in at least one order (ERP side).
         erp_sql = (
             "SELECT DISTINCT customer_ref FROM sales_order_header "
             "WHERE customer_ref IS NOT NULL"
         )
         ordered_refs = {r["customer_ref"] for r in self._erp.execute_query(erp_sql)}
-        # Anti-join in Python
+        # Python-side anti-join.
         no_orders = [c for c in customers if c["accountId"] not in ordered_refs]
-        sql_note = f"{crm_sql}  --  anti-join with ERP: {erp_sql}"
+        total_count = len(no_orders)
+        # Cap returned rows at 200 to keep response payload manageable.
+        sql_note = crm_sql + "  --  anti-join with ERP: " + erp_sql
         return Result(
-            answer={"count": len(no_orders), "customers": no_orders},
+            answer={"count": total_count, "customers": no_orders[:200]},
             sql_used=sql_note,
             sources_touched=["crm", "erp"],
             provenance={
@@ -2457,7 +2473,8 @@ class SemanticLayer:
             },
             notes=(
                 "Anti-join CRM × ERP: customers with accountId > 0 that do not appear "
-                "in any sales_order_header. Duplicates (accountId < 0) are excluded."
+                "in any sales_order_header. Duplicates (accountId < 0) are excluded. "
+                + (f"Showing first 200 of {total_count}." if total_count > 200 else "")
             ),
         )
 

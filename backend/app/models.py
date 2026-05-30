@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Any, Optional
+from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 
 # ── Request / Response models ──────────────────────────────────────────────────
@@ -87,46 +88,48 @@ class PaginatedData(BaseModel):
 
 
 class MetricCreate(BaseModel):
-    sector_id: str = "manufacturing"
-    name: str
-    description: str = ""
-    type: str = "sum"
-    entity: str = ""
-    field: str = ""
-    numerator: str = ""
-    denominator: str = ""
-    expression: str = ""
-    filters: list[str] = []
-    time_dimension: str = ""
-    grains: list[str] = ["month", "quarter", "year"]
-    format: str = "number"
-    status: str = "draft"
-    owner: str = ""
-    tags: list[str] = []
+    sector_id: str = Field(default="manufacturing", max_length=64)
+    name: str = Field(min_length=1, max_length=128)
+    description: str = Field(default="", max_length=1000)
+    type: Literal["sum", "count", "count_distinct", "avg", "ratio", "derived"] = "sum"
+    entity: str = Field(default="", max_length=128)
+    field: str = Field(default="", max_length=128)
+    numerator: str = Field(default="", max_length=256)
+    denominator: str = Field(default="", max_length=256)
+    expression: str = Field(default="", max_length=512)
+    filters: list[str] = Field(default_factory=list, max_length=20)
+    time_dimension: str = Field(default="", max_length=128)
+    grains: list[str] = Field(
+        default_factory=lambda: ["month", "quarter", "year"], max_length=10
+    )
+    format: Literal["number", "currency", "percentage"] = "number"
+    status: Literal["draft", "verified"] = "draft"
+    owner: str = Field(default="", max_length=128)
+    tags: list[str] = Field(default_factory=list, max_length=20)
 
 
 class HierarchyCreate(BaseModel):
-    sector_id: str = "manufacturing"
-    name: str
-    entity: str = ""
-    description: str = ""
-    type: str = "categorical"
-    levels: list[dict] = []
+    sector_id: str = Field(default="manufacturing", max_length=64)
+    name: str = Field(min_length=1, max_length=128)
+    entity: str = Field(default="", max_length=128)
+    description: str = Field(default="", max_length=1000)
+    type: Literal["time", "categorical"] = "categorical"
+    levels: list[dict] = Field(default_factory=list, max_length=20)
 
 
 class SegmentCreate(BaseModel):
-    sector_id: str = "manufacturing"
-    name: str
-    description: str = ""
-    entity: str = ""
-    conditions: list[dict] = []
-    tags: list[str] = []
-    used_by: list[str] = []
+    sector_id: str = Field(default="manufacturing", max_length=64)
+    name: str = Field(min_length=1, max_length=128)
+    description: str = Field(default="", max_length=1000)
+    entity: str = Field(default="", max_length=128)
+    conditions: list[dict] = Field(default_factory=list, max_length=50)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    used_by: list[str] = Field(default_factory=list, max_length=50)
 
 
 class AskRequest(BaseModel):
-    question: str
-    sector_id: str = "manufacturing"
+    question: str = Field(min_length=1, max_length=2000)
+    sector_id: str = Field(default="manufacturing", max_length=64)
 
 
 class AskResult(BaseModel):
