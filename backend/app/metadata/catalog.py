@@ -264,6 +264,115 @@ class MetadataCatalog:
         self._populated = True
         logger.info("Metadata catalog populated.")
 
+    def populate_from_manager(self, mgr) -> None:
+        """Auto-discover all tables in the DuckDB snapshot and upsert catalog entries.
+
+        Supplements the hardcoded populate() with schema-driven discovery so that
+        any registered source — including sources added at runtime — is immediately
+        visible to the semantic layer for LLM SQL generation.
+        """
+        try:
+            schema = mgr.get_schema_info()
+        except Exception as exc:
+            logger.warning("populate_from_manager: schema discovery failed: %s", exc)
+            return
+
+        now = datetime.utcnow().isoformat()
+        with self._Session() as session:
+            for table, info in schema.items():
+                columns = info.get("columns", [])
+                row_count = info.get("row_count", 0)
+                sample = info.get("sample", [])
+
+                self._upsert_entity(
+                    session,
+                    name=table,
+                    description=f"Auto-discovered from DuckDB snapshot (table: {table})",
+                    primary_key="",
+                    sources=[{"source": "duckdb_unified", "table": table}],
+                    record_count=row_count,
+                    freshness=now,
+                    quality_flags={},
+                    kg_node_count=0,
+                )
+
+                for col in columns:
+                    col_name = col.get("name", "")
+                    col_type = col.get("type", "unknown")
+                    if not col_name:
+                        continue
+                    vals = [
+                        str(r.get(col_name))
+                        for r in sample
+                        if r.get(col_name) is not None
+                    ][:5]
+                    null_rate = (
+                        sum(1 for r in sample if r.get(col_name) is None) / len(sample)
+                        if sample
+                        else 0.0
+                    )
+                    self._upsert_attribute(
+                        session,
+                        entity=table,
+                        attribute=col_name,
+                        data_type=col_type,
+                        nullability_rate=round(null_rate, 4),
+                        business_definition="",
+                        source_path=f"duckdb_unified.{table}.{col_name}",
+                        sample_values=vals,
+                        lineage_edges=[],
+                    )
+            session.commit()
+        logger.info(
+            "populate_from_manager: upserted %d tables into catalog", len(schema)
+        )
+
+    def get_schema_context(self, max_tables: int = 30) -> str:
+        """Return a compact LLM-ready description of all catalogued tables.
+
+        Used in the LLM SQL-generation prompt so the model knows exactly which
+        tables and columns are available in the DuckDB snapshot.
+        """
+        with self._Session() as session:
+            entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
+            attr_rows = session.execute(select(AttributeMetaRow)).scalars().all()
+
+        if not entity_rows:
+            return "No schema available."
+
+        # Group attributes by entity
+        attrs_by_entity: dict[str, list] = {}
+        for ar in attr_rows:
+            attrs_by_entity.setdefault(ar.entity, []).append(ar)
+
+        # Deduplicate by actual DuckDB table name — prefer first occurrence
+        seen_tables: set[str] = set()
+        lines: list[str] = ["Available tables in DuckDB:\n"]
+        count = 0
+
+        for row in sorted(entity_rows, key=lambda r: r.name):
+            if count >= max_tables:
+                break
+            sources = json.loads(row.sources_json or "[]")
+            table = next(
+                (s.get("table", row.name) for s in sources if isinstance(s, dict)),
+                row.name,
+            )
+            if table in seen_tables:
+                continue
+            seen_tables.add(table)
+            count += 1
+
+            record_count = row.record_count or 0
+            lines.append(f"Table: {table} ({record_count:,} rows)")
+            attrs = attrs_by_entity.get(row.name, [])
+            if attrs:
+                col_str = ", ".join(f"{a.attribute} {a.data_type}" for a in attrs)
+                lines.append(f"  Columns: {col_str}")
+            lines.append("")
+
+        return "\n".join(lines)
+
     # ── public query API ──────────────────────────────────────────────────────
 
     def get_entity(self, name: str) -> EntityMeta | None:

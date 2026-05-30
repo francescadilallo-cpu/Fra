@@ -456,14 +456,16 @@ def _llm_intent_provider() -> str | None:
     return None
 
 
-def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
+def _complete_json_via_groq(
+    system_prompt: str, user_content: str, max_tokens: int = 500
+) -> str:
     """Call Groq's OpenAI-compatible chat endpoint and return the raw text."""
     import httpx
 
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     payload = {
         "model": _groq_model(),
-        "max_tokens": 500,
+        "max_tokens": max_tokens,
         "temperature": 0,
         "response_format": {"type": "json_object"},
         "messages": [
@@ -495,7 +497,9 @@ def _complete_json_via_groq(system_prompt: str, user_content: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def _complete_json_via_anthropic(system_prompt: str, user_content: str) -> str:
+def _complete_json_via_anthropic(
+    system_prompt: str, user_content: str, max_tokens: int = 500
+) -> str:
     """Call Anthropic's Messages API and return the raw text."""
     import anthropic
 
@@ -505,7 +509,7 @@ def _complete_json_via_anthropic(system_prompt: str, user_content: str) -> str:
     )
     msg = client.messages.create(
         model=_anthropic_model(),
-        max_tokens=500,
+        max_tokens=max_tokens,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     )
@@ -1052,10 +1056,12 @@ class SemanticLayer:
         self._ctx_mgr = context_manager
         self._docs = docs
         self._parser = _RuleParser()
-        # Connector references — set by _load_connectors
+        # Connector references — set by set_connectors()
         self._erp = None
         self._crm = None
         self._hr_pim = None
+        # DuckDB manager — set by set_manager() for schema-driven LLM SQL generation
+        self._mgr = None
 
     @property
     def _effective_docs(self) -> SemanticDocs | None:
@@ -1068,6 +1074,10 @@ class SemanticLayer:
         self._erp = erp
         self._crm = crm
         self._hr_pim = hr_pim
+
+    def set_manager(self, mgr) -> None:
+        """Bind the DuckDB source manager for schema-driven LLM SQL generation."""
+        self._mgr = mgr
 
     def clear_semantic_cache(self) -> None:
         """Compatibility hook for endpoint-level invalidation.
@@ -1205,13 +1215,25 @@ class SemanticLayer:
                     if target and rel_name:
                         relation_hints.append(f"{entity}.{rel_name}->{target}")
 
+        # Compact table list for the intent mapper (helps the LLM decide if a
+        # question is answerable and guides it toward 'unknown' for out-of-scope ones)
+        table_names: list[str] = []
+        if self._mgr:
+            try:
+                table_names = sorted(self._mgr.get_schema_info().keys())[:25]
+            except Exception:
+                pass
+        elif self._catalog:
+            table_names = sorted(self._catalog.list_entities())[:25]
+
         system_prompt = (
             "You are an ontology intent mapper for a neuro-symbolic semantic layer. "
             "Your job is ONLY to map a user's natural-language business question "
             "(English or Italian) to ONE of the allowed intent_type values. "
             "Never generate SQL, code, or executable statements. "
-            "Pick the single closest matching intent_type. Only use 'unknown' when "
-            "the question genuinely does not correspond to any allowed intent. "
+            "Pick the single closest matching intent_type. Use 'unknown' when "
+            "the question does not match any allowed intent — the system will then "
+            "generate SQL automatically from the available tables. "
             "When you choose an intent, set entities/properties/relations/metric to "
             "values consistent with that intent (leaving them empty is acceptable — "
             "the server fills defaults from the intent contract). "
@@ -1220,7 +1242,8 @@ class SemanticLayer:
             f"Allowed intent_type values: {sorted(_INTENT_CONTRACTS.keys())}. "
             f"Allowed ontology entities: {sorted(entity_names)}. "
             f"Known metrics from metadata catalog: {sorted(metric_names)}. "
-            f"Known relation hints: {sorted(relation_hints)[:80]}."
+            f"Known relation hints: {sorted(relation_hints)[:80]}. "
+            f"Available DuckDB tables (for context only): {table_names}."
         )
         user_prompt = {
             "question": question,
@@ -1583,16 +1606,155 @@ class SemanticLayer:
         }
         fn = dispatch.get(intent.intent_type)
         if fn is None:
+            return self._execute_llm_sql(intent)
+        return fn(intent)
+
+    def _validate_generated_sql(self, sql: str) -> None:
+        """Security check for LLM-generated SQL before execution.
+
+        Stricter than payload validation: the SQL is actually executed, so we
+        block DDL/DML, multi-statement, comment injection, and system tables.
+        """
+        stripped = sql.strip()
+        if not re.match(r"^\s*(WITH|SELECT)\b", stripped, re.IGNORECASE):
+            raise SemanticSecurityViolationError(
+                "Generated SQL must start with SELECT or WITH"
+            )
+        if _DANGEROUS_SQL_RE.search(stripped):
+            raise SemanticSecurityViolationError(
+                "Generated SQL contains dangerous DDL/DML keyword"
+            )
+        if "--" in stripped or "/*" in stripped:
+            raise SemanticSecurityViolationError(
+                "Generated SQL contains comment tokens"
+            )
+        if ";" in stripped:
+            raise SemanticSecurityViolationError(
+                "Generated SQL contains semicolon (multi-statement blocked)"
+            )
+        for table_ref in _SQL_TABLE_ACCESS_RE.findall(stripped):
+            table_name = table_ref.split(".")[-1].lower()
+            if table_name in _SYSTEM_TABLE_MARKERS:
+                raise SemanticSecurityViolationError(
+                    f"Generated SQL accesses system table: {table_name}"
+                )
+
+    def _execute_llm_sql(self, intent: Intent) -> Result:
+        """Generate and execute SQL via LLM for questions with no hardcoded handler.
+
+        Uses the full DuckDB schema context so the LLM can write valid SQL against
+        any registered source, not just the golden ERP/CRM/HR/PIM tables.
+        """
+        provider = _llm_intent_provider()
+        if provider is None:
             return Result(
                 answer=(
-                    "I don't recognize this question. Try asking about: "
-                    "orders, customers, employees, products, revenue, or territories. "
-                    "Examples: 'How many orders in 2014?', 'Top 5 products by quantity', "
-                    "'Revenue by territory', 'How many employees?'"
+                    "I don't recognize this question type. "
+                    "No LLM key is configured for dynamic SQL generation. "
+                    "Try asking about: orders, customers, employees, products, "
+                    "revenue, or territories."
                 ),
-                notes="unknown_intent",
+                notes="unknown_intent_no_llm",
             )
-        return fn(intent)
+
+        if self._mgr is None:
+            return Result(
+                answer="Dynamic SQL generation requires a configured data manager.",
+                notes="no_manager",
+            )
+
+        # Build schema context from catalog (populated from DuckDB snapshot)
+        schema_ctx = (
+            self._catalog.get_schema_context()
+            if self._catalog
+            else "No schema available."
+        )
+
+        system_prompt = (
+            "You are a SQL generator for a DuckDB analytical database. "
+            "Generate a single SELECT query (or CTE + SELECT) that answers the "
+            "user's business question using ONLY the tables and columns listed below. "
+            "Return a JSON object with exactly one key: 'sql' containing the query string. "
+            "Rules: SELECT only (no DDL, no DML). "
+            "No semicolons. No comment tokens (-- or /*). "
+            "Use double-quoted identifiers when column or table names contain spaces. "
+            "If the question cannot be answered from the available schema, return "
+            '{"sql": "", "reason": "<explanation>"}.\n\n'
+            f"{schema_ctx}"
+        )
+        user_content = json.dumps(
+            {
+                "question": intent.raw_question,
+                "hint": intent.intent_type,
+                "filters": intent.filters,
+                "year": intent.year,
+                "limit": intent.limit,
+            }
+        )
+
+        try:
+            if provider == "groq":
+                raw_text = _complete_json_via_groq(
+                    system_prompt, user_content, max_tokens=1200
+                )
+            else:
+                raw_text = _complete_json_via_anthropic(
+                    system_prompt, user_content, max_tokens=1200
+                )
+            payload = _extract_json_payload(raw_text)
+        except Exception as exc:
+            logger.warning("_execute_llm_sql: LLM call failed: %s", exc)
+            return Result(
+                answer=f"Could not generate SQL for this question: {exc}",
+                notes="llm_sql_generation_failed",
+            )
+
+        sql = str(payload.get("sql", "")).strip()
+        if not sql:
+            reason = payload.get(
+                "reason", "question cannot be answered from available data"
+            )
+            return Result(
+                answer=f"This question cannot be answered: {reason}",
+                notes="llm_sql_no_query",
+            )
+
+        try:
+            self._validate_generated_sql(sql)
+        except SemanticSecurityViolationError as exc:
+            logger.error("_execute_llm_sql: security block on generated SQL: %s", exc)
+            raise
+
+        try:
+            rows = self._mgr.execute(sql)
+        except Exception as exc:
+            logger.warning("_execute_llm_sql: execution failed: %s | sql=%s", exc, sql)
+            return Result(
+                answer=f"Query failed: {exc}",
+                sql_used=sql,
+                notes="llm_sql_exec_error",
+            )
+
+        # Derive which tables were touched from SQL
+        touched = list(
+            {
+                ref.split(".")[-1]
+                for ref in _SQL_TABLE_ACCESS_RE.findall(sql)
+                if ref.split(".")[-1].lower() not in _SYSTEM_TABLE_MARKERS
+            }
+        )
+
+        return Result(
+            answer=rows,
+            sql_used=sql,
+            sources_touched=touched or ["duckdb_unified"],
+            provenance={
+                "generated_by": "llm_sql",
+                "provider": provider,
+                "intent_hint": intent.intent_type,
+            },
+            notes="Dynamic SQL generated from schema context.",
+        )
 
     # ── query implementations ─────────────────────────────────────────────────
 

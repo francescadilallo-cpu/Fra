@@ -210,6 +210,42 @@ class DuckDBSourceManager:
             ),
         )
 
+    def get_schema_info(self) -> dict[str, dict]:
+        """Discover schema for every table in the current DuckDB snapshot.
+
+        Returns {table_name: {columns: [{name, type}], row_count: int, sample: [dict]}}
+        Used to provide grounded schema context to the LLM for dynamic SQL generation.
+        """
+        self._ensure_ready()
+        conn = self.get_connection()
+        try:
+            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+            result: dict[str, dict] = {}
+            for table in tables:
+                safe = table.replace('"', '""')
+                try:
+                    cols = conn.execute(f'DESCRIBE "{safe}"').fetchall()
+                    _row = conn.execute(
+                        f'SELECT COUNT(*) AS n FROM "{safe}"'
+                    ).fetchone()
+                    count = int(_row[0]) if _row else 0
+                    sample_df = conn.execute(f'SELECT * FROM "{safe}" LIMIT 5').df()
+                    sample = sample_df.where(sample_df.notna(), other=None).to_dict(
+                        orient="records"
+                    )
+                    result[table] = {
+                        "columns": [{"name": c[0], "type": c[1]} for c in cols],
+                        "row_count": count,
+                        "sample": sample,
+                    }
+                except Exception as exc:
+                    logger.warning(
+                        "get_schema_info: skipping table '%s': %s", table, exc
+                    )
+            return result
+        finally:
+            conn.close()
+
     @property
     def registry(self) -> SourceRegistry:
         return self._registry

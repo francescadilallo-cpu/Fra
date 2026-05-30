@@ -411,6 +411,7 @@ def _ensure_semantic_loaded() -> None:
 
         catalog = MetadataCatalog()
         catalog.populate([erp, crm, hr_pim], ontology, kg)
+        catalog.populate_from_manager(_mgr)  # auto-discover all DuckDB tables
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
@@ -419,6 +420,7 @@ def _ensure_semantic_loaded() -> None:
         _semantic_docs = DocLoader(_DOCS_PATH).load() if _DOCS_PATH.exists() else None
         layer = SemanticLayer(ontology, kg, catalog, ctx_mgr, docs=_semantic_docs)
         layer.set_connectors(erp, crm, hr_pim)
+        layer.set_manager(_mgr)  # enables schema-driven LLM SQL for unknown intents
 
         _semantic_state.update(
             {
@@ -428,11 +430,28 @@ def _ensure_semantic_loaded() -> None:
                 "ontology": ontology,
                 "kg": kg,
                 "catalog": catalog,
+                "mgr": _mgr,
                 "erp": erp,
                 "crm": crm,
                 "hr_pim": hr_pim,
             }
         )
+
+
+def _refresh_catalog_after_rebuild(mgr) -> None:
+    """Re-populate the catalog from the DuckDB snapshot after any rebuild.
+
+    Called after mgr.rebuild() / mgr.ingest_one() so that newly added (or
+    removed) tables are immediately reflected in schema-driven LLM SQL generation.
+    No-op if the semantic layer hasn't been loaded yet.
+    """
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        return
+    try:
+        catalog.populate_from_manager(mgr)
+    except Exception as exc:
+        logger.warning("_refresh_catalog_after_rebuild failed: %s", exc)
 
 
 # ── Pydantic models for semantic endpoints ──────────────────────────────────
@@ -1037,6 +1056,7 @@ def rebuild_data_store(
     mgr = get_source_manager(_SCENARIO_PATH)
     row_counts = mgr.rebuild()
     meta = mgr.describe()
+    _refresh_catalog_after_rebuild(mgr)
     return {
         "rebuilt": True,
         "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
@@ -1128,6 +1148,7 @@ def add_source(
         try:
             mgr.rebuild()
             cfg = mgr.registry.get(source_id) or cfg
+            _refresh_catalog_after_rebuild(mgr)
         except Exception as exc:
             mgr.registry.patch(source_id, status="error", error_msg=str(exc))
             cfg = mgr.registry.get(source_id) or cfg
@@ -1152,6 +1173,7 @@ def remove_source(
         raise HTTPException(status_code=400, detail=str(exc))
     try:
         mgr.rebuild()
+        _refresh_catalog_after_rebuild(mgr)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -1173,6 +1195,7 @@ def sync_source(
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
     try:
         mgr.ingest_one(source_id)
+        _refresh_catalog_after_rebuild(mgr)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     cfg = mgr.registry.get(source_id) or cfg
