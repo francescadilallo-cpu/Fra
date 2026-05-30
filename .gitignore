@@ -6,6 +6,9 @@ __pycache__/
 venv/
 dist/
 build/
+.coverage
+coverage.xml
+htmlcov/
 
 # Backend data — context.db is runtime-generated, others are committed
 backend/data/context.db
