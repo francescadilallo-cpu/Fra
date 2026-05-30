@@ -14,27 +14,9 @@ import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, u
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 import AgentBuilder from './AgentBuilder'
 import { showConfirm } from './ConfirmDialog'
+import { toast } from './Toast'
 
 // ── Toast system ─────────────────────────────────────────────────────────────
-interface Toast { id: string; message: string }
-
-function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          className="flex items-start gap-3 bg-slate-900 text-white text-sm rounded-xl px-4 py-3 shadow-xl max-w-sm pointer-events-auto"
-          style={{ animation: 'slideInRight 0.2s ease-out' }}
-        >
-          <CheckCircle2 className="w-4 h-4 text-teal-400 flex-shrink-0 mt-0.5" />
-          <span className="leading-snug">{t.message}</span>
-          <button onClick={() => onDismiss(t.id)} className="ml-1 text-slate-500 hover:text-white flex-shrink-0">×</button>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // ── Action results map ────────────────────────────────────────────────────────
 const ACTION_RESULTS: Record<string, string> = {
@@ -968,18 +950,13 @@ export default function AgentsView() {
   )
   const [log, setLog] = useState<LogEntry[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [toasts, setToasts] = useState<Toast[]>([])
   const logRef = useRef<HTMLDivElement>(null)
   const statesRef = useRef(states)
   statesRef.current = states
   const customAgentsDefsRef = useRef(customAgentsDefs)
   customAgentsDefsRef.current = customAgentsDefs
 
-  const addToast = useCallback((message: string) => {
-    const id = Math.random().toString(36).slice(2)
-    setToasts(prev => [...prev, { id, message }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000)
-  }, [])
+  const addToast = useCallback((message: string) => { toast(message, 'success') }, [])
 
   // Init states for newly-added custom agents
   useEffect(() => {
@@ -1081,6 +1058,13 @@ export default function AgentsView() {
         }))
         appendLog(def.id, def.name, `✓ Completed — ${def.metrics[0].value} ${def.metrics[0].label}`, 'done')
         setExpanded(prev => ({ ...prev, [def.id]: true }))
+        const critCount = def.findings.filter(f => f.severity === 'critical').length
+        toast(
+          critCount > 0
+            ? `${def.name} — ${critCount} critical finding${critCount > 1 ? 's' : ''}`
+            : `${def.name} completed · ${def.findings.length} finding${def.findings.length !== 1 ? 's' : ''}`,
+          critCount > 0 ? 'error' : 'success',
+        )
         // Persist findings to shared store for Dashboard
         saveAgentRun(sectorId, {
           agentId: def.id,
@@ -1423,7 +1407,6 @@ export default function AgentsView() {
           )}
         </div>
 
-        <ToastContainer toasts={toasts} onDismiss={id => setToasts(prev => prev.filter(t => t.id !== id))} />
 
         {/* Agent builder modal */}
         {showBuilder && (
