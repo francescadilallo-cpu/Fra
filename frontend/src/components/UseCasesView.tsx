@@ -380,7 +380,7 @@ export default function UseCasesView({ onNavigate }: Props) {
     <div className="min-h-full bg-white overflow-auto">
 
       {/* Header strip */}
-      <div className="bg-slate-900 text-white px-12 py-4">
+      <div className="bg-slate-900 text-white px-4 md:px-8 lg:px-12 py-4">
         <div className="max-w-6xl flex items-center gap-6">
           <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Real Business Cases</span>
           <div className="h-3 w-px bg-slate-700" />
@@ -393,7 +393,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       </div>
 
       {/* Hero */}
-      <section className="px-12 py-12 border-b border-slate-100">
+      <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100">
         <div className="max-w-6xl">
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
             04 — Use Cases
@@ -409,7 +409,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       </section>
 
       {/* Case cards grid */}
-      <section className="px-12 py-12 bg-slate-50">
+      <section className="px-4 md:px-8 lg:px-12 py-12 bg-slate-50">
         <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6">
           {USE_CASES.map(uc => (
             <CaseCard key={uc.id} uc={uc} onLoad={() => loadScenario(uc)} onNavigate={onNavigate} />
@@ -418,7 +418,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       </section>
 
       {/* Pattern recap */}
-      <section className="px-12 py-14 border-t border-slate-100">
+      <section className="px-4 md:px-8 lg:px-12 py-14 border-t border-slate-100">
         <div className="max-w-6xl">
           <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The common pattern</span>
           <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
@@ -442,7 +442,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       </section>
 
       {/* Summary stats */}
-      <section className="px-12 py-14 bg-slate-900">
+      <section className="px-4 md:px-8 lg:px-12 py-14 bg-slate-900">
         <div className="max-w-6xl">
           <span className="text-xs font-semibold tracking-widest text-teal-400 uppercase">By the numbers</span>
           <h2 className="mt-3 text-2xl font-bold text-white mb-10">

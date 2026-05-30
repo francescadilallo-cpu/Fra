@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw } from 'lucide-react'
 import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import {
@@ -20,6 +20,7 @@ interface Message {
   engineResult?: EngineResult
   entities?: string[]
   timestamp: Date
+  retryQuery?: string
 }
 
 // ── Query history helpers ──────────────────────────────────────────────────────
@@ -542,9 +543,10 @@ function SqlBlock({ sql }: { sql: string }) {
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
-function MessageBubble({ message, onFollowUp, isFavorite, onToggleFavorite }: {
+function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavorite }: {
   message: Message
   onFollowUp?: (q: string) => void
+  onRetry?: (q: string) => void
   isFavorite?: boolean
   onToggleFavorite?: (q: string) => void
 }) {
@@ -578,8 +580,16 @@ function MessageBubble({ message, onFollowUp, isFavorite, onToggleFavorite }: {
         <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
           <Bot className="w-4 h-4 text-red-400" />
         </div>
-        <div className="max-w-[85%] bg-red-500/10 border border-red-500/20 rounded-2xl rounded-tl-sm px-4 py-3">
+        <div className="max-w-[85%] bg-red-500/10 border border-red-500/20 rounded-2xl rounded-tl-sm px-4 py-3 space-y-2">
           <p className="text-sm text-red-400">{message.content}</p>
+          {message.retryQuery && onRetry && (
+            <button
+              onClick={() => onRetry(message.retryQuery!)}
+              className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              <RefreshCw className="w-3 h-3" /> Retry
+            </button>
+          )}
         </div>
       </div>
     )
@@ -908,6 +918,7 @@ export default function QueryInterface() {
           id: crypto.randomUUID(),
           role: 'error',
           content: `Error: ${errMsg}`,
+          retryQuery: question,
           timestamp: new Date(),
         },
       ])
@@ -918,7 +929,8 @@ export default function QueryInterface() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    const submit = (e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))
+    if (submit) {
       e.preventDefault()
       sendMessage(input)
     }
@@ -1108,6 +1120,7 @@ export default function QueryInterface() {
             key={msg.id}
             message={msg}
             onFollowUp={sendMessage}
+            onRetry={sendMessage}
             isFavorite={msg.role === 'user' ? favorites.includes(msg.content) : undefined}
             onToggleFavorite={msg.role === 'user' ? (q) => setFavorites(toggleFavorite(sectorId, q, favorites)) : undefined}
           />
@@ -1171,7 +1184,7 @@ export default function QueryInterface() {
             )}
           </button>
         </div>
-        <p className="text-xs text-slate-400 mt-2">Enter to send · Shift+Enter for new line</p>
+        <p className="text-xs text-slate-400 mt-2">Enter to send · Shift+Enter for new line · ⌘+Enter to force send</p>
       </div>
     </div>
   )

@@ -88,7 +88,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
     <div className="min-h-full bg-white text-slate-900 overflow-auto">
 
       {/* ── Status bar ─────────────────────────────────────────────────────── */}
-      <div className="bg-slate-900 text-white px-12 py-3.5">
+      <div className="bg-slate-900 text-white px-4 md:px-8 lg:px-12 py-3.5">
         <div className="max-w-5xl flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2">
             <Activity className="w-3.5 h-3.5 text-teal-400" />
@@ -138,7 +138,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </div>
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="px-12 py-14 border-b border-slate-100">
+      <section className="px-4 md:px-8 lg:px-12 py-14 border-b border-slate-100">
         <div className="max-w-4xl">
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
             {isAW ? 'Demo — AdventureWorks 2014' : `Demo — ${sector.name}`}
@@ -191,7 +191,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </section>
 
       {/* ── Guided journey ─────────────────────────────────────────────────── */}
-      <section className="px-12 py-12 border-b border-slate-100 bg-slate-50">
+      <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100 bg-slate-50">
         <div className="max-w-5xl">
           <div className="flex items-center gap-3 mb-2">
             <Brain className="w-5 h-5 text-teal-600" />
@@ -241,7 +241,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </section>
 
       {/* ── Problem → Solution ─────────────────────────────────────────────── */}
-      <section className="px-12 py-12 border-b border-slate-100">
+      <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100">
         <div className="max-w-5xl">
           <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Problem</span>
           <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
@@ -268,7 +268,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </section>
 
       {/* ── Solution ───────────────────────────────────────────────────────── */}
-      <section className="px-12 py-12 border-b border-slate-100 bg-slate-50">
+      <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100 bg-slate-50">
         <div className="max-w-5xl">
           <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Solution</span>
           <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
@@ -310,7 +310,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────────────────── */}
-      <section className="px-12 py-16 bg-slate-900">
+      <section className="px-4 md:px-8 lg:px-12 py-16 bg-slate-900">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold text-white leading-snug mb-6">
             Ready to explore the demo?
