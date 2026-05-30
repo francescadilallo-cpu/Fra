@@ -143,6 +143,12 @@ function CredentialModal({
 
   const set = (key: string, val: string) => setValues(prev => ({ ...prev, [key]: val }))
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   const valid = def.params_schema
     .filter(f => f.required)
     .every(f => (values[f.key] ?? '').trim() !== '')

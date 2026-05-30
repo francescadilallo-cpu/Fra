@@ -3,7 +3,7 @@ import {
   Play, Zap, Bot, Workflow as WorkflowIcon,
   TrendingUp, ShieldCheck, Package, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
-  Bell, Sparkles, Plus, Trash2, Clock, Download,
+  Bell, Sparkles, Plus, Trash2, Clock, Download, Loader2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS } from '../data/sectors'
@@ -1300,8 +1300,10 @@ export default function AgentsView() {
                 : 'bg-teal-600 text-white hover:bg-teal-700 shadow-sm'
             }`}
           >
-            <Zap className="w-4 h-4" />
-            Run All Agents
+            {runningCount > 0
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Zap className="w-4 h-4" />}
+            {runningCount > 0 ? `Running ${runningCount}…` : 'Run All Agents'}
           </button>
         </div>
       </div>
