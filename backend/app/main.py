@@ -1994,3 +1994,76 @@ def delete_custom_agent(
         conn.commit()
     finally:
         conn.close()
+
+
+# ── Saved queries ─────────────────────────────────────────────────────────────
+
+_QUERIES_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "saved_queries.db"
+
+
+def _queries_db() -> _sqlite3.Connection:
+    conn = _sqlite3.connect(str(_QUERIES_DB_PATH))
+    conn.row_factory = _sqlite3.Row
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS saved_queries (
+            id TEXT PRIMARY KEY,
+            sector_id TEXT NOT NULL,
+            query TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    conn.commit()
+    return conn
+
+
+class SavedQueryPayload(BaseModel):
+    id: str
+    sector_id: str
+    query: str
+    created_at: str
+
+
+@app.get("/api/queries/saved", tags=["queries"])
+def list_saved_queries(
+    sector_id: str,
+    _user: dict = Depends(get_current_user),
+):
+    conn = _queries_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM saved_queries WHERE sector_id = ? ORDER BY created_at DESC",
+            (sector_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/api/queries/saved", status_code=201, tags=["queries"])
+def save_query(
+    body: SavedQueryPayload,
+    _user: dict = Depends(get_current_user),
+):
+    conn = _queries_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO saved_queries (id, sector_id, query, created_at) VALUES (?,?,?,?)",
+            (body.id, body.sector_id, body.query, body.created_at),
+        )
+        conn.commit()
+        return dict(conn.execute("SELECT * FROM saved_queries WHERE id=?", (body.id,)).fetchone())
+    finally:
+        conn.close()
+
+
+@app.delete("/api/queries/saved/{query_id}", status_code=204, tags=["queries"])
+def delete_saved_query(
+    query_id: str,
+    _user: dict = Depends(get_current_user),
+):
+    conn = _queries_db()
+    try:
+        conn.execute("DELETE FROM saved_queries WHERE id=?", (query_id,))
+        conn.commit()
+    finally:
+        conn.close()

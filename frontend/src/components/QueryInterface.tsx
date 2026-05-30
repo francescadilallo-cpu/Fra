@@ -7,6 +7,7 @@ import {
   PROVIDERS, type LLMProvider,
 } from '../data/llmQueryEngine'
 import { ask, adaptAskResult, checkBackend, backendErrorMessage } from '../api/semantic'
+import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 
@@ -48,13 +49,27 @@ function loadFavorites(sectorId: string): string[] {
   } catch { return [] }
 }
 
+function saveFavoritesLocal(sectorId: string, favs: string[]) {
+  try { localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(favs)) } catch { /* quota */ }
+}
+
+function stableQueryId(sectorId: string, query: string): string {
+  let h = 5381
+  for (let i = 0; i < query.length; i++) h = ((h << 5) + h) ^ query.charCodeAt(i)
+  return `${sectorId}:${(h >>> 0).toString(36)}`
+}
+
 function toggleFavorite(sectorId: string, query: string, current: string[]): string[] {
-  const next = current.includes(query)
-    ? current.filter(q => q !== query)
-    : [query, ...current].slice(0, FAVORITES_MAX)
-  try {
-    localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(next))
-  } catch { /* private browsing / quota */ }
+  const adding = !current.includes(query)
+  const next = adding
+    ? [query, ...current].slice(0, FAVORITES_MAX)
+    : current.filter(q => q !== query)
+  saveFavoritesLocal(sectorId, next)
+  if (adding) {
+    saveQueryRemote(sectorId, query, stableQueryId(sectorId, query)).catch(() => {})
+  } else {
+    deleteSavedQueryRemote(stableQueryId(sectorId, query)).catch(() => {})
+  }
   return next
 }
 
@@ -810,7 +825,17 @@ export default function QueryInterface() {
   useEffect(() => {
     setMessages([])
     setHistory(loadHistory(sectorId))
-    setFavorites(loadFavorites(sectorId))
+    const local = loadFavorites(sectorId)
+    setFavorites(local)
+    // Sync favorites from backend; merge remote-only entries into localStorage
+    listSavedQueries(sectorId).then(remote => {
+      const remoteQueries = remote.map(r => r.query)
+      const merged = [...new Set([...local, ...remoteQueries])].slice(0, FAVORITES_MAX)
+      if (merged.length !== local.length) {
+        saveFavoritesLocal(sectorId, merged)
+        setFavorites(merged)
+      }
+    }).catch(() => {})
     // Check for pre-fill from dashboard navigation
     const prefill = sessionStorage.getItem('query-prefill')
     if (prefill) {
@@ -1018,8 +1043,10 @@ export default function QueryInterface() {
                   </div>
                   <button
                     onClick={() => {
+                      const toDelete = [...favorites]
                       localStorage.removeItem(`query-favorites-${sectorId}`)
                       setFavorites([])
+                      toDelete.forEach(q => deleteSavedQueryRemote(stableQueryId(sectorId, q)).catch(() => {}))
                     }}
                     className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
                   >
