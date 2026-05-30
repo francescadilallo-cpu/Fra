@@ -288,6 +288,81 @@ class KnowledgeGraph:
             self._g.number_of_edges(),
         )
 
+    def build_from_schema(self, mgr) -> None:
+        """Build a lightweight schema graph from the DuckDB unified snapshot.
+
+        Creates one representative node per table and detects potential FK
+        relationships via column name heuristics (_id / _ref / _fk suffixes and
+        their camelCase equivalents).  No rows are loaded — purely structural,
+        making it safe and fast for any schema size.
+
+        Suitable as a zero-config fallback when no ontology YAML is present.
+        """
+        logger.info("Building knowledge graph from schema…")
+
+        try:
+            schema = mgr.get_schema_info()
+        except Exception as exc:
+            logger.warning("build_from_schema: schema discovery failed: %s", exc)
+            return
+
+        table_names = set(schema.keys())
+
+        # Phase 1 — one schema-level node per table
+        for table, info in schema.items():
+            cols = [c.get("name", "") for c in info.get("columns", [])]
+            node_id = f"{table}:__schema__"
+            self._add_node(
+                node_id,
+                entity_type=table,
+                canonical_id="__schema__",
+                data={
+                    "table": table,
+                    "columns": cols,
+                    "row_count": info.get("row_count", 0),
+                },
+                provenance=[{"source": "schema", "original_id": table, "table": table}],
+            )
+
+        # Phase 2 — FK-heuristic edges
+        _FK_SUFFIXES = ("_id", "_ref", "_fk", "Id", "Ref", "FK")
+
+        for table, info in schema.items():
+            from_node = f"{table}:__schema__"
+            for col in info.get("columns", []):
+                col_name: str = col.get("name", "")
+                for suffix in _FK_SUFFIXES:
+                    if not col_name.endswith(suffix) or col_name == suffix:
+                        continue
+                    prefix = col_name[: -len(suffix)]
+                    candidates = [
+                        prefix,
+                        prefix + "s",
+                        prefix + "es",
+                        prefix.rstrip("_"),
+                        prefix.rstrip("_") + "s",
+                        prefix.lower(),
+                        prefix.lower() + "s",
+                    ]
+                    for candidate in candidates:
+                        if candidate in table_names and candidate != table:
+                            to_node = f"{candidate}:__schema__"
+                            self._add_edge(from_node, to_node, f"FK_{col_name}")
+                            logger.debug(
+                                "build_from_schema: %s.%s → %s",
+                                table,
+                                col_name,
+                                candidate,
+                            )
+                            break
+                    break  # first matching suffix wins per column
+
+        logger.info(
+            "KG built from schema: %d nodes, %d edges",
+            self._g.number_of_nodes(),
+            self._g.number_of_edges(),
+        )
+
     @property
     def node_count(self) -> int:
         return self._g.number_of_nodes()

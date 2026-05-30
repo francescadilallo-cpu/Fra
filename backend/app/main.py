@@ -412,8 +412,8 @@ def _ensure_semantic_loaded() -> None:
             # any registered source including custom domains beyond ERP/CRM/HR/PIM.
             kg.build_from_ontology(_mgr, ontology)
         else:
-            # Fallback: legacy hardcoded loaders for the golden scenario.
-            kg.build(erp, crm, hr_pim)
+            # Fallback: schema-driven, works with any registered source.
+            kg.build_from_schema(_mgr)
 
         catalog = MetadataCatalog()
         # Schema-driven discovery first — source of truth for table/column

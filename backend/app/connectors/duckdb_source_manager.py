@@ -76,6 +76,18 @@ def _safe_data_path(raw: str) -> Path:
 _MANAGER: "DuckDBSourceManager | None" = None
 _MANAGER_LOCK = threading.RLock()
 
+# File extensions that can be auto-discovered and registered as sources.
+_DISCOVERABLE_EXTENSIONS: dict[str, str] = {
+    ".csv": "csv",
+    ".json": "json",
+    ".xlsx": "excel",
+    ".xls": "excel",
+    ".parquet": "parquet",
+    ".db": "sqlite",
+    ".sqlite": "sqlite",
+    ".sqlite3": "sqlite",
+}
+
 _ERP_TABLES = [
     "sales_order_header",
     "sales_order_line",
@@ -262,50 +274,61 @@ class DuckDBSourceManager:
     # ── Defaults seeding ───────────────────────────────────────────────────────
 
     def _seed_defaults(self) -> None:
-        """Seed the 4 default scenario sources if the registry is empty."""
-        if self._registry.count() > 0:
-            return
-        sp = self._scenario_path
-        defaults = [
-            SourceConfig(
-                id="erp",
-                connector_type="erp_sqldump",
-                label="ERP — OrionSales",
-                params={"path": str(sp / "erp_postgres" / "orion_sales_dump.sql")},
-                target_tables=_ERP_TABLES,
-                is_default=True,
-            ),
-            SourceConfig(
-                id="crm",
-                connector_type="crm_sqlite",
-                label="CRM — ClientHub",
-                params={"path": str(sp / "crm_sqlite" / "clienthub.db")},
-                target_tables=_CRM_TABLES,
-                is_default=True,
-            ),
-            SourceConfig(
-                id="hr",
-                connector_type="hr_csv",
-                label="HR — Employees",
-                params={
-                    "path": str(sp / "hr_pim_files" / "dipendenti_hr.csv"),
-                    "delimiter": ";",
-                },
-                target_tables=["hr_employees"],
-                is_default=True,
-            ),
-            SourceConfig(
-                id="pim",
-                connector_type="pim_json",
-                label="PIM — Product Catalog",
-                params={"path": str(sp / "hr_pim_files" / "product_catalog_pim.json")},
-                target_tables=["pim_products"],
-                is_default=True,
-            ),
-        ]
-        for cfg in defaults:
-            self._registry.upsert(cfg)
-        logger.info("Seeded %d default sources into registry", len(defaults))
+        """Seed the 4 default scenario sources if the registry is empty.
+
+        After seeding (or if defaults already exist), scan the scenario path
+        for any additional data files not yet in the registry and register them
+        automatically so real sources require no manual configuration.
+        """
+        if self._registry.count() == 0:
+            sp = self._scenario_path
+            defaults = [
+                SourceConfig(
+                    id="erp",
+                    connector_type="erp_sqldump",
+                    label="ERP — OrionSales",
+                    params={"path": str(sp / "erp_postgres" / "orion_sales_dump.sql")},
+                    target_tables=_ERP_TABLES,
+                    is_default=True,
+                ),
+                SourceConfig(
+                    id="crm",
+                    connector_type="crm_sqlite",
+                    label="CRM — ClientHub",
+                    params={"path": str(sp / "crm_sqlite" / "clienthub.db")},
+                    target_tables=_CRM_TABLES,
+                    is_default=True,
+                ),
+                SourceConfig(
+                    id="hr",
+                    connector_type="hr_csv",
+                    label="HR — Employees",
+                    params={
+                        "path": str(sp / "hr_pim_files" / "dipendenti_hr.csv"),
+                        "delimiter": ";",
+                    },
+                    target_tables=["hr_employees"],
+                    is_default=True,
+                ),
+                SourceConfig(
+                    id="pim",
+                    connector_type="pim_json",
+                    label="PIM — Product Catalog",
+                    params={
+                        "path": str(sp / "hr_pim_files" / "product_catalog_pim.json")
+                    },
+                    target_tables=["pim_products"],
+                    is_default=True,
+                ),
+            ]
+            for cfg in defaults:
+                self._registry.upsert(cfg)
+            logger.info("Seeded %d default sources into registry", len(defaults))
+
+        # Auto-discover any additional files not yet registered
+        discovered = self._auto_discover_files(self._scenario_path)
+        if discovered:
+            logger.info("Auto-discovered %d new data file(s)", discovered)
 
     # ── Initialisation ─────────────────────────────────────────────────────────
 
@@ -456,6 +479,8 @@ class DuckDBSourceManager:
             self._ingest_sqlite_generic(conn, cfg)
         elif ctype == "postgresql":
             self._ingest_postgresql(conn, cfg)
+        elif ctype == "parquet":
+            self._ingest_parquet(conn, cfg)
         elif ctype not in IMPLEMENTED_CONNECTOR_TYPES:
             logger.info(
                 "Source '%s' connector_type='%s' not yet implemented — skipping",
@@ -701,6 +726,93 @@ class DuckDBSourceManager:
                 logger.info("PG   %-25s %7d rows", table, n)
                 if table not in cfg.target_tables:
                     cfg.target_tables.append(table)
+
+    def _ingest_parquet(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
+        path = _safe_data_path(cfg.params.get("path", ""))
+        if not path.exists():
+            raise FileNotFoundError(f"Parquet not found: {path}")
+        table = (
+            cfg.params.get("table_name")
+            or path.stem.replace("-", "_").replace(" ", "_").lower()
+        )
+        safe_path = str(path).replace("'", "''")
+        conn.execute(
+            f"CREATE TABLE IF NOT EXISTS \"{table}\" AS "
+            f"SELECT * FROM read_parquet('{safe_path}')"
+        )
+        n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        self._row_counts[f"{cfg.id}.{table}"] = n
+        logger.info("PQT  %-25s %7d rows", table, n)
+        if table not in cfg.target_tables:
+            cfg.target_tables.append(table)
+
+    # ── Auto-discovery ─────────────────────────────────────────────────────────
+
+    def _auto_discover_files(self, directory: Path) -> int:
+        """Scan *directory* recursively for supported data files and register new ones.
+
+        Files whose resolved path is already referenced by an existing registry
+        entry are skipped.  Returns the count of newly registered sources.
+        """
+        if not directory.exists() or not directory.is_dir():
+            return 0
+
+        # Collect all paths already referenced by the registry
+        registered_paths: set[str] = set()
+        for cfg in self._registry.list():
+            raw = cfg.params.get("path")
+            if raw:
+                try:
+                    registered_paths.add(str(Path(raw).resolve()))
+                except Exception:
+                    pass
+
+        new_count = 0
+        for file_path in sorted(directory.rglob("*")):
+            if not file_path.is_file():
+                continue
+            ext = file_path.suffix.lower()
+            connector_type = _DISCOVERABLE_EXTENSIONS.get(ext)
+            if not connector_type:
+                continue
+            resolved = str(file_path.resolve())
+            if resolved in registered_paths:
+                continue  # already registered
+
+            # Derive a stable, collision-free source ID from the relative path
+            try:
+                rel = file_path.relative_to(directory)
+            except ValueError:
+                rel = file_path
+            base_id = f"auto_{rel.stem.replace('-', '_').replace(' ', '_').lower()}"
+            source_id = base_id
+            suffix = 0
+            while self._registry.get(source_id) is not None:
+                suffix += 1
+                source_id = f"{base_id}_{suffix}"
+
+            table_name = file_path.stem.replace("-", "_").replace(" ", "_").lower()
+            new_cfg = SourceConfig(
+                id=source_id,
+                connector_type=connector_type,
+                label=f"Auto-discovered: {file_path.name}",
+                params={"path": str(file_path), "table_name": table_name},
+                target_tables=[table_name],
+                is_default=False,
+            )
+            self._registry.upsert(new_cfg)
+            registered_paths.add(resolved)
+            new_count += 1
+            logger.info(
+                "Auto-discovered source '%s' (%s): %s",
+                source_id,
+                connector_type,
+                file_path.name,
+            )
+
+        return new_count
 
     # ── Adapter shims (BaseConnector-compatible) ───────────────────────────────
     # These expose load_entity() / execute_query() / describe() so KnowledgeGraph
