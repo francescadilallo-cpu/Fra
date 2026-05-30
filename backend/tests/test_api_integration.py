@@ -534,17 +534,13 @@ def test_disabled_user_token_rejected(client):
     users_with_disabled = [
         {
             "username": "admin_u",
-            "password_hash": os.environ.get(
-                "_TEST_ADMIN_HASH", _hash("admin_pw")
-            ),
+            "password_hash": os.environ.get("_TEST_ADMIN_HASH", _hash("admin_pw")),
             "role": "admin",
             "disabled": False,
         },
         {
             "username": "user_u",
-            "password_hash": os.environ.get(
-                "_TEST_USER_HASH", _hash("user_pw")
-            ),
+            "password_hash": os.environ.get("_TEST_USER_HASH", _hash("user_pw")),
             "role": "user",
             "disabled": False,
         },

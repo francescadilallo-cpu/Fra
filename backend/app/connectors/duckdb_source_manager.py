@@ -72,6 +72,7 @@ def _safe_data_path(raw: str) -> Path:
             )
     return resolved
 
+
 _MANAGER: "DuckDBSourceManager | None" = None
 _MANAGER_LOCK = threading.RLock()
 

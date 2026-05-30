@@ -399,7 +399,11 @@ def _ensure_semantic_loaded() -> None:
         try:
             ontology = Ontology.load(ontology_path) if ontology_path.exists() else None
         except Exception as exc:
-            logger.warning("Could not load ontology from %s: %s — running without ontology", ontology_path, exc)
+            logger.warning(
+                "Could not load ontology from %s: %s — running without ontology",
+                ontology_path,
+                exc,
+            )
             ontology = None
 
         kg = KnowledgeGraph()

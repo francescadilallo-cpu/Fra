@@ -743,7 +743,10 @@ def _find_connector(connectors: list, name: str):
                 return c
         except Exception as exc:
             import logging as _logging
-            _logging.getLogger(__name__).debug("_find_connector: describe() failed: %s", exc)
+
+            _logging.getLogger(__name__).debug(
+                "_find_connector: describe() failed: %s", exc
+            )
     return None
 
 

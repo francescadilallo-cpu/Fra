@@ -461,7 +461,6 @@ def test_context_manager_drop_session():
 def test_context_manager_eviction_at_capacity():
     """Sessions beyond _MAX_SESSIONS trigger LRU eviction of the oldest half."""
     from app.context.manager import ContextManager, _MAX_SESSIONS
-    import time
 
     mgr = ContextManager()
     # Fill to capacity, ensuring distinct last_accessed timestamps
@@ -528,6 +527,7 @@ def test_q_glossary_lookup_with_docs_override():
 
     layer = _make_layer_for_handler_tests()
     from app.semantic.layer import SemanticLayer
+
     SemanticLayer._thread_local.docs = SemanticDocs(
         glossary=[
             GlossaryTerm(term="fatturato", definition="Total billed revenue"),
@@ -535,8 +535,11 @@ def test_q_glossary_lookup_with_docs_override():
         ]
     )
     try:
-        intent = Intent(intent_type="glossary_lookup", raw_question="fatturato?",
-                        filters={"term": "fatturato"})
+        intent = Intent(
+            intent_type="glossary_lookup",
+            raw_question="fatturato?",
+            filters={"term": "fatturato"},
+        )
         result = layer._q_glossary_lookup(intent)
         assert result.answer == "Total billed revenue"
     finally:
@@ -550,12 +553,18 @@ def test_q_glossary_lookup_with_docs_partial_match():
 
     layer = _make_layer_for_handler_tests()
     from app.semantic.layer import SemanticLayer
+
     SemanticLayer._thread_local.docs = SemanticDocs(
-        glossary=[GlossaryTerm(term="fatturato lordo", definition="Gross billed revenue")]
+        glossary=[
+            GlossaryTerm(term="fatturato lordo", definition="Gross billed revenue")
+        ]
     )
     try:
-        intent = Intent(intent_type="glossary_lookup", raw_question="fatturato",
-                        filters={"term": "fatturato"})
+        intent = Intent(
+            intent_type="glossary_lookup",
+            raw_question="fatturato",
+            filters={"term": "fatturato"},
+        )
         result = layer._q_glossary_lookup(intent)
         assert "Gross billed revenue" in result.answer
     finally:
@@ -569,12 +578,14 @@ def test_q_glossary_lookup_unknown_term_lists_available():
 
     layer = _make_layer_for_handler_tests()
     from app.semantic.layer import SemanticLayer
+
     SemanticLayer._thread_local.docs = SemanticDocs(
         glossary=[GlossaryTerm(term="fatturato", definition="Revenue")]
     )
     try:
-        intent = Intent(intent_type="glossary_lookup", raw_question="xyz",
-                        filters={"term": "xyz"})
+        intent = Intent(
+            intent_type="glossary_lookup", raw_question="xyz", filters={"term": "xyz"}
+        )
         result = layer._q_glossary_lookup(intent)
         assert "fatturato" in result.answer
         assert "not present" in result.answer.lower() or "xyz" in result.answer
@@ -589,6 +600,7 @@ def test_q_disambiguation_rules_with_docs():
 
     layer = _make_layer_for_handler_tests()
     from app.semantic.layer import SemanticLayer
+
     SemanticLayer._thread_local.docs = SemanticDocs(
         disambiguation_rules=[
             DisambiguationRule(id="r1", name="Rule One", description="Test rule"),
@@ -611,6 +623,7 @@ def test_q_certified_metrics_with_docs_certified_filter():
 
     layer = _make_layer_for_handler_tests()
     from app.semantic.layer import SemanticLayer
+
     SemanticLayer._thread_local.docs = SemanticDocs(
         metrics=[
             MetricDoc(name="revenue", display_name="Revenue", certified=True),
@@ -618,7 +631,9 @@ def test_q_certified_metrics_with_docs_certified_filter():
         ]
     )
     try:
-        intent = Intent(intent_type="certified_metrics", raw_question="certified metrics")
+        intent = Intent(
+            intent_type="certified_metrics", raw_question="certified metrics"
+        )
         result = layer._q_certified_metrics(intent)
         assert isinstance(result.answer, list)
         # Only the certified one should appear
