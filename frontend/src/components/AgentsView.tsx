@@ -3,7 +3,7 @@ import {
   Play, Zap, Bot, Workflow as WorkflowIcon,
   TrendingUp, ShieldCheck, Package, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
-  Bell, Sparkles, Plus, Trash2, Clock,
+  Bell, Sparkles, Plus, Trash2, Clock, Download,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS } from '../data/sectors'
@@ -1023,6 +1023,14 @@ export default function AgentsView() {
     addToast(result)
   }, [addToast])
 
+  // Listen for "run-all-agents" from command palette
+  useEffect(() => {
+    const handler = () => runAll()
+    window.addEventListener('run-all-agents', handler)
+    return () => window.removeEventListener('run-all-agents', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Reset when sector changes
   useEffect(() => {
     const newAgents = AGENTS[sectorId]
@@ -1225,13 +1233,27 @@ export default function AgentsView() {
 
   const completedCount = agents.filter(a => states[a.id]?.status === 'completed').length
   const runningCount = agents.filter(a => states[a.id]?.status === 'running').length
-  const totalFindings = agents
-    .filter(a => states[a.id]?.status === 'completed')
-    .flatMap(a => a.findings).length
-  const criticalFindings = agents
-    .filter(a => states[a.id]?.status === 'completed')
-    .flatMap(a => a.findings)
-    .filter(f => f.severity === 'critical').length
+  const completedAgents = agents.filter(a => states[a.id]?.status === 'completed')
+  const totalFindings = completedAgents.flatMap(a => a.findings).length
+  const criticalFindings = completedAgents.flatMap(a => a.findings).filter(f => f.severity === 'critical').length
+
+  const exportFindingsCSV = useCallback(() => {
+    const rows: string[] = ['Agent,Run At,Severity,Finding']
+    const now = new Date().toISOString()
+    completedAgents.forEach(a => {
+      a.findings.forEach(f => {
+        const escaped = f.text.replace(/"/g, '""')
+        rows.push(`"${a.name}","${now}","${f.severity}","${escaped}"`)
+      })
+    })
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `agent-findings-${sectorId}-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [completedAgents, sectorId])
 
   const LOG_COLORS: Record<LogEntry['kind'], string> = {
     start:   'text-blue-600',
@@ -1268,6 +1290,16 @@ export default function AgentsView() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {totalFindings > 0 && (
+            <button
+              onClick={exportFindingsCSV}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+              title="Export all findings as CSV"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          )}
           <button
             onClick={() => { setBuilderPrefill(undefined); setShowBuilder(true) }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-teal-200 text-teal-700 hover:bg-teal-50 transition-colors"

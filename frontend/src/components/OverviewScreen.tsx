@@ -72,6 +72,18 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const kgNodes = semStatus?.kg_nodes ?? 0
   const isAW = sectorId === 'manufacturing'
 
+  // Derive journey step completion from real system state
+  const semBuilt = semStatus?.loaded === true
+  const agentsRan = agentRuns.length > 0
+  // step 1 = sources, 2 = ontology, 3&4 = sembuilder, 5 = query, 6 = agents
+  function stepDone(step: number): boolean {
+    if (step <= 2) return semBuilt || isAW
+    if (step <= 4) return semBuilt
+    if (step === 5) return false  // can't auto-detect
+    if (step === 6) return agentsRan
+    return false
+  }
+
   return (
     <div className="min-h-full bg-white text-slate-900 overflow-auto">
 
@@ -190,30 +202,40 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
 
           <div className="grid grid-cols-3 gap-4">
-            {JOURNEY.map(({ step, section, tab, icon: Icon, title, desc, aw }) => (
-              <button
-                key={tab}
-                onClick={() => onNavigate(tab)}
-                className="group text-left bg-white border border-slate-200 hover:border-teal-300 rounded-xl p-4 transition-all hover:shadow-sm"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center group-hover:bg-teal-100 transition-colors">
-                      <Icon className="w-4 h-4 text-teal-600" />
+            {JOURNEY.map(({ step, section, tab, icon: Icon, title, desc, aw }) => {
+              const done = stepDone(step)
+              return (
+                <button
+                  key={`${tab}-${step}`}
+                  onClick={() => onNavigate(tab)}
+                  className={`group text-left rounded-xl p-4 transition-all hover:shadow-sm border ${
+                    done
+                      ? 'bg-teal-50/40 border-teal-200 hover:border-teal-300'
+                      : 'bg-white border-slate-200 hover:border-teal-300'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                        done ? 'bg-teal-100 group-hover:bg-teal-200' : 'bg-teal-50 group-hover:bg-teal-100'
+                      }`}>
+                        <Icon className="w-4 h-4 text-teal-600" />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{section} {step}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{section} {step}</span>
+                    {done && <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />}
                   </div>
-                </div>
-                <p className="text-sm font-semibold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors">{title}</p>
-                <p className="text-xs text-slate-500 leading-snug mb-2">{desc}</p>
-                {aw && (
-                  <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
-                )}
-                <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Open <ArrowRight className="w-3 h-3" />
-                </div>
-              </button>
-            ))}
+                  <p className="text-sm font-semibold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors">{title}</p>
+                  <p className="text-xs text-slate-500 leading-snug mb-2">{desc}</p>
+                  {aw && (
+                    <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
+                  )}
+                  <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Open <ArrowRight className="w-3 h-3" />
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       </section>

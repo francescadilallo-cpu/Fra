@@ -1000,6 +1000,21 @@ export default function QueryInterface() {
               </p>
             </div>
 
+            {/* Offline hint — only when backend is confirmed offline and no LLM key configured */}
+            {isManufacturing && backendOnline === false && !isLLMActive && (
+              <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
+                <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800">Backend offline — using pattern engine</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Results come from the local query engine. For full AI answers,{' '}
+                    <button onClick={() => setShowApiPanel(true)} className="underline font-medium">add an API key</button>
+                    {' '}or start the backend.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Recent history */}
             {history.length > 0 && (
               <div className="space-y-2 w-full max-w-lg">
