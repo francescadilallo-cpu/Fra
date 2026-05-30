@@ -513,6 +513,8 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const [ingesting, setIngesting] = useState(false)
   const [building, setBuilding] = useState(false)
   const [buildStep, setBuildStep] = useState(0) // 1–3 = in-progress steps, 4 = done
+  const navTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => { if (navTimerRef.current) clearTimeout(navTimerRef.current) }, [])
 
   const showToast = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => {
     globalToast(msg, type === 'error' ? 'error' : 'success')
@@ -696,24 +698,23 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     setBuildStep(1)
     const t2 = setTimeout(() => setBuildStep(2), 900)
     const t3 = setTimeout(() => setBuildStep(3), 1900)
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 30_000)
-    )
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30_000)
     try {
-      await Promise.race([buildSemanticLayer(), timeout])
-      clearTimeout(t2); clearTimeout(t3)
+      await buildSemanticLayer(controller.signal)
+      clearTimeout(t2); clearTimeout(t3); clearTimeout(timeoutId)
       setBuildStep(4)
       globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
-      setTimeout(() => {
+      navTimerRef.current = setTimeout(() => {
         setBuilding(false); setBuildStep(0)
         onNavigate?.('sembuilder' as NavTab)
       }, 700)
     } catch (err) {
-      clearTimeout(t2); clearTimeout(t3)
+      clearTimeout(t2); clearTimeout(t3); clearTimeout(timeoutId)
       setBuilding(false); setBuildStep(0)
-      const isTimeout = err instanceof Error && err.message === 'timeout'
+      const isCanceled = (err as { code?: string })?.code === 'ERR_CANCELED'
       globalToast(
-        isTimeout
+        isCanceled
           ? 'Build timed out — the backend took too long to respond'
           : 'Build failed — check backend connection or source configuration',
         'error',

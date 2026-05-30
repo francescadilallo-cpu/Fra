@@ -946,7 +946,7 @@ export default function QueryInterface() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const submit = (e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))
+    const submit = (e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey))
     if (submit) {
       e.preventDefault()
       sendMessage(input)

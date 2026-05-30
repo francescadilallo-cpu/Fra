@@ -341,8 +341,8 @@ export interface SemanticDraft {
   built_at: string
 }
 
-export const buildSemanticLayer = (): Promise<SemanticDraft> =>
-  http.post<SemanticDraft>('/api/semantic/build').then(r => r.data)
+export const buildSemanticLayer = (signal?: AbortSignal): Promise<SemanticDraft> =>
+  http.post<SemanticDraft>('/api/semantic/build', undefined, { signal }).then(r => r.data)
 
 export const getDraft = (): Promise<SemanticDraft> =>
   http.get<SemanticDraft>('/api/semantic/draft').then(r => r.data)

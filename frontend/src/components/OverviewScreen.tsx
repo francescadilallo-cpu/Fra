@@ -351,7 +351,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {[
               `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${sector.connectors.length} connected systems`,
-              'Knowledge Graph with 193k nodes and 313k edges',
+              ...(isAW ? [`Knowledge Graph with ${kgNodes > 0 ? kgNodes.toLocaleString('en-US') : '193k'} nodes and ${edgeCount > 0 ? edgeCount.toLocaleString('en-US') : '313k'} edges`] : []),
               'Natural language Query AI — ask questions in plain English',
               'Download CSV for each entity from the Data Explorer',
             ].map(item => (

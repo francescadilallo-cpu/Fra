@@ -299,22 +299,9 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
   )
 }
 
-const TAB_TITLES: Partial<Record<NavTab, string>> = {
-  overview:    'Overview',
-  sources:     'Data Sources',
-  data:        'Data Explorer',
-  ontology:    'Ontology',
-  builder:     'Ontology Builder',
-  sembuilder:  'Knowledge Graph',
-  context:     'Context',
-  query:       'Query AI',
-  agents:      'Agents',
-  dashboard:   'Dashboard',
-  compliance:  'Compliance',
-  usecases:    'Use Cases',
-  process:     'Process',
-  config:      'Configuration',
-}
+const TAB_TITLES = Object.fromEntries(
+  NAV_ENTRIES.filter(e => e.kind === 'item').map(e => [(e as { id: NavTab; label: string }).id, (e as { label: string }).label])
+) as Partial<Record<NavTab, string>>
 
 export default function Layout({ activeTab, onTabChange, children }: Props) {
   const { sector } = useSector()
