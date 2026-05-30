@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1195,7 +1196,7 @@ def create_metric(
     m: MetricCreate,
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
-    mid = f"m-{int(__import__('time').time() * 1000)}"
+    mid = f"m-{uuid.uuid4().hex[:12]}"
     conn = get_connection()
     try:
         conn.execute(
@@ -1279,7 +1280,7 @@ def create_hierarchy(
     h: HierarchyCreate,
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
-    hid = f"h-{int(__import__('time').time() * 1000)}"
+    hid = f"h-{uuid.uuid4().hex[:12]}"
     conn = get_connection()
     try:
         conn.execute(
@@ -1354,7 +1355,7 @@ def create_segment(
     s: SegmentCreate,
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
-    sid = f"seg-{int(__import__('time').time() * 1000)}"
+    sid = f"seg-{uuid.uuid4().hex[:12]}"
     conn = get_connection()
     try:
         conn.execute(
