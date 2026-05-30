@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import sqlite3 as _sqlite3
 import logging
 import os
 import threading
@@ -1809,3 +1810,187 @@ def delete_draft_context(
     registry.remove(doc_id)
     _sync_context_docs_to_layer()
     return {"ok": True}
+
+
+# ── Custom Agents persistence ─────────────────────────────────────────────────
+#
+# A lightweight SQLite store (separate from the main DuckDB pipeline) that
+# persists user-defined agent definitions so they survive browser cache clears
+# and work across devices.
+
+_AGENTS_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "custom_agents.db"
+
+
+def _agents_db() -> _sqlite3.Connection:
+    conn = _sqlite3.connect(str(_AGENTS_DB_PATH))
+    conn.row_factory = _sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custom_agents (
+            id          TEXT PRIMARY KEY,
+            sector_id   TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            template    TEXT DEFAULT 'monitor',
+            entities    TEXT DEFAULT '[]',
+            findings    TEXT DEFAULT '[]',
+            actions     TEXT DEFAULT '[]',
+            trigger     TEXT DEFAULT '{"kind":"manual"}',
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            last_run_at TEXT
+        )
+        """
+    )
+    conn.commit()
+    return conn
+
+
+class CustomAgentPayload(BaseModel):
+    id: str
+    sector_id: str
+    name: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    template: str = "monitor"
+    entities: list[str] = []
+    findings: list[dict] = []
+    actions: list[str] = []
+    trigger: dict = Field(default_factory=lambda: {"kind": "manual"})
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    last_run_at: str | None = None
+
+
+def _row_to_agent(row: _sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "sector_id": row["sector_id"],
+        "name": row["name"],
+        "description": row["description"],
+        "template": row["template"],
+        "entities": json.loads(row["entities"] or "[]"),
+        "findings": json.loads(row["findings"] or "[]"),
+        "actions": json.loads(row["actions"] or "[]"),
+        "trigger": json.loads(row["trigger"] or '{"kind":"manual"}'),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "last_run_at": row["last_run_at"],
+    }
+
+
+@app.get("/api/agents/custom", tags=["agents"])
+def list_custom_agents(
+    sector_id: str = Query(default="manufacturing"),
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    conn = _agents_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM custom_agents WHERE sector_id = ? ORDER BY created_at DESC",
+            (sector_id,),
+        ).fetchall()
+        return [_row_to_agent(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/api/agents/custom", status_code=201, tags=["agents"])
+def create_custom_agent(
+    body: CustomAgentPayload,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _agents_db()
+    try:
+        conn.execute(
+            """
+            INSERT INTO custom_agents
+              (id, sector_id, name, description, template, entities, findings,
+               actions, trigger, created_at, updated_at, last_run_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              name=excluded.name, description=excluded.description,
+              template=excluded.template, entities=excluded.entities,
+              findings=excluded.findings, actions=excluded.actions,
+              trigger=excluded.trigger, updated_at=excluded.updated_at,
+              last_run_at=excluded.last_run_at
+            """,
+            (
+                body.id,
+                body.sector_id,
+                body.name,
+                body.description,
+                body.template,
+                json.dumps(body.entities),
+                json.dumps(body.findings),
+                json.dumps(body.actions),
+                json.dumps(body.trigger),
+                body.created_at,
+                now,
+                body.last_run_at,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM custom_agents WHERE id=?", (body.id,)
+        ).fetchone()
+        return _row_to_agent(row)
+    finally:
+        conn.close()
+
+
+@app.put("/api/agents/custom/{agent_id}", tags=["agents"])
+def update_custom_agent(
+    agent_id: str,
+    body: CustomAgentPayload,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _agents_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM custom_agents WHERE id=?", (agent_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        conn.execute(
+            """
+            UPDATE custom_agents SET
+              name=?, description=?, template=?, entities=?, findings=?,
+              actions=?, trigger=?, updated_at=?, last_run_at=?
+            WHERE id=?
+            """,
+            (
+                body.name,
+                body.description,
+                body.template,
+                json.dumps(body.entities),
+                json.dumps(body.findings),
+                json.dumps(body.actions),
+                json.dumps(body.trigger),
+                now,
+                body.last_run_at,
+                agent_id,
+            ),
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM custom_agents WHERE id=?", (agent_id,)
+        ).fetchone()
+        return _row_to_agent(updated)
+    finally:
+        conn.close()
+
+
+@app.delete("/api/agents/custom/{agent_id}", status_code=204, tags=["agents"])
+def delete_custom_agent(
+    agent_id: str,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> None:
+    conn = _agents_db()
+    try:
+        conn.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
+        conn.commit()
+    finally:
+        conn.close()

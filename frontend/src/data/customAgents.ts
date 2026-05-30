@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { SectorId } from './sectors'
+import { listAgents, createAgent, updateAgent, deleteAgentRemote } from '../api/agents'
 
 export type AgentTemplate = 'monitor' | 'alert' | 'reconciler' | 'validator' | 'enricher'
 
@@ -73,6 +74,20 @@ export function useCustomAgents(sectorId: SectorId): CustomAgentDef[] {
     window.addEventListener(EVENT, refresh)
     const onStorage = (e: StorageEvent) => { if (e.key === KEY(sectorId)) refresh() }
     window.addEventListener('storage', onStorage)
+
+    // Sync from backend: merge remote agents into localStorage (backend wins on conflict)
+    listAgents(sectorId)
+      .then(remote => {
+        const local = loadCustomAgents(sectorId)
+        const localIds = new Set(local.map(a => a.id))
+        const merged = [...local]
+        for (const r of remote) {
+          if (!localIds.has(r.id)) merged.push(r)
+        }
+        saveCustomAgents(sectorId, merged)
+      })
+      .catch(() => { /* backend offline — use localStorage */ })
+
     return () => {
       window.removeEventListener(EVENT, refresh)
       window.removeEventListener('storage', onStorage)
@@ -80,5 +95,29 @@ export function useCustomAgents(sectorId: SectorId): CustomAgentDef[] {
   }, [sectorId])
 
   return agents
+}
+
+// ── Backend-aware write helpers ───────────────────────────────────────────────
+// These keep localStorage and backend in sync. Backend failure is silent
+// (localStorage is always updated first so the UI is never blocked).
+
+export async function addCustomAgentPersisted(sectorId: string, agent: CustomAgentDef): Promise<void> {
+  addCustomAgent(sectorId, agent)
+  try { await createAgent(agent) } catch { /* offline — localStorage is the source of truth */ }
+}
+
+export async function removeCustomAgentPersisted(sectorId: string, agentId: string): Promise<void> {
+  removeCustomAgent(sectorId, agentId)
+  try { await deleteAgentRemote(agentId) } catch { /* offline */ }
+}
+
+export async function updateCustomAgentPersisted(
+  sectorId: string,
+  agentId: string,
+  patch: Partial<CustomAgentDef>,
+): Promise<void> {
+  updateCustomAgent(sectorId, agentId, patch)
+  const updated = loadCustomAgents(sectorId).find(a => a.id === agentId)
+  if (updated) { try { await updateAgent(agentId, updated) } catch { /* offline */ } }
 }
 

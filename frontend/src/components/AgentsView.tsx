@@ -10,7 +10,7 @@ import { SECTORS } from '../data/sectors'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { loadExtension } from '../data/ontologyExtensions'
-import { useCustomAgents, addCustomAgent, removeCustomAgent, updateCustomAgent, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
+import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 import AgentBuilder from './AgentBuilder'
 
@@ -1011,7 +1011,7 @@ export default function AgentsView() {
 
   const handleSaveCustomAgent = useCallback((agent: CustomAgentDef) => {
     const withSector = { ...agent, sectorId }
-    addCustomAgent(sectorId, withSector)
+    addCustomAgentPersisted(sectorId, withSector)
     setShowBuilder(false)
     setBuilderPrefill(undefined)
     addToast(`Agent "${agent.name}" created — see My Agents below`)
@@ -1106,7 +1106,7 @@ export default function AgentsView() {
         if (now - lastRun < DEMO_MS[trigger.interval]) return
         if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
         const def = customToAgentDef(cd)
-        updateCustomAgent(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
+        updateCustomAgentPersisted(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
         simulateAgent(def, () => addToast(`⏰ Scheduled run: "${cd.name}"`))
       })
     }, 5_000)
@@ -1121,7 +1121,7 @@ export default function AgentsView() {
         if (trigger.kind !== 'event' || trigger.on !== eventKind) return
         if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
         const def = customToAgentDef(cd)
-        updateCustomAgent(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
+        updateCustomAgentPersisted(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
         simulateAgent(def, () => addToast(`⚡ Event triggered: "${cd.name}"`))
       })
     }
@@ -1360,7 +1360,7 @@ export default function AgentsView() {
                       triggerBadge={cd ? <TriggerBadge trigger={getTrigger(cd)} /> : undefined}
                       onDelete={() => {
                         if (cd && confirm(`Remove agent "${cd.name}"?`)) {
-                          removeCustomAgent(sectorId, def.id)
+                          removeCustomAgentPersisted(sectorId, def.id)
                         }
                       }}
                     />
