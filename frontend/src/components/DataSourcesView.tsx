@@ -682,7 +682,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     'all', 'italian', 'erp', 'accounting', 'ecommerce', 'crm', 'payments', 'database', 'cloud', 'logistics',
   ]
 
-  const BUILD_STEPS = ['Scanning data sources…', 'Building knowledge graph…', 'Extracting metrics &amp; relations…']
+  const BUILD_STEPS = ['Scanning data sources…', 'Building knowledge graph…', 'Extracting metrics & relations…']
 
   async function handleBuildSemanticLayer() {
     setBuilding(true)
