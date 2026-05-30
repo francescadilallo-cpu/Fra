@@ -512,3 +512,105 @@ def test_segment_name_empty_422(client, admin_headers):
     bad = {**_SEGMENT_PAYLOAD, "name": ""}
     resp = client.post("/api/semantic/segments", json=bad, headers=admin_headers)
     assert resp.status_code == 422
+
+
+# ── Disabled-user auth bypass guard ───────────────────────────────────────────
+
+
+def test_disabled_user_token_rejected(client):
+    """A JWT issued before a user is disabled must be rejected on subsequent requests."""
+    import base64
+    import hashlib
+    import json
+    import os
+    import secrets
+
+    def _hash(pw):
+        salt = secrets.token_hex(16)
+        digest = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 120_000)
+        return f"pbkdf2_sha256$120000${salt}${base64.b64encode(digest).decode()}"
+
+    # Create a fresh user and log in to obtain a valid token
+    users_with_disabled = [
+        {
+            "username": "admin_u",
+            "password_hash": os.environ.get(
+                "_TEST_ADMIN_HASH", _hash("admin_pw")
+            ),
+            "role": "admin",
+            "disabled": False,
+        },
+        {
+            "username": "user_u",
+            "password_hash": os.environ.get(
+                "_TEST_USER_HASH", _hash("user_pw")
+            ),
+            "role": "user",
+            "disabled": False,
+        },
+        {
+            "username": "will_be_disabled",
+            "password_hash": _hash("secret123"),
+            "role": "user",
+            "disabled": False,
+        },
+    ]
+    os.environ["AUTH_USERS_JSON"] = json.dumps(users_with_disabled)
+
+    # Obtain a token while the account is still enabled
+    resp = client.post(
+        "/api/auth/token",
+        data={"username": "will_be_disabled", "password": "secret123"},
+    )
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    live_headers = {"Authorization": f"Bearer {token}"}
+
+    # Confirm the token works
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    resp = client.get("/api/dashboard", headers=live_headers)
+    assert resp.status_code == 200
+
+    # Now disable the user by updating AUTH_USERS_JSON
+    users_with_disabled[-1]["disabled"] = True
+    os.environ["AUTH_USERS_JSON"] = json.dumps(users_with_disabled)
+
+    # The previously valid token must now be rejected
+    resp = client.get("/api/dashboard", headers=live_headers)
+    assert resp.status_code == 401, (
+        "Disabled user should not be able to use an existing token"
+    )
+
+    # Restore original env for other tests
+    original_users = [
+        {
+            "username": "admin_u",
+            "password_hash": _hash("admin_pw"),
+            "role": "admin",
+            "disabled": False,
+        },
+        {
+            "username": "user_u",
+            "password_hash": _hash("user_pw"),
+            "role": "user",
+            "disabled": False,
+        },
+    ]
+    os.environ["AUTH_USERS_JSON"] = json.dumps(original_users)
+
+
+# ── SemanticAskRequest context dict size limit ─────────────────────────────────
+
+
+def test_ask_oversized_context_422(client, user_headers):
+    """SemanticAskRequest.context dict with >32 keys must be rejected with 422."""
+    resp = client.post(
+        "/api/semantic/ask",
+        json={
+            "question": "test",
+            "context": {f"key_{i}": "val" for i in range(33)},
+        },
+        headers=user_headers,
+    )
+    assert resp.status_code == 422
