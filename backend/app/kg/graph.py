@@ -231,12 +231,13 @@ class KnowledgeGraph:
                 safe_from = from_table.replace('"', '""')
                 safe_pk = from_pk.replace('"', '""')
                 safe_col = from_col.replace('"', '""')
+                _EDGE_LIMIT = 100_000
                 try:
                     edge_rows = mgr.execute(
                         f'SELECT "{safe_pk}", "{safe_col}" '
                         f'FROM "{safe_from}" '
                         f'WHERE "{safe_col}" IS NOT NULL '
-                        f"LIMIT 100000"
+                        f"LIMIT {_EDGE_LIMIT}"
                     )
                 except Exception as exc:
                     logger.warning(
@@ -264,6 +265,15 @@ class KnowledgeGraph:
                     self._add_edge(from_node, to_node, edge_type)
                     edges_added += 1
 
+                if edges_added >= _EDGE_LIMIT:
+                    logger.warning(
+                        "build_from_ontology: edge query for %s.%s hit the %d-row "
+                        "cap — the knowledge graph may be incomplete. "
+                        "Raise _EDGE_LIMIT or add pagination to load all edges.",
+                        entity_name,
+                        attr_name,
+                        _EDGE_LIMIT,
+                    )
                 logger.debug(
                     "build_from_ontology: %d edges %s-[%s]->%s",
                     edges_added,

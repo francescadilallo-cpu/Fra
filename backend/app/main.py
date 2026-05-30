@@ -416,8 +416,13 @@ def _ensure_semantic_loaded() -> None:
             kg.build(erp, crm, hr_pim)
 
         catalog = MetadataCatalog()
+        # Schema-driven discovery first — source of truth for table/column
+        # structure. populate_from_manager() must run before populate() so that
+        # schema-discovered entries exist before business metadata is layered on.
+        # Running populate() first would create phantom entities for tables not
+        # yet in DuckDB, which corrupt the LLM SQL schema context.
+        catalog.populate_from_manager(_mgr)
         catalog.populate([erp, crm, hr_pim], ontology, kg)
-        catalog.populate_from_manager(_mgr)  # auto-discover all DuckDB tables
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
@@ -869,7 +874,9 @@ def semantic_status(
         "kg_nodes": kg.node_count,
         "kg_edges": kg.edge_count,
         "metadata_rows": catalog.row_count(),
-        "sources": ["erp", "crm", "hr_pim"],
+        "sources": list(_semantic_state.get("mgr").describe().tables)
+        if _semantic_state.get("mgr")
+        else ["erp", "crm", "hr_pim"],
         "dedup_count": kg.dedup_count,
     }
 
@@ -1217,6 +1224,39 @@ def semantic_sources(
 ) -> list[dict[str, Any]]:
     """Return real data source metadata with freshness."""
     _ensure_semantic_loaded()
+    mgr = _semantic_state.get("mgr")
+
+    # Prefer unified mgr-based source info (reflects actual registered sources)
+    if mgr is not None:
+        try:
+            meta = mgr.describe()
+            built_at = meta.loaded_at
+            if built_at is not None:
+                age_h = (datetime.utcnow() - built_at).total_seconds() / 3600
+                freshness = (
+                    "fresh" if age_h < 24 else "stale" if age_h < 168 else "outdated"
+                )
+            else:
+                freshness = "unknown"
+            non_empty = sum(1 for c in meta.record_counts.values() if c > 0)
+            quality = round(100 * non_empty / max(len(meta.tables), 1))
+            return [
+                {
+                    "id": "unified",
+                    "name": meta.name,
+                    "source_type": meta.source_type,
+                    "tables": meta.tables,
+                    "record_counts": meta.record_counts,
+                    "total_rows": sum(meta.record_counts.values()),
+                    "loaded_at": built_at.isoformat() if built_at else None,
+                    "quality_score": quality,
+                    "freshness_status": freshness,
+                }
+            ]
+        except Exception as exc:
+            return [{"id": "unified", "name": "duckdb_unified", "error": str(exc)}]
+
+    # Legacy fallback: iterate the per-domain connectors
     sources = []
     for key in ["erp", "crm", "hr_pim"]:
         connector = _semantic_state.get(key)
@@ -1225,8 +1265,6 @@ def semantic_sources(
         try:
             meta = connector.describe()
             total = sum(meta.record_counts.values())
-            quality = 97 if key == "erp" else 94 if key == "crm" else 99
-            freshness = "fresh"
             sources.append(
                 {
                     "id": key,
@@ -1236,8 +1274,8 @@ def semantic_sources(
                     "record_counts": meta.record_counts,
                     "total_rows": total,
                     "loaded_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
-                    "quality_score": quality,
-                    "freshness_status": freshness,
+                    "quality_score": None,
+                    "freshness_status": "unknown",
                 }
             )
         except Exception as exc:

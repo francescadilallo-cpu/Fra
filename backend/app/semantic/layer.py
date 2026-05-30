@@ -1078,6 +1078,11 @@ class SemanticLayer:
     def set_manager(self, mgr) -> None:
         """Bind the DuckDB source manager for schema-driven LLM SQL generation."""
         self._mgr = mgr
+        try:
+            self._known_tables: frozenset[str] = frozenset(mgr.get_schema_info().keys())
+        except Exception as _exc:
+            logger.warning("set_manager: could not cache table list: %s", _exc)
+            self._known_tables = frozenset()
 
     def _exec(self, sql: str, params: tuple = ()) -> list[dict]:
         """Execute SQL against the unified DuckDB snapshot.
@@ -1629,7 +1634,26 @@ class SemanticLayer:
         fn = dispatch.get(intent.intent_type)
         if fn is None:
             return self._execute_llm_sql(intent)
-        return fn(intent)
+        try:
+            return fn(intent)
+        except Exception as _exc:
+            _emsg = str(_exc).lower()
+            if getattr(self, "_mgr", None) is not None and any(
+                kw in _emsg
+                for kw in (
+                    "does not exist",
+                    "not found",
+                    "catalog error",
+                    "no such table",
+                )
+            ):
+                logger.info(
+                    "Handler '%s' hit missing-table error, falling back to LLM SQL: %s",
+                    intent.intent_type,
+                    _exc,
+                )
+                return self._execute_llm_sql(intent)
+            raise
 
     def _validate_generated_sql(self, sql: str) -> None:
         """Security check for LLM-generated SQL before execution.
@@ -1669,12 +1693,17 @@ class SemanticLayer:
         """
         provider = _llm_intent_provider()
         if provider is None:
+            # Build the hint from actual catalog entities rather than hardcoding domain names.
+            _hint_tables = (
+                sorted(self._catalog.list_entities())[:6] if self._catalog else []
+            )
+            _hint = (
+                f" Try asking about: {', '.join(_hint_tables)}." if _hint_tables else ""
+            )
             return Result(
                 answer=(
                     "I don't recognize this question type. "
-                    "No LLM key is configured for dynamic SQL generation. "
-                    "Try asking about: orders, customers, employees, products, "
-                    "revenue, or territories."
+                    "No LLM key is configured for dynamic SQL generation." + _hint
                 ),
                 notes="unknown_intent_no_llm",
             )
