@@ -599,7 +599,9 @@ def login_for_access_token(
 
 
 @app.get("/api/dashboard", response_model=DashboardData)
-def dashboard() -> DashboardData:
+def dashboard(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> DashboardData:
     conn = get_connection()
     try:
         counts = get_table_counts(conn)
@@ -681,13 +683,17 @@ def dashboard() -> DashboardData:
 
 
 @app.get("/api/ontology/graph")
-def ontology_graph() -> dict[str, Any]:
+def ontology_graph(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
     onto = get_ontology()
     return onto.get_ontology_graph_data()
 
 
 @app.get("/api/ontology/mappings", response_model=MappingsResponse)
-def ontology_mappings() -> MappingsResponse:
+def ontology_mappings(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> MappingsResponse:
     flat = get_flat_mappings()
     raw = get_mappings()
     return MappingsResponse(mappings=flat, raw=raw)
