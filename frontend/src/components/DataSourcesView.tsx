@@ -16,6 +16,7 @@ import {
 } from '../api/sources'
 import { buildSemanticLayer } from '../api/semantic'
 import type { NavTab } from '../types'
+import { toast as globalToast } from './Toast'
 
 // ── AW Sources Panel (manufacturing only) ────────────────────────────────────
 
@@ -504,11 +505,12 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const [upload, setUpload] = useState<UploadState | null>(null)
   const [ingesting, setIngesting] = useState(false)
   const [building, setBuilding] = useState(false)
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null)
+  const [buildStep, setBuildStep] = useState(0) // 1–3 = in-progress steps, 4 = done
+  const [localToast, setLocalToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    setLocalToast({ msg, type })
+    setTimeout(() => setLocalToast(null), 3500)
   }, [])
 
   // ── Load sources from backend on mount
@@ -682,16 +684,27 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     'all', 'italian', 'erp', 'accounting', 'ecommerce', 'crm', 'payments', 'database', 'cloud', 'logistics',
   ]
 
+  const BUILD_STEPS = ['Scanning data sources…', 'Building knowledge graph…', 'Extracting metrics &amp; relations…']
+
   async function handleBuildSemanticLayer() {
     setBuilding(true)
+    setBuildStep(1)
+    const t2 = setTimeout(() => setBuildStep(2), 900)
+    const t3 = setTimeout(() => setBuildStep(3), 1900)
     try {
       await buildSemanticLayer()
+      clearTimeout(t2); clearTimeout(t3)
+      setBuildStep(4)
+      globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
+      setTimeout(() => {
+        setBuilding(false); setBuildStep(0)
+        onNavigate?.('sembuilder' as NavTab)
+      }, 700)
     } catch {
-      // backend may be offline or slow; navigate anyway
-    } finally {
-      setBuilding(false)
+      clearTimeout(t2); clearTimeout(t3)
+      setBuilding(false); setBuildStep(0)
+      globalToast('Build failed — check backend connection or source configuration', 'error')
     }
-    onNavigate?.('sembuilder' as NavTab)
   }
 
   return (
@@ -739,23 +752,43 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
         {/* Build Semantic Layer CTA */}
         {sources.length > 0 && (
-          <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-4 flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
-              <p className="text-xs text-teal-700 mt-0.5">
-                {sources.length} source{sources.length !== 1 ? 's' : ''} connected · KG + catalog will be auto-built from schema
-              </p>
-            </div>
-            <button
-              onClick={handleBuildSemanticLayer}
-              disabled={building}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
-            >
-              {building
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Building…</>
-                : <><Zap className="w-4 h-4" />Build Semantic Layer</>
-              }
-            </button>
+          <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
+            {building ? (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-teal-800 mb-3">Building semantic layer…</p>
+                {BUILD_STEPS.map((step, i) => {
+                  const stepNum = i + 1
+                  const done = buildStep > stepNum || buildStep === 4
+                  const active = buildStep === stepNum
+                  return (
+                    <div key={i} className={`flex items-center gap-2.5 text-xs transition-colors ${done ? 'text-teal-700' : active ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
+                      {done
+                        ? <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />
+                        : active
+                        ? <Loader2 className="w-4 h-4 animate-spin text-teal-500 flex-shrink-0" />
+                        : <div className="w-4 h-4 rounded-full border-2 border-slate-200 flex-shrink-0" />
+                      }
+                      <span dangerouslySetInnerHTML={{ __html: step }} />
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
+                  <p className="text-xs text-teal-700 mt-0.5">
+                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relations, and metrics auto-extracted from schema
+                  </p>
+                </div>
+                <button
+                  onClick={handleBuildSemanticLayer}
+                  className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm"
+                >
+                  <Zap className="w-4 h-4" /> Build Semantic Layer
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -840,13 +873,13 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 text-white text-sm rounded-xl px-4 py-3 shadow-xl flex items-center gap-2 ${toast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}>
-          {toast.type === 'error'
+      {/* Local toast (connect/sync/ingest actions) */}
+      {localToast && (
+        <div className={`fixed bottom-6 right-6 z-50 text-white text-sm rounded-xl px-4 py-3 shadow-xl flex items-center gap-2 ${localToast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}>
+          {localToast.type === 'error'
             ? <AlertTriangle className="w-4 h-4 text-red-200" />
             : <CheckCircle2 className="w-4 h-4 text-teal-400" />}
-          {toast.msg}
+          {localToast.msg}
         </div>
       )}
     </div>

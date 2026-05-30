@@ -22,6 +22,7 @@ import type { SectorId } from './data/sectors'
 import { loadExtension, saveExtension } from './data/ontologyExtensions'
 import { createCompany, migrateExistingCompany, logoutCurrent } from './data/companies'
 import { clearAuthToken, getAuthToken } from './api/client'
+import { Toaster } from './components/Toast'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
@@ -107,6 +108,15 @@ export default function App() {
     return () => window.removeEventListener('navigate-to-query', handler)
   }, [])
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { tab } = (e as CustomEvent<{ tab: NavTab }>).detail ?? {}
+      if (tab) setActiveTab(tab)
+    }
+    window.addEventListener('navigate-to-tab', handler)
+    return () => window.removeEventListener('navigate-to-tab', handler)
+  }, [])
+
   // Logout: archives the active company so all its data is preserved, then
   // clears the live state and onboarding flag. Re-entry triggers the wizard.
   // Previously-saved companies remain accessible via the dropdown after the
@@ -156,6 +166,7 @@ export default function App() {
 
   return (
     <>
+      <Toaster />
       {showOnboarding && (
         <OnboardingWizard
           onComplete={(companyName: string, newSectorId: SectorId, customEntity: string) => {
