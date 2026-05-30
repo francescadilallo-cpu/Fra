@@ -804,6 +804,16 @@ class _RuleParser:
         if ("b2b" in q or "aziende" in q) and ("attiv" in q or "client" in q):
             return Intent(intent_type="list_b2b_active", raw_question=question)
 
+        # ── Q10: customer state with most orders — MUST come before Q13 ────
+        if (
+            ("stato" in q or "provincia" in q or "state" in q)
+            and ("ordini" in q or "orders" in q)
+            and "client" in q
+        ):
+            return Intent(
+                intent_type="customer_state_most_orders", raw_question=question
+            )
+
         # ── Q13: customers in state ───────────────────────────────────────
         if ("california" in q or "stato" in q or "provincia" in q) and "client" in q:
             state = self._extract_quoted(question) or _extract_state(question)
@@ -883,16 +893,6 @@ class _RuleParser:
                 intent_type="top_products_by_qty",
                 limit=limit or 5,
                 raw_question=question,
-            )
-
-        # ── Q10: customer state with most orders ──────────────────────────
-        if (
-            ("stato" in q or "provincia" in q or "state" in q)
-            and ("ordini" in q or "orders" in q)
-            and "client" in q
-        ):
-            return Intent(
-                intent_type="customer_state_most_orders", raw_question=question
             )
 
         # ── Q15: margin per salesperson ───────────────────────────────────
