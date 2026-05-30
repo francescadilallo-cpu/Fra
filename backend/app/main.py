@@ -147,6 +147,14 @@ def _get_semantic_redis_client() -> Any:
         return _semantic_redis_client
 
 
+def _safe_json(raw: str | None, default: Any) -> Any:
+    """Parse JSON stored in the DB; return default on corrupt/missing data."""
+    try:
+        return json.loads(raw) if raw else default
+    except json.JSONDecodeError:
+        return default
+
+
 def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
     payload = json.dumps(
         {"q": question.strip(), "ctx": context},
@@ -461,6 +469,7 @@ class SemanticAskResponse(BaseModel):
 class OntologyValidateRequest(BaseModel):
     ontology_path: str | None = Field(
         default=None,
+        max_length=256,
         description="Optional path relative to test_scenario/ for admin validation",
     )
 
@@ -1171,9 +1180,9 @@ def get_metrics(
         result = []
         for r in rows:
             d = dict(r)
-            d["filters"] = json.loads(d.pop("filters_json", "[]"))
-            d["grains"] = json.loads(d.pop("grains_json", "[]"))
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
+            d["filters"] = _safe_json(d.pop("filters_json", "[]"), [])
+            d["grains"] = _safe_json(d.pop("grains_json", "[]"), [])
+            d["tags"] = _safe_json(d.pop("tags_json", "[]"), [])
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result
@@ -1257,7 +1266,7 @@ def get_hierarchies(
         result = []
         for r in rows:
             d = dict(r)
-            d["levels"] = json.loads(d.pop("levels_json", "[]"))
+            d["levels"] = _safe_json(d.pop("levels_json", "[]"), [])
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result
@@ -1330,9 +1339,9 @@ def get_segments(
         result = []
         for r in rows:
             d = dict(r)
-            d["conditions"] = json.loads(d.pop("conditions_json", "[]"))
-            d["tags"] = json.loads(d.pop("tags_json", "[]"))
-            d["used_by"] = json.loads(d.pop("used_by_json", "[]"))
+            d["conditions"] = _safe_json(d.pop("conditions_json", "[]"), [])
+            d["tags"] = _safe_json(d.pop("tags_json", "[]"), [])
+            d["used_by"] = _safe_json(d.pop("used_by_json", "[]"), [])
             d["is_builtin"] = bool(d["is_builtin"])
             result.append(d)
         return result

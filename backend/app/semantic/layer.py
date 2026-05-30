@@ -499,13 +499,18 @@ def _complete_json_via_anthropic(system_prompt: str, user_content: str) -> str:
     """Call Anthropic's Messages API and return the raw text."""
     import anthropic
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "").strip())
+    client = anthropic.Anthropic(
+        api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
+        timeout=15.0,
+    )
     msg = client.messages.create(
         model=_anthropic_model(),
         max_tokens=500,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     )
+    if not msg.content:
+        raise ValueError("Anthropic returned empty content array")
     return msg.content[0].text
 
 
