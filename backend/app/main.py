@@ -323,6 +323,12 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
     if not isinstance(subject, str) or role not in {"admin", "user"}:
         raise credentials_exc
 
+    # Re-check disabled flag — a valid token for a now-disabled account must be rejected.
+    users = _load_auth_users()
+    live_user = users.get(subject)
+    if not live_user or live_user.get("disabled"):
+        raise credentials_exc
+
     return UserPrincipal(username=subject, role=role)
 
 
@@ -497,6 +503,12 @@ def _resolve_ontology_validation_path(raw: str | None) -> Path:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise DB, manufacturing ontology, and DuckDB data snapshot at startup."""
+    _secret = os.getenv("JWT_SECRET_KEY", "")
+    if len(_secret) < 32:
+        logger.warning(
+            "JWT_SECRET_KEY is %d bytes — minimum 32 bytes required for HS256 security",
+            len(_secret),
+        )
     init_db()
     conn = get_connection()
     try:
