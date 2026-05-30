@@ -355,3 +355,22 @@ def test_semantic_write_endpoints_require_auth(auth_client, method, path, body):
     assert resp.status_code == 401, (
         f"{method.upper()} {path} returned {resp.status_code}"
     )
+
+
+@pytest.mark.parametrize(
+    "method,path",
+    [
+        ("get", "/api/context/documents"),
+        ("get", "/api/context/entities"),
+        ("get", "/api/context/metrics"),
+        ("get", "/api/context/glossary"),
+        ("get", "/api/context/search?q=test"),
+    ],
+)
+def test_context_read_endpoints_require_auth(auth_client, method, path):
+    """Unauthenticated requests to context read endpoints return 401."""
+    client, _ = auth_client
+    resp = getattr(client, method)(path)
+    assert resp.status_code == 401, (
+        f"{method.upper()} {path} returned {resp.status_code}"
+    )

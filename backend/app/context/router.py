@@ -6,7 +6,7 @@ import io
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .store import ContextStore, default_store
 
@@ -55,12 +55,15 @@ class DocumentMeta(BaseModel):
     created_at: str
 
 
+_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB — prevent OOM on Render 512 MB tier
+
+
 class EntityIn(BaseModel):
-    name: str
-    display_name: str
-    synonyms: list[str] = []
-    description: str = ""
-    source: str = ""
+    name: str = Field(min_length=1, max_length=128)
+    display_name: str = Field(min_length=1, max_length=128)
+    synonyms: list[str] = Field(default_factory=list, max_length=20)
+    description: str = Field(default="", max_length=1000)
+    source: str = Field(default="", max_length=256)
 
 
 class EntityOut(EntityIn):
@@ -69,11 +72,11 @@ class EntityOut(EntityIn):
 
 
 class MetricIn(BaseModel):
-    name: str
-    display_name: str
-    synonyms: list[str] = []
-    description: str = ""
-    unit: str = ""
+    name: str = Field(min_length=1, max_length=128)
+    display_name: str = Field(min_length=1, max_length=128)
+    synonyms: list[str] = Field(default_factory=list, max_length=20)
+    description: str = Field(default="", max_length=1000)
+    unit: str = Field(default="", max_length=64)
     certified: bool = False
 
 
@@ -83,8 +86,8 @@ class MetricOut(MetricIn):
 
 
 class GlossaryIn(BaseModel):
-    term: str
-    definition: str
+    term: str = Field(min_length=1, max_length=128)
+    definition: str = Field(min_length=1, max_length=2000)
 
 
 class GlossaryOut(GlossaryIn):
@@ -112,6 +115,11 @@ async def upload_document(
             detail=f"File type not supported. Allowed: {', '.join(allowed)}",
         )
     raw = await file.read()
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds {_MAX_UPLOAD_BYTES // 1024 // 1024} MB limit",
+        )
     content = _extract_text(raw, file.filename or "upload")
     if not content.strip():
         raise HTTPException(
@@ -144,7 +152,10 @@ def delete_document(doc_id: int, store: ContextStore = Depends(_get_store)):
 
 
 @router.get("/search")
-def search_documents(q: str = Query(...), store: ContextStore = Depends(_get_store)):
+def search_documents(
+    q: str = Query(..., min_length=1, max_length=256),
+    store: ContextStore = Depends(_get_store),
+):
     keywords = q.split()
     return {"snippets": store.search_documents(keywords)}
 

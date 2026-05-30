@@ -553,7 +553,10 @@ _agentic_layer = ExecutiveAgenticLayer(
     get_db_connection=get_connection,
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
-app.include_router(context_router)
+app.include_router(
+    context_router,
+    dependencies=[Depends(require_roles("user", "admin"))],
+)
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
