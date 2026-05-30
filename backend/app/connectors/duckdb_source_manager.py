@@ -278,8 +278,12 @@ class DuckDBSourceManager:
     def _try_load_snapshot(self) -> bool:
         try:
             conn = duckdb.connect(str(self._db_path), read_only=True)
-            meta_rows = conn.execute("SELECT key, value FROM _build_meta").fetchall()
-            conn.close()
+            try:
+                meta_rows = conn.execute(
+                    "SELECT key, value FROM _build_meta"
+                ).fetchall()
+            finally:
+                conn.close()
         except Exception as exc:
             logger.warning("Cannot open snapshot %s: %s", self._db_path, exc)
             return False
@@ -410,15 +414,20 @@ class DuckDBSourceManager:
         from .postgres_connector import _load_sql_dump_to_sqlite
 
         sqlite_conn = _load_sql_dump_to_sqlite(dump_path)
-        for table in _ERP_TABLES:
-            try:
-                rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
-                df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df")
-                self._row_counts[f"{cfg.id}.{table}"] = len(df)
-                logger.info("ERP  %-25s %7d rows", table, len(df))
-            except Exception as exc:
-                logger.warning("Could not ingest ERP.%s: %s", table, exc)
+        try:
+            for table in _ERP_TABLES:
+                try:
+                    rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
+                    df = pd.DataFrame([dict(r) for r in rows])
+                    conn.execute(
+                        f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df"
+                    )
+                    self._row_counts[f"{cfg.id}.{table}"] = len(df)
+                    logger.info("ERP  %-25s %7d rows", table, len(df))
+                except Exception as exc:
+                    logger.warning("Could not ingest ERP.%s: %s", table, exc)
+        finally:
+            sqlite_conn.close()
 
     def _ingest_crm_sqlite(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
@@ -431,15 +440,20 @@ class DuckDBSourceManager:
             return
         sqlite_conn = _sqlite3.connect(str(crm_path))
         sqlite_conn.row_factory = _sqlite3.Row
-        for table in _CRM_TABLES:
-            try:
-                rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
-                df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df")
-                self._row_counts[f"{cfg.id}.{table}"] = len(df)
-                logger.info("CRM  %-25s %7d rows", table, len(df))
-            except Exception as exc:
-                logger.warning("Could not ingest CRM.%s: %s", table, exc)
+        try:
+            for table in _CRM_TABLES:
+                try:
+                    rows = sqlite_conn.execute(f"SELECT * FROM {table}").fetchall()
+                    df = pd.DataFrame([dict(r) for r in rows])
+                    conn.execute(
+                        f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df"
+                    )
+                    self._row_counts[f"{cfg.id}.{table}"] = len(df)
+                    logger.info("CRM  %-25s %7d rows", table, len(df))
+                except Exception as exc:
+                    logger.warning("Could not ingest CRM.%s: %s", table, exc)
+        finally:
+            sqlite_conn.close()
 
     def _ingest_hr_csv(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
@@ -481,9 +495,12 @@ class DuckDBSourceManager:
         import io
 
         # Support inline CSV (uploaded from browser) or file path
+        _MAX_INLINE_BYTES = 5 * 1024 * 1024  # 5 MB guard against OOM
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
         if inline:
+            if len(inline.encode("utf-8")) > _MAX_INLINE_BYTES:
+                raise ValueError(f"Inline CSV exceeds 5 MB limit ({len(inline)} chars)")
             df = pd.read_csv(io.StringIO(inline), sep=",", low_memory=False)
         else:
             path = Path(cfg.params.get("path", ""))
@@ -553,22 +570,27 @@ class DuckDBSourceManager:
         table_filter: list[str] | None = cfg.params.get("tables")
         src = _sqlite3.connect(str(path))
         src.row_factory = _sqlite3.Row
-        tables = [
-            r[0]
-            for r in src.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-            ).fetchall()
-        ]
-        if table_filter:
-            tables = [t for t in tables if t in table_filter]
-        for table in tables:
-            rows = src.execute(f"SELECT * FROM {table}").fetchall()
-            df = pd.DataFrame([dict(r) for r in rows])
-            conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
-            self._row_counts[f"{cfg.id}.{table}"] = len(df)
-            logger.info("SDB  %-25s %7d rows", table, len(df))
-            if table not in cfg.target_tables:
-                cfg.target_tables.append(table)
+        try:
+            tables = [
+                r[0]
+                for r in src.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+            ]
+            if table_filter:
+                tables = [t for t in tables if t in table_filter]
+            for table in tables:
+                rows = src.execute(f"SELECT * FROM {table}").fetchall()
+                df = pd.DataFrame([dict(r) for r in rows])
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
+                )
+                self._row_counts[f"{cfg.id}.{table}"] = len(df)
+                logger.info("SDB  %-25s %7d rows", table, len(df))
+                if table not in cfg.target_tables:
+                    cfg.target_tables.append(table)
+        finally:
+            src.close()
 
     def _ingest_postgresql(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
@@ -586,20 +608,22 @@ class DuckDBSourceManager:
             import psycopg2
             import psycopg2.extras
 
-            pg_conn = psycopg2.connect(dsn)
-            cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            for table in tables:
-                cur.execute(f'SELECT * FROM "{schema}"."{table}"')
-                rows = cur.fetchall()
-                df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
-                )
-                self._row_counts[f"{cfg.id}.{table}"] = len(df)
-                logger.info("PG   %-25s %7d rows", table, len(df))
-                if table not in cfg.target_tables:
-                    cfg.target_tables.append(table)
-            pg_conn.close()
+            pg_conn = psycopg2.connect(dsn, connect_timeout=10)
+            try:
+                cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                for table in tables:
+                    cur.execute(f'SELECT * FROM "{schema}"."{table}" LIMIT 100000')
+                    rows = cur.fetchall()
+                    df = pd.DataFrame([dict(r) for r in rows])
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
+                    )
+                    self._row_counts[f"{cfg.id}.{table}"] = len(df)
+                    logger.info("PG   %-25s %7d rows", table, len(df))
+                    if table not in cfg.target_tables:
+                        cfg.target_tables.append(table)
+            finally:
+                pg_conn.close()
         except ImportError:
             # Fallback: try DuckDB postgres_scanner
             conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")

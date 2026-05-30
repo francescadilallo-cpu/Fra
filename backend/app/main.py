@@ -1169,7 +1169,7 @@ def semantic_sources(
 
 @app.get("/api/semantic/metrics")
 def get_metrics(
-    sector_id: str = "manufacturing",
+    sector_id: str = Query(default="manufacturing", max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1255,7 +1255,7 @@ def delete_metric(
 
 @app.get("/api/semantic/hierarchies")
 def get_hierarchies(
-    sector_id: str = "manufacturing",
+    sector_id: str = Query(default="manufacturing", max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1328,7 +1328,7 @@ def delete_hierarchy(
 
 @app.get("/api/semantic/segments")
 def get_segments(
-    sector_id: str = "manufacturing",
+    sector_id: str = Query(default="manufacturing", max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
