@@ -357,3 +357,44 @@ def test_data_provenance_delegates_to_catalog():
 
     assert "SalesOrder" in result.answer
     assert result.answer["SalesOrder"] == {"source": "erp"}
+
+
+# ── _q_margin_per_salesperson ─────────────────────────────────────────────────
+
+
+def test_margin_per_salesperson_executes_one_erp_query_not_two():
+    """Only one ERP query is needed (margin_sql). The dead approx_revenue
+    query was removed — verify the handler makes exactly 2 ERP calls (the
+    margin_sql is called once with year and once for pim). Actually: 1 ERP
+    query + 1 PIM query."""
+    layer = _make_layer()
+    layer._hr_pim.execute_query.return_value = [
+        {"internal_id": 42, "standardCost": 100.0, "listPrice": 150.0}
+    ]
+    layer._erp.execute_query.return_value = [
+        {"salesperson_ref": 7, "product_ref": 42, "total_qty": 10}
+    ]
+
+    result = layer._q_margin_per_salesperson(
+        _intent("margin_per_salesperson", year=2014)
+    )
+
+    assert layer._erp.execute_query.call_count == 1  # only margin_sql
+    assert result.sources_touched == ["erp", "hr_pim"]
+    assert len(result.answer) == 1
+    assert result.answer[0]["salesperson_ref"] == 7
+    assert result.answer[0]["margin"] == pytest.approx(500.0)  # 10 * (150 - 100)
+
+
+def test_margin_per_salesperson_no_year():
+    """Without year filter, uses the unfiltered margin_sql."""
+    layer = _make_layer()
+    layer._hr_pim.execute_query.return_value = []
+    layer._erp.execute_query.return_value = []
+
+    result = layer._q_margin_per_salesperson(_intent("margin_per_salesperson"))
+
+    assert layer._erp.execute_query.call_count == 1
+    call_sql = layer._erp.execute_query.call_args[0][0]
+    assert "strftime" not in call_sql
+    assert result.answer == []
