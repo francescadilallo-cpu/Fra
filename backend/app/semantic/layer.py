@@ -1977,27 +1977,6 @@ class SemanticLayer:
 
     def _q_margin_per_salesperson(self, intent: Intent) -> Result:
         year = intent.year or intent.filters.get("year")
-        if year:
-            sql = """
-                SELECT h.salesperson_ref,
-                       ROUND(SUM(l.qty * (l.unit_price - l.unit_price * l.unit_discount)), 2) as approx_revenue
-                FROM sales_order_header h
-                JOIN sales_order_line l ON l.order_id = h.order_id
-                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
-                  AND h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref ORDER BY approx_revenue DESC
-            """
-            self._erp.execute_query(sql, (str(year),))
-        else:
-            sql = """
-                SELECT h.salesperson_ref,
-                       ROUND(SUM(l.qty * (l.unit_price - l.unit_price * l.unit_discount)), 2) as approx_revenue
-                FROM sales_order_header h
-                JOIN sales_order_line l ON l.order_id = h.order_id
-                WHERE h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref ORDER BY approx_revenue DESC
-            """
-            self._erp.execute_query(sql)
 
         # Enrich with PIM cost data for true margin calculation
         cost_sql = (
