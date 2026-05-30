@@ -17,6 +17,7 @@ import {
   removeNode,
 } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
+import { showConfirm } from './ConfirmDialog'
 
 // ── Type color map (same as OntologyGraph) ───────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -1164,8 +1165,9 @@ export default function OntologyBuilder() {
     toApprove.forEach((c) => approve(c.id))
   }, [pending, approve])
 
-  const clearExtensions = useCallback(() => {
-    if (!confirm(`Do you really want to remove all saved extensions for ${sector.name}? This action is not reversible.`)) return
+  const clearExtensions = useCallback(async () => {
+    const ok = await showConfirm(`All custom extensions for ${sector.name} will be permanently removed.`, { title: 'Reset ontology?', dangerous: true })
+    if (!ok) return
     saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
     const s = buildInitialState(sector, sectorId)
     setNodes(s.nodes)
@@ -1212,9 +1214,10 @@ export default function OntologyBuilder() {
     [editingEntity, sector, sectorId],
   )
 
-  const deleteEntity = useCallback(() => {
+  const deleteEntity = useCallback(async () => {
     if (!editingEntity) return
-    if (!confirm(`Delete the class "${editingEntity.label}"? Relations involving it will also be removed.`)) return
+    const ok = await showConfirm(`Relations involving "${editingEntity.label}" will also be removed.`, { title: `Delete "${editingEntity.label}"?`, dangerous: true })
+    if (!ok) return
     removeNode(sectorId, editingEntity.nodeId, editingEntity.isBaseNode)
     const s = buildInitialState(sector, sectorId)
     setNodes(s.nodes)

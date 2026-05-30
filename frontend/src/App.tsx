@@ -23,6 +23,8 @@ import { loadExtension, saveExtension } from './data/ontologyExtensions'
 import { createCompany, migrateExistingCompany, logoutCurrent } from './data/companies'
 import { clearAuthToken, getAuthToken } from './api/client'
 import { Toaster } from './components/Toast'
+import { ConfirmProvider } from './components/ConfirmDialog'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
@@ -165,19 +167,18 @@ export default function App() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       <Toaster />
+      <ConfirmProvider />
       {showOnboarding && (
         <OnboardingWizard
           onComplete={(companyName: string, newSectorId: SectorId, customEntity: string) => {
-            // createCompany archives the previous company's data and starts the new one with clean storage
             createCompany(companyName, newSectorId)
             try { localStorage.setItem(ONBOARDING_KEY, '1') } catch { /* quota */ }
             if (customEntity) addCustomEntityToOntology(newSectorId, customEntity)
             setSector(newSectorId)
             setShowOnboarding(false)
             window.dispatchEvent(new CustomEvent('company-name-changed'))
-            // Reload to ensure all React state (sector context, hooks) reads from the new company's storage
             window.location.reload()
           }}
           onSkip={() => {
@@ -202,6 +203,6 @@ export default function App() {
         {activeTab === 'compliance' && <ComplianceView />}
         {activeTab === 'config' && <ConfigurationView />}
       </Layout>
-    </>
+    </ErrorBoundary>
   )
 }

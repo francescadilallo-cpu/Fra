@@ -6,6 +6,7 @@ import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import CommandPalette from './CommandPalette'
+import { showConfirm } from './ConfirmDialog'
 
 interface Props {
   activeTab: NavTab
@@ -123,11 +124,13 @@ function CompanyMenu({ companyName }: { companyName: string }) {
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [open])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setOpen(false)
-    if (confirm('Close session? The current company will be archived (you can find it in the dropdown later) and the wizard will open on next login.')) {
-      window.dispatchEvent(new CustomEvent('logout-requested'))
-    }
+    const ok = await showConfirm(
+      'The current company will be archived — you can restore it from the dropdown later.',
+      { title: 'Close session?', confirmLabel: 'Close session' },
+    )
+    if (ok) window.dispatchEvent(new CustomEvent('logout-requested'))
   }
 
   const handleNewCompany = () => {
@@ -142,16 +145,16 @@ function CompanyMenu({ companyName }: { companyName: string }) {
     window.dispatchEvent(new CustomEvent('company-switched'))
   }
 
-  const handleDelete = (e: React.MouseEvent, id: string, name: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
     if (id === currentId) {
-      alert('Cannot delete the active company. Switch to another company first.')
+      await showConfirm('Switch to another company before deleting this one.', { title: 'Cannot delete active company', confirmLabel: 'OK' })
       return
     }
-    if (confirm(`Permanently delete "${name}"? All archived data will be lost.`)) {
-      deleteCompany(id)
-      setCompanies(listCompanies())
-    }
+    const ok = await showConfirm(`All archived data for "${name}" will be permanently lost.`, {
+      title: `Delete "${name}"?`, dangerous: true,
+    })
+    if (ok) { deleteCompany(id); setCompanies(listCompanies()) }
   }
 
   const otherCompanies = companies.filter(c => c.id !== currentId)
@@ -362,8 +365,9 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
         {/* Footer */}
         <div className="px-4 py-4 border-t border-white/5">
           <button
-            onClick={() => {
-              if (confirm('Close session? The current company will be archived and the wizard will open on next login.')) {
+            onClick={async () => {
+              const ok = await showConfirm('The current company will be archived — you can restore it from the dropdown later.', { title: 'Close session?', confirmLabel: 'Close session' })
+              if (ok) {
                 window.dispatchEvent(new CustomEvent('logout-requested'))
               }
             }}

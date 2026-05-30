@@ -13,6 +13,7 @@ import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 import AgentBuilder from './AgentBuilder'
+import { showConfirm } from './ConfirmDialog'
 
 // ── Toast system ─────────────────────────────────────────────────────────────
 interface Toast { id: string; message: string }
@@ -1358,9 +1359,10 @@ export default function AgentsView() {
                       onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
                       onAction={handleAction}
                       triggerBadge={cd ? <TriggerBadge trigger={getTrigger(cd)} /> : undefined}
-                      onDelete={() => {
-                        if (cd && confirm(`Remove agent "${cd.name}"?`)) {
-                          removeCustomAgentPersisted(sectorId, def.id)
+                      onDelete={async () => {
+                        if (cd) {
+                          const ok = await showConfirm(`"${cd.name}" will be permanently removed.`, { title: 'Remove agent?', dangerous: true })
+                          if (ok) removeCustomAgentPersisted(sectorId, def.id)
                         }
                       }}
                     />
