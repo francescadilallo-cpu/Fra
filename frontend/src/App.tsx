@@ -161,7 +161,7 @@ export default function App() {
           onComplete={(companyName: string, newSectorId: SectorId, customEntity: string) => {
             // createCompany archives the previous company's data and starts the new one with clean storage
             createCompany(companyName, newSectorId)
-            localStorage.setItem(ONBOARDING_KEY, '1')
+            try { localStorage.setItem(ONBOARDING_KEY, '1') } catch { /* quota */ }
             if (customEntity) addCustomEntityToOntology(newSectorId, customEntity)
             setSector(newSectorId)
             setShowOnboarding(false)
@@ -170,7 +170,7 @@ export default function App() {
             window.location.reload()
           }}
           onSkip={() => {
-            localStorage.setItem(ONBOARDING_KEY, '1')
+            try { localStorage.setItem(ONBOARDING_KEY, '1') } catch { /* quota */ }
             setShowOnboarding(false)
           }}
         />

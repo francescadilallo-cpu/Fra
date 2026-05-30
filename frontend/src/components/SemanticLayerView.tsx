@@ -42,7 +42,7 @@ function loadSources(id: string): SourceDef[] {
   try { return JSON.parse(localStorage.getItem(SOURCES_KEY(id)) ?? '[]') } catch { return [] }
 }
 function saveSources(id: string, v: SourceDef[]) {
-  localStorage.setItem(SOURCES_KEY(id), JSON.stringify(v))
+  try { localStorage.setItem(SOURCES_KEY(id), JSON.stringify(v)) } catch { /* quota */ }
 }
 
 // ── Persistent: disambiguation rules ─────────────────────────────────────────
@@ -1213,7 +1213,7 @@ function loadMetrics(sid: string): Metric[] {
   try { return JSON.parse(localStorage.getItem(`semantic-metrics-${sid}`) ?? '[]') } catch { return [] }
 }
 function saveMetrics(sid: string, m: Metric[]) {
-  localStorage.setItem(`semantic-metrics-${sid}`, JSON.stringify(m))
+  try { localStorage.setItem(`semantic-metrics-${sid}`, JSON.stringify(m)) } catch { /* quota */ }
 }
 
 function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => void }) {
@@ -1337,7 +1337,7 @@ function loadHierarchies(sid: string): DimHierarchy[] {
   try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${sid}`) ?? '[]') } catch { return [] }
 }
 function saveHierarchies(sid: string, h: DimHierarchy[]) {
-  localStorage.setItem(`semantic-hierarchies-${sid}`, JSON.stringify(h))
+  try { localStorage.setItem(`semantic-hierarchies-${sid}`, JSON.stringify(h)) } catch { /* quota */ }
 }
 
 function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void }) {
@@ -1425,7 +1425,7 @@ function loadSegments(sid: string): Segment[] {
   try { return JSON.parse(localStorage.getItem(`semantic-segments-${sid}`) ?? '[]') } catch { return [] }
 }
 function saveSegments(sid: string, s: Segment[]) {
-  localStorage.setItem(`semantic-segments-${sid}`, JSON.stringify(s))
+  try { localStorage.setItem(`semantic-segments-${sid}`, JSON.stringify(s)) } catch { /* quota */ }
 }
 
 function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void }) {
