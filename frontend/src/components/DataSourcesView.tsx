@@ -506,11 +506,9 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const [ingesting, setIngesting] = useState(false)
   const [building, setBuilding] = useState(false)
   const [buildStep, setBuildStep] = useState(0) // 1–3 = in-progress steps, 4 = done
-  const [localToast, setLocalToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => {
-    setLocalToast({ msg, type })
-    setTimeout(() => setLocalToast(null), 3500)
+    globalToast(msg, type === 'error' ? 'error' : 'success')
   }, [])
 
   // ── Load sources from backend on mount
@@ -873,15 +871,6 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         </div>
       )}
 
-      {/* Local toast (connect/sync/ingest actions) */}
-      {localToast && (
-        <div className={`fixed bottom-6 right-6 z-50 text-white text-sm rounded-xl px-4 py-3 shadow-xl flex items-center gap-2 ${localToast.type === 'error' ? 'bg-red-600' : 'bg-slate-900'}`}>
-          {localToast.type === 'error'
-            ? <AlertTriangle className="w-4 h-4 text-red-200" />
-            : <CheckCircle2 className="w-4 h-4 text-teal-400" />}
-          {localToast.msg}
-        </div>
-      )}
     </div>
   )
 }
