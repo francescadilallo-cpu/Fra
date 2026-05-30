@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react'
 import { GitBranch, MessageSquare, ArrowRight, CheckCircle2, Activity, Brain, Plug, Network, BookOpen, BotMessageSquare } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { useAgentStore, countFindings } from '../data/agentStore'
+import { semanticStatus, type SemanticStatus } from '../api/semantic'
 import type { NavTab } from '../types'
 
 interface Props { onNavigate: (tab: NavTab) => void }
@@ -59,9 +61,15 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const ontology = useExtendedOntology(sectorId)
   const agentRuns = useAgentStore(sectorId)
   const findings = countFindings(agentRuns)
+  const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
 
-  const entityCount = ontology.nodes.length
-  const edgeCount = ontology.edges.length
+  useEffect(() => {
+    semanticStatus().then(setSemStatus).catch(() => {})
+  }, [])
+
+  const entityCount = semStatus?.loaded ? semStatus.entities.length : ontology.nodes.length
+  const edgeCount = semStatus?.loaded ? semStatus.kg_edges : ontology.edges.length
+  const kgNodes = semStatus?.kg_nodes ?? 0
   const isAW = sectorId === 'manufacturing'
 
   return (
@@ -84,7 +92,11 @@ export default function OverviewScreen({ onNavigate }: Props) {
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-teal-400 rounded-full" />
                 <span className="text-xs text-slate-300">Knowledge Graph</span>
-                <span className="text-xs font-semibold text-white ml-1">193,062 nodes · 313,193 edges</span>
+                <span className="text-xs font-semibold text-white ml-1">
+                  {semStatus?.loaded
+                    ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`
+                    : '193,062 nodes · 313,193 edges'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-teal-400 rounded-full" />

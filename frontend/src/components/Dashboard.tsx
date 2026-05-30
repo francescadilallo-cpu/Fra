@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import {
   TrendingUp, ShoppingCart, FileText, Users, Database,
   CheckCircle, Activity, Package, BotMessageSquare,
-  GitBranch, Zap, ArrowUp, ArrowDown, Download, Sparkles, X,
+  Zap, ArrowUp, ArrowDown, Download, Sparkles, X, Layers, RefreshCw,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
+import { semanticStatus, type SemanticStatus } from '../api/semantic'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
 
@@ -302,33 +303,91 @@ function AgentIntelligence({ sectorId, onNavigate }: { sectorId: SectorId; onNav
   )
 }
 
-function SemanticLayerStats({ sectorId, onNavigate }: { sectorId: SectorId; onNavigate?: (tab: NavTab) => void }) {
-  const ontology = useExtendedOntology(sectorId)
-  const entities = ontology.nodes.length
-  const props = ontology.nodes.reduce((s, n) => s + n.data.properties.length, 0)
-  const relations = ontology.edges.length
+function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (tab: NavTab) => void }) {
+  const [status, setStatus] = useState<SemanticStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  function load() {
+    setLoading(true)
+    semanticStatus()
+      .then(s => { setStatus(s) })
+      .catch(() => { setStatus(null) })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-          <GitBranch className="w-4 h-4 text-teal-600" />
-          Semantic Layer
+          <Layers className="w-4 h-4 text-teal-600" />
+          Knowledge Graph
         </h2>
-        <button onClick={() => onNavigate?.('ontology')} className="text-xs text-teal-600 hover:text-teal-700 font-medium">View ontology →</button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            className="text-slate-400 hover:text-slate-600 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => onNavigate?.('sembuilder')}
+            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+          >
+            Open →
+          </button>
+        </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Entities',   value: entities,  color: 'text-teal-600',   bg: 'bg-teal-50' },
-          { label: 'Relations',  value: relations,  color: 'text-blue-600',   bg: 'bg-blue-50' },
-          { label: 'Properties', value: props,      color: 'text-purple-600', bg: 'bg-purple-50' },
-        ].map(s => (
-          <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center`}>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{s.label}</p>
+
+      {loading ? (
+        <div className="space-y-2 animate-pulse">
+          <div className="grid grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-slate-100 rounded-lg h-16" />
+            ))}
           </div>
-        ))}
-      </div>
-      <p className="text-xs text-slate-400 mt-3 text-center">Active sector ontology · mapped to DB</p>
+        </div>
+      ) : !status?.loaded ? (
+        <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-5 text-center">
+          <Layers className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs text-slate-500 font-medium">Not built yet</p>
+          <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build the semantic layer</p>
+          <button
+            onClick={() => onNavigate?.('sources')}
+            className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+          >
+            <Zap className="w-3 h-3 inline mr-1" />Build Semantic Layer
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Entities',   value: status.entities.length,             color: 'text-teal-600',   bg: 'bg-teal-50' },
+              { label: 'KG Nodes',   value: status.kg_nodes.toLocaleString(),   color: 'text-blue-600',   bg: 'bg-blue-50' },
+              { label: 'KG Edges',   value: status.kg_edges.toLocaleString(),   color: 'text-violet-600', bg: 'bg-violet-50' },
+              { label: 'Metadata',   value: status.metadata_rows.toLocaleString(), color: 'text-amber-600', bg: 'bg-amber-50' },
+            ].map(s => (
+              <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center`}>
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap">
+            {status.sources.slice(0, 5).map(src => (
+              <span key={src} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">
+                {src}
+              </span>
+            ))}
+            {status.sources.length > 5 && (
+              <span className="text-[10px] text-slate-400">+{status.sources.length - 5} more</span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
