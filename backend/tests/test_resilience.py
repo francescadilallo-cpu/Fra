@@ -496,3 +496,134 @@ def test_context_manager_remember_is_noop_for_unknown():
 
     mgr = ContextManager()
     mgr.remember("nonexistent", "term", "value")  # must not raise
+
+
+# ── SemanticLayer docs-override paths ────────────────────────────────────────
+
+
+def _make_layer_for_handler_tests():
+    """Minimal SemanticLayer with thread-local initialised."""
+    from app.semantic.layer import SemanticLayer
+
+    layer = SemanticLayer.__new__(SemanticLayer)
+    layer._docs = None
+    layer._parser = MagicMock()
+    layer._ontology = MagicMock()
+    layer._kg = MagicMock()
+    layer._catalog = MagicMock()
+    layer._ctx_mgr = None
+    layer._erp = MagicMock()
+    layer._crm = MagicMock()
+    layer._hr_pim = MagicMock()
+    # Initialise the thread-local slot used by _effective_docs
+    if not hasattr(SemanticLayer._thread_local, "docs"):
+        SemanticLayer._thread_local.docs = None
+    return layer
+
+
+def test_q_glossary_lookup_with_docs_override():
+    """_q_glossary_lookup returns definition from docs when docs are provided."""
+    from app.semantic.layer import Intent
+    from app.semantic.doc_schema import GlossaryTerm, SemanticDocs
+
+    layer = _make_layer_for_handler_tests()
+    from app.semantic.layer import SemanticLayer
+    SemanticLayer._thread_local.docs = SemanticDocs(
+        glossary=[
+            GlossaryTerm(term="fatturato", definition="Total billed revenue"),
+            GlossaryTerm(term="ordine", definition="Sales order"),
+        ]
+    )
+    try:
+        intent = Intent(intent_type="glossary_lookup", raw_question="fatturato?",
+                        filters={"term": "fatturato"})
+        result = layer._q_glossary_lookup(intent)
+        assert result.answer == "Total billed revenue"
+    finally:
+        SemanticLayer._thread_local.docs = None
+
+
+def test_q_glossary_lookup_with_docs_partial_match():
+    """_q_glossary_lookup falls back to partial match when exact match misses."""
+    from app.semantic.layer import Intent
+    from app.semantic.doc_schema import GlossaryTerm, SemanticDocs
+
+    layer = _make_layer_for_handler_tests()
+    from app.semantic.layer import SemanticLayer
+    SemanticLayer._thread_local.docs = SemanticDocs(
+        glossary=[GlossaryTerm(term="fatturato lordo", definition="Gross billed revenue")]
+    )
+    try:
+        intent = Intent(intent_type="glossary_lookup", raw_question="fatturato",
+                        filters={"term": "fatturato"})
+        result = layer._q_glossary_lookup(intent)
+        assert "Gross billed revenue" in result.answer
+    finally:
+        SemanticLayer._thread_local.docs = None
+
+
+def test_q_glossary_lookup_unknown_term_lists_available():
+    """_q_glossary_lookup includes available terms when the term is not found."""
+    from app.semantic.layer import Intent
+    from app.semantic.doc_schema import GlossaryTerm, SemanticDocs
+
+    layer = _make_layer_for_handler_tests()
+    from app.semantic.layer import SemanticLayer
+    SemanticLayer._thread_local.docs = SemanticDocs(
+        glossary=[GlossaryTerm(term="fatturato", definition="Revenue")]
+    )
+    try:
+        intent = Intent(intent_type="glossary_lookup", raw_question="xyz",
+                        filters={"term": "xyz"})
+        result = layer._q_glossary_lookup(intent)
+        assert "fatturato" in result.answer
+        assert "not present" in result.answer.lower() or "xyz" in result.answer
+    finally:
+        SemanticLayer._thread_local.docs = None
+
+
+def test_q_disambiguation_rules_with_docs():
+    """_q_disambiguation_rules returns rules from docs when available."""
+    from app.semantic.layer import Intent
+    from app.semantic.doc_schema import DisambiguationRule, SemanticDocs
+
+    layer = _make_layer_for_handler_tests()
+    from app.semantic.layer import SemanticLayer
+    SemanticLayer._thread_local.docs = SemanticDocs(
+        disambiguation_rules=[
+            DisambiguationRule(id="r1", name="Rule One", description="Test rule"),
+        ]
+    )
+    try:
+        intent = Intent(intent_type="disambiguation_rules", raw_question="rules")
+        result = layer._q_disambiguation_rules(intent)
+        assert isinstance(result.answer, list)
+        assert len(result.answer) == 1
+        assert result.answer[0]["rule_id"] == "r1"
+    finally:
+        SemanticLayer._thread_local.docs = None
+
+
+def test_q_certified_metrics_with_docs_certified_filter():
+    """_q_certified_metrics returns only certified=True metrics from docs."""
+    from app.semantic.layer import Intent
+    from app.semantic.doc_schema import MetricDoc, SemanticDocs
+
+    layer = _make_layer_for_handler_tests()
+    from app.semantic.layer import SemanticLayer
+    SemanticLayer._thread_local.docs = SemanticDocs(
+        metrics=[
+            MetricDoc(name="revenue", display_name="Revenue", certified=True),
+            MetricDoc(name="draft_metric", display_name="Draft", certified=False),
+        ]
+    )
+    try:
+        intent = Intent(intent_type="certified_metrics", raw_question="certified metrics")
+        result = layer._q_certified_metrics(intent)
+        assert isinstance(result.answer, list)
+        # Only the certified one should appear
+        names = [m["name"] for m in result.answer]
+        assert "revenue" in names
+        assert "draft_metric" not in names
+    finally:
+        SemanticLayer._thread_local.docs = None
