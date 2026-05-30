@@ -1,20 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import Layout from './components/Layout'
 import AccessGate, { SESSION_KEY } from './components/AccessGate'
 import OverviewScreen from './components/OverviewScreen'
 import Dashboard from './components/Dashboard'
-import OntologyGraph from './components/OntologyGraph'
-import OntologyBuilder from './components/OntologyBuilder'
-import QueryInterface from './components/QueryInterface'
-import ProcessView from './components/ProcessView'
-import ConfigurationView from './components/ConfigurationView'
-import AgentsView from './components/AgentsView'
-import DataExplorer from './components/DataExplorer'
-import DataSourcesView from './components/DataSourcesView'
-import ComplianceView from './components/ComplianceView'
-import UseCasesView from './components/UseCasesView'
-import SemanticLayerView from './components/SemanticLayerView'
-import ContextTab from './components/ContextTab'
 import OnboardingWizard from './components/OnboardingWizard'
 import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
@@ -26,7 +14,29 @@ import { Toaster } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
+// Lazy-load heavy tabs to split the JS bundle and speed up initial paint
+const OntologyGraph = lazy(() => import('./components/OntologyGraph'))
+const OntologyBuilder = lazy(() => import('./components/OntologyBuilder'))
+const QueryInterface = lazy(() => import('./components/QueryInterface'))
+const ProcessView = lazy(() => import('./components/ProcessView'))
+const ConfigurationView = lazy(() => import('./components/ConfigurationView'))
+const AgentsView = lazy(() => import('./components/AgentsView'))
+const DataExplorer = lazy(() => import('./components/DataExplorer'))
+const DataSourcesView = lazy(() => import('./components/DataSourcesView'))
+const ComplianceView = lazy(() => import('./components/ComplianceView'))
+const UseCasesView = lazy(() => import('./components/UseCasesView'))
+const SemanticLayerView = lazy(() => import('./components/SemanticLayerView'))
+const ContextTab = lazy(() => import('./components/ContextTab'))
+
 const ONBOARDING_KEY = 'si-onboarding-done'
+
+function TabFallback() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function normalizeEntityName(raw: string): string {
   const map: Record<string, string> = {
@@ -188,20 +198,22 @@ export default function App() {
         />
       )}
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-        {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
-        {activeTab === 'usecases' && <UseCasesView onNavigate={setActiveTab} />}
-        {activeTab === 'sembuilder' && <SemanticLayerView />}
-        {activeTab === 'context' && <ContextTab />}
-        {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
-        {activeTab === 'ontology' && <OntologyGraph />}
-        {activeTab === 'builder' && <OntologyBuilder />}
-        {activeTab === 'agents' && <AgentsView />}
-        {activeTab === 'sources' && <DataSourcesView onNavigate={setActiveTab} />}
-        {activeTab === 'data' && <DataExplorer />}
-        {activeTab === 'query' && <QueryInterface />}
-        {activeTab === 'process' && <ProcessView />}
-        {activeTab === 'compliance' && <ComplianceView />}
-        {activeTab === 'config' && <ConfigurationView />}
+        <Suspense fallback={<TabFallback />}>
+          {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
+          {activeTab === 'usecases' && <UseCasesView onNavigate={setActiveTab} />}
+          {activeTab === 'sembuilder' && <SemanticLayerView />}
+          {activeTab === 'context' && <ContextTab />}
+          {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
+          {activeTab === 'ontology' && <OntologyGraph />}
+          {activeTab === 'builder' && <OntologyBuilder />}
+          {activeTab === 'agents' && <AgentsView />}
+          {activeTab === 'sources' && <DataSourcesView onNavigate={setActiveTab} />}
+          {activeTab === 'data' && <DataExplorer />}
+          {activeTab === 'query' && <QueryInterface />}
+          {activeTab === 'process' && <ProcessView />}
+          {activeTab === 'compliance' && <ComplianceView />}
+          {activeTab === 'config' && <ConfigurationView />}
+        </Suspense>
       </Layout>
     </ErrorBoundary>
   )
