@@ -295,10 +295,17 @@ class DuckDBSourceManager:
                 _SCHEMA_VERSION,
             )
             return False
-        self._built_at = datetime.fromisoformat(
-            meta.get("built_at", datetime.utcnow().isoformat())
-        )
-        self._row_counts = json.loads(meta.get("row_counts", "{}"))
+        try:
+            self._built_at = datetime.fromisoformat(
+                meta.get("built_at", datetime.utcnow().isoformat())
+            )
+        except (ValueError, TypeError):
+            logger.warning("Snapshot has malformed built_at metadata — rebuilding")
+            return False
+        try:
+            self._row_counts = json.loads(meta.get("row_counts", "{}"))
+        except json.JSONDecodeError:
+            self._row_counts = {}
         logger.info(
             "Snapshot loaded: %s | built %s | %d total rows",
             self._db_path,

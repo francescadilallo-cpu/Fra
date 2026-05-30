@@ -1113,7 +1113,13 @@ def remove_source(
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    mgr.rebuild()
+    try:
+        mgr.rebuild()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Source removed from registry but snapshot rebuild failed: {exc}",
+        )
 
 
 @app.post("/api/sources/{source_id}/sync", response_model=SourceResponse)

@@ -61,19 +61,29 @@ class KnowledgeGraph:
     # ── public API ────────────────────────────────────────────────────────────
 
     def build(self, erp, crm, hr_pim) -> None:  # type hints skipped to avoid circular
-        """Populate the graph from the three connectors."""
+        """Populate the graph from the three connectors.
+
+        Each loader is wrapped individually: a missing table or corrupt data in
+        one entity type does NOT prevent the remaining entities from loading.
+        """
         logger.info("Building knowledge graph…")
 
-        self._load_territories(erp)
-        self._load_offers(erp)
-        self._load_crm_customers(crm)
-        self._load_hr_employees(hr_pim)
-        self._load_pim_products(hr_pim)
-        self._load_erp_salespersons(erp)
-        # SalesOrder and SalesOrderLine are NOT loaded into the in-memory graph:
-        # they are queried directly via DuckDB SQL. Loading them would create
-        # 150k+ networkx nodes (~400MB RAM) and crash Render's free-tier instance.
-        self._load_crm_addresses(crm)
+        _loaders = [
+            ("territories", self._load_territories, erp),
+            ("offers", self._load_offers, erp),
+            ("crm_customers", self._load_crm_customers, crm),
+            ("hr_employees", self._load_hr_employees, hr_pim),
+            ("pim_products", self._load_pim_products, hr_pim),
+            ("erp_salespersons", self._load_erp_salespersons, erp),
+            # SalesOrder/SalesOrderLine are NOT loaded here — queried via DuckDB SQL
+            # to avoid 150k+ networkx nodes (~400MB) on Render's free-tier instance.
+            ("crm_addresses", self._load_crm_addresses, crm),
+        ]
+        for name, loader, connector in _loaders:
+            try:
+                loader(connector)
+            except Exception as exc:
+                logger.warning("KG loader '%s' failed (partial KG): %s", name, exc)
 
         logger.info(
             "KG built: %d nodes, %d edges, %d duplicates merged",

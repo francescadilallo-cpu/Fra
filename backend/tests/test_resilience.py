@@ -374,3 +374,125 @@ def test_context_read_endpoints_require_auth(auth_client, method, path):
     assert resp.status_code == 401, (
         f"{method.upper()} {path} returned {resp.status_code}"
     )
+
+
+# ── ContextManager unit tests ────────────────────────────────────────────────
+
+
+def test_context_manager_creates_session():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    ctx = mgr.get_or_create("sess-1")
+    assert ctx.session_id == "sess-1"
+    assert ctx.history == []
+    assert ctx.resolved_entities == {}
+
+
+def test_context_manager_returns_same_session():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    ctx1 = mgr.get_or_create("sess-same")
+    ctx2 = mgr.get_or_create("sess-same")
+    assert ctx1 is ctx2
+
+
+def test_context_manager_auto_uuid_when_no_id():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    ctx = mgr.get_or_create()
+    assert len(ctx.session_id) == 36  # uuid4 format
+
+
+def test_context_manager_update_records_history():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    mgr.get_or_create("sess-h")
+    mgr.update("sess-h", intent="q1", result="r1")
+    mgr.update("sess-h", intent="q2", result="r2")
+    ctx = mgr.get_or_create("sess-h")
+    assert len(ctx.history) == 2
+    assert ctx.history[0]["intent"] == "q1"
+
+
+def test_context_manager_history_trimmed_to_max():
+    from app.context.manager import ContextManager, _MAX_HISTORY
+
+    mgr = ContextManager()
+    mgr.get_or_create("sess-trim")
+    for i in range(_MAX_HISTORY + 5):
+        mgr.update("sess-trim", intent=f"q{i}", result=f"r{i}")
+    ctx = mgr.get_or_create("sess-trim")
+    assert len(ctx.history) == _MAX_HISTORY
+    # most recent item is kept
+    assert ctx.history[-1]["intent"] == f"q{_MAX_HISTORY + 4}"
+
+
+def test_context_manager_remember_and_resolve():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    mgr.get_or_create("sess-r")
+    mgr.remember("sess-r", "fatturato", "revenue_with_tax")
+    assert mgr.resolve("sess-r", "fatturato") == "revenue_with_tax"
+    assert mgr.resolve("sess-r", "unknown") is None
+
+
+def test_context_manager_resolve_unknown_session_returns_none():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    assert mgr.resolve("no-such-session", "term") is None
+
+
+def test_context_manager_drop_session():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    mgr.get_or_create("sess-drop")
+    assert mgr.drop_session("sess-drop") is True
+    assert mgr.drop_session("sess-drop") is False
+    assert "sess-drop" not in mgr.list_sessions()
+
+
+def test_context_manager_eviction_at_capacity():
+    """Sessions beyond _MAX_SESSIONS trigger LRU eviction of the oldest half."""
+    from app.context.manager import ContextManager, _MAX_SESSIONS
+    import time
+
+    mgr = ContextManager()
+    # Fill to capacity, ensuring distinct last_accessed timestamps
+    for i in range(_MAX_SESSIONS):
+        mgr.get_or_create(f"sess-{i}")
+        # Force strictly increasing last_accessed without sleeping
+        mgr._store[f"sess-{i}"].last_accessed = float(i)
+
+    # The oldest half are sess-0 … sess-(_MAX_SESSIONS//2 - 1)
+    # Adding one more triggers eviction
+    mgr.get_or_create("sess-new")
+
+    sessions = set(mgr.list_sessions())
+    # Oldest half should be gone
+    for i in range(_MAX_SESSIONS // 2):
+        assert f"sess-{i}" not in sessions, f"sess-{i} should have been evicted"
+    # Recent sessions and the new one should survive
+    assert "sess-new" in sessions
+    assert f"sess-{_MAX_SESSIONS - 1}" in sessions
+
+
+def test_context_manager_eviction_update_is_noop_for_unknown():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    # update on a non-existent session must not raise
+    mgr.update("nonexistent", intent="x", result="y")
+
+
+def test_context_manager_remember_is_noop_for_unknown():
+    from app.context.manager import ContextManager
+
+    mgr = ContextManager()
+    mgr.remember("nonexistent", "term", "value")  # must not raise
