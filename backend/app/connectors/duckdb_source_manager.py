@@ -739,7 +739,7 @@ class DuckDBSourceManager:
         )
         safe_path = str(path).replace("'", "''")
         conn.execute(
-            f"CREATE TABLE IF NOT EXISTS \"{table}\" AS "
+            f'CREATE TABLE IF NOT EXISTS "{table}" AS '
             f"SELECT * FROM read_parquet('{safe_path}')"
         )
         n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
