@@ -21,6 +21,9 @@ def _make_layer():
     layer._erp = MagicMock()
     layer._crm = MagicMock()
     layer._hr_pim = MagicMock()
+    # Unified mgr mock — all _exec() calls route here
+    layer._mgr = MagicMock()
+    layer._known_tables = frozenset()
     return layer
 
 
@@ -35,7 +38,7 @@ def _intent(intent_type: str, **kwargs):
 
 def test_customers_by_state_with_state():
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {
             "accountId": 1,
             "ragioneSociale": "Acme",
@@ -48,13 +51,13 @@ def test_customers_by_state_with_state():
     )
     assert result.sources_touched == ["crm"]
     assert len(result.answer) == 1
-    call_sql = layer._crm.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "stateName" in call_sql
 
 
 def test_customers_by_state_falls_back_to_fuzzy_when_empty():
     layer = _make_layer()
-    layer._crm.execute_query.side_effect = [
+    layer._mgr.execute.side_effect = [
         [],
         [
             {
@@ -68,15 +71,15 @@ def test_customers_by_state_falls_back_to_fuzzy_when_empty():
     result = layer._q_customers_by_state(
         _intent("customers_by_state", filters={"state": "Cali"})
     )
-    assert layer._crm.execute_query.call_count == 2
+    assert layer._mgr.execute.call_count == 2
     assert len(result.answer) == 1
 
 
 def test_customers_by_state_no_state_returns_sample():
     layer = _make_layer()
-    layer._crm.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     layer._q_customers_by_state(_intent("customers_by_state"))
-    call_sql = layer._crm.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "LIMIT 20" in call_sql
 
 
@@ -85,9 +88,9 @@ def test_customers_by_state_no_state_returns_sample():
 
 def test_top_salesperson_by_orders_with_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"salesperson_ref": 7, "n": 412}]
-    layer._hr_pim.execute_query.return_value = [
-        {"Nome": "Maria", "Cognome": "Rossi", "Reparto": "Sales"}
+    layer._mgr.execute.side_effect = [
+        [{"salesperson_ref": 7, "n": 412}],
+        [{"Nome": "Maria", "Cognome": "Rossi", "Reparto": "Sales"}],
     ]
     result = layer._q_top_salesperson_by_orders(
         _intent("top_salesperson_by_orders", year=2014)
@@ -95,21 +98,23 @@ def test_top_salesperson_by_orders_with_year():
     assert result.answer["salesperson_ref"] == 7
     assert result.answer["order_count"] == 412
     assert result.answer["Nome"] == "Maria"
-    erp_sql = layer._erp.execute_query.call_args[0][0]
+    erp_sql = layer._mgr.execute.call_args_list[0][0][0]
     assert "strftime" in erp_sql
 
 
 def test_top_salesperson_by_orders_empty_returns_none():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_top_salesperson_by_orders(_intent("top_salesperson_by_orders"))
     assert result.answer is None
 
 
 def test_top_salesperson_by_orders_no_hr_enrichment():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"salesperson_ref": 3, "n": 100}]
-    layer._hr_pim.execute_query.return_value = []
+    layer._mgr.execute.side_effect = [
+        [{"salesperson_ref": 3, "n": 100}],
+        [],
+    ]
     result = layer._q_top_salesperson_by_orders(_intent("top_salesperson_by_orders"))
     assert result.answer["Nome"] is None
     assert result.answer["Cognome"] is None
@@ -120,28 +125,29 @@ def test_top_salesperson_by_orders_no_hr_enrichment():
 
 def test_top_salespersons_by_revenue_with_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [
-        {"salesperson_ref": 1, "revenue": 1_000_000.0},
-        {"salesperson_ref": 2, "revenue": 800_000.0},
+    layer._mgr.execute.side_effect = [
+        [
+            {"salesperson_ref": 1, "revenue": 1_000_000.0},
+            {"salesperson_ref": 2, "revenue": 800_000.0},
+        ],
+        [],
     ]
-    layer._hr_pim.execute_query.return_value = []
     result = layer._q_top_salespersons_by_revenue(
         _intent("top_salespersons_by_revenue", year=2014, limit=3)
     )
     assert result.sources_touched == ["erp", "hr_pim"]
-    erp_sql = layer._erp.execute_query.call_args[0][0]
+    erp_sql = layer._mgr.execute.call_args_list[0][0][0]
     assert "strftime" in erp_sql
 
 
 def test_top_salespersons_by_revenue_limit_clamped():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
-    layer._hr_pim.execute_query.return_value = []
+    layer._mgr.execute.side_effect = [[], []]
     layer._q_top_salespersons_by_revenue(
         _intent("top_salespersons_by_revenue", limit=9999)
     )
     # The LIMIT ? parameter in the ERP query must be ≤ 50
-    params = layer._erp.execute_query.call_args[0][1]
+    params = layer._mgr.execute.call_args_list[0][0][1]
     assert params[-1] <= 50
 
 
@@ -150,21 +156,21 @@ def test_top_salespersons_by_revenue_limit_clamped():
 
 def test_revenue_by_territory_with_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {"territory_name": "Northwest", "revenue": 4_200_000.0}
     ]
     result = layer._q_revenue_by_territory(_intent("revenue_by_territory", year=2014))
     assert result.sources_touched == ["erp"]
     assert result.answer[0]["territory_name"] == "Northwest"
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" in call_sql
 
 
 def test_revenue_by_territory_no_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_revenue_by_territory(_intent("revenue_by_territory"))
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" not in call_sql
     assert result.answer == []
 
@@ -174,7 +180,7 @@ def test_revenue_by_territory_no_year():
 
 def test_revenue_vs_quota_with_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {
             "salesperson_ref": 5,
             "revenue": 900_000.0,
@@ -185,15 +191,15 @@ def test_revenue_vs_quota_with_year():
     result = layer._q_revenue_vs_quota(_intent("revenue_vs_quota", year=2014))
     assert result.sources_touched == ["erp"]
     assert result.answer[0]["pct_quota"] == 90.0
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" in call_sql
 
 
 def test_revenue_vs_quota_no_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     layer._q_revenue_vs_quota(_intent("revenue_vs_quota"))
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" not in call_sql
 
 
@@ -202,9 +208,9 @@ def test_revenue_vs_quota_no_year():
 
 def test_top_customer_by_spend_with_crm_enrichment():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"customer_ref": 42, "spesa": 250_000.0}]
-    layer._crm.execute_query.return_value = [
-        {"accountType": "B2B", "ragioneSociale": "MegaCorp", "nomeContatto": "A"}
+    layer._mgr.execute.side_effect = [
+        [{"customer_ref": 42, "spesa": 250_000.0}],
+        [{"accountType": "B2B", "ragioneSociale": "MegaCorp", "nomeContatto": "A"}],
     ]
     result = layer._q_top_customer_by_spend(_intent("top_customer_by_spend"))
     assert result.answer["customer_ref"] == 42
@@ -215,7 +221,7 @@ def test_top_customer_by_spend_with_crm_enrichment():
 
 def test_top_customer_by_spend_empty_erp_returns_none():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_top_customer_by_spend(_intent("top_customer_by_spend"))
     assert result.answer is None
 
@@ -225,8 +231,10 @@ def test_top_customer_by_spend_empty_erp_returns_none():
 
 def test_customer_state_most_orders():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"customer_ref": 7, "n": 310}]
-    layer._crm.execute_query.return_value = [{"stateName": "California"}]
+    layer._mgr.execute.side_effect = [
+        [{"customer_ref": 7, "n": 310}],
+        [{"stateName": "California"}],
+    ]
     result = layer._q_customer_state_most_orders(_intent("customer_state_most_orders"))
     assert result.answer["state"] == "California"
     assert result.answer["order_count"] == 310
@@ -235,15 +243,17 @@ def test_customer_state_most_orders():
 
 def test_customer_state_most_orders_no_state_fallback():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"customer_ref": 7, "n": 310}]
-    layer._crm.execute_query.return_value = []
+    layer._mgr.execute.side_effect = [
+        [{"customer_ref": 7, "n": 310}],
+        [],
+    ]
     result = layer._q_customer_state_most_orders(_intent("customer_state_most_orders"))
     assert result.answer["state"] == "Unknown"
 
 
 def test_customer_state_most_orders_no_orders_returns_none():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_customer_state_most_orders(_intent("customer_state_most_orders"))
     assert result.answer is None
 
@@ -253,15 +263,17 @@ def test_customer_state_most_orders_no_orders_returns_none():
 
 def test_avg_revenue_by_segment():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [
-        {"customer_ref": 1, "total": 10_000.0},
-        {"customer_ref": 2, "total": 20_000.0},
-        {"customer_ref": 3, "total": 5_000.0},
-    ]
-    layer._crm.execute_query.return_value = [
-        {"accountId": 1, "accountType": "B2B"},
-        {"accountId": 2, "accountType": "B2B"},
-        {"accountId": 3, "accountType": "B2C"},
+    layer._mgr.execute.side_effect = [
+        [
+            {"customer_ref": 1, "total": 10_000.0},
+            {"customer_ref": 2, "total": 20_000.0},
+            {"customer_ref": 3, "total": 5_000.0},
+        ],
+        [
+            {"accountId": 1, "accountType": "B2B"},
+            {"accountId": 2, "accountType": "B2B"},
+            {"accountId": 3, "accountType": "B2C"},
+        ],
     ]
     result = layer._q_avg_revenue_by_segment(_intent("avg_revenue_by_segment"))
     assert result.sources_touched == ["erp", "crm"]
@@ -277,23 +289,25 @@ def test_avg_revenue_by_segment():
 
 def test_top_category_by_margin():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [
-        {"product_ref": 10, "total_qty": 100},
-        {"product_ref": 20, "total_qty": 50},
-    ]
-    layer._hr_pim.execute_query.return_value = [
-        {
-            "internal_id": 10,
-            "categoryPath": "Bikes/Road",
-            "listPrice": 800.0,
-            "standardCost": 400.0,
-        },
-        {
-            "internal_id": 20,
-            "categoryPath": "Accessories",
-            "listPrice": 50.0,
-            "standardCost": 30.0,
-        },
+    layer._mgr.execute.side_effect = [
+        [
+            {"product_ref": 10, "total_qty": 100},
+            {"product_ref": 20, "total_qty": 50},
+        ],
+        [
+            {
+                "internal_id": 10,
+                "categoryPath": "Bikes/Road",
+                "listPrice": 800.0,
+                "standardCost": 400.0,
+            },
+            {
+                "internal_id": 20,
+                "categoryPath": "Accessories",
+                "listPrice": 50.0,
+                "standardCost": 30.0,
+            },
+        ],
     ]
     result = layer._q_top_category_by_margin(_intent("top_category_by_margin"))
     assert result.sources_touched == ["erp", "hr_pim"]
@@ -353,29 +367,31 @@ def test_disambiguation_rules_returns_three_hardcoded():
 
 def test_customers_without_orders_anti_join():
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [
-        {
-            "accountId": 1,
-            "ragioneSociale": "A",
-            "nomeContatto": "x",
-            "accountType": "B2B",
-        },
-        {
-            "accountId": 2,
-            "ragioneSociale": "B",
-            "nomeContatto": "y",
-            "accountType": "B2C",
-        },
-        {
-            "accountId": 3,
-            "ragioneSociale": "C",
-            "nomeContatto": "z",
-            "accountType": "B2B",
-        },
-    ]
-    layer._erp.execute_query.return_value = [
-        {"customer_ref": 1},
-        {"customer_ref": 3},
+    layer._mgr.execute.side_effect = [
+        [
+            {
+                "accountId": 1,
+                "ragioneSociale": "A",
+                "nomeContatto": "x",
+                "accountType": "B2B",
+            },
+            {
+                "accountId": 2,
+                "ragioneSociale": "B",
+                "nomeContatto": "y",
+                "accountType": "B2C",
+            },
+            {
+                "accountId": 3,
+                "ragioneSociale": "C",
+                "nomeContatto": "z",
+                "accountType": "B2B",
+            },
+        ],
+        [
+            {"customer_ref": 1},
+            {"customer_ref": 3},
+        ],
     ]
     result = layer._q_customers_without_orders(_intent("customers_without_orders"))
     assert result.answer["count"] == 1
@@ -385,15 +401,17 @@ def test_customers_without_orders_anti_join():
 
 def test_customers_without_orders_all_have_orders():
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [
-        {
-            "accountId": 5,
-            "ragioneSociale": "X",
-            "nomeContatto": "q",
-            "accountType": "B2B",
-        },
+    layer._mgr.execute.side_effect = [
+        [
+            {
+                "accountId": 5,
+                "ragioneSociale": "X",
+                "nomeContatto": "q",
+                "accountType": "B2B",
+            },
+        ],
+        [{"customer_ref": 5}],
     ]
-    layer._erp.execute_query.return_value = [{"customer_ref": 5}]
     result = layer._q_customers_without_orders(_intent("customers_without_orders"))
     assert result.answer["count"] == 0
     assert result.answer["customers"] == []

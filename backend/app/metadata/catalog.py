@@ -22,6 +22,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    delete,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -413,6 +414,49 @@ class MetadataCatalog:
             a = session.query(AttributeMetaRow).count()
             m = session.query(MetricMetaRow).count()
             return e + a + m
+
+    def prune_phantom_entities(self, known_tables: frozenset[str]) -> int:
+        """Remove catalog entities whose backing DuckDB table is not in *known_tables*.
+
+        Prevents phantom table entries — created by the hardcoded populate() methods
+        for a golden scenario that doesn't match the actual deployment — from leaking
+        into the LLM SQL schema context and causing the model to generate SQL against
+        non-existent tables.
+
+        Returns the number of entity rows deleted.
+        """
+        removed = 0
+        with self._Session() as session:
+            entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
+            for row in entity_rows:
+                sources = json.loads(row.sources_json or "[]")
+                table = next(
+                    (
+                        s.get("table")
+                        for s in sources
+                        if isinstance(s, dict) and s.get("table")
+                    ),
+                    None,
+                )
+                if table and table not in known_tables:
+                    logger.debug(
+                        "prune_phantom_entities: removing entity '%s' (table '%s' absent from DuckDB)",
+                        row.name,
+                        table,
+                    )
+                    session.execute(
+                        delete(AttributeMetaRow).where(
+                            AttributeMetaRow.entity == row.name
+                        )
+                    )
+                    session.delete(row)
+                    removed += 1
+            session.commit()
+        if removed:
+            logger.info(
+                "prune_phantom_entities: removed %d phantom entity records", removed
+            )
+        return removed
 
     # ── internal helpers ──────────────────────────────────────────────────────
 

@@ -27,6 +27,9 @@ def _make_layer():
     layer._erp = MagicMock()
     layer._crm = MagicMock()
     layer._hr_pim = MagicMock()
+    # Unified mgr mock — all _exec() calls route here
+    layer._mgr = MagicMock()
+    layer._known_tables = frozenset()
     return layer
 
 
@@ -194,7 +197,7 @@ def test_parser_year_extracted_correctly():
 
 def test_count_employees_all():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"cnt": 290}]
+    layer._mgr.execute.return_value = [{"cnt": 290}]
     result = layer._q_count_employees(_intent("count_employees"))
     assert result.answer == 290
     assert result.sources_touched == ["hr_pim"]
@@ -202,25 +205,25 @@ def test_count_employees_all():
 
 def test_count_employees_with_department():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"cnt": 47}]
+    layer._mgr.execute.return_value = [{"cnt": 47}]
     result = layer._q_count_employees(
         _intent("count_employees", filters={"department": "Sales"})
     )
     assert result.answer == 47
-    call_sql = layer._hr_pim.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "Reparto" in call_sql
 
 
 def test_count_employees_zero_on_empty():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_count_employees(_intent("count_employees"))
     assert result.answer == 0
 
 
 def test_count_employees_includes_hr_freshness_warning():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"cnt": 5}]
+    layer._mgr.execute.return_value = [{"cnt": 5}]
     result = layer._q_count_employees(_intent("count_employees"))
     assert "Delayed" in result.notes
 
@@ -230,7 +233,7 @@ def test_count_employees_includes_hr_freshness_warning():
 
 def test_avg_hourly_rate_all():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"avg_rate": 18.75}]
+    layer._mgr.execute.return_value = [{"avg_rate": 18.75}]
     result = layer._q_avg_hourly_rate(_intent("avg_hourly_rate"))
     assert result.answer == pytest.approx(18.75)
     assert result.sources_touched == ["hr_pim"]
@@ -238,18 +241,18 @@ def test_avg_hourly_rate_all():
 
 def test_avg_hourly_rate_by_dept():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"avg_rate": 22.10}]
+    layer._mgr.execute.return_value = [{"avg_rate": 22.10}]
     result = layer._q_avg_hourly_rate(
         _intent("avg_hourly_rate", filters={"department": "Engineering"})
     )
-    call_sql = layer._hr_pim.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "Reparto" in call_sql
     assert result.answer == pytest.approx(22.10)
 
 
 def test_avg_hourly_rate_none_on_empty():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
     result = layer._q_avg_hourly_rate(_intent("avg_hourly_rate"))
     assert result.answer is None
 
@@ -259,11 +262,11 @@ def test_avg_hourly_rate_none_on_empty():
 
 def test_count_make_only():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [{"cnt": 115}]
+    layer._mgr.execute.return_value = [{"cnt": 115}]
     result = layer._q_count_make_only(_intent("count_make_only"))
     assert result.answer == 115
     assert result.sources_touched == ["hr_pim"]
-    assert "isMakeOnly" in layer._hr_pim.execute_query.call_args[0][0]
+    assert "isMakeOnly" in layer._mgr.execute.call_args[0][0]
 
 
 # ── _q_product_price ─────────────────────────────────────────────────────────
@@ -272,7 +275,7 @@ def test_count_make_only():
 def test_product_price_exact_match():
     layer = _make_layer()
     # First call: exact match returns a result
-    layer._hr_pim.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {
             "displayName": "Road-650 Black, 48",
             "listPrice": 782.99,
@@ -289,7 +292,7 @@ def test_product_price_exact_match():
 def test_product_price_falls_back_to_fuzzy():
     layer = _make_layer()
     # First exact call: no result; second fuzzy call: result
-    layer._hr_pim.execute_query.side_effect = [
+    layer._mgr.execute.side_effect = [
         [],
         [
             {
@@ -302,17 +305,17 @@ def test_product_price_falls_back_to_fuzzy():
     result = layer._q_product_price(
         _intent("product_price", filters={"product_name": "Road-650"})
     )
-    assert layer._hr_pim.execute_query.call_count == 2
+    assert layer._mgr.execute.call_count == 2
     assert len(result.answer) == 1
 
 
 def test_product_price_no_name_returns_top10():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {"displayName": "X", "listPrice": 1.0, "standardCost": 0.5}
     ] * 10
     result = layer._q_product_price(_intent("product_price"))
-    call_sql = layer._hr_pim.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "LIMIT 10" in call_sql
     assert len(result.answer) == 10
 
@@ -322,7 +325,7 @@ def test_product_price_no_name_returns_top10():
 
 def test_list_b2b_active_returns_count_and_companies():
     layer = _make_layer()
-    layer._crm.execute_query.side_effect = [
+    layer._mgr.execute.side_effect = [
         [{"cnt": 42}],
         [{"accountId": 1, "ragioneSociale": "Acme"}],
     ]
@@ -337,7 +340,7 @@ def test_list_b2b_active_returns_count_and_companies():
 
 def test_count_employees_by_group():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {"GruppoReparto": "Production", "cnt": 120},
         {"GruppoReparto": "Sales", "cnt": 47},
     ]
@@ -352,11 +355,11 @@ def test_count_employees_by_group():
 
 def test_orders_with_discount():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"cnt": 5432}]
+    layer._mgr.execute.return_value = [{"cnt": 5432}]
     result = layer._q_orders_with_discount(_intent("orders_with_discount"))
     assert result.answer == 5432
     assert result.sources_touched == ["erp"]
-    assert "offer_ref" in layer._erp.execute_query.call_args[0][0]
+    assert "offer_ref" in layer._mgr.execute.call_args[0][0]
 
 
 # ── _q_employees_with_duplicate_customers ─────────────────────────────────────

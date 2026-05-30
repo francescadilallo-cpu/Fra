@@ -423,6 +423,13 @@ def _ensure_semantic_loaded() -> None:
         # yet in DuckDB, which corrupt the LLM SQL schema context.
         catalog.populate_from_manager(_mgr)
         catalog.populate([erp, crm, hr_pim], ontology, kg)
+        # Remove entities created by populate() whose tables aren't in the actual
+        # DuckDB snapshot — prevents them from appearing in the LLM schema context.
+        try:
+            _known = frozenset(_mgr.get_schema_info().keys())
+            catalog.prune_phantom_entities(_known)
+        except Exception as _prune_exc:
+            logger.warning("catalog prune skipped: %s", _prune_exc)
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (

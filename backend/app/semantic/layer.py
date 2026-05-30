@@ -1814,11 +1814,11 @@ class SemanticLayer:
         if dept:
             sql = "SELECT COUNT(*) as cnt FROM dipendenti_hr WHERE Reparto = ?"
             params = (dept,)
-            rows = self._hr_pim.execute_query(sql, params)
+            rows = self._exec(sql, params)
         else:
             sql = "SELECT COUNT(*) as cnt FROM dipendenti_hr"
             params = ()
-            rows = self._hr_pim.execute_query(sql)
+            rows = self._exec(sql)
         count = rows[0]["cnt"] if rows else 0
         return Result(
             answer=count,
@@ -1834,7 +1834,7 @@ class SemanticLayer:
 
     def _q_count_employees_by_group(self, intent: Intent) -> Result:
         sql = "SELECT GruppoReparto, COUNT(*) as cnt FROM dipendenti_hr GROUP BY GruppoReparto ORDER BY cnt DESC"
-        rows = self._hr_pim.execute_query(sql)
+        rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
@@ -1846,10 +1846,10 @@ class SemanticLayer:
         dept = intent.filters.get("department")
         if dept:
             sql = "SELECT ROUND(AVG(CAST(RetribuzioneOraria AS DOUBLE)), 4) as avg_rate FROM dipendenti_hr WHERE Reparto = ?"
-            rows = self._hr_pim.execute_query(sql, (dept,))
+            rows = self._exec(sql, (dept,))
         else:
             sql = "SELECT ROUND(AVG(CAST(RetribuzioneOraria AS DOUBLE)), 4) as avg_rate FROM dipendenti_hr"
-            rows = self._hr_pim.execute_query(sql)
+            rows = self._exec(sql)
         avg = rows[0]["avg_rate"] if rows else None
         return Result(
             answer=avg,
@@ -1862,14 +1862,14 @@ class SemanticLayer:
         name = intent.filters.get("product_name")
         if name:
             sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim WHERE displayName = ?"
-            rows = self._hr_pim.execute_query(sql, (name,))
+            rows = self._exec(sql, (name,))
             if not rows:
                 # fuzzy: contains
                 sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim WHERE displayName LIKE ?"
-                rows = self._hr_pim.execute_query(sql, (f"%{name}%",))
+                rows = self._exec(sql, (f"%{name}%",))
         else:
             sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim LIMIT 10"
-            rows = self._hr_pim.execute_query(sql)
+            rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
@@ -1879,7 +1879,7 @@ class SemanticLayer:
 
     def _q_count_make_only(self, intent: Intent) -> Result:
         sql = "SELECT COUNT(*) as cnt FROM product_catalog_pim WHERE isMakeOnly = true"
-        rows = self._hr_pim.execute_query(sql)
+        rows = self._exec(sql)
         count = rows[0]["cnt"] if rows else 0
         return Result(
             answer=count,
@@ -1892,10 +1892,10 @@ class SemanticLayer:
         year = intent.filters.get("year") or intent.year
         if year:
             sql = "SELECT COUNT(*) as cnt FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
-            rows = self._erp.execute_query(sql, (str(year),))
+            rows = self._exec(sql, (str(year),))
         else:
             sql = "SELECT COUNT(*) as cnt FROM sales_order_header"
-            rows = self._erp.execute_query(sql)
+            rows = self._exec(sql)
         count = rows[0]["cnt"] if rows else 0
         return Result(
             answer=count,
@@ -1910,14 +1910,14 @@ class SemanticLayer:
             "WHERE accountType='B2B' AND isActive=1 "
             "AND ragioneSociale IS NOT NULL AND ragioneSociale != ''"
         )
-        rows = self._crm.execute_query(sql)
+        rows = self._exec(sql)
         count = rows[0]["cnt"] if rows else 0
         detail_sql = (
             "SELECT accountId, ragioneSociale FROM account "
             "WHERE accountType='B2B' AND isActive=1 AND accountId > 0 "
             "ORDER BY ragioneSociale LIMIT 50"
         )
-        companies = self._crm.execute_query(detail_sql)
+        companies = self._exec(detail_sql)
         return Result(
             answer={"unique_b2b_active": count, "companies": companies},
             sql_used=sql,
@@ -1939,10 +1939,10 @@ class SemanticLayer:
                 WHERE sp.stateName = ? AND a.accountId > 0
                 ORDER BY a.ragioneSociale, a.nomeContatto
             """
-            rows = self._crm.execute_query(sql, (state,))
+            rows = self._exec(sql, (state,))
             if not rows:
                 sql = sql.replace("sp.stateName = ?", "LOWER(sp.stateName) LIKE ?")
-                rows = self._crm.execute_query(sql, (f"%{state.lower()}%",))
+                rows = self._exec(sql, (f"%{state.lower()}%",))
         else:
             sql = """
                 SELECT a.accountId, a.ragioneSociale, a.nomeContatto, sp.stateName
@@ -1953,7 +1953,7 @@ class SemanticLayer:
                 WHERE a.accountId > 0
                 LIMIT 20
             """
-            rows = self._crm.execute_query(sql)
+            rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
@@ -1971,7 +1971,7 @@ class SemanticLayer:
                   AND salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1
             """
-            rows = self._erp.execute_query(sql, (str(year),))
+            rows = self._exec(sql, (str(year),))
         else:
             sql = """
                 SELECT salesperson_ref, COUNT(*) as n
@@ -1979,13 +1979,13 @@ class SemanticLayer:
                 WHERE salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1
             """
-            rows = self._erp.execute_query(sql)
+            rows = self._exec(sql)
         if not rows:
             return Result(answer=None, sql_used=sql, sources_touched=["erp"])
         sid = rows[0]["salesperson_ref"]
         n = rows[0]["n"]
         # Enrich with HR name
-        hr_rows = self._hr_pim.execute_query(
+        hr_rows = self._exec(
             "SELECT Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) = ?",
             (int(sid),),
         )
@@ -2017,14 +2017,14 @@ class SemanticLayer:
                   AND salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
             """
-            rows = self._erp.execute_query(sql, (str(year), limit))
+            rows = self._exec(sql, (str(year), limit))
         else:
             sql = """
                 SELECT salesperson_ref, ROUND(SUM(total_due), 2) as revenue
                 FROM sales_order_header WHERE salesperson_ref IS NOT NULL
                 GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
             """
-            rows = self._erp.execute_query(sql, (limit,))
+            rows = self._exec(sql, (limit,))
         # Batch HR enrichment: one query for all salesperson IDs instead of N queries.
         if not rows:
             return Result(
@@ -2036,7 +2036,7 @@ class SemanticLayer:
             )
         sp_ids = [int(r["salesperson_ref"]) for r in rows]
         placeholders = ",".join("?" * len(sp_ids))
-        hr_rows = self._hr_pim.execute_query(
+        hr_rows = self._exec(
             f"SELECT CAST(MatricolaDip AS INTEGER) as mid, Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) IN ({placeholders})",
             tuple(sp_ids),
         )
@@ -2063,7 +2063,7 @@ class SemanticLayer:
                 WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
                 GROUP BY t.territory_name ORDER BY revenue DESC
             """
-            rows = self._erp.execute_query(sql, (str(year),))
+            rows = self._exec(sql, (str(year),))
         else:
             sql = """
                 SELECT t.territory_name, ROUND(SUM(h.total_due), 2) as revenue
@@ -2071,7 +2071,7 @@ class SemanticLayer:
                 JOIN territory t ON h.territory_ref = t.territory_id
                 GROUP BY t.territory_name ORDER BY revenue DESC
             """
-            rows = self._erp.execute_query(sql)
+            rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
@@ -2094,7 +2094,7 @@ class SemanticLayer:
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY revenue DESC
             """
-            rows = self._erp.execute_query(sql, (str(year),))
+            rows = self._exec(sql, (str(year),))
         else:
             sql = """
                 SELECT h.salesperson_ref,
@@ -2106,7 +2106,7 @@ class SemanticLayer:
                 WHERE h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref ORDER BY revenue DESC
             """
-            rows = self._erp.execute_query(sql)
+            rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
@@ -2120,12 +2120,12 @@ class SemanticLayer:
             SELECT customer_ref, ROUND(SUM(total_due), 2) as spesa
             FROM sales_order_header GROUP BY customer_ref ORDER BY spesa DESC LIMIT 1
         """
-        rows = self._erp.execute_query(sql)
+        rows = self._exec(sql)
         if not rows:
             return Result(answer=None, sql_used=sql, sources_touched=["erp"])
         cid = rows[0]["customer_ref"]
         spesa = rows[0]["spesa"]
-        crm_rows = self._crm.execute_query(
+        crm_rows = self._exec(
             "SELECT accountType, ragioneSociale, nomeContatto FROM account WHERE accountId=?",
             (cid,),
         )
@@ -2151,7 +2151,7 @@ class SemanticLayer:
             SELECT product_ref, SUM(qty) as qty_totale
             FROM sales_order_line GROUP BY product_ref ORDER BY qty_totale DESC LIMIT ?
         """
-        rows = self._erp.execute_query(sql, (limit,))
+        rows = self._exec(sql, (limit,))
         if not rows:
             return Result(
                 answer=[],
@@ -2162,7 +2162,7 @@ class SemanticLayer:
         # Batch PIM enrichment: one query for all product IDs instead of N queries.
         product_ids = [r["product_ref"] for r in rows]
         placeholders = ",".join("?" * len(product_ids))
-        pim_rows = self._hr_pim.execute_query(
+        pim_rows = self._exec(
             f"SELECT internal_id, displayName, categoryPath FROM product_catalog_pim WHERE internal_id IN ({placeholders})",
             tuple(product_ids),
         )
@@ -2183,7 +2183,7 @@ class SemanticLayer:
             SELECT customer_ref, COUNT(*) as n
             FROM sales_order_header GROUP BY customer_ref ORDER BY n DESC LIMIT 1
         """
-        rows = self._erp.execute_query(sql)
+        rows = self._exec(sql)
         if not rows:
             return Result(answer=None, sql_used=sql, sources_touched=["erp", "crm"])
         cid = rows[0]["customer_ref"]
@@ -2195,7 +2195,7 @@ class SemanticLayer:
             JOIN state_province sp ON sp.stateId = addr.stateProvinceId
             WHERE a.accountId = ? LIMIT 1
         """
-        state_rows = self._crm.execute_query(state_sql, (cid,))
+        state_rows = self._exec(state_sql, (cid,))
         state = state_rows[0]["stateName"] if state_rows else "Unknown"
         return Result(
             answer={"customer_ref": cid, "order_count": rows[0]["n"], "state": state},
@@ -2214,7 +2214,7 @@ class SemanticLayer:
         cost_sql = (
             "SELECT internal_id, standardCost, listPrice FROM product_catalog_pim"
         )
-        pim_rows = {r["internal_id"]: r for r in self._hr_pim.execute_query(cost_sql)}
+        pim_rows = {r["internal_id"]: r for r in self._exec(cost_sql)}
 
         # Build per-salesperson margin using line data
         if year:
@@ -2227,7 +2227,7 @@ class SemanticLayer:
                   AND h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref, l.product_ref
             """
-            margin_rows = self._erp.execute_query(margin_sql, (str(year),))
+            margin_rows = self._exec(margin_sql, (str(year),))
         else:
             margin_sql = """
                 SELECT h.salesperson_ref, l.product_ref,
@@ -2237,7 +2237,7 @@ class SemanticLayer:
                 WHERE h.salesperson_ref IS NOT NULL
                 GROUP BY h.salesperson_ref, l.product_ref
             """
-            margin_rows = self._erp.execute_query(margin_sql)
+            margin_rows = self._exec(margin_sql)
 
         margins: dict[int, float] = {}
         for r in margin_rows:
@@ -2266,12 +2266,12 @@ class SemanticLayer:
 
     def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
         # ERP and CRM are separate connectors — join manually in Python
-        orders = self._erp.execute_query(
+        orders = self._exec(
             "SELECT customer_ref, ROUND(SUM(total_due), 2) as total FROM sales_order_header GROUP BY customer_ref"
         )
         accts = {
             r["accountId"]: r["accountType"]
-            for r in self._crm.execute_query(
+            for r in self._exec(
                 "SELECT accountId, accountType FROM account WHERE accountId > 0"
             )
         }
@@ -2304,12 +2304,10 @@ class SemanticLayer:
     def _q_top_category_by_margin(self, intent: Intent) -> Result:
         # Get per-product qty from ERP
         qty_sql = "SELECT product_ref, SUM(qty) as total_qty FROM sales_order_line GROUP BY product_ref"
-        qty_rows = {
-            r["product_ref"]: r["total_qty"] for r in self._erp.execute_query(qty_sql)
-        }
+        qty_rows = {r["product_ref"]: r["total_qty"] for r in self._exec(qty_sql)}
         # PIM products with cost data
         pim_sql = "SELECT internal_id, categoryPath, listPrice, standardCost FROM product_catalog_pim"
-        pim_rows = self._hr_pim.execute_query(pim_sql)
+        pim_rows = self._exec(pim_sql)
 
         cat_revenue: dict[str, float] = {}
         cat_cost: dict[str, float] = {}
@@ -2351,7 +2349,7 @@ class SemanticLayer:
 
     def _q_orders_with_discount(self, intent: Intent) -> Result:
         sql = "SELECT COUNT(DISTINCT order_id) as cnt FROM sales_order_line WHERE offer_ref != 1"
-        rows = self._erp.execute_query(sql)
+        rows = self._exec(sql)
         count = rows[0]["cnt"] if rows else 0
         return Result(
             answer=count,
@@ -2363,8 +2361,8 @@ class SemanticLayer:
     def _q_count_customers_unique(self, intent: Intent) -> Result:
         sql_total = "SELECT COUNT(*) as total FROM account"
         sql_dups = "SELECT COUNT(*) as dups FROM account WHERE accountId < 0"
-        total = self._crm.execute_query(sql_total)[0]["total"]
-        dups = self._crm.execute_query(sql_dups)[0]["dups"]
+        total = self._exec(sql_total)[0]["total"]
+        dups = self._exec(sql_dups)[0]["dups"]
         unique = total - dups
         return Result(
             answer={"total": total, "duplicates": dups, "unique": unique},
@@ -2382,7 +2380,7 @@ class SemanticLayer:
                 "FROM account WHERE ragioneSociale LIKE ? OR nomeContatto LIKE ? "
                 "ORDER BY ABS(accountId)"
             )
-            rows = self._crm.execute_query(sql, (f"%{company}%", f"%{company}%"))
+            rows = self._exec(sql, (f"%{company}%", f"%{company}%"))
             positives = [r for r in rows if r["accountId"] > 0]
             negatives = [r for r in rows if r["accountId"] < 0]
             has_dups = len(negatives) > 0
@@ -2401,7 +2399,7 @@ class SemanticLayer:
                 notes="accountId < 0 = duplicate record per CRM deduplication rule",
             )
         sql = "SELECT COUNT(*) as dups FROM account WHERE accountId < 0"
-        rows = self._crm.execute_query(sql)
+        rows = self._exec(sql)
         return Result(
             answer={"duplicate_count": rows[0]["dups"]},
             sql_used=sql,
@@ -2427,10 +2425,10 @@ class SemanticLayer:
         year = intent.year or intent.filters.get("year")
         if year:
             sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
-            rows = self._erp.execute_query(sql, (str(year),))
+            rows = self._exec(sql, (str(year),))
         else:
             sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header"
-            rows = self._erp.execute_query(sql)
+            rows = self._exec(sql)
         val = rows[0]["revenue_with_tax"] if rows else None
         return Result(
             answer=val,
@@ -2443,9 +2441,7 @@ class SemanticLayer:
     def _q_lookup_employee(self, intent: Intent) -> Result:
         name = intent.filters.get("name", "")
         sql = "SELECT * FROM dipendenti_hr WHERE LOWER(Nome) LIKE ? OR LOWER(Cognome) LIKE ?"
-        rows = self._hr_pim.execute_query(
-            sql, (f"%{name.lower()}%", f"%{name.lower()}%")
-        )
+        rows = self._exec(sql, (f"%{name.lower()}%", f"%{name.lower()}%"))
         if len(rows) > 1:
             # Multiple matches → disambiguation required
             return Result(
@@ -2490,6 +2486,10 @@ class SemanticLayer:
         entity = intent.filters.get("entity", "Unknown")
         if self._effective_docs and self._effective_docs.entities:
             available = ", ".join(e.display_name for e in self._effective_docs.entities)
+        elif self._ontology:
+            available = ", ".join(sorted(self._ontology.entity_names()))
+        elif self._catalog:
+            available = ", ".join(sorted(self._catalog.list_entities())[:12])
         else:
             available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
         return Result(
@@ -2497,8 +2497,7 @@ class SemanticLayer:
             sources_touched=[],
             notes=(
                 f"The entity '{entity}' is not modeled in the semantic layer. "
-                f"Available entities are: {available}. "
-                "Suppliers (Supplier/Vendor) are not part of the current data model."
+                f"Available entities are: {available}."
             ),
             disambiguation_required=False,
         )
@@ -2669,13 +2668,13 @@ class SemanticLayer:
             "SELECT accountId, ragioneSociale, nomeContatto, accountType "
             "FROM account WHERE accountId > 0 ORDER BY ragioneSociale LIMIT 10000"
         )
-        customers = self._crm.execute_query(crm_sql)
+        customers = self._exec(crm_sql)
         # All customer_refs that appear in at least one order (ERP side).
         erp_sql = (
             "SELECT DISTINCT customer_ref FROM sales_order_header "
             "WHERE customer_ref IS NOT NULL"
         )
-        ordered_refs = {r["customer_ref"] for r in self._erp.execute_query(erp_sql)}
+        ordered_refs = {r["customer_ref"] for r in self._exec(erp_sql)}
         # Python-side anti-join.
         no_orders = [c for c in customers if c["accountId"] not in ordered_refs]
         total_count = len(no_orders)

@@ -6,7 +6,6 @@ the handler's return value and guard logic without touching a DB.
 
 from __future__ import annotations
 
-import re
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,7 +21,7 @@ def _make_layer():
     layer = SemanticLayer.__new__(SemanticLayer)
     layer._docs = None
     layer._parser = MagicMock()
-    layer._ontology = MagicMock()
+    layer._ontology = None  # None so entity_not_modeled falls to catalog/hardcoded
     layer._kg = MagicMock()
     layer._catalog = MagicMock()
     layer._catalog.list_entities.return_value = ["SalesOrder"]
@@ -31,6 +30,9 @@ def _make_layer():
     layer._erp = MagicMock()
     layer._crm = MagicMock()
     layer._hr_pim = MagicMock()
+    # Unified mgr mock — all _exec() calls route here when mgr is set
+    layer._mgr = MagicMock()
+    layer._known_tables = frozenset()
     return layer
 
 
@@ -45,26 +47,26 @@ def _intent(intent_type: str, **kwargs):
 
 def test_count_orders_without_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"cnt": 31465}]
+    layer._mgr.execute.return_value = [{"cnt": 31465}]
 
     result = layer._q_count_orders(_intent("count_orders"))
 
     assert result.answer == 31465
     assert result.sources_touched == ["erp"]
-    # No year filter → no parameter bound
-    call_args = layer._erp.execute_query.call_args
+    # No year filter → empty params tuple
+    call_args = layer._mgr.execute.call_args
     assert call_args[0][0].strip().startswith("SELECT COUNT(*)")
-    assert len(call_args[0]) == 1  # just SQL, no params tuple
+    assert call_args[0][1] == ()  # no params
 
 
 def test_count_orders_with_year_filter():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"cnt": 3987}]
+    layer._mgr.execute.return_value = [{"cnt": 3987}]
 
     result = layer._q_count_orders(_intent("count_orders", filters={"year": 2014}))
 
     assert result.answer == 3987
-    call_args = layer._erp.execute_query.call_args
+    call_args = layer._mgr.execute.call_args
     sql, params = call_args[0]
     assert "strftime" in sql
     assert params == ("2014",)
@@ -72,7 +74,7 @@ def test_count_orders_with_year_filter():
 
 def test_count_orders_returns_zero_on_empty_rows():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
 
     result = layer._q_count_orders(_intent("count_orders"))
 
@@ -85,42 +87,36 @@ def test_count_orders_returns_zero_on_empty_rows():
 def test_top_products_limit_clamp():
     """User-supplied limit=9999 is clamped to ≤ 50."""
     layer = _make_layer()
-    executed_limits = []
+    captured_params: list = []
 
-    def capture(sql, params=None, *a, **kw):
-        m = re.search(r"LIMIT\s+(\d+)", sql, re.IGNORECASE)
-        if m:
-            executed_limits.append(int(m.group(1)))
-        # Return empty rows so hr_pim enrichment is skipped
+    def capture(sql, params=()):
+        captured_params.append(params)
         return []
 
-    layer._erp.execute_query = capture
-    layer._hr_pim.execute_query = MagicMock(return_value=[])
+    layer._mgr.execute = capture
 
     layer._q_top_products_by_qty(_intent("top_products_by_qty", limit=9999))
 
-    assert all(lim <= 50 for lim in executed_limits), (
-        f"Limit not clamped: {executed_limits}"
-    )
+    # The clamped limit is passed as the last element of the params tuple
+    assert captured_params, "No exec calls made"
+    assert captured_params[0][-1] <= 50, f"Limit not clamped: {captured_params}"
 
 
 def test_top_products_limit_minimum():
     """Limit is clamped to at least 1."""
     layer = _make_layer()
-    executed_limits = []
+    captured_params: list = []
 
-    def capture(sql, params=None, *a, **kw):
-        m = re.search(r"LIMIT\s+(\d+)", sql, re.IGNORECASE)
-        if m:
-            executed_limits.append(int(m.group(1)))
+    def capture(sql, params=()):
+        captured_params.append(params)
         return []
 
-    layer._erp.execute_query = capture
-    layer._hr_pim.execute_query = MagicMock(return_value=[])
+    layer._mgr.execute = capture
 
     layer._q_top_products_by_qty(_intent("top_products_by_qty", limit=0))
 
-    assert all(lim >= 1 for lim in executed_limits), f"Limit below 1: {executed_limits}"
+    assert captured_params, "No exec calls made"
+    assert captured_params[0][-1] >= 1, f"Limit below 1: {captured_params}"
 
 
 # ── _q_count_customers_unique ────────────────────────────────────────────────
@@ -129,7 +125,7 @@ def test_top_products_limit_minimum():
 def test_count_customers_unique_arithmetic():
     """unique = total - duplicates (accountId < 0)."""
     layer = _make_layer()
-    layer._crm.execute_query.side_effect = [
+    layer._mgr.execute.side_effect = [
         [{"total": 20201}],
         [{"dups": 381}],
     ]
@@ -146,7 +142,7 @@ def test_count_customers_unique_arithmetic():
 def test_check_duplicate_accounts_global():
     """Without company filter, returns aggregate duplicate count."""
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [{"dups": 42}]
+    layer._mgr.execute.return_value = [{"dups": 42}]
 
     result = layer._q_check_duplicate_accounts(_intent("check_duplicate_accounts"))
 
@@ -157,7 +153,7 @@ def test_check_duplicate_accounts_global():
 def test_check_duplicate_accounts_with_company_triggers_disambiguation():
     """With company filter and negatives found, sets disambiguation_required=True."""
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {
             "accountId": 5,
             "accountType": "B2B",
@@ -189,7 +185,7 @@ def test_check_duplicate_accounts_with_company_triggers_disambiguation():
 def test_check_duplicate_accounts_no_duplicates():
     """With company filter but no negative accountIds, disambiguation_required=False."""
     layer = _make_layer()
-    layer._crm.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {
             "accountId": 5,
             "accountType": "B2B",
@@ -232,14 +228,17 @@ def test_impossible_unknown_reason_fallback():
 
 
 def test_entity_not_modeled_no_docs():
-    """Without docs, fallback entity list is used."""
+    """Without docs or ontology, falls back to catalog or hardcoded entity list."""
     layer = _make_layer()
+    # With _ontology=None and catalog returning only ["SalesOrder"], the catalog
+    # branch is used. Verify the requested entity name appears and the catalog
+    # entity list is present.
     result = layer._q_entity_not_modeled(
         _intent("entity_not_modeled", filters={"entity": "Supplier"})
     )
     assert result.answer is None
     assert "Supplier" in result.notes
-    assert "Customer" in result.notes  # fallback list present
+    assert "SalesOrder" in result.notes  # catalog entity list present
 
 
 def test_entity_not_modeled_with_docs_uses_doc_entities():
@@ -269,30 +268,30 @@ def test_entity_not_modeled_with_docs_uses_doc_entities():
 
 def test_revenue_with_tax_with_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"revenue_with_tax": 22_436_011.08}]
+    layer._mgr.execute.return_value = [{"revenue_with_tax": 22_436_011.08}]
 
     result = layer._q_revenue_with_tax(_intent("revenue_with_tax", year=2014))
 
     assert result.answer == pytest.approx(22_436_011.08)
     assert result.sources_touched == ["erp"]
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" in call_sql
 
 
 def test_revenue_with_tax_without_year():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = [{"revenue_with_tax": 109_846_381.40}]
+    layer._mgr.execute.return_value = [{"revenue_with_tax": 109_846_381.40}]
 
     result = layer._q_revenue_with_tax(_intent("revenue_with_tax"))
 
     assert result.answer == pytest.approx(109_846_381.40)
-    call_sql = layer._erp.execute_query.call_args[0][0]
+    call_sql = layer._mgr.execute.call_args[0][0]
     assert "strftime" not in call_sql
 
 
 def test_revenue_with_tax_empty_rows_returns_none():
     layer = _make_layer()
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
 
     result = layer._q_revenue_with_tax(_intent("revenue_with_tax"))
 
@@ -304,7 +303,7 @@ def test_revenue_with_tax_empty_rows_returns_none():
 
 def test_lookup_employee_single_match():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {"Nome": "John", "Cognome": "Doe", "MatricolaDip": 1, "Reparto": "Sales"}
     ]
 
@@ -318,7 +317,7 @@ def test_lookup_employee_single_match():
 
 def test_lookup_employee_multiple_matches_triggers_disambiguation():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [
+    layer._mgr.execute.return_value = [
         {"Nome": "John", "Cognome": "Doe", "MatricolaDip": 1, "Reparto": "Sales"},
         {"Nome": "Jane", "Cognome": "Doe", "MatricolaDip": 2, "Reparto": "HR"},
     ]
@@ -333,7 +332,7 @@ def test_lookup_employee_multiple_matches_triggers_disambiguation():
 
 def test_lookup_employee_no_match_returns_empty():
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = []
+    layer._mgr.execute.return_value = []
 
     result = layer._q_lookup_employee(
         _intent("lookup_employee", filters={"name": "nobody"})
@@ -363,23 +362,19 @@ def test_data_provenance_delegates_to_catalog():
 
 
 def test_margin_per_salesperson_executes_one_erp_query_not_two():
-    """Only one ERP query is needed (margin_sql). The dead approx_revenue
-    query was removed — verify the handler makes exactly 2 ERP calls (the
-    margin_sql is called once with year and once for pim). Actually: 1 ERP
-    query + 1 PIM query."""
+    """Handler makes exactly 2 _exec calls: 1 PIM cost query + 1 ERP margin query."""
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = [
-        {"internal_id": 42, "standardCost": 100.0, "listPrice": 150.0}
-    ]
-    layer._erp.execute_query.return_value = [
-        {"salesperson_ref": 7, "product_ref": 42, "total_qty": 10}
+    # Call order: PIM cost query first, then ERP margin query
+    layer._mgr.execute.side_effect = [
+        [{"internal_id": 42, "standardCost": 100.0, "listPrice": 150.0}],  # PIM
+        [{"salesperson_ref": 7, "product_ref": 42, "total_qty": 10}],  # ERP
     ]
 
     result = layer._q_margin_per_salesperson(
         _intent("margin_per_salesperson", year=2014)
     )
 
-    assert layer._erp.execute_query.call_count == 1  # only margin_sql
+    assert layer._mgr.execute.call_count == 2  # 1 PIM + 1 ERP
     assert result.sources_touched == ["erp", "hr_pim"]
     assert len(result.answer) == 1
     assert result.answer[0]["salesperson_ref"] == 7
@@ -389,12 +384,12 @@ def test_margin_per_salesperson_executes_one_erp_query_not_two():
 def test_margin_per_salesperson_no_year():
     """Without year filter, uses the unfiltered margin_sql."""
     layer = _make_layer()
-    layer._hr_pim.execute_query.return_value = []
-    layer._erp.execute_query.return_value = []
+    layer._mgr.execute.side_effect = [[], []]  # PIM, then ERP (both empty)
 
     result = layer._q_margin_per_salesperson(_intent("margin_per_salesperson"))
 
-    assert layer._erp.execute_query.call_count == 1
-    call_sql = layer._erp.execute_query.call_args[0][0]
-    assert "strftime" not in call_sql
+    assert layer._mgr.execute.call_count == 2
+    # ERP margin SQL is the second call; verify no year filter
+    erp_sql = layer._mgr.execute.call_args_list[1][0][0]
+    assert "strftime" not in erp_sql
     assert result.answer == []
