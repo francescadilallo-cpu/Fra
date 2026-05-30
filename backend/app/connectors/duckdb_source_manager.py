@@ -53,6 +53,25 @@ logger = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
+# Paths under these prefixes are never opened as data sources (defence-in-depth).
+_BLOCKED_PATH_PREFIXES = ("/etc/", "/proc/", "/sys/", "/dev/", "/run/", "/boot/")
+
+
+def _safe_data_path(raw: str) -> Path:
+    """Resolve and validate a file path supplied by an admin-configured source.
+
+    Raises ValueError if the resolved path sits under a blocked system prefix,
+    preventing accidental or malicious reads of sensitive OS files.
+    """
+    resolved = Path(raw).resolve()
+    resolved_str = str(resolved)
+    for prefix in _BLOCKED_PATH_PREFIXES:
+        if resolved_str.startswith(prefix):
+            raise ValueError(
+                f"Data source path '{raw}' resolves to a restricted location"
+            )
+    return resolved
+
 _MANAGER: "DuckDBSourceManager | None" = None
 _MANAGER_LOCK = threading.RLock()
 
@@ -414,7 +433,7 @@ class DuckDBSourceManager:
     def _ingest_erp_sqldump(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        dump_path = Path(cfg.params.get("path", ""))
+        dump_path = _safe_data_path(cfg.params.get("path", ""))
         if not dump_path.exists():
             logger.warning("ERP dump not found: %s", dump_path)
             return
@@ -441,7 +460,7 @@ class DuckDBSourceManager:
     ) -> None:
         import sqlite3 as _sqlite3
 
-        crm_path = Path(cfg.params.get("path", ""))
+        crm_path = _safe_data_path(cfg.params.get("path", ""))
         if not crm_path.exists():
             logger.warning("CRM SQLite not found: %s", crm_path)
             return
@@ -465,7 +484,7 @@ class DuckDBSourceManager:
     def _ingest_hr_csv(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        hr_path = Path(cfg.params.get("path", ""))
+        hr_path = _safe_data_path(cfg.params.get("path", ""))
         if not hr_path.exists():
             logger.warning("HR CSV not found: %s", hr_path)
             return
@@ -483,7 +502,7 @@ class DuckDBSourceManager:
     def _ingest_pim_json(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        pim_path = Path(cfg.params.get("path", ""))
+        pim_path = _safe_data_path(cfg.params.get("path", ""))
         if not pim_path.exists():
             logger.warning("PIM JSON not found: %s", pim_path)
             return
@@ -510,7 +529,7 @@ class DuckDBSourceManager:
                 raise ValueError(f"Inline CSV exceeds 5 MB limit ({len(inline)} chars)")
             df = pd.read_csv(io.StringIO(inline), sep=",", low_memory=False)
         else:
-            path = Path(cfg.params.get("path", ""))
+            path = _safe_data_path(cfg.params.get("path", ""))
             if not path.exists():
                 raise FileNotFoundError(f"CSV not found: {path}")
             table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
@@ -527,7 +546,7 @@ class DuckDBSourceManager:
     def _ingest_json_file(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        path = Path(cfg.params.get("path", ""))
+        path = _safe_data_path(cfg.params.get("path", ""))
         if not path.exists():
             raise FileNotFoundError(f"JSON not found: {path}")
         table = (
@@ -551,7 +570,7 @@ class DuckDBSourceManager:
             cfg.target_tables.append(table)
 
     def _ingest_excel(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
-        path = Path(cfg.params.get("path", ""))
+        path = _safe_data_path(cfg.params.get("path", ""))
         if not path.exists():
             raise FileNotFoundError(f"Excel not found: {path}")
         sheet = cfg.params.get("sheet", 0)
@@ -571,7 +590,7 @@ class DuckDBSourceManager:
     ) -> None:
         import sqlite3 as _sqlite3
 
-        path = Path(cfg.params.get("path", ""))
+        path = _safe_data_path(cfg.params.get("path", ""))
         if not path.exists():
             raise FileNotFoundError(f"SQLite not found: {path}")
         table_filter: list[str] | None = cfg.params.get("tables")
@@ -587,10 +606,11 @@ class DuckDBSourceManager:
             if table_filter:
                 tables = [t for t in tables if t in table_filter]
             for table in tables:
-                rows = src.execute(f"SELECT * FROM {table}").fetchall()
+                safe_id = table.replace('"', '""')  # escape SQL identifier
+                rows = src.execute(f'SELECT * FROM "{safe_id}"').fetchall()
                 df = pd.DataFrame([dict(r) for r in rows])
                 conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
+                    f'CREATE TABLE IF NOT EXISTS "{safe_id}" AS SELECT * FROM df'
                 )
                 self._row_counts[f"{cfg.id}.{table}"] = len(df)
                 logger.info("SDB  %-25s %7d rows", table, len(df))

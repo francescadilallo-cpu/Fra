@@ -446,6 +446,8 @@ class SemanticAskRequest(BaseModel):
         alias = (self.query or "").strip()
         if not q and not alias:
             raise ValueError("Either 'question' or 'query' must be provided")
+        if len(self.context) > 32:
+            raise ValueError("context dict must not exceed 32 keys")
         return self
 
     def normalized_question(self) -> str:
@@ -481,7 +483,8 @@ def _resolve_ontology_validation_path(raw: str | None) -> Path:
 
     candidate = (_SCENARIO_PATH / raw).resolve()
     scenario_root = _SCENARIO_PATH.resolve()
-    if scenario_root not in [candidate, *candidate.parents]:
+    # Use is_relative_to to correctly handle symlinks and path traversal
+    if not candidate.is_relative_to(scenario_root):
         raise HTTPException(status_code=400, detail="Invalid ontology path scope")
     if not candidate.exists():
         raise HTTPException(status_code=404, detail="Ontology file not found")
@@ -1018,9 +1021,15 @@ def rebuild_data_store(
 
 
 class SourceAddRequest(BaseModel):
-    connector_type: str = Field(max_length=64)
+    connector_type: str = Field(min_length=1, max_length=64)
     label: str = Field(min_length=1, max_length=128)
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_params(self) -> "SourceAddRequest":
+        if len(self.params) > 32:
+            raise ValueError("params dict must not exceed 32 keys")
+        return self
 
 
 class SourceResponse(BaseModel):
