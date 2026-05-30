@@ -340,6 +340,12 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
   const [newField, setNewField] = useState(EMPTY_FIELD)
   const [addingField, setAddingField] = useState(false)
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   function saveEntity() {
     const props: OntologyProperty[] = fields.map(f => ({
       name: f.name,

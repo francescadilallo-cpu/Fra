@@ -400,10 +400,10 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
             <span>Log out</span>
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-500">Demo · Mock Data</span>
+            <div className="w-1.5 h-1.5 bg-teal-500 rounded-full" />
+            <span className="text-xs text-slate-500">SemanticIntelligence</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-600">v0.2 MVP · Multi-Sector</p>
+          <p className="mt-1 text-[11px] text-slate-600">v0.2 · Multi-Sector</p>
         </div>
       </aside>
 

@@ -1800,6 +1800,12 @@ function EditChangeModal({
   const [propNodeId, setPropNodeId] = useState(change.addPropertyTo?.nodeId ?? '')
   const [propName, setPropName] = useState(change.addPropertyTo?.property.name ?? '')
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   function addProperty() {
     const n = normalizeProperty(newProp.trim())
     if (!n || properties.some((p) => p.name === n)) return
@@ -2083,6 +2089,12 @@ function EditEntityModal({
   const [newPropName, setNewPropName] = useState('')
   const [newPropPhysical, setNewPropPhysical] = useState('')
   const [newPropType, setNewPropType] = useState<PropertyType>('string')
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   function addProperty() {
     const name = normalizeProperty(newPropName.trim())

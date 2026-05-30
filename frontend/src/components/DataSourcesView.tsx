@@ -172,13 +172,14 @@ function CredentialModal({
 
         {/* Fields */}
         <div className="px-5 py-4 space-y-3.5">
-          {def.params_schema.map((field: ParamField) => (
+          {def.params_schema.map((field: ParamField, idx: number) => (
             <div key={field.key}>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-0.5">*</span>}
               </label>
               <input
+                autoFocus={idx === 0}
                 type={field.type === 'password' ? 'password' : 'text'}
                 value={values[field.key] ?? ''}
                 onChange={e => set(field.key, e.target.value)}

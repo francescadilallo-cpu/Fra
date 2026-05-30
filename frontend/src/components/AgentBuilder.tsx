@@ -230,6 +230,12 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
   const tpl = TEMPLATES.find(t => t.id === template)!
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
     if (!nameEdited) setName(tpl.autoName(primaryEntity))
     if (!descEdited) setDescription(tpl.autoDescription(primaryEntity))
     setActions(prev => prev.length > 0 ? prev : DEFAULT_ACTIONS[template])
