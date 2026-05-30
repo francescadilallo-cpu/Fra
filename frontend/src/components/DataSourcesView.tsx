@@ -85,7 +85,7 @@ function AWSourcesPanel() {
     <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-2.5">
         <Database className="w-4 h-4 text-teal-600" />
-        <h2 className="text-sm font-bold text-slate-800">AdventureWorks — Fonti Attive</h2>
+        <h2 className="text-sm font-bold text-slate-800">AdventureWorks — Active Sources</h2>
         <span className="flex items-center gap-1 text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">
           <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />3 connected
         </span>

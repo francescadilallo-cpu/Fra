@@ -29,7 +29,7 @@ type StepLog = { text: string; type: 'info' | 'ok' | 'warn' }
 const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
   manufacturing: {
     connect: [
-      { text: 'Initializing connection pool — AdventureWorks scenario', type: 'info' },
+      { text: 'Initializing connection pool...', type: 'info' },
       { text: '✓ ERP OrionSales — PostgreSQL/DuckDB :5432 — 18ms', type: 'ok' },
       { text: '✓ CRM ClientHub — SQLite file loaded — 42ms', type: 'ok' },
       { text: '✓ HR dipendenti_hr.csv — 290 rows parsed', type: 'ok' },
@@ -47,7 +47,7 @@ const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
       { text: '✓ 212,736 rows extracted in 3.2s', type: 'ok' },
     ],
     map: [
-      { text: 'Loading semantic mappings v1.0 (AdventureWorks)', type: 'info' },
+      { text: 'Loading semantic mappings v1.0...', type: 'info' },
       { text: 'Resolving cross-source bridges...', type: 'info' },
       { text: '⚡ customer_ref → CRM.accountId — 19,829 matched (372 deduped)', type: 'ok' },
       { text: '⚡ salesperson_ref → HR.MatricolaDip — 17 matched', type: 'ok' },
@@ -69,7 +69,7 @@ const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
       { text: '✓ 8 ontology entities registered', type: 'ok' },
       { text: '✓ 47 semantic field definitions indexed', type: 'ok' },
       { text: '✓ Query engine ready — fatturato disambiguation active', type: 'ok' },
-      { text: '✓ Semantic layer AdventureWorks-2014 ready', type: 'ok' },
+      { text: '✓ Semantic layer ready', type: 'ok' },
     ],
   },
   retail: {
@@ -509,8 +509,8 @@ export default function ProcessView() {
         {runState === 'done' && (
           <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
             {[
-              { label: 'Rows Extracted',   value: summary.rows,                   sub: '4 sources · ERP+CRM+HR+PIM' },
-              { label: 'Entities Mapped',  value: String(summary.entities),        sub: '8 AW ontology classes' },
+              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${sector.connectors.length} sources connected` },
+              { label: 'Entities Mapped',  value: String(summary.entities),        sub: `${summary.entities} ontology classes` },
               { label: 'KG Nodes Created', value: summary.enrichments,             sub: 'instances in Knowledge Graph' },
               { label: 'KG Edges Indexed', value: summary.triples,                 sub: '3 cross-source bridges' },
             ].map(({ label, value, sub }) => (

@@ -370,7 +370,7 @@ export default function DataExplorer() {
           )}
         </div>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.name} · Browse real AdventureWorks data for each entity
+          {sector.name} · Browse live data for each entity
           {selected && rowCount > 0 && (
             <span className="ml-2 text-teal-600 font-medium">{rowCount.toLocaleString('en-US')} records in production DB</span>
           )}

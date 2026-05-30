@@ -278,7 +278,7 @@ function AWConfigSources() {
     <div className="mb-5 bg-teal-50/60 border border-teal-200 rounded-xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-teal-100">
         <Database className="w-3.5 h-3.5 text-teal-600" />
-        <p className="text-xs font-bold text-teal-800 uppercase tracking-wide">AdventureWorks — Active Sources</p>
+        <p className="text-xs font-bold text-teal-800 uppercase tracking-wide">Active Sources</p>
         <span className="text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5 ml-auto">
           4 connected
         </span>

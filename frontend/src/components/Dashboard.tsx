@@ -524,7 +524,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       {isAW && (
         <div className="bg-slate-900 rounded-2xl px-6 py-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">AdventureWorks · Live Data</span>
+            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">Live Data</span>
             <span className="text-[10px] text-slate-500">Click a card to query</span>
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">

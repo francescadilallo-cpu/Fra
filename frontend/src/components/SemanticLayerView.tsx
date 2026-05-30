@@ -3094,7 +3094,7 @@ export default function SemanticLayerView() {
             {/* Built-in bridges (manufacturing) */}
             {isManufacturing && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in bridges (AdventureWorks)</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in bridges</p>
                 {AW_BRIDGES.map(b => <BridgeCard key={b.id} bridge={b} />)}
               </div>
             )}
@@ -3127,7 +3127,7 @@ export default function SemanticLayerView() {
             {/* Built-in rules (manufacturing) */}
             {isManufacturing && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in rules (AdventureWorks)</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in rules</p>
                 {AW_DISAMBIGUATION_RULES.map((rule, i) => <DisambiguationCard key={i} rule={rule} />)}
               </div>
             )}
@@ -3198,7 +3198,7 @@ export default function SemanticLayerView() {
 
             {isManufacturing && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Verified · AdventureWorks</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Verified · Built-in</p>
                 {AW_METRICS.map(m => <MetricCard key={m.id} metric={m} />)}
               </div>
             )}
@@ -3271,7 +3271,7 @@ export default function SemanticLayerView() {
 
             {isManufacturing && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in · AdventureWorks</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in</p>
                 {AW_HIERARCHIES.map(h => <HierarchyCard key={h.id} h={h} />)}
               </div>
             )}
@@ -3347,7 +3347,7 @@ export default function SemanticLayerView() {
 
             {isManufacturing && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in · AdventureWorks</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in</p>
                 {AW_SEGMENTS.map(s => <SegmentCard key={s.id} seg={s} />)}
               </div>
             )}
