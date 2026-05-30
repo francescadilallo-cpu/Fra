@@ -386,7 +386,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar activeTab={activeTab} onTabChange={onTabChange} />
-        <div className="flex-1 overflow-auto bg-slate-50">
+        <div key={activeTab} className="flex-1 overflow-auto bg-slate-50 animate-fade-in">
           {children}
         </div>
       </main>
