@@ -105,7 +105,7 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
           <h3 className="font-semibold text-slate-900">{node.label}</h3>
           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${src.badge}`}>{src.label}</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 ml-2 flex-shrink-0"><X className="w-4 h-4" /></button>
+        <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-700 ml-2 flex-shrink-0"><X className="w-4 h-4" /></button>
       </div>
       <div className="space-y-3 text-sm">
         <div>

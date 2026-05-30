@@ -1238,7 +1238,7 @@ function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => voi
             <p className="text-xs text-slate-500 leading-snug">{metric.description}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {onDelete && <button onClick={e => { e.stopPropagation(); onDelete() }} className="text-slate-300 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
+            {onDelete && <button onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete" className="text-slate-300 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>}
             {open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
           </div>
         </div>
@@ -1368,7 +1368,7 @@ function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void
           </div>
         </div>
         {onDelete && (
-          <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+          <button onClick={onDelete} aria-label="Delete" className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
         )}
       </div>
     </div>
@@ -1460,7 +1460,7 @@ function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void })
           )}
         </div>
         {onDelete && (
-          <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
+          <button onClick={onDelete} aria-label="Delete" className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
         )}
       </div>
     </div>
@@ -1776,8 +1776,8 @@ function DefEditableCell({ value, onSave }: { value: string; onSave: (v: string)
         <input autoFocus value={draft} onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
           className="flex-1 bg-white border border-teal-400 rounded px-2 py-0.5 text-xs text-slate-900 outline-none min-w-0 font-mono" />
-        <button onClick={commit} className="text-teal-500 hover:text-teal-700"><Check className="w-3.5 h-3.5" /></button>
-        <button onClick={cancel} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+        <button onClick={commit} aria-label="Save" className="text-teal-500 hover:text-teal-700"><Check className="w-3.5 h-3.5" /></button>
+        <button onClick={cancel} aria-label="Cancel" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
       </div>
     )
   }
@@ -1906,8 +1906,8 @@ function SemanticDefsPanel() {
                         <div className="flex items-center gap-2">
                           <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
                             className="flex-1 text-xs border border-teal-300 rounded px-2 py-1 outline-none" />
-                          <button onClick={() => saveEdit(globalIdx)} className="text-teal-600 hover:text-teal-700"><Check className="w-4 h-4" /></button>
-                          <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                          <button onClick={() => saveEdit(globalIdx)} aria-label="Save" className="text-teal-600 hover:text-teal-700"><Check className="w-4 h-4" /></button>
+                          <button onClick={() => setEditing(null)} aria-label="Cancel" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
                         </div>
                       ) : (
                         <p className="text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900" onClick={() => startEdit(globalIdx)}>{def.definition}</p>

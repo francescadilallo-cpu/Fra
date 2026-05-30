@@ -723,7 +723,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
           <span className="text-xs font-semibold text-white">LLM Provider</span>
           <span className="text-[10px] text-slate-400">— chiave salvata solo nel browser</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+        <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
       </div>
 
       {/* Provider selector */}

@@ -159,7 +159,7 @@ function CredentialModal({
             <p className="text-sm font-bold text-slate-900">{connector.name}</p>
             <p className="text-[11px] text-slate-500">Configure connection</p>
           </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100">
+          <button onClick={onCancel} aria-label="Close" className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -431,7 +431,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
             · <span className="text-teal-600 font-medium">{acceptedCount}/{upload.headers.length} mapped</span>
           </p>
         </div>
-        <button onClick={onClear} className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100"><X className="w-4 h-4" /></button>
+        <button onClick={onClear} aria-label="Remove file" className="text-slate-400 hover:text-slate-700 p-1.5 rounded hover:bg-slate-100"><X className="w-4 h-4" /></button>
       </div>
       <div className="max-h-[380px] overflow-auto">
         <table className="w-full text-xs">
@@ -689,8 +689,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     setBuildStep(1)
     const t2 = setTimeout(() => setBuildStep(2), 900)
     const t3 = setTimeout(() => setBuildStep(3), 1900)
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 30_000)
+    )
     try {
-      await buildSemanticLayer()
+      await Promise.race([buildSemanticLayer(), timeout])
       clearTimeout(t2); clearTimeout(t3)
       setBuildStep(4)
       globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
@@ -698,10 +701,16 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         setBuilding(false); setBuildStep(0)
         onNavigate?.('sembuilder' as NavTab)
       }, 700)
-    } catch {
+    } catch (err) {
       clearTimeout(t2); clearTimeout(t3)
       setBuilding(false); setBuildStep(0)
-      globalToast('Build failed — check backend connection or source configuration', 'error')
+      const isTimeout = err instanceof Error && err.message === 'timeout'
+      globalToast(
+        isTimeout
+          ? 'Build timed out — the backend took too long to respond'
+          : 'Build failed — check backend connection or source configuration',
+        'error',
+      )
     }
   }
 

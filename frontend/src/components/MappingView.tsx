@@ -171,8 +171,8 @@ function SemanticDefinitionsPanel() {
                             onChange={e => setEditText(e.target.value)}
                             className="flex-1 text-xs border border-teal-300 rounded px-2 py-1 outline-none"
                           />
-                          <button onClick={() => saveEdit(globalIdx)} className="text-teal-600 hover:text-teal-700"><Check className="w-4 h-4" /></button>
-                          <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                          <button onClick={() => saveEdit(globalIdx)} aria-label="Save" className="text-teal-600 hover:text-teal-700"><Check className="w-4 h-4" /></button>
+                          <button onClick={() => setEditing(null)} aria-label="Cancel" className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
                         </div>
                       ) : (
                         <p className="text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900" onClick={() => startEdit(globalIdx)}>{def.definition}</p>
@@ -311,8 +311,8 @@ function EditableCell({ value, onSave }: { value: string; onSave: (v: string) =>
           onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
           className="flex-1 bg-white border border-teal-400 rounded px-2 py-0.5 text-xs text-slate-900 outline-none min-w-0 font-mono"
         />
-        <button onClick={commit} className="text-teal-500 hover:text-teal-700"><Check className="w-3.5 h-3.5" /></button>
-        <button onClick={cancel} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+        <button onClick={commit} aria-label="Save" className="text-teal-500 hover:text-teal-700"><Check className="w-3.5 h-3.5" /></button>
+        <button onClick={cancel} aria-label="Cancel" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
       </div>
     )
   }

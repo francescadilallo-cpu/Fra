@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
     this.setState({ errorInfo: info.componentStack })
-    console.error('[ErrorBoundary]', error, info)
+    if (import.meta.env.DEV) console.error('[ErrorBoundary]', error, info)
   }
 
   reset = () => this.setState({ error: null, errorInfo: '' })
