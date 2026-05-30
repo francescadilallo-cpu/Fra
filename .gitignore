@@ -10,8 +10,10 @@ build/
 coverage.xml
 htmlcov/
 
-# Backend data — context.db is runtime-generated, others are committed
+# Backend data — runtime-generated SQLite databases
 backend/data/context.db
+backend/custom_agents.db
+backend/saved_queries.db
 
 # Node
 frontend/node_modules/
