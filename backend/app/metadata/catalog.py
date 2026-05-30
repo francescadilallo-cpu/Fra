@@ -50,6 +50,8 @@ class EntityMetaRow(Base):
     freshness = Column(String, default="")  # ISO 8601
     quality_flags_json = Column(Text, default="{}")  # JSON dict
     kg_node_count = Column(Integer, default=0)
+    user_description = Column(Text, default="")  # user-edited override
+    context_notes = Column(Text, default="")  # injected into LLM prompts
 
 
 class AttributeMetaRow(Base):
@@ -115,6 +117,14 @@ class EntityMeta:
     @property
     def kg_node_count(self) -> int:
         return self._row.kg_node_count or 0
+
+    @property
+    def user_description(self) -> str:
+        return getattr(self._row, "user_description", "") or ""
+
+    @property
+    def context_notes(self) -> str:
+        return getattr(self._row, "context_notes", "") or ""
 
     def to_dict(self) -> dict:
         return {
@@ -245,8 +255,33 @@ class MetadataCatalog:
     def __init__(self, db_url: str = "sqlite:///:memory:") -> None:
         self._engine = create_engine(db_url, echo=False)
         Base.metadata.create_all(self._engine)
+        self._migrate_schema()
         self._Session = sessionmaker(bind=self._engine)
         self._populated = False
+
+    def _migrate_schema(self) -> None:
+        """Add new columns to existing SQLite tables without breaking existing data."""
+        import sqlite3 as _sqlite3
+
+        url = str(self._engine.url)
+        if ":memory:" in url or "///":
+            pass
+        db_path = url.split("///")[-1] if "///" in url else None
+        if not db_path or ":memory:" in db_path:
+            return
+        conn = _sqlite3.connect(db_path)
+        try:
+            for col, ddl in [
+                ("user_description", "TEXT DEFAULT ''"),
+                ("context_notes", "TEXT DEFAULT ''"),
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE entity_meta ADD COLUMN {col} {ddl}")
+                except Exception:
+                    pass  # column already exists
+            conn.commit()
+        finally:
+            conn.close()
 
     # ── population ────────────────────────────────────────────────────────────
 
@@ -464,6 +499,103 @@ class MetadataCatalog:
             )
         return removed
 
+    # ── draft editing ─────────────────────────────────────────────────────────
+
+    def save_entity_draft(
+        self,
+        name: str,
+        user_description: str | None = None,
+        context_notes: str | None = None,
+    ) -> bool:
+        """Persist user-edited fields for an entity. Returns False if not found."""
+        with self._Session() as session:
+            row = session.get(EntityMetaRow, name)
+            if row is None:
+                return False
+            if user_description is not None:
+                row.user_description = user_description
+            if context_notes is not None:
+                row.context_notes = context_notes
+            session.commit()
+        return True
+
+    def save_metric_draft(
+        self,
+        name: str,
+        description: str | None = None,
+        formula: str | None = None,
+        label: str | None = None,
+    ) -> bool:
+        """Persist user-edited fields for a metric. Returns False if not found."""
+        with self._Session() as session:
+            row = session.get(MetricMetaRow, name)
+            if row is None:
+                return False
+            if description is not None:
+                row.description = description
+            if formula is not None:
+                row.formula = formula
+            if label is not None:
+                row.label = label
+            session.commit()
+        return True
+
+    def get_draft_entities(self) -> list[dict]:
+        """Return all entities with their user-edited fields for the draft editor."""
+        with self._Session() as session:
+            entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
+            result = []
+            for row in entity_rows:
+                sources = json.loads(row.sources_json or "[]")
+                attrs = (
+                    session.execute(
+                        select(AttributeMetaRow).where(
+                            AttributeMetaRow.entity == row.name
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                result.append(
+                    {
+                        "name": row.name,
+                        "table": next(
+                            (
+                                s.get("table")
+                                for s in sources
+                                if isinstance(s, dict) and s.get("table")
+                            ),
+                            row.name.lower(),
+                        ),
+                        "columns": [a.attribute for a in attrs],
+                        "description": row.description or "",
+                        "user_description": getattr(row, "user_description", "") or "",
+                        "context_notes": getattr(row, "context_notes", "") or "",
+                        "record_count": row.record_count or 0,
+                        "sources": [
+                            s.get("source", "unknown")
+                            for s in sources
+                            if isinstance(s, dict)
+                        ],
+                    }
+                )
+            return result
+
+    def get_draft_metrics(self) -> list[dict]:
+        """Return all metrics as dicts for the draft editor."""
+        with self._Session() as session:
+            rows = session.execute(select(MetricMetaRow)).scalars().all()
+            return [
+                {
+                    "name": r.name,
+                    "label": r.label or "",
+                    "description": r.description or "",
+                    "formula": r.formula or "",
+                    "unit": r.unit or "",
+                }
+                for r in rows
+            ]
+
     # ── internal helpers ──────────────────────────────────────────────────────
 
     def _upsert_entity(
@@ -486,6 +618,8 @@ class MetadataCatalog:
             existing.sources_json = json.dumps(sources)
             existing.quality_flags_json = json.dumps(quality_flags)
             existing.kg_node_count = kg_node_count
+            # user_description and context_notes are NOT overwritten here —
+            # they are only updated via save_entity_draft()
         else:
             session.add(
                 EntityMetaRow(

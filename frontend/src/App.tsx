@@ -184,7 +184,7 @@ export default function App() {
         {activeTab === 'ontology' && <OntologyGraph />}
         {activeTab === 'builder' && <OntologyBuilder />}
         {activeTab === 'agents' && <AgentsView />}
-        {activeTab === 'sources' && <DataSourcesView />}
+        {activeTab === 'sources' && <DataSourcesView onNavigate={setActiveTab} />}
         {activeTab === 'data' && <DataExplorer />}
         {activeTab === 'query' && <QueryInterface />}
         {activeTab === 'process' && <ProcessView />}

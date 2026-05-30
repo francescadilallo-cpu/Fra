@@ -14,6 +14,7 @@ import {
   type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
+import { SemanticDraftView } from './SemanticDraftView'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
 import type { OntologyProperty, PropertyType, OntologyNode } from '../types'
@@ -2601,6 +2602,9 @@ export default function SemanticLayerView() {
         {/* ── OVERVIEW ── */}
         {section === 'overview' && (
           <div className="px-8 py-7 space-y-7">
+            {/* Schema draft — auto-extracted config, always visible at top */}
+            <SemanticDraftView />
+
             <SectionHeader icon={Layers} title="Overview"
               desc="Semantic layer status, coverage score, and data quality"
               action={

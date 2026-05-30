@@ -297,6 +297,78 @@ export function adaptAskResult(result: AskResult): EngineResult {
   }
 }
 
+// ── Semantic Draft ────────────────────────────────────────────────────────────
+
+export interface DraftEntity {
+  name: string
+  table: string
+  columns: string[]
+  description: string
+  user_description: string
+  context_notes: string
+  record_count: number
+  sources: string[]
+}
+
+export interface DraftRelation {
+  from_table: string
+  to_table: string
+  via_column: string
+  edge_type: string
+}
+
+export interface DraftMetric {
+  name: string
+  label: string
+  description: string
+  formula: string
+  unit: string
+}
+
+export interface ContextDoc {
+  id: string
+  title: string
+  content: string
+  created_at: string
+}
+
+export interface SemanticDraft {
+  entities: DraftEntity[]
+  relations: DraftRelation[]
+  metrics: DraftMetric[]
+  context_docs: ContextDoc[]
+  loaded: boolean
+  built_at: string
+}
+
+export const buildSemanticLayer = (): Promise<SemanticDraft> =>
+  http.post<SemanticDraft>('/api/semantic/build').then(r => r.data)
+
+export const getDraft = (): Promise<SemanticDraft> =>
+  http.get<SemanticDraft>('/api/semantic/draft').then(r => r.data)
+
+export const patchDraftEntity = (
+  name: string,
+  updates: { user_description?: string; context_notes?: string },
+): Promise<void> =>
+  http
+    .patch(`/api/semantic/draft/entities/${encodeURIComponent(name)}`, updates)
+    .then(() => undefined)
+
+export const patchDraftMetric = (
+  name: string,
+  updates: { description?: string; formula?: string; label?: string },
+): Promise<void> =>
+  http
+    .patch(`/api/semantic/draft/metrics/${encodeURIComponent(name)}`, updates)
+    .then(() => undefined)
+
+export const addContextDoc = (title: string, content: string): Promise<ContextDoc> =>
+  http.post<ContextDoc>('/api/semantic/draft/context', { title, content }).then(r => r.data)
+
+export const deleteContextDoc = (id: string): Promise<void> =>
+  http.delete(`/api/semantic/draft/context/${encodeURIComponent(id)}`).then(() => undefined)
+
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
 export function isBackendError(e: unknown): boolean {

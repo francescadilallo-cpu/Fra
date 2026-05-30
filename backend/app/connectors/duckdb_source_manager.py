@@ -481,6 +481,8 @@ class DuckDBSourceManager:
             self._ingest_postgresql(conn, cfg)
         elif ctype == "parquet":
             self._ingest_parquet(conn, cfg)
+        elif ctype == "context_doc":
+            self._ingest_context_doc(conn, cfg)
         elif ctype not in IMPLEMENTED_CONNECTOR_TYPES:
             logger.info(
                 "Source '%s' connector_type='%s' not yet implemented — skipping",
@@ -747,6 +749,12 @@ class DuckDBSourceManager:
         logger.info("PQT  %-25s %7d rows", table, n)
         if table not in cfg.target_tables:
             cfg.target_tables.append(table)
+
+    def _ingest_context_doc(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
+        """Context documents are metadata-only — no DuckDB table is created."""
+        logger.info("CTX  %-25s (context document, no DuckDB table)", cfg.label)
 
     # ── Auto-discovery ─────────────────────────────────────────────────────────
 

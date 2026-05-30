@@ -454,6 +454,8 @@ def _ensure_semantic_loaded() -> None:
                 "hr_pim": hr_pim,
             }
         )
+        # Inject any registered context documents into the LLM prompt
+        _sync_context_docs_to_layer()
 
 
 def _refresh_catalog_after_rebuild(mgr) -> None:
@@ -470,6 +472,83 @@ def _refresh_catalog_after_rebuild(mgr) -> None:
         catalog.populate_from_manager(mgr)
     except Exception as exc:
         logger.warning("_refresh_catalog_after_rebuild failed: %s", exc)
+
+
+def _sync_context_docs_to_layer() -> None:
+    """Push context_doc registry entries into the semantic layer LLM prompt."""
+    layer = _semantic_state.get("layer")
+    if layer is None:
+        return
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    docs = [
+        {"title": c.label, "content": c.params.get("content", "")}
+        for c in registry.list()
+        if c.connector_type == "context_doc"
+    ]
+    layer.set_context_docs(docs)
+
+
+def _get_semantic_draft() -> dict:
+    """Return the current semantic layer state as an editable draft dict."""
+    catalog = _semantic_state.get("catalog")
+    kg = _semantic_state.get("kg")
+
+    entities = catalog.get_draft_entities() if catalog else []
+    metrics = catalog.get_draft_metrics() if catalog else []
+
+    relations: list[dict] = []
+    if kg:
+        seen: set[tuple] = set()
+        for src, dst, data in kg.all_edges():
+            edge_type = data.get("type", "")
+            src_table = src.split(":")[0]
+            dst_table = dst.split(":")[0]
+            key = (src_table, dst_table, edge_type)
+            if key not in seen:
+                seen.add(key)
+                relations.append(
+                    {
+                        "from_table": src_table,
+                        "to_table": dst_table,
+                        "via_column": edge_type[3:]
+                        if edge_type.startswith("FK_")
+                        else "",
+                        "edge_type": edge_type,
+                    }
+                )
+
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    context_docs = [
+        {
+            "id": c.id,
+            "title": c.label,
+            "content": c.params.get("content", ""),
+            "created_at": c.connected_at,
+        }
+        for c in registry.list()
+        if c.connector_type == "context_doc"
+    ]
+
+    return {
+        "entities": entities,
+        "relations": relations,
+        "metrics": metrics,
+        "context_docs": context_docs,
+        "loaded": _semantic_state.get("loaded", False),
+        "built_at": datetime.utcnow().isoformat(),
+    }
+
+
+def reload_semantic() -> None:
+    """Force full rebuild of the semantic stack (thread-safe)."""
+    with _semantic_init_lock:
+        _semantic_state["loaded"] = False
+    _ensure_semantic_loaded()
+    _sync_context_docs_to_layer()
 
 
 # ── Pydantic models for semantic endpoints ──────────────────────────────────
@@ -518,6 +597,22 @@ class SemanticAskResponse(BaseModel):
     candidates: list[str] = []
     notes: str = ""
     ambiguity_error: bool = False
+
+
+class EntityDraftUpdate(BaseModel):
+    user_description: str | None = None
+    context_notes: str | None = None
+
+
+class MetricDraftUpdate(BaseModel):
+    description: str | None = None
+    formula: str | None = None
+    label: str | None = None
+
+
+class ContextDocCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=20000)
 
 
 class OntologyValidateRequest(BaseModel):
@@ -1558,3 +1653,159 @@ def semantic_coverage(
     }
     score = round(sum(breakdown.values()) / len(breakdown))
     return {"sector_id": sector_id, "score": score, "breakdown": breakdown}
+
+
+# ── Semantic Layer Draft endpoints ────────────────────────────────────────────
+
+
+@app.post(
+    "/api/semantic/build",
+    tags=["semantic"],
+    summary="Rebuild semantic layer and return draft config",
+)
+async def build_semantic_layer(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Force a full rebuild of the KG + catalog, then return the draft config."""
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, reload_semantic)
+    return _get_semantic_draft()
+
+
+@app.get(
+    "/api/semantic/draft",
+    tags=["semantic"],
+    summary="Get current semantic layer draft (entities, relations, metrics, context)",
+)
+def get_semantic_draft_endpoint(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    _ensure_semantic_loaded()
+    return _get_semantic_draft()
+
+
+@app.patch(
+    "/api/semantic/draft/entities/{name}",
+    tags=["semantic"],
+    summary="Update user description and context notes for an entity",
+)
+def patch_draft_entity(
+    name: str,
+    body: EntityDraftUpdate,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    ok = catalog.save_entity_draft(
+        name,
+        user_description=body.user_description,
+        context_notes=body.context_notes,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+    _sync_context_docs_to_layer()
+    return {"ok": True}
+
+
+@app.patch(
+    "/api/semantic/draft/metrics/{name}",
+    tags=["semantic"],
+    summary="Update description/formula for a metric",
+)
+def patch_draft_metric(
+    name: str,
+    body: MetricDraftUpdate,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    ok = catalog.save_metric_draft(
+        name,
+        description=body.description,
+        formula=body.formula,
+        label=body.label,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Metric '{name}' not found")
+    return {"ok": True}
+
+
+@app.get(
+    "/api/semantic/draft/context",
+    tags=["semantic"],
+    summary="List global context documents",
+)
+def list_draft_context(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    return [
+        {
+            "id": c.id,
+            "title": c.label,
+            "content": c.params.get("content", ""),
+            "created_at": c.connected_at,
+        }
+        for c in registry.list()
+        if c.connector_type == "context_doc"
+    ]
+
+
+@app.post(
+    "/api/semantic/draft/context",
+    tags=["semantic"],
+    summary="Add a global context document",
+    status_code=201,
+)
+def add_draft_context(
+    body: ContextDocCreate,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    from .connectors.source_registry import get_source_registry, SourceConfig
+
+    registry = get_source_registry()
+    doc_id = f"ctx_{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}"
+    cfg = SourceConfig(
+        id=doc_id,
+        connector_type="context_doc",
+        label=body.title,
+        params={"content": body.content},
+        target_tables=[],
+        status="active",
+    )
+    registry.upsert(cfg)
+    _sync_context_docs_to_layer()
+    return {
+        "id": doc_id,
+        "title": body.title,
+        "content": body.content,
+        "created_at": cfg.connected_at,
+    }
+
+
+@app.delete(
+    "/api/semantic/draft/context/{doc_id}",
+    tags=["semantic"],
+    summary="Remove a context document",
+)
+def delete_draft_context(
+    doc_id: str,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    cfg = registry.get(doc_id)
+    if cfg is None or cfg.connector_type != "context_doc":
+        raise HTTPException(status_code=404, detail="Context document not found")
+    registry.remove(doc_id)
+    _sync_context_docs_to_layer()
+    return {"ok": True}

@@ -14,6 +14,8 @@ import {
   getConnectorBackendDef,
   type BackendSource, type ParamField,
 } from '../api/sources'
+import { buildSemanticLayer } from '../api/semantic'
+import type { NavTab } from '../types'
 
 // ── AW Sources Panel (manufacturing only) ────────────────────────────────────
 
@@ -484,7 +486,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export default function DataSourcesView() {
+export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
   const { sectorId, sector } = useSector()
   const ontology = useExtendedOntology(sectorId)
 
@@ -501,6 +503,7 @@ export default function DataSourcesView() {
   const [credentialLoading, setCredentialLoading] = useState(false)
   const [upload, setUpload] = useState<UploadState | null>(null)
   const [ingesting, setIngesting] = useState(false)
+  const [building, setBuilding] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null)
 
   const showToast = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => {
@@ -679,6 +682,18 @@ export default function DataSourcesView() {
     'all', 'italian', 'erp', 'accounting', 'ecommerce', 'crm', 'payments', 'database', 'cloud', 'logistics',
   ]
 
+  async function handleBuildSemanticLayer() {
+    setBuilding(true)
+    try {
+      await buildSemanticLayer()
+    } catch {
+      // backend may be offline or slow; navigate anyway
+    } finally {
+      setBuilding(false)
+    }
+    onNavigate?.('sembuilder' as NavTab)
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -721,6 +736,28 @@ export default function DataSourcesView() {
             onSync={syncById}
           />
         </section>
+
+        {/* Build Semantic Layer CTA */}
+        {sources.length > 0 && (
+          <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-4 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
+              <p className="text-xs text-teal-700 mt-0.5">
+                {sources.length} source{sources.length !== 1 ? 's' : ''} connected · KG + catalog will be auto-built from schema
+              </p>
+            </div>
+            <button
+              onClick={handleBuildSemanticLayer}
+              disabled={building}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+            >
+              {building
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Building…</>
+                : <><Zap className="w-4 h-4" />Build Semantic Layer</>
+              }
+            </button>
+          </div>
+        )}
 
         {/* Connector hub */}
         <section>

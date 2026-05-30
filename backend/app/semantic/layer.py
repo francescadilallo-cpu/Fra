@@ -1084,6 +1084,10 @@ class SemanticLayer:
             logger.warning("set_manager: could not cache table list: %s", _exc)
             self._known_tables = frozenset()
 
+    def set_context_docs(self, docs: list[dict]) -> None:
+        """Inject global context documents into LLM SQL generation prompts."""
+        self._context_docs: list[dict] = list(docs or [])
+
     def _exec(self, sql: str, params: tuple = ()) -> list[dict]:
         """Execute SQL against the unified DuckDB snapshot.
 
@@ -1721,6 +1725,18 @@ class SemanticLayer:
             else "No schema available."
         )
 
+        # Append any user-supplied business context notes to the schema prompt
+        _ctx_docs = getattr(self, "_context_docs", []) or []
+        _ctx_block = ""
+        if _ctx_docs:
+            _ctx_parts = [
+                f"### {d.get('title', 'Context')}\n{d.get('content', '')}"
+                for d in _ctx_docs
+                if d.get("content")
+            ]
+            if _ctx_parts:
+                _ctx_block = "\n\n### Business Context\n" + "\n\n".join(_ctx_parts)
+
         system_prompt = (
             "You are a SQL generator for a DuckDB analytical database. "
             "Generate a single SELECT query (or CTE + SELECT) that answers the "
@@ -1731,7 +1747,7 @@ class SemanticLayer:
             "Use double-quoted identifiers when column or table names contain spaces. "
             "If the question cannot be answered from the available schema, return "
             '{"sql": "", "reason": "<explanation>"}.\n\n'
-            f"{schema_ctx}"
+            f"{schema_ctx}{_ctx_block}"
         )
         user_content = json.dumps(
             {

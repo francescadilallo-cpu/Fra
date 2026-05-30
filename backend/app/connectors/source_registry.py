@@ -64,6 +64,7 @@ IMPLEMENTED_CONNECTOR_TYPES = {
     "excel",
     "sqlite",
     "postgresql",
+    "context_doc",
 }
 
 # SaaS connectors: registered in registry but ingestion not yet implemented
