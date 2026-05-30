@@ -642,3 +642,127 @@ def test_q_certified_metrics_with_docs_certified_filter():
         assert "draft_metric" not in names
     finally:
         SemanticLayer._thread_local.docs = None
+
+
+# ── Saved queries CRUD ────────────────────────────────────────────────────────
+
+
+def test_saved_queries_crud(auth_client, tmp_path, monkeypatch):
+    """Full CRUD cycle for /api/queries/saved."""
+    import app.main as m
+
+    monkeypatch.setattr(m, "_QUERIES_DB_PATH", tmp_path / "q.db")
+
+    client, headers = auth_client
+    sector = "manufacturing"
+    qid = "test-id-001"
+
+    # List when empty
+    r = client.get(f"/api/queries/saved?sector_id={sector}", headers=headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+    # Save a query
+    payload = {
+        "id": qid,
+        "sector_id": sector,
+        "query": "What is the revenue by product?",
+        "created_at": "2024-01-01T00:00:00",
+    }
+    r = client.post("/api/queries/saved", json=payload, headers=headers)
+    assert r.status_code == 201
+    assert r.json()["id"] == qid
+
+    # List now returns it
+    r = client.get(f"/api/queries/saved?sector_id={sector}", headers=headers)
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == 1
+    assert items[0]["query"] == "What is the revenue by product?"
+
+    # Idempotent upsert (same id, different query text)
+    payload2 = {**payload, "query": "Updated question"}
+    r = client.post("/api/queries/saved", json=payload2, headers=headers)
+    assert r.status_code == 201
+
+    r = client.get(f"/api/queries/saved?sector_id={sector}", headers=headers)
+    assert r.json()[0]["query"] == "Updated question"
+
+    # Delete
+    r = client.delete(f"/api/queries/saved/{qid}", headers=headers)
+    assert r.status_code == 204
+
+    # Gone
+    r = client.get(f"/api/queries/saved?sector_id={sector}", headers=headers)
+    assert r.json() == []
+
+
+def test_saved_queries_require_auth(auth_client):
+    """Saved queries endpoints reject unauthenticated requests."""
+    client, _ = auth_client
+    assert client.get("/api/queries/saved?sector_id=x").status_code == 401
+    assert client.post("/api/queries/saved", json={}).status_code == 401
+    assert client.delete("/api/queries/saved/x").status_code == 401
+
+
+# ── Custom agents CRUD ────────────────────────────────────────────────────────
+
+
+def test_custom_agents_crud(auth_client, tmp_path, monkeypatch):
+    """Full CRUD cycle for /api/agents/custom."""
+    import app.main as m
+
+    monkeypatch.setattr(m, "_AGENTS_DB_PATH", tmp_path / "a.db")
+
+    client, headers = auth_client
+    sector = "manufacturing"
+
+    # List when empty
+    r = client.get(f"/api/agents/custom?sector_id={sector}", headers=headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+    # Create
+    agent = {
+        "id": "agent-001",
+        "sector_id": sector,
+        "name": "Test Agent",
+        "description": "A test agent",
+        "template": "monitor",
+        "entities": ["Customer"],
+        "findings": [],
+        "actions": [],
+        "trigger": {"kind": "manual"},
+    }
+    r = client.post("/api/agents/custom", json=agent, headers=headers)
+    assert r.status_code == 201
+    assert r.json()["name"] == "Test Agent"
+
+    # List
+    r = client.get(f"/api/agents/custom?sector_id={sector}", headers=headers)
+    assert len(r.json()) == 1
+
+    # Update
+    r = client.put("/api/agents/custom/agent-001", json={**agent, "name": "Updated"}, headers=headers)
+    assert r.status_code == 200
+    assert r.json()["name"] == "Updated"
+
+    # Update non-existent
+    r = client.put("/api/agents/custom/no-such", json=agent, headers=headers)
+    assert r.status_code == 404
+
+    # Delete
+    r = client.delete("/api/agents/custom/agent-001", headers=headers)
+    assert r.status_code == 204
+
+    r = client.get(f"/api/agents/custom?sector_id={sector}", headers=headers)
+    assert r.json() == []
+
+
+def test_custom_agents_require_auth(auth_client):
+    """Custom agents endpoints reject unauthenticated requests."""
+    client, _ = auth_client
+    assert client.get("/api/agents/custom?sector_id=x").status_code == 401
+    assert client.post("/api/agents/custom", json={}).status_code == 401
+    assert client.put("/api/agents/custom/x", json={}).status_code == 401
+    assert client.delete("/api/agents/custom/x").status_code == 401
