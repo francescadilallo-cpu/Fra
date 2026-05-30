@@ -175,7 +175,20 @@ export default function OverviewScreen({ onNavigate }: Props) {
             </div>
           ) : (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
-              <p className="text-sm text-slate-600">Active sector: <strong>{sector.name}</strong> — {sector.domain}</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Active sector — {sector.name}</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'Data Sources',    value: String(sector.connectors.length),  sub: sector.domain },
+                  { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
+                  { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
+                ].map(s => (
+                  <div key={s.label} className="border border-slate-200 rounded-lg px-3 py-2.5 bg-white">
+                    <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
+                    <p className="text-base font-bold text-slate-900 mt-0.5">{s.value}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">{s.sub}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

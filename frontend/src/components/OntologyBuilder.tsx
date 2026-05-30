@@ -1660,21 +1660,21 @@ function InlineChangeChip({
             <button
               onClick={() => onEdit(change)}
               className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
-              title="Edit"
+              aria-label="Edit"
             >
               <Pencil className="w-3 h-3" />
             </button>
             <button
               onClick={() => onReject(change.id)}
               className="w-5 h-5 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center"
-              title="Reject"
+              aria-label="Reject"
             >
               <XCircle className="w-3 h-3" />
             </button>
             <button
               onClick={() => onApprove(change.id)}
               className="w-5 h-5 rounded bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center"
-              title="Approve"
+              aria-label="Approve"
             >
               <CheckCircle2 className="w-3 h-3" />
             </button>
@@ -2247,7 +2247,7 @@ function EditEntityModal({
                   onClick={addProperty}
                   disabled={!newPropName.trim()}
                   className="text-teal-600 hover:text-teal-800 disabled:text-slate-300 transition-colors flex items-center justify-center"
-                  title="Add property"
+                  aria-label="Add property"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
