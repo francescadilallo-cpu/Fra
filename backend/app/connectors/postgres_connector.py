@@ -96,9 +96,18 @@ def _translate_create(body: str) -> str:
     return body
 
 
+_MAX_SQL_DUMP_BYTES = 64 * 1024 * 1024  # 64 MB — prevents OOM on Render 512 MB tier
+
+
 def _load_sql_dump_to_sqlite(sql_path: Path) -> sqlite3.Connection:
     """Parse SQL dump and load into a SQLite in-memory database."""
     logger.info("Loading ERP SQL dump from %s into SQLite (in-memory)…", sql_path)
+    file_size = sql_path.stat().st_size
+    if file_size > _MAX_SQL_DUMP_BYTES:
+        raise ValueError(
+            f"SQL dump '{sql_path.name}' is {file_size // 1024 // 1024} MB, "
+            f"exceeding the {_MAX_SQL_DUMP_BYTES // 1024 // 1024} MB limit"
+        )
     text = sql_path.read_text(encoding="utf-8")
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row

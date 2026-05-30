@@ -199,13 +199,47 @@ class SourceRegistry:
                 conn.close()
 
     def patch(self, source_id: str, **kwargs) -> SourceConfig:
-        cfg = self.get(source_id)
-        if cfg is None:
-            raise KeyError(f"Source '{source_id}' not found")
-        for k, v in kwargs.items():
-            if hasattr(cfg, k):
-                setattr(cfg, k, v)
-        self.upsert(cfg)
+        """Atomically read-modify-write a source config.
+
+        The read and write happen inside a single lock acquisition to prevent
+        a concurrent patch() call from losing its changes.
+        """
+        with self._lock:
+            conn = self._open()
+            try:
+                row = conn.execute(
+                    "SELECT * FROM sources WHERE id = ?", (source_id,)
+                ).fetchone()
+                if row is None:
+                    raise KeyError(f"Source '{source_id}' not found")
+                cfg = self._from_row(row)
+                for k, v in kwargs.items():
+                    if hasattr(cfg, k):
+                        setattr(cfg, k, v)
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO sources
+                    (id, connector_type, label, params_json, target_tables_json,
+                     row_count, status, error_msg, connected_at, last_sync_at, is_default)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cfg.id,
+                        cfg.connector_type,
+                        cfg.label,
+                        json.dumps(cfg.params),
+                        json.dumps(cfg.target_tables),
+                        cfg.row_count,
+                        cfg.status,
+                        cfg.error_msg,
+                        cfg.connected_at,
+                        cfg.last_sync_at,
+                        int(cfg.is_default),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
         return cfg
 
     def remove(self, source_id: str) -> None:
