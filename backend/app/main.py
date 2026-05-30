@@ -2051,7 +2051,11 @@ def save_query(
             (body.id, body.sector_id, body.query, body.created_at),
         )
         conn.commit()
-        return dict(conn.execute("SELECT * FROM saved_queries WHERE id=?", (body.id,)).fetchone())
+        return dict(
+            conn.execute(
+                "SELECT * FROM saved_queries WHERE id=?", (body.id,)
+            ).fetchone()
+        )
     finally:
         conn.close()
 

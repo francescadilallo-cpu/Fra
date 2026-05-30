@@ -743,7 +743,11 @@ def test_custom_agents_crud(auth_client, tmp_path, monkeypatch):
     assert len(r.json()) == 1
 
     # Update
-    r = client.put("/api/agents/custom/agent-001", json={**agent, "name": "Updated"}, headers=headers)
+    r = client.put(
+        "/api/agents/custom/agent-001",
+        json={**agent, "name": "Updated"},
+        headers=headers,
+    )
     assert r.status_code == 200
     assert r.json()["name"] == "Updated"
 
