@@ -141,7 +141,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       <section className="px-4 md:px-8 lg:px-12 py-14 border-b border-slate-100">
         <div className="max-w-4xl">
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
-            {isAW ? 'Demo — AdventureWorks 2014' : `Demo — ${sector.name}`}
+            {`Demo — ${sector.name}`}
           </span>
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
             Semantic<span className="text-teal-600">Intelligence</span>
@@ -317,9 +317,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {[
-              'Real AdventureWorks 2014 data — 31,465 orders, 4 systems',
+              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${sector.connectors.length} connected systems`,
               'Knowledge Graph with 193k nodes and 313k edges',
-              'Natural language Query AI — "Who is the top salesperson?"',
+              'Natural language Query AI — ask questions in plain English',
               'Download CSV for each entity from the Data Explorer',
             ].map(item => (
               <li key={item} className="flex items-start gap-2">

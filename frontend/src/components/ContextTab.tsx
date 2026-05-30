@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, Upload, FileText, Plus, BookOpen, Tag, BarChart2, X } from 'lucide-react'
+import { Trash2, Upload, FileText, Plus, BookOpen, Tag, BarChart2, X, Loader2 } from 'lucide-react'
 import {
   listDocuments,
   uploadDocument,
@@ -163,7 +163,7 @@ function DocumentsTab() {
       <SectionCard>
         <SectionHeader title="Uploaded documents" subtitle={`${docs.length} document${docs.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
+          <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
         ) : docs.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
             No documents uploaded. Add a file above.
@@ -182,7 +182,7 @@ function DocumentsTab() {
                 <button
                   onClick={() => handleDelete(doc.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                  title="Delete"
+                  aria-label="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -344,7 +344,7 @@ function EntitiesTab() {
       <SectionCard>
         <SectionHeader title="Defined entities" subtitle={`${entities.length} ${entities.length !== 1 ? 'entities' : 'entity'}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
+          <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
         ) : entities.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
             No entities defined. Add one above.
@@ -372,7 +372,7 @@ function EntitiesTab() {
                 <button
                   onClick={() => handleDelete(e.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Delete"
+                  aria-label="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -546,7 +546,7 @@ function MetricsTab() {
       <SectionCard>
         <SectionHeader title="Defined metrics" subtitle={`${metrics.length} metric${metrics.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
+          <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
         ) : metrics.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
             No metrics defined. Add one above.
@@ -577,7 +577,7 @@ function MetricsTab() {
                 <button
                   onClick={() => handleDelete(m.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Delete"
+                  aria-label="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -704,7 +704,7 @@ function GlossaryTab() {
       <SectionCard>
         <SectionHeader title="Glossary" subtitle={`${terms.length} term${terms.length !== 1 ? 's' : ''}`} />
         {loading ? (
-          <div className="px-5 py-8 text-center text-sm text-slate-400">Loading…</div>
+          <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
         ) : terms.length === 0 ? (
           <div className="px-5 py-8 text-center text-sm text-slate-400">
             No terms in the glossary. Add one above.
@@ -721,7 +721,7 @@ function GlossaryTab() {
                 <button
                   onClick={() => handleDelete(t.id)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Delete"
+                  aria-label="Delete"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

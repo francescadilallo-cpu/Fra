@@ -25,8 +25,8 @@ export const SECTORS: Record<SectorId, SectorConfig> = {
     id: 'manufacturing',
     name: 'Manufacturing',
     icon: '🏭',
-    domain: 'AdventureWorks · ERP × CRM × HR × PIM',
-    ontologyTitle: 'AdventureWorks Sales Ontology — Cross-source',
+    domain: 'ERP × CRM × HR × PIM',
+    ontologyTitle: 'Manufacturing Sales Ontology — Cross-source',
     funnel: [
       // count[0] → KPI "Total Orders"; count[3] → KPI "Orders Shipped"; sum(value) → KPI "Revenue 2014"
       { stage: 'Orders Received',  count: 31465, value: 22419498 },
