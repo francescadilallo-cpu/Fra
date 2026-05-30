@@ -32,6 +32,26 @@ logger = logging.getLogger(__name__)
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
+def _normalize_table_name(name: str) -> str:
+    """Strip common file extensions from an ontology source table name.
+
+    The YAML may reference source files with extensions
+    (e.g. ``dipendenti_hr.csv``, ``product_catalog_pim.json``).
+    DuckDB stores the ingested tables without extensions.
+    """
+    _KNOWN_EXT = {"csv", "json", "xlsx", "xls", "parquet", "sql"}
+    parts = name.rsplit(".", 1)
+    if len(parts) == 2 and parts[1].lower() in _KNOWN_EXT:
+        return parts[0]
+    return name
+
+
+_VIA_RE = re.compile(r"(\w+)\s*(?:→|->)\s*(\w+)\.(\w+)")
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
 def _norm_email(email: str | None) -> str | None:
     if not email:
         return None
@@ -90,6 +110,172 @@ class KnowledgeGraph:
             self._g.number_of_nodes(),
             self._g.number_of_edges(),
             self._dedup_count,
+        )
+
+    def build_from_ontology(self, mgr, ontology) -> None:
+        """Build the knowledge graph from ontology source definitions + DuckDB tables.
+
+        This is the schema-driven alternative to build(): instead of hardcoded
+        loaders per entity type, it reads entity→table mappings from the ontology
+        YAML and loads nodes directly from the DuckDB unified snapshot.
+
+        Phase 1 — Nodes: for every entity declared in the ontology, find its
+        source table in DuckDB, load all rows, and add a node per row.
+
+        Phase 2 — Edges: for every many_to_one / one_to_one relation with a
+        ``via: from_col → TargetEntity.target_pk`` definition, run a lightweight
+        SQL query to materialise edges without loading all rows into Python.
+
+        Falls back gracefully when a table is absent (partial KG is safe).
+        """
+        logger.info("Building knowledge graph from ontology…")
+
+        # Discover available DuckDB tables once
+        try:
+            available_tables = set(mgr.get_schema_info().keys())
+        except Exception as exc:
+            logger.warning("build_from_ontology: schema discovery failed: %s", exc)
+            available_tables = set()
+
+        entities_cfg: dict[str, Any] = getattr(ontology, "_entities_cfg", {})
+
+        # entity_name → DuckDB table name (after normalisation)
+        entity_table_map: dict[str, str] = {}
+        # entity_name → primary-key column name in DuckDB
+        entity_pk_map: dict[str, str] = {}
+
+        # ── Phase 1: load nodes ───────────────────────────────────────────────
+        for entity_name, entity_cfg in entities_cfg.items():
+            if not isinstance(entity_cfg, dict):
+                continue
+            sources = entity_cfg.get("sources") or []
+            if not sources:
+                continue
+
+            primary_src = sources[0]
+            raw_table = primary_src.get("table", "")
+            key_field = primary_src.get("key_field", "id")
+            table = _normalize_table_name(raw_table)
+
+            if table not in available_tables:
+                logger.debug(
+                    "build_from_ontology: entity '%s' — table '%s' not in DuckDB, skipping",
+                    entity_name,
+                    table,
+                )
+                continue
+
+            entity_table_map[entity_name] = table
+            entity_pk_map[entity_name] = key_field
+
+            safe = table.replace('"', '""')
+            try:
+                rows = mgr.execute_all(f'SELECT * FROM "{safe}"')
+            except Exception as exc:
+                logger.warning(
+                    "build_from_ontology: load failed for entity '%s' (table '%s'): %s",
+                    entity_name,
+                    table,
+                    exc,
+                )
+                continue
+
+            source_id = primary_src.get("source", "unknown")
+            loaded = 0
+            for row in rows:
+                pk_val = row.get(key_field)
+                if pk_val is None:
+                    continue
+                node_id = f"{entity_name}:{pk_val}"
+                self._add_node(
+                    node_id,
+                    entity_type=entity_name,
+                    canonical_id=pk_val,
+                    data={k: v for k, v in row.items()},
+                    provenance=[
+                        {"source": source_id, "original_id": pk_val, "table": table}
+                    ],
+                )
+                loaded += 1
+            logger.debug(
+                "build_from_ontology: %d nodes loaded for '%s'", loaded, entity_name
+            )
+
+        # ── Phase 2: build edges from relation definitions ────────────────────
+        for entity_name, entity_cfg in entities_cfg.items():
+            if not isinstance(entity_cfg, dict):
+                continue
+            from_table = entity_table_map.get(entity_name)
+            from_pk = entity_pk_map.get(entity_name)
+            if not from_table or not from_pk:
+                continue
+
+            attrs = entity_cfg.get("attributes") or {}
+            for attr_name, attr_cfg in attrs.items():
+                if not isinstance(attr_cfg, dict) or "relation" not in attr_cfg:
+                    continue
+                rel_kind = attr_cfg.get("relation", "")
+                if rel_kind == "one_to_many":
+                    continue  # no FK in the from-table, skip
+                via = str(attr_cfg.get("via", "")).strip()
+                target_entity = attr_cfg.get("target", "")
+                if not via or not target_entity:
+                    continue
+
+                m = _VIA_RE.match(via)
+                if not m:
+                    continue
+                from_col, _tgt, _tgt_key = m.groups()
+                edge_type = attr_name.upper()
+
+                safe_from = from_table.replace('"', '""')
+                safe_pk = from_pk.replace('"', '""')
+                safe_col = from_col.replace('"', '""')
+                try:
+                    edge_rows = mgr.execute(
+                        f'SELECT "{safe_pk}", "{safe_col}" '
+                        f'FROM "{safe_from}" '
+                        f'WHERE "{safe_col}" IS NOT NULL '
+                        f"LIMIT 100000"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "build_from_ontology: edge query failed %s.%s: %s",
+                        entity_name,
+                        attr_name,
+                        exc,
+                    )
+                    continue
+
+                edges_added = 0
+                for row in edge_rows:
+                    from_id = row.get(from_pk)
+                    to_id = row.get(from_col)
+                    if from_id is None or to_id is None:
+                        continue
+                    # Apply CRM dedup map if targeting Customer
+                    if target_entity == "Customer":
+                        try:
+                            to_id = self._dup_map.get(int(to_id), int(to_id))
+                        except (TypeError, ValueError):
+                            pass
+                    from_node = f"{entity_name}:{from_id}"
+                    to_node = f"{target_entity}:{to_id}"
+                    self._add_edge(from_node, to_node, edge_type)
+                    edges_added += 1
+
+                logger.debug(
+                    "build_from_ontology: %d edges %s-[%s]->%s",
+                    edges_added,
+                    entity_name,
+                    edge_type,
+                    target_entity,
+                )
+
+        logger.info(
+            "KG built from ontology: %d nodes, %d edges",
+            self._g.number_of_nodes(),
+            self._g.number_of_edges(),
         )
 
     @property

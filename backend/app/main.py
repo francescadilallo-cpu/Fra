@@ -407,7 +407,13 @@ def _ensure_semantic_loaded() -> None:
             ontology = None
 
         kg = KnowledgeGraph()
-        kg.build(erp, crm, hr_pim)
+        if ontology is not None:
+            # Schema-driven: reads entity→table mappings from the YAML, works with
+            # any registered source including custom domains beyond ERP/CRM/HR/PIM.
+            kg.build_from_ontology(_mgr, ontology)
+        else:
+            # Fallback: legacy hardcoded loaders for the golden scenario.
+            kg.build(erp, crm, hr_pim)
 
         catalog = MetadataCatalog()
         catalog.populate([erp, crm, hr_pim], ontology, kg)

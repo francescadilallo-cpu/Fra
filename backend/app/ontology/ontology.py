@@ -186,8 +186,12 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
 
     for entity_name, entity_cfg in entities.items():
         if entity_name not in known_entities:
-            raise OntologyValidationError(
-                f"Entity '{entity_name}' is not registered in canonical model"
+            # Custom entity — not in the built-in registry but valid in the YAML.
+            # Log at info so operators know it's intentional, not a typo.
+            logger.info(
+                "Ontology declares custom entity '%s' (not in canonical registry); "
+                "it will be handled as a generic entity.",
+                entity_name,
             )
         if not isinstance(entity_cfg, dict):
             raise OntologyValidationError(
@@ -283,15 +287,23 @@ class Ontology:
     def entity(self, name: str) -> type[OntologyEntity]:
         """Return the Pydantic model class for *name*.
 
-        Raises KeyError if the entity is not in the registry.
+        For custom entities not in the canonical registry, returns the base
+        OntologyEntity class (which accepts any extra fields via model_config extra=allow).
         """
-        if name not in _ENTITY_REGISTRY:
-            raise KeyError(f"Unknown entity '{name}'. Known: {list(_ENTITY_REGISTRY)}")
-        return _ENTITY_REGISTRY[name]
+        return _ENTITY_REGISTRY.get(name, OntologyEntity)
 
     def entity_names(self) -> list[str]:
-        """Return all registered entity names."""
-        return list(_ENTITY_REGISTRY.keys())
+        """Return entity names: YAML-declared entities first, then canonical registry.
+
+        This means a custom ontology with new entities (e.g. Supplier, Vendor)
+        will expose them correctly to the intent mapper and KG builder.
+        """
+        yaml_entities = list(self._entities_cfg.keys())
+        # Append registry entities not already in YAML (backward compat)
+        for name in _ENTITY_REGISTRY:
+            if name not in yaml_entities:
+                yaml_entities.append(name)
+        return yaml_entities
 
     def relations_of(self, entity: str) -> list[dict]:
         """Return relation definitions for *entity* as listed in the YAML.

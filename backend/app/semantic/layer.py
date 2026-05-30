@@ -1079,6 +1079,28 @@ class SemanticLayer:
         """Bind the DuckDB source manager for schema-driven LLM SQL generation."""
         self._mgr = mgr
 
+    def _exec(self, sql: str, params: tuple = ()) -> list[dict]:
+        """Execute SQL against the unified DuckDB snapshot.
+
+        Used by _execute_llm_sql() and any new schema-agnostic handler.
+        Falls back to the first available legacy adapter when mgr is not set
+        (e.g. in unit tests that bypass set_manager()).
+        """
+        mgr = getattr(self, "_mgr", None)
+        if mgr is not None:
+            return mgr.execute(sql, params)
+        for adapter in (
+            getattr(self, "_erp", None),
+            getattr(self, "_crm", None),
+            getattr(self, "_hr_pim", None),
+        ):
+            if adapter is not None:
+                return adapter.execute_query(sql, params)
+        raise RuntimeError(
+            "No DuckDB manager or adapter configured. "
+            "Call set_manager(mgr) before using the semantic layer."
+        )
+
     def clear_semantic_cache(self) -> None:
         """Compatibility hook for endpoint-level invalidation.
 

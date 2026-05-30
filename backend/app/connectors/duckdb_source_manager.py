@@ -765,3 +765,65 @@ class HRPIMDuckDBAdapter(_DuckDBConnectorAdapter):
         "Employee": "hr_employees",
         "Product": "pim_products",
     }
+
+
+class GenericDuckDBAdapter:
+    """Source-agnostic DuckDB adapter driven by a runtime entity→table mapping.
+
+    Unlike the hardcoded ERP/CRM/HRPIM adapters, this class accepts any
+    entity→table mapping at construction time, making it suitable for any source
+    registered at runtime (CSV, SQLite, JSON, etc.).
+
+    Usage:
+        adapter = GenericDuckDBAdapter(
+            mgr,
+            entity_table_map={"Supplier": "suppliers", "Invoice": "invoices"},
+            pk_map={"Supplier": "supplier_id", "Invoice": "invoice_id"},
+            label="erp2",
+        )
+        rows = adapter.load_entity("Supplier")  # SELECT * FROM "suppliers"
+    """
+
+    def __init__(
+        self,
+        mgr: "DuckDBSourceManager",
+        entity_table_map: dict[str, str],
+        pk_map: dict[str, str] | None = None,
+        label: str = "generic",
+    ) -> None:
+        self._mgr = mgr
+        self._entity_table_map = dict(entity_table_map)
+        self._pk_map = dict(pk_map or {})
+        self._label = label
+
+    def load_entity(self, entity_type: str) -> list[dict[str, Any]]:
+        """Load all rows for *entity_type* from its mapped DuckDB table."""
+        table = self._entity_table_map.get(entity_type)
+        if not table:
+            return []
+        safe = table.replace('"', '""')
+        try:
+            return self._mgr.execute_all(f'SELECT * FROM "{safe}"')
+        except Exception as exc:
+            logger.warning(
+                "GenericDuckDBAdapter.load_entity('%s' → table='%s') failed: %s",
+                entity_type,
+                table,
+                exc,
+            )
+            return []
+
+    def execute_query(
+        self, sql: str, params: tuple[Any, ...] = ()
+    ) -> list[dict[str, Any]]:
+        """Execute a SQL statement against the unified DuckDB snapshot."""
+        return self._mgr.execute(sql, params)
+
+    def describe(self) -> SourceMeta:
+        return SourceMeta(
+            name=self._label,
+            source_type="generic_duckdb",
+            tables=list(self._entity_table_map.values()),
+            record_counts={},
+            loaded_at=self._mgr.built_at or datetime.utcnow(),
+        )
