@@ -39,13 +39,13 @@ const JOURNEY: {
   {
     step: 4, section: 'BUILD',
     tab: 'sembuilder',   icon: BookOpen,       title: 'Semantic Layer',
-    desc: 'Define the meaning of fields. Document ambiguities ("fatturato"), map the Italian HR schema.',
+    desc: 'Define the meaning of fields. Document ambiguities, map cross-source field synonyms, and certify metrics.',
     aw: '47 semantic definitions · 2 documented ambiguities · cross-source bridges',
   },
   {
     step: 5, section: 'QUERY',
     tab: 'query',        icon: MessageSquare,  title: 'Query AI',
-    desc: 'Query the semantic layer in natural language. The engine resolves cross-source joins and ambiguities.',
+    desc: 'Ask questions in natural language. The engine resolves joins, ambiguities, and cross-source bridges automatically.',
     aw: '"Who is the top salesperson?" → Linda Mitchell $4.25M · ERP×HR join',
   },
   {
@@ -100,23 +100,23 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <span className="text-xs font-semibold text-white ml-1">{entityCount} entities · {edgeCount} relationships</span>
           </div>
           {isAW && (
-            <>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-teal-400 rounded-full" />
-                <span className="text-xs text-slate-300">Knowledge Graph</span>
-                <span className="text-xs font-semibold text-white ml-1">
-                  {semStatus?.loaded
-                    ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`
-                    : '193,062 nodes · 313,193 edges'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-teal-400 rounded-full" />
-                <span className="text-xs text-slate-300">Sources</span>
-                <span className="text-xs font-semibold text-white ml-1">ERP · CRM · HR · PIM — connected</span>
-              </div>
-            </>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-teal-400 rounded-full" />
+              <span className="text-xs text-slate-300">Knowledge Graph</span>
+              <span className="text-xs font-semibold text-white ml-1">
+                {semStatus?.loaded
+                  ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`
+                  : '193,062 nodes · 313,193 edges'}
+              </span>
+            </div>
           )}
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-teal-400 rounded-full" />
+            <span className="text-xs text-slate-300">Sources</span>
+            <span className="text-xs font-semibold text-white ml-1">
+              {sector.connectors.slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {sector.connectors.length} connected
+            </span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${agentRuns.length > 0 ? 'bg-teal-400' : 'bg-slate-500'}`} />
             <span className="text-xs text-slate-300">Agents</span>
@@ -240,7 +240,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
                   </div>
                   <p className="text-sm font-semibold text-slate-900 mb-1 group-hover:text-teal-700 transition-colors">{title}</p>
                   <p className="text-xs text-slate-500 leading-snug mb-2">{desc}</p>
-                  {aw && (
+                  {isAW && aw && (
                     <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
                   )}
                   <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -262,19 +262,39 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
-              <p className="text-3xl font-extrabold text-red-500 mb-2">4</p>
+              <p className="text-3xl font-extrabold text-red-500 mb-2">{sector.connectors.length}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
-              <p className="text-xs text-slate-500">ERP, CRM, HR, PIM — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+              <p className="text-xs text-slate-500">{sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
-              <p className="text-3xl font-extrabold text-amber-500 mb-2">372</p>
-              <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
-              <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated by 1.9%.</p>
+              {isAW ? (
+                <>
+                  <p className="text-3xl font-extrabold text-amber-500 mb-2">372</p>
+                  <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
+                  <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated by 1.9%.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-3xl font-extrabold text-amber-500 mb-2">?</p>
+                  <p className="text-sm font-semibold text-slate-900 mb-1">silent data quality issues</p>
+                  <p className="text-xs text-slate-500">Duplicates, orphaned records, and stale caches spread across systems — invisible until a query returns the wrong number.</p>
+                </>
+              )}
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-violet-400">
-              <p className="text-3xl font-extrabold text-violet-500 mb-2">"fatturato"</p>
-              <p className="text-sm font-semibold text-slate-900 mb-1">ambiguous term</p>
-              <p className="text-xs text-slate-500">subtotal_amount = $20.1M (net) or total_due = $22.4M (with tax & freight)? AI must ask, not guess.</p>
+              {isAW ? (
+                <>
+                  <p className="text-3xl font-extrabold text-violet-500 mb-2">"fatturato"</p>
+                  <p className="text-sm font-semibold text-slate-900 mb-1">ambiguous term</p>
+                  <p className="text-xs text-slate-500">subtotal_amount = $20.1M (net) or total_due = $22.4M (with tax & freight)? AI must ask, not guess.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-3xl font-extrabold text-violet-500 mb-2">≠</p>
+                  <p className="text-sm font-semibold text-slate-900 mb-1">same term, different meaning</p>
+                  <p className="text-xs text-slate-500">Fields like "revenue", "patient", or "exposure" mean different things across systems. Without disambiguation, AI returns wrong answers.</p>
+                </>
+              )}
             </div>
           </div>
         </div>
