@@ -671,6 +671,9 @@ class _RuleParser:
         ]
         if "fatturato" in q:
             has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
+            # "fatturato medio" (average revenue) → avg_revenue_by_segment
+            if "medio" in q:
+                return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
             # Q21 pattern: standalone "fatturato" with year only
             is_standalone = not has_qualifier
             if is_standalone:

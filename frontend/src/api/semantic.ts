@@ -257,18 +257,23 @@ export function adaptAskResult(result: AskResult): EngineResult {
       summary = rawAnswer
     } else if (typeof rawAnswer === 'number') {
       summary = `**${rawAnswer.toLocaleString('en-US')}**`
-    } else if (rows.length === 1 && typeof rawAnswer === 'object' && rawAnswer !== null && !Array.isArray(rawAnswer)) {
-      // Single-row dict: build summary from the first numeric field, if any
-      const entries = Object.entries(rawAnswer as Record<string, unknown>)
-      const firstNumeric = entries.find(([, v]) => typeof v === 'number')
-      if (firstNumeric) {
-        const [col, val] = firstNumeric
-        summary = `**${(val as number).toLocaleString('en-US')}** (${col})`
-      } else {
-        summary = `${rows.length} result returned`
-      }
     } else if (rows.length > 0) {
-      summary = `**${rows.length}** result${rows.length !== 1 ? 's' : ''} returned`
+      // Build a readable summary from the row data
+      const row = rows[0]
+      const entries = Object.entries(row)
+      const numericFields = entries.filter(([, v]) => typeof v === 'number')
+      if (rows.length === 1 && numericFields.length > 0) {
+        // Single-row result: list all numeric fields
+        summary = numericFields
+          .map(([col, val]) => `**${(val as number).toLocaleString('en-US')}** (${col})`)
+          .join(' · ')
+      } else if (numericFields.length > 0) {
+        // Multi-row result: show count and the key numeric column
+        const [col] = numericFields[0]
+        summary = `**${rows.length}** result${rows.length !== 1 ? 's' : ''} — see table below (${col} and more)`
+      } else {
+        summary = `**${rows.length}** result${rows.length !== 1 ? 's' : ''} returned`
+      }
     }
   }
 
@@ -282,10 +287,12 @@ export function adaptAskResult(result: AskResult): EngineResult {
     text:  SOURCE_META[s]?.text  ?? 'text-slate-700',
   }))
 
+  const finalSummary = summary || (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : '')
+
   return {
     sql: result.sql_used ?? '-- no SQL generated',
     rows,
-    summary: summary || (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : ''),
+    summary: finalSummary,
     interpreted_as: result.interpreted_as ?? '',
     chartData: result.chart_hint ? mapChartHint(result.chart_hint, rows) : undefined,
     sources,

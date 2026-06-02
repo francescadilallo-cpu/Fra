@@ -634,16 +634,18 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           )}
         </div>
 
-        {/* Summary — render **bold** as <strong> without dangerouslySetInnerHTML */}
-        <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
-          <p className="text-sm text-slate-700">
-            {r.summary.split(/(\*\*.*?\*\*)/).map((part, i) =>
-              part.startsWith('**') && part.endsWith('**')
-                ? <strong key={i}>{part.slice(2, -2)}</strong>
-                : part
-            )}
-          </p>
-        </div>
+        {/* Summary — only rendered when non-empty */}
+        {r.summary && (
+          <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
+            <p className="text-sm text-slate-700">
+              {r.summary.split(/(\*\*.*?\*\*)/).map((part, i) =>
+                part.startsWith('**') && part.endsWith('**')
+                  ? <strong key={i}>{part.slice(2, -2)}</strong>
+                  : part
+              )}
+            </p>
+          </div>
+        )}
 
         {/* Disambiguation card */}
         {r.isDisambiguation && onFollowUp && (
