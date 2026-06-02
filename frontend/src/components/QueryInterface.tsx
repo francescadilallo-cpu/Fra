@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw } from 'lucide-react'
-import { executeQuery } from '../data/queryEngine'
 import type { EngineResult, ChartData } from '../data/queryEngine'
 import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
@@ -904,9 +903,8 @@ export default function QueryInterface() {
         // Browser LLM path — direct provider call (Groq/Gemini/Claude)
         result = await executeLLMQuery(question, creds.key, creds.provider)
       } else {
-        // Pattern engine path — local, no API needed
-        await new Promise(r => setTimeout(r, 420))
-        result = executeQuery(question, ontology.nodes, sectorId)
+        // No real data source available
+        throw new Error('Backend offline — connect the backend or add an API key to query real data')
       }
 
       const entities = ontology.nodes
@@ -1029,11 +1027,11 @@ export default function QueryInterface() {
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
                 <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-semibold text-amber-800">Demo mode — results are simulated</p>
+                  <p className="text-xs font-semibold text-amber-800">No data source connected</p>
                   <p className="text-xs text-amber-700 mt-0.5">
-                    Backend is offline. Responses use a local pattern engine with demo data, not your real data.{' '}
+                    The backend is offline.{' '}
                     <button onClick={() => setShowApiPanel(true)} className="underline font-medium">Add an API key</button>
-                    {' '}or start the backend for real results.
+                    {' '}to query via LLM, or start the backend for real results.
                   </p>
                 </div>
               </div>
