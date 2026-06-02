@@ -2284,31 +2284,23 @@ class SemanticLayer:
         )
 
     def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
-        # ERP and CRM are separate connectors — join manually in Python
-        orders = self._exec(
-            "SELECT customer_ref, ROUND(SUM(total_due), 2) as total FROM sales_order_header GROUP BY customer_ref"
-        )
-        accts = {
-            r["accountId"]: r["accountType"]
-            for r in self._exec(
-                "SELECT accountId, accountType FROM account WHERE accountId > 0"
-            )
-        }
-        by_seg: dict[str, list[float]] = {}
-        for o in orders:
-            seg = accts.get(o["customer_ref"])
-            if seg:
-                by_seg.setdefault(seg, []).append(o["total"] or 0)
-        rows = [
-            {
-                "accountType": seg,
-                "n_customers": len(vals),
-                "total_revenue": round(sum(vals), 2),
-                "avg_per_customer": round(sum(vals) / len(vals), 2) if vals else 0,
-            }
-            for seg, vals in sorted(by_seg.items())
-        ]
-        sql = "-- cross-source join: ERP sales_order_header + CRM account"
+        # Single SQL join so all rows are processed inside DuckDB — avoids the
+        # 100-row cap that mgr.execute() imposes on Python-side fetches.
+        sql = """
+            SELECT
+                a.accountType,
+                COUNT(DISTINCT s.customer_ref)       AS n_customers,
+                ROUND(SUM(s.total_due), 2)           AS total_revenue,
+                ROUND(AVG(s.total_due), 2)           AS avg_per_order,
+                ROUND(SUM(s.total_due) /
+                    NULLIF(COUNT(DISTINCT s.customer_ref), 0), 2) AS avg_per_customer
+            FROM sales_order_header s
+            JOIN account a ON s.customer_ref = a.accountId
+            WHERE a.accountId > 0
+            GROUP BY a.accountType
+            ORDER BY a.accountType
+        """.strip()
+        rows = self._exec(sql)
         return Result(
             answer=rows,
             sql_used=sql,
