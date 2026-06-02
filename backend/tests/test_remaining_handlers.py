@@ -263,17 +263,22 @@ def test_customer_state_most_orders_no_orders_returns_none():
 
 def test_avg_revenue_by_segment():
     layer = _make_layer()
-    layer._mgr.execute.side_effect = [
-        [
-            {"customer_ref": 1, "total": 10_000.0},
-            {"customer_ref": 2, "total": 20_000.0},
-            {"customer_ref": 3, "total": 5_000.0},
-        ],
-        [
-            {"accountId": 1, "accountType": "B2B"},
-            {"accountId": 2, "accountType": "B2B"},
-            {"accountId": 3, "accountType": "B2C"},
-        ],
+    # Function now issues a single JOIN query — mock returns pre-aggregated rows
+    layer._mgr.execute.return_value = [
+        {
+            "accountType": "B2B",
+            "n_customers": 2,
+            "total_revenue": 30_000.0,
+            "avg_per_order": 15_000.0,
+            "avg_per_customer": 15_000.0,
+        },
+        {
+            "accountType": "B2C",
+            "n_customers": 1,
+            "total_revenue": 5_000.0,
+            "avg_per_order": 5_000.0,
+            "avg_per_customer": 5_000.0,
+        },
     ]
     result = layer._q_avg_revenue_by_segment(_intent("avg_revenue_by_segment"))
     assert result.sources_touched == ["erp", "crm"]
