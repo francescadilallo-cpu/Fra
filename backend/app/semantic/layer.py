@@ -644,6 +644,10 @@ class _RuleParser:
         ):
             return Intent(intent_type="customers_without_orders", raw_question=question)
 
+        # ── "average revenue" in English (medio + incassi after normalisation) ─
+        if "medio" in q and "incass" in q:
+            return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
+
         # ── Q21: ambiguous "fatturato" — only when standing alone ────────────
         # "fatturato totale per territorio", "fatturato per venditore", etc.
         # are contextually resolved to revenue_with_tax per golden questions hint Q7.
@@ -871,6 +875,16 @@ class _RuleParser:
                 raw_question=question,
             )
 
+        # ── top salesperson / best seller (any English phrasing with "top") ─
+        if ("venditore" in q or "venditori" in q) and "top" in q:
+            return Intent(
+                intent_type="top_salespersons_by_revenue",
+                filters={"year": year},
+                limit=limit or 3,
+                year=year,
+                raw_question=question,
+            )
+
         # ── Q7: revenue by territory ──────────────────────────────────────
         if ("territorio" in q or "territory" in q) and (
             "incass" in q or "revenue" in q or "total" in q or "fatturato" in q
@@ -946,6 +960,40 @@ class _RuleParser:
         if "quanti clienti" in q or "numero clienti" in q:
             return Intent(intent_type="count_customers_unique", raw_question=question)
 
+        # ── Domain catch-alls: fire only when no specific pattern matched ─────
+        # These ensure any question containing a recognised domain term returns
+        # something meaningful rather than an "unknown intent" error.
+        if "clienti" in q or "cliente" in q:
+            return Intent(intent_type="count_customers_unique", raw_question=question)
+        if "ordini" in q or "ordine" in q:
+            return Intent(
+                intent_type="count_orders",
+                filters={"year": year} if year else {},
+                raw_question=question,
+            )
+        if "dipendenti" in q or "dipendente" in q:
+            return Intent(intent_type="count_employees", raw_question=question)
+        if "prodotti" in q or "prodotto" in q:
+            return Intent(
+                intent_type="top_products_by_qty",
+                limit=limit or 5,
+                raw_question=question,
+            )
+        if "venditore" in q or "venditori" in q:
+            return Intent(
+                intent_type="top_salespersons_by_revenue",
+                limit=limit or 3,
+                year=year,
+                raw_question=question,
+            )
+        if "incass" in q:
+            return Intent(
+                intent_type="revenue_with_tax",
+                filters={"year": year} if year else {},
+                year=year,
+                raw_question=question,
+            )
+
         # Fallback — unknown
         return Intent(intent_type="unknown", raw_question=question)
 
@@ -995,6 +1043,7 @@ class _RuleParser:
 _EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bhow many\b"), "quanti"),
     (re.compile(r"\bnumber of\b"), "numero"),
+    (re.compile(r"\bcount\b"), "quanti"),
     (re.compile(r"\bcustomers?\b"), "clienti"),
     (re.compile(r"\bclients?\b"), "clienti"),
     (re.compile(r"\borders?\b"), "ordini"),
@@ -1007,6 +1056,12 @@ _EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bdepartments?\b"), "reparto"),
     (re.compile(r"\b(?:salary|salaries|wage|pay rate)\b"), "retribuzione"),
     (re.compile(r"\brevenue\b"), "incassi"),
+    (re.compile(r"\b(?:average|avg)\b"), "medio"),
+    (re.compile(r"\bcategor(?:y|ies)\b"), "categoria"),
+    (re.compile(r"\bmargins?\b"), "margine"),
+    (re.compile(r"\bactive\b"), "attiv"),
+    (re.compile(r"\btotal\b"), "totale"),
+    (re.compile(r"\bsales\b"), "incassi"),
 ]
 
 
@@ -1702,17 +1757,15 @@ class SemanticLayer:
         """
         provider = _llm_intent_provider()
         if provider is None:
-            # Build the hint from actual catalog entities rather than hardcoding domain names.
-            _hint_tables = (
-                sorted(self._catalog.list_entities())[:6] if self._catalog else []
-            )
-            _hint = (
-                f" Try asking about: {', '.join(_hint_tables)}." if _hint_tables else ""
-            )
             return Result(
                 answer=(
-                    "I don't recognize this question type. "
-                    "No LLM key is configured for dynamic SQL generation." + _hint
+                    "I don't recognise this question yet. "
+                    "Try: **employees** (count, salary, by department), "
+                    "**customers** (count, by state, top spender, without orders), "
+                    "**orders** (count by year, with discount), "
+                    "**products** (price lookup, top by quantity), "
+                    "**revenue** (by territory, vs quota, B2B vs B2C average), "
+                    "**salesperson** (top by revenue or orders, margin)."
                 ),
                 notes="unknown_intent_no_llm",
             )
