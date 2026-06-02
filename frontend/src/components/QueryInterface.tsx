@@ -459,25 +459,23 @@ function DisambiguationCard({ onChoose }: { onChoose: (q: string) => void }) {
         <span className="text-sm font-semibold text-amber-800">Disambiguation required — which "revenue" do you mean?</span>
       </div>
       <p className="text-xs text-slate-600 leading-relaxed">
-        The term <span className="font-mono bg-white border border-amber-200 rounded px-1 text-amber-700">fatturato</span> / "revenue" maps to two different database fields in AdventureWorks. Choose which one applies to your analysis:
+        The term <span className="font-mono bg-white border border-amber-200 rounded px-1 text-amber-700">fatturato</span> / "revenue" maps to two different metrics in the data model. Choose which definition applies to your analysis:
       </p>
       <div className="grid grid-cols-2 gap-3">
         <button
-          onClick={() => onChoose('Show net revenue subtotalAmount by territory')}
+          onClick={() => onChoose('Show net revenue by territory')}
           className="bg-white border-2 border-teal-200 hover:border-teal-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
         >
-          <p className="text-2xl font-bold text-teal-600 group-hover:text-teal-700">$20.1M</p>
-          <p className="text-xs font-semibold text-slate-800 mt-1.5">Net Revenue</p>
+          <p className="text-xs font-semibold text-slate-800">Net Revenue</p>
           <p className="text-[10px] font-mono text-slate-500 mt-0.5">subtotal_amount</p>
           <p className="text-[10px] text-slate-400 mt-1">Excl. tax &amp; freight · commercial "fatturato"</p>
           <p className="text-[10px] text-teal-600 font-medium mt-2">Use this →</p>
         </button>
         <button
-          onClick={() => onChoose('Show gross revenue totalDue billed amount by territory')}
+          onClick={() => onChoose('Show gross revenue billed amount by territory')}
           className="bg-white border-2 border-blue-200 hover:border-blue-500 rounded-xl p-4 text-left transition-all group shadow-sm hover:shadow-md"
         >
-          <p className="text-2xl font-bold text-blue-600 group-hover:text-blue-700">$22.4M</p>
-          <p className="text-xs font-semibold text-slate-800 mt-1.5">Gross Revenue</p>
+          <p className="text-xs font-semibold text-slate-800">Gross Revenue</p>
           <p className="text-[10px] font-mono text-slate-500 mt-0.5">total_due</p>
           <p className="text-[10px] text-slate-400 mt-1">Incl. tax &amp; freight · billing amount</p>
           <p className="text-[10px] text-blue-600 font-medium mt-2">Use this →</p>
@@ -832,14 +830,13 @@ export default function QueryInterface() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const isLLMActive = !!creds.key
-  const isManufacturing = sectorId === 'manufacturing'
-  const canUseBackend = backendOnline === true && isManufacturing
+  const canUseBackend = backendOnline === true
 
   const checkBackendOnce = useCallback(async () => {
     const ok = await checkBackend()
     setBackendOnline(ok)
-    setUseBackend(ok && isManufacturing)
-  }, [isManufacturing])
+    setUseBackend(ok)
+  }, [])
 
   useEffect(() => { checkBackendOnce() }, [checkBackendOnce])
 
@@ -965,23 +962,21 @@ export default function QueryInterface() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Backend status indicator */}
-            {isManufacturing && (
-              <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
-                backendOnline === null ? 'bg-slate-50 border-slate-200 text-slate-400' :
-                backendOnline ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-amber-50 border-amber-200 text-amber-700'
-              }`}>
-                {backendOnline === null
-                  ? <><Loader2 className="w-3 h-3 animate-spin" />Connecting…</>
-                  : backendOnline
-                    ? <><button onClick={() => setUseBackend(v => !v)} className="flex items-center gap-1.5">
-                        {useBackend ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3 opacity-60" />}
-                        {useBackend ? 'Backend AI' : 'Backend off'}
-                      </button></>
-                    : <><WifiOff className="w-3 h-3" />Backend offline</>
-                }
-              </div>
-            )}
+            {/* Backend status indicator — shown for all sectors */}
+            <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              backendOnline === null ? 'bg-slate-50 border-slate-200 text-slate-400' :
+              backendOnline ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-amber-50 border-amber-200 text-amber-700'
+            }`}>
+              {backendOnline === null
+                ? <><Loader2 className="w-3 h-3 animate-spin" />Connecting…</>
+                : backendOnline
+                  ? <><button onClick={() => setUseBackend(v => !v)} className="flex items-center gap-1.5">
+                      {useBackend ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3 opacity-60" />}
+                      {useBackend ? 'Backend AI' : 'Backend off'}
+                    </button></>
+                  : <><WifiOff className="w-3 h-3" />Demo mode</>
+              }
+            </div>
             {queryCount > 0 && (
               <button
                 onClick={() => setMessages([])}
@@ -1029,16 +1024,16 @@ export default function QueryInterface() {
               </p>
             </div>
 
-            {/* Offline hint — only when backend is confirmed offline and no LLM key configured */}
-            {isManufacturing && backendOnline === false && !isLLMActive && (
+            {/* Offline hint — backend confirmed offline and no LLM key configured */}
+            {backendOnline === false && !isLLMActive && (
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
                 <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-semibold text-amber-800">Backend offline — using pattern engine</p>
+                  <p className="text-xs font-semibold text-amber-800">Demo mode — results are simulated</p>
                   <p className="text-xs text-amber-700 mt-0.5">
-                    Results come from the local query engine. For full AI answers,{' '}
-                    <button onClick={() => setShowApiPanel(true)} className="underline font-medium">add an API key</button>
-                    {' '}or start the backend.
+                    Backend is offline. Responses use a local pattern engine with demo data, not your real data.{' '}
+                    <button onClick={() => setShowApiPanel(true)} className="underline font-medium">Add an API key</button>
+                    {' '}or start the backend for real results.
                   </p>
                 </div>
               </div>
