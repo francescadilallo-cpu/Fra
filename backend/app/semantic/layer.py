@@ -551,6 +551,7 @@ class _RuleParser:
 
     # Compiled patterns (order matters — more specific first)
     _YEAR_RE = re.compile(r"\b(20\d{2})\b")
+    _YEAR_RANGE_RE = re.compile(r"\b(20\d{2})\s*[-–/]\s*(20\d{2})\b")
     _LIMIT_RE = re.compile(r"\btop[\s-]?(\d+)\b", re.IGNORECASE)
     _DEPT_RE = re.compile(
         r'"([^"]+)"|\'([^\']+)\'|reparto\s+([A-Za-z &]+)', re.IGNORECASE
@@ -646,7 +647,11 @@ class _RuleParser:
 
         # ── "average revenue" in English (medio + incassi after normalisation) ─
         if "medio" in q and "incass" in q:
-            return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
+            return Intent(
+                intent_type="avg_revenue_by_segment",
+                filters=self._seg_filters(q, question, year),
+                raw_question=question,
+            )
 
         # ── Q21: ambiguous "fatturato" — only when standing alone ────────────
         # "fatturato totale per territorio", "fatturato per venditore", etc.
@@ -678,7 +683,9 @@ class _RuleParser:
             # "fatturato medio" (average revenue) → avg_revenue_by_segment
             if "medio" in q:
                 return Intent(
-                    intent_type="avg_revenue_by_segment", raw_question=question
+                    intent_type="avg_revenue_by_segment",
+                    filters=self._seg_filters(q, question, year),
+                    raw_question=question,
                 )
             # Q21 pattern: standalone "fatturato" with year only
             is_standalone = not has_qualifier
@@ -816,7 +823,11 @@ class _RuleParser:
         if ("b2b" in q or "b2c" in q) and (
             "fatturato" in q or "incass" in q or "medio" in q or "revenue" in q
         ):
-            return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
+            return Intent(
+                intent_type="avg_revenue_by_segment",
+                filters=self._seg_filters(q, question, year),
+                raw_question=question,
+            )
 
         # ── Q4: B2B active companies ──────────────────────────────────────
         if ("b2b" in q or "aziende" in q) and ("attiv" in q or "client" in q):
@@ -936,7 +947,11 @@ class _RuleParser:
         if ("b2b" in q or "b2c" in q or "segment" in q) and (
             "incass" in q or "revenue" in q or "medio" in q
         ):
-            return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
+            return Intent(
+                intent_type="avg_revenue_by_segment",
+                filters=self._seg_filters(q, question, year),
+                raw_question=question,
+            )
 
         # ── Q18: category with highest margin ─────────────────────────────
         if "categoria" in q and "margine" in q:
@@ -1003,6 +1018,26 @@ class _RuleParser:
         m = self._YEAR_RE.search(text)
         return int(m.group(1)) if m else None
 
+    def _extract_year_range(self, text: str) -> tuple[int, int] | None:
+        m = self._YEAR_RANGE_RE.search(text)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+        return None
+
+    def _seg_filters(self, q: str, question: str, year: int | None) -> dict:
+        """Build segment + year filters for avg_revenue_by_segment intents."""
+        filters: dict = {}
+        yr = self._extract_year_range(question)
+        if yr:
+            filters["year_from"], filters["year_to"] = yr
+        elif year:
+            filters["year"] = year
+        if any(kw in q for kw in ["b2b", "aziende"]):
+            filters["segment"] = "B2B"
+        elif "b2c" in q:
+            filters["segment"] = "B2C"
+        return filters
+
     def _extract_limit(self, text: str) -> int | None:
         m = self._LIMIT_RE.search(text)
         return int(m.group(1)) if m else None
@@ -1062,6 +1097,7 @@ _EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bactive\b"), "attiv"),
     (re.compile(r"\btotal\b"), "totale"),
     (re.compile(r"\bsales\b"), "incassi"),
+    (re.compile(r"\bcompan(?:y|ies)\b"), "aziende"),
 ]
 
 
@@ -2339,9 +2375,28 @@ class SemanticLayer:
         )
 
     def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
-        # Single SQL join so all rows are processed inside DuckDB — avoids the
-        # 100-row cap that mgr.execute() imposes on Python-side fetches.
-        sql = """
+        # Build WHERE conditions — year and segment come from intent.filters.
+        conditions = ["a.accountId > 0"]
+
+        year = intent.year or intent.filters.get("year")
+        year_from = intent.filters.get("year_from")
+        year_to = intent.filters.get("year_to")
+        segment = intent.filters.get("segment")
+
+        if year_from and year_to:
+            conditions.append(
+                f"YEAR(s.order_date) BETWEEN {int(year_from)} AND {int(year_to)}"
+            )
+        elif year:
+            conditions.append(f"YEAR(s.order_date) = {int(year)}")
+
+        # segment is set only from a safe whitelist ("B2B" or "B2C")
+        if segment in ("B2B", "B2C"):
+            conditions.append(f"a.accountType = '{segment}'")
+
+        where = " AND ".join(conditions)
+
+        sql = f"""
             SELECT
                 a.accountType,
                 COUNT(DISTINCT s.customer_ref)       AS n_customers,
@@ -2351,7 +2406,7 @@ class SemanticLayer:
                     NULLIF(COUNT(DISTINCT s.customer_ref), 0), 2) AS avg_per_customer
             FROM sales_order_header s
             JOIN account a ON s.customer_ref = a.accountId
-            WHERE a.accountId > 0
+            WHERE {where}
             GROUP BY a.accountType
             ORDER BY a.accountType
         """.strip()
@@ -2364,7 +2419,10 @@ class SemanticLayer:
                 **self._prov("SalesOrder", ["customer_ref", "total_due"]),
                 **self._prov("Customer", ["accountType"]),
             },
-            notes="total_revenue and avg_per_customer values in USD ($). revenue = SUM(total_due).",
+            notes=(
+                "total_revenue and avg_per_customer values in USD ($). "
+                "revenue = SUM(total_due)."
+            ),
         )
 
     def _q_top_category_by_margin(self, intent: Intent) -> Result:
