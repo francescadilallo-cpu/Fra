@@ -129,6 +129,7 @@ export interface AskResult {
   candidates: string[]
   ambiguity_error: boolean
   chart_hint: { type: string; label_col: string; value_col: string } | null
+  notes: string | null
 }
 
 export interface CoverageResult {
@@ -287,7 +288,13 @@ export function adaptAskResult(result: AskResult): EngineResult {
     text:  SOURCE_META[s]?.text  ?? 'text-slate-700',
   }))
 
-  const finalSummary = summary || (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : '')
+  // notes is a last-resort fallback: some handlers (impossible, entity_not_modeled)
+  // set answer=null with the explanation only in notes. This ensures the user
+  // always sees a message rather than an empty response.
+  const finalSummary =
+    summary ||
+    (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : '') ||
+    (typeof result.notes === 'string' ? result.notes : '')
 
   return {
     sql: result.sql_used ?? '-- no SQL generated',

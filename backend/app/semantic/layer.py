@@ -2592,15 +2592,19 @@ class SemanticLayer:
         reason = intent.filters.get("reason", "unknown")
         messages = {
             "nationality_not_available": (
-                "The field 'employee nationality' is not available in any of the data sources "
-                "(ERP, CRM, HR/PIM). AdventureWorks does not contain this attribute. "
-                "Unable to answer the question."
+                "This data is not available. The field 'employee nationality' does not "
+                "exist in any of the connected sources (ERP, CRM, HR/PIM). "
+                "The AdventureWorks dataset does not capture nationality information."
             ),
         }
+        msg = messages.get(
+            reason,
+            "This question cannot be answered with the current data sources.",
+        )
         return Result(
-            answer=None,
+            answer=msg,
             sources_touched=[],
-            notes=messages.get(reason, "Data not available in the current sources."),
+            notes=msg,
             disambiguation_required=False,
         )
 
@@ -2615,14 +2619,19 @@ class SemanticLayer:
         elif self._catalog:
             available = ", ".join(sorted(self._catalog.list_entities())[:12])
         else:
-            available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
+            available = (
+                "Customer, SalesOrder, SalesOrderLine, Product, Employee, "
+                "Territory, Salesperson"
+            )
+        msg = (
+            f"**{entity}** is not part of the connected data model. "
+            f"The semantic layer covers: {available}. "
+            f"If you need {entity} data, it would need to be added as a new source."
+        )
         return Result(
-            answer=None,
+            answer=msg,
             sources_touched=[],
-            notes=(
-                f"The entity '{entity}' is not modeled in the semantic layer. "
-                f"Available entities are: {available}."
-            ),
+            notes=msg,
             disambiguation_required=False,
         )
 

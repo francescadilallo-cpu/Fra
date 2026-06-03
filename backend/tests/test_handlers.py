@@ -212,15 +212,20 @@ def test_impossible_known_reason():
     result = layer._q_impossible(
         _intent("impossible", filters={"reason": "nationality_not_available"})
     )
-    assert result.answer is None
-    assert "nationality" in result.notes.lower()
+    # answer now carries the user-facing explanation (not None)
+    assert isinstance(result.answer, str)
+    assert "nationality" in result.answer.lower()
     assert result.sources_touched == []
 
 
 def test_impossible_unknown_reason_fallback():
     layer = _make_layer()
     result = layer._q_impossible(_intent("impossible", filters={"reason": "xyzzy"}))
-    assert "not available" in result.notes
+    assert isinstance(result.answer, str)
+    assert (
+        "not available" in result.answer.lower()
+        or "cannot be answered" in result.answer.lower()
+    )
     assert result.sources_touched == []
 
 
@@ -231,18 +236,17 @@ def test_entity_not_modeled_no_docs():
     """Without docs or ontology, falls back to catalog or hardcoded entity list."""
     layer = _make_layer()
     # With _ontology=None and catalog returning only ["SalesOrder"], the catalog
-    # branch is used. Verify the requested entity name appears and the catalog
-    # entity list is present.
+    # branch is used. Verify the requested entity name appears in the answer.
     result = layer._q_entity_not_modeled(
         _intent("entity_not_modeled", filters={"entity": "Supplier"})
     )
-    assert result.answer is None
-    assert "Supplier" in result.notes
-    assert "SalesOrder" in result.notes  # catalog entity list present
+    assert isinstance(result.answer, str)
+    assert "Supplier" in result.answer
+    assert "SalesOrder" in result.answer  # catalog entity list present
 
 
 def test_entity_not_modeled_with_docs_uses_doc_entities():
-    """With docs, doc entity names appear in the notes."""
+    """With docs, doc entity names appear in the answer."""
     from app.semantic.doc_schema import SemanticDocs
 
     layer = _make_layer()
@@ -260,7 +264,7 @@ def test_entity_not_modeled_with_docs_uses_doc_entities():
         _intent("entity_not_modeled", filters={"entity": "Sprocket"})
     )
 
-    assert "Widget" in result.notes
+    assert "Widget" in result.answer
 
 
 # ── _q_revenue_with_tax ───────────────────────────────────────────────────────
