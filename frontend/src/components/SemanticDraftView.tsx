@@ -598,7 +598,8 @@ function QueryTemplatesTab({
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Query Templates let you define reusable SQL patterns matched by keywords.
+        Query Templates are auto-generated from your semantic layer at build time and matched by keywords.
+        You can add custom ones or edit any template — edited templates survive future rebuilds.
         Use <code className="font-mono bg-slate-100 px-1 rounded">{'{year}'}</code> and{' '}
         <code className="font-mono bg-slate-100 px-1 rounded">{'{limit}'}</code> as safe substitution tokens.
       </p>
@@ -695,6 +696,9 @@ function QueryTemplateCard({
             {template.intent_type}
           </span>
           <span className="text-sm font-semibold text-slate-800 truncate">{template.name}</span>
+          {template.auto_generated && (
+            <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full flex-shrink-0">auto</span>
+          )}
           {!template.is_active && (
             <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full flex-shrink-0">inactive</span>
           )}

@@ -348,6 +348,7 @@ export interface QueryTemplate {
   sources: string[]
   intent_type: string
   is_active: boolean
+  auto_generated: boolean
   created_at: string
   updated_at: string
 }

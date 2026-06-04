@@ -46,6 +46,7 @@ from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
+from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
 from .context.store import default_store as _context_store
 
@@ -1730,6 +1731,15 @@ async def build_semantic_layer(
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, reload_semantic)
+    # Auto-generate templates from the freshly-built schema
+    catalog = _semantic_state.get("catalog")
+    layer = _semantic_state.get("layer")
+    if catalog is not None and layer is not None:
+        draft = _get_semantic_draft()
+        auto_tpls = generate_templates_from_draft(draft)
+        n = catalog.upsert_auto_templates(auto_tpls)
+        logger.info("Auto-generated %d query templates from semantic layer", n)
+        layer.set_templates(catalog.list_templates())
     return _get_semantic_draft()
 
 

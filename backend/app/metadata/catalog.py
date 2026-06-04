@@ -94,6 +94,7 @@ class QueryTemplateRow(Base):
     created_at = Column(String, default="")
     updated_at = Column(String, default="")
     is_active = Column(Integer, default=1)
+    auto_generated = Column(Integer, default=0)
 
 
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
@@ -299,6 +300,12 @@ class MetadataCatalog:
                     conn.execute(f"ALTER TABLE entity_meta ADD COLUMN {col} {ddl}")
                 except Exception:
                     pass  # column already exists
+            try:
+                conn.execute(
+                    "ALTER TABLE query_templates ADD COLUMN auto_generated INTEGER DEFAULT 0"
+                )
+            except Exception:
+                pass  # column already exists
             conn.commit()
         finally:
             conn.close()
@@ -631,6 +638,7 @@ class MetadataCatalog:
             "sources": json.loads(row.sources_json or "[]"),
             "intent_type": f"tpl_{row.id}",
             "is_active": bool(row.is_active),
+            "auto_generated": bool(row.auto_generated),
             "created_at": row.created_at or "",
             "updated_at": row.updated_at or "",
         }
@@ -691,6 +699,7 @@ class MetadataCatalog:
             if "sources" in kwargs and kwargs["sources"] is not None:
                 row.sources_json = json.dumps(kwargs["sources"])
             row.updated_at = now
+            row.auto_generated = 0
             result = self._template_to_dict(row)
         return result
 
@@ -704,6 +713,48 @@ class MetadataCatalog:
                 raise KeyError(f"Template {template_id} not found")
             row.is_active = 0
             row.updated_at = now
+
+    def upsert_auto_templates(self, templates: list[dict]) -> int:
+        """Insert or update auto-generated templates.
+
+        Rules:
+        - If name exists with auto_generated=1: update sql/keywords/sources.
+        - If name exists with auto_generated=0 (user-edited): skip — never overwrite.
+        - If name does not exist: insert with auto_generated=1.
+        Returns count of upserted templates.
+        """
+        import json
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        with self._Session() as s:
+            for tpl in templates:
+                existing = s.query(QueryTemplateRow).filter_by(name=tpl["name"]).first()
+                if existing is not None:
+                    if not existing.auto_generated:
+                        continue  # user-owned — do not overwrite
+                    existing.sql_query = tpl["sql_query"]
+                    existing.keywords_json = json.dumps(tpl.get("keywords", []))
+                    existing.sources_json = json.dumps(tpl.get("sources", []))
+                    existing.description = tpl.get("description", "")
+                    existing.updated_at = now
+                    count += 1
+                else:
+                    row = QueryTemplateRow(
+                        name=tpl["name"],
+                        description=tpl.get("description", ""),
+                        sql_query=tpl["sql_query"],
+                        keywords_json=json.dumps(tpl.get("keywords", [])),
+                        sources_json=json.dumps(tpl.get("sources", [])),
+                        created_at=now,
+                        updated_at=now,
+                        is_active=1,
+                        auto_generated=1,
+                    )
+                    s.add(row)
+                    count += 1
+        return count
 
     # ── internal helpers ──────────────────────────────────────────────────────
 
