@@ -455,9 +455,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setReporting(false)
   }
 
-  const funnel = sector.funnel
-  const totalQuotes = funnel[0]?.count ?? 0
-  const totalOrders = funnel[Math.min(3, funnel.length - 1)]?.count ?? 0
+  const funnel = liveConfig?.funnel ?? sector.funnel
+  const totalQuotes = liveConfig?.funnel?.[0]?.count ?? sector.funnel[0]?.count ?? 0
+  const totalOrders = liveConfig?.funnel?.[2]?.count ?? sector.funnel[Math.min(3, sector.funnel.length - 1)]?.count ?? 0
   const conversion = totalQuotes > 0 ? Math.round((totalOrders / totalQuotes) * 100) : 0
   const openValue = funnel.reduce((s, f) => s + f.value, 0)
   const hasMonetary = funnel.some(f => f.value > 0)

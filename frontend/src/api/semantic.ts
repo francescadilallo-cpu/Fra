@@ -449,6 +449,8 @@ export interface LiveConfig {
     edges: LiveOntologyEdge[]
   }
   metrics: { name: string; label: string; formula: string; unit: string }[]
+  funnel: { stage: string; count: number; value: number }[] | null
+  process_stages: { key: string; label: string }[]
   built_at: string
 }
 

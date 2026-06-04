@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
+import { getLiveConfig, type LiveConfig } from '../api/semantic'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -304,6 +305,11 @@ function fmt(v: number) {
 export default function ProcessView() {
   const { sectorId, sector } = useSector()
 
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+  }, [])
+
   // Pipeline state
   const [runState, setRunState] = useState<RunState>('idle')
   const [statuses, setStatuses] = useState<Record<StepId, StepStatus>>(IDLE_STATUSES)
@@ -408,7 +414,8 @@ export default function ProcessView() {
   const progressPct = Math.min(100, Math.round((elapsed / TOTAL_MS) * 100))
   const activeStepIdx = PIPELINE_STEPS.findIndex(s => statuses[s.id] === 'running')
   const summary = SECTOR_SUMMARY[sectorId]
-  const funnel = sector.funnel
+  const funnel = liveConfig?.funnel ?? sector.funnel
+  const processStages = (liveConfig?.process_stages?.length ? liveConfig.process_stages : sector.processStages)
   const maxCount = funnel[0]?.count ?? 1
 
   return (
@@ -528,7 +535,7 @@ export default function ProcessView() {
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
-          {sector.processStages.map((stage, i) => {
+          {processStages.map((stage, i) => {
             const style = STAGE_STYLES[i % STAGE_STYLES.length]
             const Icon = style.icon
             const funnelItem = funnel[Math.min(i, funnel.length - 1)]
@@ -550,7 +557,7 @@ export default function ProcessView() {
                     <span>{AVG_DAYS[i % AVG_DAYS.length]}</span>
                   </div>
                 </div>
-                {i < sector.processStages.length - 1 && (
+                {i < processStages.length - 1 && (
                   <div className="mt-10 text-slate-300 text-xl font-light flex-shrink-0">→</div>
                 )}
               </div>
