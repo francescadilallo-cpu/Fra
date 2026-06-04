@@ -916,6 +916,39 @@ class MetadataCatalog:
 
     # ── per-source population ─────────────────────────────────────────────────
 
+    def _get_available_tables(
+        self, mgr=None, connectors: list | None = None
+    ) -> set[str]:
+        """Return the set of table names currently available in the data layer.
+
+        Queries ``mgr`` (DuckDBSourceManager) when provided, otherwise falls
+        back to querying the legacy per-domain connectors via SHOW TABLES / the
+        adapter describe() method.  Returns an empty set on any error so callers
+        can safely check membership without crashing.
+        """
+        if mgr is not None:
+            try:
+                rows = mgr.execute("SHOW TABLES")
+                # DuckDB SHOW TABLES returns dicts with a 'name' key
+                tables = {r.get("name", "") for r in rows if r.get("name")}
+                if tables:
+                    return tables
+                # Fallback: get_schema_info is authoritative
+                schema = mgr.get_schema_info()
+                return set(schema.keys())
+            except Exception as exc:
+                logger.debug("_get_available_tables: mgr query failed: %s", exc)
+                return set()
+
+        available: set[str] = set()
+        for c in connectors or []:
+            try:
+                meta = c.describe()
+                available.update(meta.tables)
+            except Exception as exc:
+                logger.debug("_get_available_tables: describe() failed: %s", exc)
+        return available
+
     def _populate_metrics(self, session: Session, ontology) -> None:
         # Static metric definitions
         metrics = [
@@ -972,137 +1005,182 @@ class MetadataCatalog:
         if erp is None and mgr is None:
             return
 
+        expected_tables = {
+            "sales_order_header",
+            "sales_order_line",
+            "salesperson",
+            "territory",
+        }
+        available = self._get_available_tables(mgr=mgr, connectors=connectors)
+        if available and not (expected_tables & available):
+            logger.debug(
+                "_populate_erp: none of %s found in available tables, skipping",
+                expected_tables,
+            )
+            return
+
         # SalesOrder
-        orders_count = _count_rows("sales_order_header", erp, mgr)
-        orders_sample = _sample_rows("sales_order_header", erp, mgr)
-        self._upsert_entity(
-            session,
-            name="SalesOrder",
-            description="Sales order header.",
-            primary_key="order_id",
-            sources=[
-                {"source": "erp", "table": "sales_order_header", "key": "order_id"}
-            ],
-            record_count=orders_count,
-            freshness=now,
-            quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=0,
-        )
-        _catalog_columns(
-            session,
-            self._upsert_attribute,
-            entity="SalesOrder",
-            rows=orders_sample,
-            source_prefix="erp.sales_order_header",
-            field_definitions={
-                "order_id": "Identificatore ordine",
-                "order_number": "Numero ordine (stringa, es. SO43659)",
-                "order_date": "Data ordine",
-                "total_due": "Totale dovuto (subtotale + tasse + spedizione)",
-                "subtotal_amount": "Ricavi puri (senza tasse)",
-                "customer_ref": "Riferimento cliente (CRM accountId)",
-                "salesperson_ref": "Riferimento venditore (HR MatricolaDip)",
-                "territory_ref": "Riferimento territorio",
-            },
-            lineage={
-                "subtotal_amount": [
-                    {
-                        "metric": "revenue",
-                        "entity": "SalesOrder",
-                        "source_field": "subtotal_amount",
-                    }
+        if not available or "sales_order_header" in available:
+            orders_count = _count_rows("sales_order_header", erp, mgr)
+            orders_sample = _sample_rows("sales_order_header", erp, mgr)
+            self._upsert_entity(
+                session,
+                name="SalesOrder",
+                description="Sales order header.",
+                primary_key="order_id",
+                sources=[
+                    {"source": "erp", "table": "sales_order_header", "key": "order_id"}
                 ],
-                "total_due": [
-                    {
-                        "metric": "revenue_with_tax",
-                        "entity": "SalesOrder",
-                        "source_field": "total_due",
-                    }
-                ],
-            },
-        )
+                record_count=orders_count,
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": False,
+                },
+                kg_node_count=0,
+            )
+            _catalog_columns(
+                session,
+                self._upsert_attribute,
+                entity="SalesOrder",
+                rows=orders_sample,
+                source_prefix="erp.sales_order_header",
+                field_definitions={
+                    "order_id": "Identificatore ordine",
+                    "order_number": "Numero ordine (stringa, es. SO43659)",
+                    "order_date": "Data ordine",
+                    "total_due": "Totale dovuto (subtotale + tasse + spedizione)",
+                    "subtotal_amount": "Ricavi puri (senza tasse)",
+                    "customer_ref": "Riferimento cliente (CRM accountId)",
+                    "salesperson_ref": "Riferimento venditore (HR MatricolaDip)",
+                    "territory_ref": "Riferimento territorio",
+                },
+                lineage={
+                    "subtotal_amount": [
+                        {
+                            "metric": "revenue",
+                            "entity": "SalesOrder",
+                            "source_field": "subtotal_amount",
+                        }
+                    ],
+                    "total_due": [
+                        {
+                            "metric": "revenue_with_tax",
+                            "entity": "SalesOrder",
+                            "source_field": "total_due",
+                        }
+                    ],
+                },
+            )
 
         # SalesOrderLine
-        lines_count = _count_rows("sales_order_line", erp, mgr)
-        lines_sample = _sample_rows("sales_order_line", erp, mgr)
-        self._upsert_entity(
-            session,
-            name="SalesOrderLine",
-            description="Sales order line item.",
-            primary_key="(order_id, line_id)",
-            sources=[{"source": "erp", "table": "sales_order_line"}],
-            record_count=lines_count,
-            freshness=now,
-            quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=0,
-        )
-        _catalog_columns(
-            session,
-            self._upsert_attribute,
-            entity="SalesOrderLine",
-            rows=lines_sample,
-            source_prefix="erp.sales_order_line",
-            field_definitions={
-                "product_ref": "Riferimento prodotto (PIM internal_id)",
-                "qty": "Quantità ordinata",
-                "unit_price": "Prezzo unitario",
-                "line_total": "Totale riga",
-                "offer_ref": "Offerta applicata (1 = nessuna offerta)",
-            },
-            lineage={
-                "qty": [
-                    {
-                        "metric": "margin",
-                        "entity": "SalesOrderLine",
-                        "source_field": "qty",
-                    }
-                ],
-                "line_total": [
-                    {
-                        "metric": "margin",
-                        "entity": "SalesOrderLine",
-                        "source_field": "line_total",
-                    }
-                ],
-            },
-        )
+        if not available or "sales_order_line" in available:
+            lines_count = _count_rows("sales_order_line", erp, mgr)
+            lines_sample = _sample_rows("sales_order_line", erp, mgr)
+            self._upsert_entity(
+                session,
+                name="SalesOrderLine",
+                description="Sales order line item.",
+                primary_key="(order_id, line_id)",
+                sources=[{"source": "erp", "table": "sales_order_line"}],
+                record_count=lines_count,
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": False,
+                },
+                kg_node_count=0,
+            )
+            _catalog_columns(
+                session,
+                self._upsert_attribute,
+                entity="SalesOrderLine",
+                rows=lines_sample,
+                source_prefix="erp.sales_order_line",
+                field_definitions={
+                    "product_ref": "Riferimento prodotto (PIM internal_id)",
+                    "qty": "Quantità ordinata",
+                    "unit_price": "Prezzo unitario",
+                    "line_total": "Totale riga",
+                    "offer_ref": "Offerta applicata (1 = nessuna offerta)",
+                },
+                lineage={
+                    "qty": [
+                        {
+                            "metric": "margin",
+                            "entity": "SalesOrderLine",
+                            "source_field": "qty",
+                        }
+                    ],
+                    "line_total": [
+                        {
+                            "metric": "margin",
+                            "entity": "SalesOrderLine",
+                            "source_field": "line_total",
+                        }
+                    ],
+                },
+            )
 
         # Salesperson
-        kg_count_sp = kg.subgraph("Salesperson").number_of_nodes()
-        self._upsert_entity(
-            session,
-            name="Salesperson",
-            description="Venditore (sub-ruolo di Employee, con attributi commerciali).",
-            primary_key="salesperson_id",
-            sources=[
-                {"source": "erp", "table": "salesperson", "key": "salesperson_id"},
-                {"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"},
-            ],
-            record_count=_count_rows("salesperson", erp, mgr),
-            freshness=now,
-            quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=kg_count_sp,
-        )
+        if not available or "salesperson" in available:
+            kg_count_sp = kg.subgraph("Salesperson").number_of_nodes()
+            self._upsert_entity(
+                session,
+                name="Salesperson",
+                description="Venditore (sub-ruolo di Employee, con attributi commerciali).",
+                primary_key="salesperson_id",
+                sources=[
+                    {"source": "erp", "table": "salesperson", "key": "salesperson_id"},
+                    {
+                        "source": "hr_pim",
+                        "table": "dipendenti_hr",
+                        "key": "MatricolaDip",
+                    },
+                ],
+                record_count=_count_rows("salesperson", erp, mgr),
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": False,
+                },
+                kg_node_count=kg_count_sp,
+            )
 
         # Territory
-        kg_count_t = kg.subgraph("Territory").number_of_nodes()
-        self._upsert_entity(
-            session,
-            name="Territory",
-            description="Territorio commerciale.",
-            primary_key="territory_id",
-            sources=[{"source": "erp", "table": "territory", "key": "territory_id"}],
-            record_count=_count_rows("territory", erp, mgr),
-            freshness=now,
-            quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=kg_count_t,
-        )
+        if not available or "territory" in available:
+            kg_count_t = kg.subgraph("Territory").number_of_nodes()
+            self._upsert_entity(
+                session,
+                name="Territory",
+                description="Territorio commerciale.",
+                primary_key="territory_id",
+                sources=[
+                    {"source": "erp", "table": "territory", "key": "territory_id"}
+                ],
+                record_count=_count_rows("territory", erp, mgr),
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": False,
+                },
+                kg_node_count=kg_count_t,
+            )
 
     def _populate_crm(
         self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
         crm = _find_connector(connectors, "crm")
         if crm is None and mgr is None:
+            return
+
+        expected_tables = {"account"}
+        available = self._get_available_tables(mgr=mgr, connectors=connectors)
+        if available and not (expected_tables & available):
+            logger.debug(
+                "_populate_crm: none of %s found in available tables, skipping",
+                expected_tables,
+            )
             return
 
         total_count = _count_rows("account", crm, mgr)
@@ -1152,98 +1230,117 @@ class MetadataCatalog:
         if hr_pim is None and mgr is None:
             return
 
-        emp_count = _count_rows("dipendenti_hr", hr_pim, mgr)
-        emp_sample = _sample_rows("dipendenti_hr", hr_pim, mgr)
-        kg_count_e = kg.subgraph("Employee").number_of_nodes()
-        null_rate_pay = _null_rate(emp_sample, "RetribuzioneOraria")
+        expected_tables = {"dipendenti_hr", "product_catalog_pim"}
+        available = self._get_available_tables(mgr=mgr, connectors=connectors)
+        if available and not (expected_tables & available):
+            logger.debug(
+                "_populate_hr_pim: none of %s found in available tables, skipping",
+                expected_tables,
+            )
+            return
 
-        self._upsert_entity(
-            session,
-            name="Employee",
-            description="Dipendente HR. MatricolaDip è anche salesperson_id in ERP.",
-            primary_key="MatricolaDip",
-            sources=[
-                {"source": "hr_pim", "table": "dipendenti_hr", "key": "MatricolaDip"}
-            ],
-            record_count=emp_count,
-            freshness=now,
-            quality_flags={
-                "duplicates_detected": False,
-                "null_rate_warning": null_rate_pay > NULL_RATE_WARN_THRESHOLD,
-            },
-            kg_node_count=kg_count_e,
-        )
-        _catalog_columns(
-            session,
-            self._upsert_attribute,
-            entity="Employee",
-            rows=emp_sample,
-            source_prefix="hr_pim.dipendenti_hr",
-            field_definitions={
-                "MatricolaDip": "Matricola dipendente (= salesperson_id ERP)",
-                "Nome": "Nome",
-                "Cognome": "Cognome",
-                "Reparto": "Reparto (es. Engineering, Production)",
-                "GruppoReparto": "Gruppo reparto",
-                "DataAssunzione": "Data assunzione (normalizzata ISO 8601)",
-                "RetribuzioneOraria": "Retribuzione oraria (USD)",
-            },
-            lineage={},
-        )
-
-        prod_count = _count_rows("product_catalog_pim", hr_pim, mgr)
-        prod_sample = _sample_rows("product_catalog_pim", hr_pim, mgr)
-        kg_count_p = kg.subgraph("Product").number_of_nodes()
-        self._upsert_entity(
-            session,
-            name="Product",
-            description="Prodotto del catalogo PIM.",
-            primary_key="internal_id",
-            sources=[
-                {
-                    "source": "hr_pim",
-                    "table": "product_catalog_pim",
-                    "key": "internal_id",
-                }
-            ],
-            record_count=prod_count,
-            freshness=now,
-            quality_flags={"duplicates_detected": False, "null_rate_warning": False},
-            kg_node_count=kg_count_p,
-        )
-        _catalog_columns(
-            session,
-            self._upsert_attribute,
-            entity="Product",
-            rows=prod_sample,
-            source_prefix="hr_pim.product_catalog_pim",
-            field_definitions={
-                "internal_id": "ID prodotto (= product_ref ERP)",
-                "sku": "SKU alternativo",
-                "displayName": "Nome visualizzato prodotto",
-                "categoryPath": "Percorso categoria (es. Bikes/Mountain Bikes)",
-                "standardCost": "Costo standard (USD)",
-                "listPrice": "Prezzo di listino (USD)",
-                "isMakeOnly": "Prodotto solo internamente",
-                "sellStartDate": "Data inizio vendita (ISO 8601)",
-            },
-            lineage={
-                "standardCost": [
+        # Employee (dipendenti_hr)
+        if not available or "dipendenti_hr" in available:
+            emp_count = _count_rows("dipendenti_hr", hr_pim, mgr)
+            emp_sample = _sample_rows("dipendenti_hr", hr_pim, mgr)
+            kg_count_e = kg.subgraph("Employee").number_of_nodes()
+            null_rate_pay = _null_rate(emp_sample, "RetribuzioneOraria")
+            self._upsert_entity(
+                session,
+                name="Employee",
+                description="Dipendente HR. MatricolaDip è anche salesperson_id in ERP.",
+                primary_key="MatricolaDip",
+                sources=[
                     {
-                        "metric": "margin",
-                        "entity": "Product",
-                        "source_field": "standardCost",
+                        "source": "hr_pim",
+                        "table": "dipendenti_hr",
+                        "key": "MatricolaDip",
                     }
                 ],
-                "listPrice": [
+                record_count=emp_count,
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": null_rate_pay > NULL_RATE_WARN_THRESHOLD,
+                },
+                kg_node_count=kg_count_e,
+            )
+            _catalog_columns(
+                session,
+                self._upsert_attribute,
+                entity="Employee",
+                rows=emp_sample,
+                source_prefix="hr_pim.dipendenti_hr",
+                field_definitions={
+                    "MatricolaDip": "Matricola dipendente (= salesperson_id ERP)",
+                    "Nome": "Nome",
+                    "Cognome": "Cognome",
+                    "Reparto": "Reparto (es. Engineering, Production)",
+                    "GruppoReparto": "Gruppo reparto",
+                    "DataAssunzione": "Data assunzione (normalizzata ISO 8601)",
+                    "RetribuzioneOraria": "Retribuzione oraria (USD)",
+                },
+                lineage={},
+            )
+
+        # Product (product_catalog_pim)
+        if not available or "product_catalog_pim" in available:
+            prod_count = _count_rows("product_catalog_pim", hr_pim, mgr)
+            prod_sample = _sample_rows("product_catalog_pim", hr_pim, mgr)
+            kg_count_p = kg.subgraph("Product").number_of_nodes()
+            self._upsert_entity(
+                session,
+                name="Product",
+                description="Prodotto del catalogo PIM.",
+                primary_key="internal_id",
+                sources=[
                     {
-                        "metric": "margin",
-                        "entity": "Product",
-                        "source_field": "listPrice",
+                        "source": "hr_pim",
+                        "table": "product_catalog_pim",
+                        "key": "internal_id",
                     }
                 ],
-            },
-        )
+                record_count=prod_count,
+                freshness=now,
+                quality_flags={
+                    "duplicates_detected": False,
+                    "null_rate_warning": False,
+                },
+                kg_node_count=kg_count_p,
+            )
+            _catalog_columns(
+                session,
+                self._upsert_attribute,
+                entity="Product",
+                rows=prod_sample,
+                source_prefix="hr_pim.product_catalog_pim",
+                field_definitions={
+                    "internal_id": "ID prodotto (= product_ref ERP)",
+                    "sku": "SKU alternativo",
+                    "displayName": "Nome visualizzato prodotto",
+                    "categoryPath": "Percorso categoria (es. Bikes/Mountain Bikes)",
+                    "standardCost": "Costo standard (USD)",
+                    "listPrice": "Prezzo di listino (USD)",
+                    "isMakeOnly": "Prodotto solo internamente",
+                    "sellStartDate": "Data inizio vendita (ISO 8601)",
+                },
+                lineage={
+                    "standardCost": [
+                        {
+                            "metric": "margin",
+                            "entity": "Product",
+                            "source_field": "standardCost",
+                        }
+                    ],
+                    "listPrice": [
+                        {
+                            "metric": "margin",
+                            "entity": "Product",
+                            "source_field": "listPrice",
+                        }
+                    ],
+                },
+            )
 
 
 # ── module-level helpers ──────────────────────────────────────────────────────

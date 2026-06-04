@@ -869,31 +869,40 @@ def dashboard(
             for r in recent_rows
         ]
 
-        # Data source cards
-        data_sources = [
-            {
-                "name": "ERP – Clienti & Prodotti",
-                "type": "SQLite",
-                "status": "connected",
-                "tables": ["customers", "products"],
-                "row_counts": {
-                    "customers": counts["customers"],
-                    "products": counts["products"],
-                },
-            },
-            {
-                "name": "ERP – Preventivi & Ordini",
-                "type": "SQLite",
-                "status": "connected",
-                "tables": ["quotes", "quote_lines", "orders", "order_lines"],
-                "row_counts": {
-                    "quotes": counts["quotes"],
-                    "quote_lines": counts["quote_lines"],
-                    "orders": counts["orders"],
-                    "order_lines": counts["order_lines"],
-                },
-            },
-        ]
+        # Data source cards — built dynamically from the source registry
+        from .connectors.source_registry import get_source_registry
+
+        registry = get_source_registry()
+        data_sources = []
+        for src in registry.list():
+            # Skip context_doc sources — they are not data tables
+            if src.connector_type == "context_doc":
+                continue
+            # Map "active" status to "connected" for frontend compatibility
+            display_status = "connected" if src.status == "active" else src.status
+            # Build per-table row counts from the known legacy counts where available,
+            # otherwise report 0 (the registry only stores a total row_count, not per-table)
+            row_counts = {t: counts.get(t, 0) for t in src.target_tables}
+            data_sources.append(
+                {
+                    "name": src.label,
+                    "type": src.connector_type,
+                    "status": display_status,
+                    "tables": src.target_tables,
+                    "row_counts": row_counts,
+                }
+            )
+        # Fall back to a single default card if the registry is empty (first boot)
+        if not data_sources:
+            data_sources = [
+                {
+                    "name": "ERP",
+                    "type": "sqlite",
+                    "status": "connected",
+                    "tables": list(counts.keys()),
+                    "row_counts": dict(counts),
+                }
+            ]
 
         return DashboardData(
             total_customers=total_customers,
@@ -1980,6 +1989,22 @@ async def delete_template(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _hot_reload_templates()
+
+
+@app.get("/api/semantic/example-questions", tags=["semantic"])
+def list_example_questions() -> list[dict[str, str]]:
+    """Return example questions derived from active query templates (public, no auth)."""
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        return []
+    templates = catalog.list_templates()
+    active = [t for t in templates if t.get("is_active", True)]
+    active_sorted = sorted(active, key=lambda t: t.get("name", ""))
+    return [
+        {"question": t["name"], "description": t.get("description", "")}
+        for t in active_sorted[:12]
+    ]
 
 
 # ── Custom Agents persistence ─────────────────────────────────────────────────
