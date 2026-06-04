@@ -2561,6 +2561,11 @@ class SemanticLayer:
 
     # ── EC-10: glossary lookup ────────────────────────────────────────────────
 
+    # DEPRECATED: _GLOSSARY is kept as a last-resort fallback only.
+    # On startup, these terms are seeded as Context Documents in the catalog
+    # (see app.semantic.glossary.DEFAULT_GLOSSARY + catalog.seed_glossary_docs).
+    # The handler now reads from the catalog first so users can edit/extend terms
+    # without touching Python code.  Do not add new terms here.
     _GLOSSARY: dict[str, str] = {
         "cliente attivo": (
             "An 'active customer' is a CRM account with isActive=1 and accountId > 0 "
@@ -2637,7 +2642,41 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
-        # Fallback to hardcoded glossary
+        # Try catalog context docs (titles starting with "Glossary: ") — user-editable
+        if self._catalog:
+            catalog_docs = self._catalog.list_context_docs()
+            glossary_docs = [
+                d for d in catalog_docs if d["title"].startswith("Glossary: ")
+            ]
+            if glossary_docs:
+                definition = None
+                for doc in glossary_docs:
+                    term_key = doc["title"][len("Glossary: ") :].lower()
+                    if term_key == raw_term:
+                        definition = doc["content"]
+                        break
+                if definition is None:
+                    for doc in glossary_docs:
+                        term_key = doc["title"][len("Glossary: ") :].lower()
+                        if raw_term in term_key or term_key in raw_term:
+                            definition = doc["content"]
+                            break
+                if definition is None:
+                    available = ", ".join(
+                        sorted(d["title"][len("Glossary: ") :] for d in glossary_docs)
+                    )
+                    definition = (
+                        f"The term '{raw_term}' is not present in the semantic layer glossary. "
+                        f"Available terms: {available}."
+                    )
+                return Result(
+                    answer=definition,
+                    sources_touched=[],
+                    notes="Response from the semantic layer glossary/ontology.",
+                    disambiguation_required=False,
+                )
+
+        # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs)
         definition = self._GLOSSARY.get(raw_term)
         if definition is None:
             for key, val in self._GLOSSARY.items():
@@ -2778,6 +2817,10 @@ class SemanticLayer:
 
     # ── SS-07: certified metrics list ─────────────────────────────────────────
 
+    # DEPRECATED: _CERTIFIED_METRICS is kept as a last-resort fallback only.
+    # The handler now reads from self._catalog.list_metric_objects() first.
+    # Only used when the catalog returns zero metrics (e.g. during cold-start tests).
+    # Do not add new metrics here — add them to the catalog instead.
     _CERTIFIED_METRICS: list[dict[str, str]] = [
         {
             "name": "revenue",
@@ -2847,6 +2890,33 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
+        # Try catalog metrics — user-editable via the metadata catalog
+        if self._catalog:
+            catalog_metrics = self._catalog.list_metric_objects()
+            if catalog_metrics:
+                answer = [
+                    {
+                        "name": m.name,
+                        "definition": m.formula,
+                        "source": ", ".join(m.sources_touched)
+                        if m.sources_touched
+                        else "",
+                        "unit": m.unit,
+                        "status": "certified",
+                    }
+                    for m in catalog_metrics
+                ]
+                return Result(
+                    answer=answer,
+                    sources_touched=[],
+                    notes=(
+                        f"{len(answer)} certified metrics available in the semantic layer. "
+                        "Fixed and deterministic list."
+                    ),
+                    disambiguation_required=False,
+                )
+
+        # Fallback to hardcoded list (deprecated — metrics should come from the catalog)
         return Result(
             answer=self._CERTIFIED_METRICS,
             sources_touched=[],

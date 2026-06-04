@@ -97,6 +97,15 @@ class QueryTemplateRow(Base):
     auto_generated = Column(Integer, default=0)
 
 
+class ContextDocRow(Base):
+    __tablename__ = "context_docs"
+
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=False, unique=True)
+    content = Column(Text, default="")
+    created_at = Column(String, default="")
+
+
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
 
 
@@ -473,6 +482,46 @@ class MetadataCatalog:
         with self._Session() as session:
             rows = session.execute(select(MetricMetaRow.name)).scalars().all()
             return list(rows)
+
+    def list_metric_objects(self) -> list[MetricMeta]:
+        """Return all metrics as MetricMeta objects (includes formula, unit, etc.)."""
+        with self._Session() as session:
+            rows = session.execute(select(MetricMetaRow)).scalars().all()
+            return [MetricMeta(r) for r in rows]
+
+    def list_context_docs(self) -> list[dict]:
+        """Return all context documents as dicts with 'id', 'title', and 'content'."""
+        with self._Session() as session:
+            rows = session.execute(select(ContextDocRow)).scalars().all()
+            return [{"id": r.id, "title": r.title, "content": r.content} for r in rows]
+
+    def seed_glossary_docs(self, terms: dict[str, str]) -> int:
+        """Seed glossary terms as Context Documents if they don't already exist.
+
+        Each term becomes a doc with title='Glossary: {term}' and content=definition.
+        Never overwrites existing docs.
+        Returns count inserted.
+        """
+        import uuid as _uuid
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        with self._Session() as s:
+            for term, definition in terms.items():
+                title = f"Glossary: {term}"
+                existing = s.query(ContextDocRow).filter_by(title=title).first()
+                if existing is not None:
+                    continue
+                row = ContextDocRow(
+                    id=str(_uuid.uuid4()),
+                    title=title,
+                    content=definition,
+                    created_at=now,
+                )
+                s.add(row)
+                count += 1
+        return count
 
     def row_count(self) -> int:
         """Total rows across all catalog tables."""

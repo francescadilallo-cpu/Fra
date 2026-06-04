@@ -421,7 +421,9 @@ def test_customers_without_orders_all_have_orders():
 
 
 def test_certified_metrics_returns_hardcoded_list():
+    # When the catalog returns no metrics, the handler falls back to _CERTIFIED_METRICS
     layer = _make_layer()
+    layer._catalog.list_metric_objects.return_value = []
     result = layer._q_certified_metrics(_intent("certified_metrics"))
     assert isinstance(result.answer, list)
     names = {m["name"] for m in result.answer}

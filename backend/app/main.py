@@ -462,6 +462,12 @@ def _ensure_semantic_loaded() -> None:
         n = catalog.seed_default_templates(SEED_TEMPLATES)
         if n:
             logger.info("Seeded %d default query templates", n)
+        # Seed default glossary terms as context docs on first install
+        from app.semantic.glossary import DEFAULT_GLOSSARY
+
+        n = catalog.seed_glossary_docs(DEFAULT_GLOSSARY)
+        if n:
+            logger.info("Seeded %d glossary terms as context docs", n)
         # Load user-defined query templates into the semantic layer
         layer.set_templates(catalog.list_templates())
         # Inject any registered context documents into the LLM prompt
