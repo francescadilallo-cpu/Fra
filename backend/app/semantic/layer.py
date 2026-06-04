@@ -673,7 +673,9 @@ class _RuleParser:
             has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
             # "fatturato medio" (average revenue) → avg_revenue_by_segment
             if "medio" in q:
-                return Intent(intent_type="avg_revenue_by_segment", raw_question=question)
+                return Intent(
+                    intent_type="avg_revenue_by_segment", raw_question=question
+                )
             # Q21 pattern: standalone "fatturato" with year only
             is_standalone = not has_qualifier
             if is_standalone:
@@ -2869,3 +2871,81 @@ class SemanticLayer:
             if attr_meta:
                 prov[f"{entity}.{attr}"] = attr_meta.to_dict()
         return prov
+
+    def _execute_template_query(self, intent: "Intent") -> "Result":
+        """Execute a user-defined query template with safe token substitution."""
+        import re as _re
+
+        tpl_id_str = intent.intent_type[4:]  # strip "tpl_"
+        tpl = next(
+            (
+                t
+                for t in self._templates
+                if str(t["id"]) == tpl_id_str and t.get("is_active", True)
+            ),
+            None,
+        )
+        if tpl is None:
+            return Result(
+                answer="Template not found or inactive.",
+                notes="template_missing",
+            )
+
+        sql = tpl["sql_query"]
+
+        # Safe substitution of {year}
+        year_val = intent.filters.get("year")
+        if year_val is not None:
+            try:
+                y = int(year_val)
+                if not (2000 <= y <= 2100):
+                    raise ValueError
+                sql = sql.replace("{year}", str(y))
+            except ValueError:
+                sql = sql.replace("{year}", "2024")
+        else:
+            sql = sql.replace("{year}", "2024")
+
+        # Safe substitution of {limit}
+        limit_val = intent.filters.get("limit")
+        if limit_val is not None:
+            try:
+                lim = int(limit_val)
+                lim = max(1, min(lim, 100))
+                sql = sql.replace("{limit}", str(lim))
+            except ValueError:
+                sql = sql.replace("{limit}", "10")
+        else:
+            sql = sql.replace("{limit}", "10")
+
+        # Reject any remaining unfilled tokens
+        remaining = _re.findall(r"\{(\w+)\}", sql)
+        if remaining:
+            return Result(
+                answer=f"Template has unsupported tokens: {remaining}",
+                notes="template_bad_tokens",
+            )
+
+        try:
+            self._validate_generated_sql(sql)
+        except Exception as exc:
+            return Result(
+                answer=f"Template SQL is invalid: {exc}",
+                notes="template_invalid_sql",
+            )
+
+        try:
+            rows = self._exec(sql)
+        except Exception as exc:
+            return Result(
+                answer=f"Template query failed: {exc}",
+                sql_used=sql,
+                notes="template_exec_error",
+            )
+
+        return Result(
+            answer=rows,
+            sql_used=sql,
+            sources_touched=tpl.get("sources", []) or ["duckdb_unified"],
+            notes=f"template:{tpl['name']}",
+        )

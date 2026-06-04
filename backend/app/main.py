@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import jwt as _pyjwt
 from jwt.exceptions import ExpiredSignatureError as _JWTExpiredSignatureError
 from jwt.exceptions import InvalidTokenError as _JWTInvalidTokenError
@@ -455,6 +455,8 @@ def _ensure_semantic_loaded() -> None:
                 "hr_pim": hr_pim,
             }
         )
+        # Load user-defined query templates into the semantic layer
+        layer.set_templates(catalog.list_templates())
         # Inject any registered context documents into the LLM prompt
         _sync_context_docs_to_layer()
 
@@ -539,9 +541,19 @@ def _get_semantic_draft() -> dict:
         "relations": relations,
         "metrics": metrics,
         "context_docs": context_docs,
+        "templates": catalog.list_templates() if catalog else [],
         "loaded": _semantic_state.get("loaded", False),
         "built_at": datetime.utcnow().isoformat(),
     }
+
+
+def _hot_reload_templates() -> None:
+    """Push fresh templates to the live SemanticLayer instance."""
+    _ensure_semantic_loaded()
+    layer = _semantic_state.get("layer")
+    catalog = _semantic_state.get("catalog")
+    if layer is not None and catalog is not None:
+        layer.set_templates(catalog.list_templates())
 
 
 def reload_semantic() -> None:
@@ -614,6 +626,52 @@ class MetricDraftUpdate(BaseModel):
 class ContextDocCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=20000)
+
+
+class QueryTemplatePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    sql_query: str = Field(min_length=10, max_length=8000)
+    keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+
+    @field_validator("sql_query")
+    @classmethod
+    def _check_tokens(cls, v: str) -> str:
+        import re as _re
+
+        allowed = {"year", "limit"}
+        found = set(_re.findall(r"\{(\w+)\}", v))
+        bad = found - allowed
+        if bad:
+            raise ValueError(
+                f"Unsupported template tokens: {bad}. Only {{year}} and {{limit}} are allowed."
+            )
+        return v
+
+
+class QueryTemplateUpdatePayload(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    sql_query: str | None = Field(default=None, min_length=10, max_length=8000)
+    keywords: list[str] | None = None
+    sources: list[str] | None = None
+
+    @field_validator("sql_query")
+    @classmethod
+    def _check_tokens(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        import re as _re
+
+        allowed = {"year", "limit"}
+        found = set(_re.findall(r"\{(\w+)\}", v))
+        bad = found - allowed
+        if bad:
+            raise ValueError(
+                f"Unsupported template tokens: {bad}. Only {{year}} and {{limit}} are allowed."
+            )
+        return v
 
 
 class OntologyValidateRequest(BaseModel):
@@ -1810,6 +1868,77 @@ def delete_draft_context(
     registry.remove(doc_id)
     _sync_context_docs_to_layer()
     return {"ok": True}
+
+
+# ── Query Templates CRUD ─────────────────────────────────────────────────────
+
+
+@app.get("/api/semantic/templates", tags=["semantic"])
+async def list_templates(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    return catalog.list_templates()
+
+
+@app.post("/api/semantic/templates", status_code=201, tags=["semantic"])
+async def create_template(
+    payload: QueryTemplatePayload,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    tpl = catalog.create_template(
+        name=payload.name,
+        description=payload.description,
+        sql_query=payload.sql_query,
+        keywords=payload.keywords,
+        sources=payload.sources,
+    )
+    _hot_reload_templates()
+    return tpl
+
+
+@app.patch("/api/semantic/templates/{template_id}", tags=["semantic"])
+async def update_template(
+    template_id: int,
+    payload: QueryTemplateUpdatePayload,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    try:
+        tpl = catalog.update_template(
+            template_id,
+            **payload.model_dump(exclude_none=True),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _hot_reload_templates()
+    return tpl
+
+
+@app.delete("/api/semantic/templates/{template_id}", status_code=204, tags=["semantic"])
+async def delete_template(
+    template_id: int,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> None:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    try:
+        catalog.delete_template(template_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _hot_reload_templates()
 
 
 # ── Custom Agents persistence ─────────────────────────────────────────────────

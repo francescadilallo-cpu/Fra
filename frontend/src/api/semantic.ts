@@ -339,11 +339,33 @@ export interface ContextDoc {
   created_at: string
 }
 
+export interface QueryTemplate {
+  id: number
+  name: string
+  description: string
+  sql_query: string
+  keywords: string[]
+  sources: string[]
+  intent_type: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface QueryTemplateCreate {
+  name: string
+  description: string
+  sql_query: string
+  keywords: string[]
+  sources: string[]
+}
+
 export interface SemanticDraft {
   entities: DraftEntity[]
   relations: DraftRelation[]
   metrics: DraftMetric[]
   context_docs: ContextDoc[]
+  templates: QueryTemplate[]
   loaded: boolean
   built_at: string
 }
@@ -375,6 +397,23 @@ export const addContextDoc = (title: string, content: string): Promise<ContextDo
 
 export const deleteContextDoc = (id: string): Promise<void> =>
   http.delete(`/api/semantic/draft/context/${encodeURIComponent(id)}`).then(() => undefined)
+
+// ── Query Templates ───────────────────────────────────────────────────────────
+
+export const listQueryTemplates = (): Promise<QueryTemplate[]> =>
+  http.get<QueryTemplate[]>('/api/semantic/templates').then(r => r.data)
+
+export const createQueryTemplate = (t: QueryTemplateCreate): Promise<QueryTemplate> =>
+  http.post<QueryTemplate>('/api/semantic/templates', t).then(r => r.data)
+
+export const updateQueryTemplate = (
+  id: number,
+  t: Partial<QueryTemplateCreate>,
+): Promise<QueryTemplate> =>
+  http.patch<QueryTemplate>(`/api/semantic/templates/${id}`, t).then(r => r.data)
+
+export const deleteQueryTemplate = (id: number): Promise<void> =>
+  http.delete(`/api/semantic/templates/${id}`).then(() => undefined)
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
