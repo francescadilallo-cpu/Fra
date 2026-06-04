@@ -416,6 +416,16 @@ export const updateQueryTemplate = (
 export const deleteQueryTemplate = (id: number): Promise<void> =>
   http.delete(`/api/semantic/templates/${id}`).then(() => undefined)
 
+// ── Example Questions ─────────────────────────────────────────────────────────
+
+export interface ExampleQuestion {
+  question: string
+  description: string
+}
+
+export const listExampleQuestions = (): Promise<ExampleQuestion[]> =>
+  http.get<ExampleQuestion[]>('/api/semantic/example-questions').then(r => r.data)
+
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
 export function isBackendError(e: unknown): boolean {
