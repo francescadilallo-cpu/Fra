@@ -756,6 +756,38 @@ class MetadataCatalog:
                     count += 1
         return count
 
+    def seed_default_templates(self, templates: list[dict]) -> int:
+        """Seed the DB with default templates on first install.
+
+        Only inserts templates that do not already exist by name.
+        Never overwrites existing templates (auto_generated or user-owned).
+        Returns count of inserted templates.
+        """
+        import json
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        with self._Session() as s:
+            for tpl in templates:
+                existing = s.query(QueryTemplateRow).filter_by(name=tpl["name"]).first()
+                if existing is not None:
+                    continue  # never overwrite
+                row = QueryTemplateRow(
+                    name=tpl["name"],
+                    description=tpl.get("description", ""),
+                    sql_query=tpl["sql_query"],
+                    keywords_json=json.dumps(tpl.get("keywords", [])),
+                    sources_json=json.dumps(tpl.get("sources", [])),
+                    created_at=now,
+                    updated_at=now,
+                    is_active=1,
+                    auto_generated=1,
+                )
+                s.add(row)
+                count += 1
+        return count
+
     # ── internal helpers ──────────────────────────────────────────────────────
 
     def _upsert_entity(

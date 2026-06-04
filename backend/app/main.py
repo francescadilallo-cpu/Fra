@@ -456,6 +456,12 @@ def _ensure_semantic_loaded() -> None:
                 "hr_pim": hr_pim,
             }
         )
+        # Seed golden query templates on first install (never overwrites existing)
+        from app.semantic.seed_templates import SEED_TEMPLATES
+
+        n = catalog.seed_default_templates(SEED_TEMPLATES)
+        if n:
+            logger.info("Seeded %d default query templates", n)
         # Load user-defined query templates into the semantic layer
         layer.set_templates(catalog.list_templates())
         # Inject any registered context documents into the LLM prompt
@@ -980,15 +986,34 @@ def get_table_data(
     page_size: int = Query(default=20, ge=1, le=100),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> PaginatedData:
-    allowed_tables = {
-        "customers",
-        "products",
-        "quotes",
-        "quote_lines",
-        "orders",
-        "order_lines",
-    }
-    if table not in allowed_tables:
+    # Auto-discover available tables from DuckDB instead of hardcoded whitelist
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    try:
+        duckdb_conn = get_source_manager(_SCENARIO_PATH).get_connection()
+        try:
+            available = {
+                row[0] for row in duckdb_conn.execute("SHOW TABLES").fetchall()
+            }
+        finally:
+            duckdb_conn.close()
+    except Exception:
+        available = set()
+    # Also include SQLite tables (the actual data backend for this endpoint)
+    try:
+        _sl = get_connection()
+        try:
+            available |= {
+                row[0]
+                for row in _sl.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        finally:
+            _sl.close()
+    except Exception:
+        pass
+    if table not in available:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
     conn = get_connection()
