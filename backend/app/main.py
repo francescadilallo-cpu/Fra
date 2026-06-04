@@ -71,6 +71,7 @@ AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
 # normal bursts of questions don't trip a 429.
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "").strip() or "10/minute"
 SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "").strip() or "60/minute"
+DEFAULT_SECTOR = os.getenv("DEFAULT_SECTOR", "manufacturing")
 
 
 def _login_limit_key(request: Request) -> str:
@@ -1491,7 +1492,7 @@ def semantic_sources(
 
 @app.get("/api/semantic/metrics")
 def get_metrics(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1576,7 +1577,7 @@ def delete_metric(
 
 @app.get("/api/semantic/hierarchies")
 def get_hierarchies(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1648,7 +1649,7 @@ def delete_hierarchy(
 
 @app.get("/api/semantic/segments")
 def get_segments(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -2254,7 +2255,7 @@ def _row_to_agent(row: _sqlite3.Row) -> dict:
 
 @app.get("/api/agents/custom", tags=["agents"])
 def list_custom_agents(
-    sector_id: str = Query(default="manufacturing"),
+    sector_id: str = Query(default=DEFAULT_SECTOR),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict]:
     conn = _agents_db()
