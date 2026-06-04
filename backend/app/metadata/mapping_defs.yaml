@@ -1,0 +1,241 @@
+# Semantic field definitions and disambiguation rules.
+# Loaded via GET /api/semantic/mapping-defs — edit here to update the UI.
+# status: ok | ambiguous | todo
+
+definitions:
+  - entity: SalesOrder
+    field: subtotalAmount
+    definition: >
+      Net order amount before taxes and shipping costs. Canonical "commercial revenue" —
+      use for sales metrics and rep KPI calculations.
+    status: ok
+
+  - entity: SalesOrder
+    field: totalDue
+    definition: >
+      Gross amount billed to customer — includes taxes and freight.
+      Use for finance/accounting contexts (higher than subtotalAmount by tax+freight delta).
+    status: ambiguous
+
+  - entity: SalesOrder
+    field: onlineOrderFlag
+    definition: >
+      TRUE = online B2C order (self-service). FALSE = offline B2B order placed through
+      a sales representative.
+    status: ok
+
+  - entity: SalesOrder
+    field: status
+    definition: >
+      Order lifecycle status: Confirmed (open, not shipped), Processing (being prepared),
+      Shipped (en route), Delivered (complete).
+    status: ok
+
+  - entity: SalesOrder
+    field: orderDate
+    definition: >
+      Date the order was placed by the customer or entered by the sales rep.
+      Reference date for all revenue period calculations.
+    status: ok
+
+  - entity: Customer
+    field: accountId
+    definition: >
+      CRM primary key (integer). Values < 0 are duplicates from a legacy migration —
+      removed from the Knowledge Graph during deduplication.
+    status: ok
+
+  - entity: Customer
+    field: accountNumber
+    definition: >
+      Human-readable customer code (string). Stable across system migrations.
+      Used for manual cross-reference with legacy ERP data.
+    status: ok
+
+  - entity: Customer
+    field: customerType
+    definition: >
+      Customer classification: "Company" (B2B reseller/retailer) or "Individual" (B2C direct buyer).
+      Drives pricing tier and rep assignment.
+    status: todo
+
+  - entity: Salesperson
+    field: salesPersonId
+    definition: >
+      ERP primary key for the salesperson. Bridges to HR.matricolaDip for
+      cross-source ERP↔HR join.
+    status: ok
+
+  - entity: Salesperson
+    field: salesYTD
+    definition: >
+      Year-to-date sales revenue attributed to this rep (ERP aggregate).
+      Use for ranking sales performance and territory comparison.
+    status: ok
+
+  - entity: Salesperson
+    field: bonus
+    definition: >
+      Annual bonus paid to the salesperson. Not necessarily proportional to revenue —
+      a rep may receive higher bonus despite lower YTD revenue.
+    status: ambiguous
+
+  - entity: Salesperson
+    field: commissionPct
+    definition: >
+      Commission rate applied to net sales (subtotalAmount).
+      Ranges from 1.0% to 2.0% across reps.
+    status: ok
+
+  - entity: Employee
+    field: matricolaDip
+    definition: >
+      HR employee ID (Italian: "matricola dipendente"). ERP↔HR bridge key —
+      maps to Salesperson.salesPersonId. All sales reps matched.
+    status: ok
+
+  - entity: Employee
+    field: cognome
+    definition: >
+      Employee last name (Italian schema). Semantic layer maps this to
+      Employee.lastName in English queries.
+    status: ok
+
+  - entity: Employee
+    field: nome
+    definition: >
+      Employee first name (Italian schema). Semantic layer maps this to
+      Employee.firstName in English queries.
+    status: ok
+
+  - entity: Employee
+    field: ruolo
+    definition: >
+      Job title (Italian: "ruolo"). Maps to Employee.jobTitle.
+      Examples: "Sales Representative", "Sales Manager", "Engineering Manager".
+    status: ok
+
+  - entity: Employee
+    field: dataAssunzione
+    definition: >
+      Hire date (Italian: "data di assunzione"). Useful for tenure-based
+      performance analysis.
+    status: ok
+
+  - entity: Product
+    field: internalId
+    definition: >
+      PIM product identifier. ERP↔PIM bridge key — maps to SalesOrderLine.product_ref.
+    status: ok
+
+  - entity: Product
+    field: listPrice
+    definition: >
+      Published catalog price (USD). Not the actual sale price — discounts and offers
+      are applied at SalesOrderLine level via offerRef.
+    status: ok
+
+  - entity: Product
+    field: category
+    definition: >
+      Top-level product category: Bikes, Accessories, Clothing, Components.
+      Bikes typically drive the largest share of line item revenue.
+    status: ok
+
+  - entity: Territory
+    field: salesYTD
+    definition: >
+      Territory year-to-date revenue (ERP aggregate).
+      Use for geographic performance comparison and territory assignment.
+    status: ok
+
+  - entity: Territory
+    field: group
+    definition: >
+      Geographic group: North America, Europe, Pacific.
+      Enables continental rollup of revenue and performance metrics.
+    status: ok
+
+  - entity: SalesOrderLine
+    field: unitPrice
+    definition: >
+      Actual unit sale price after any list price adjustments. May differ from
+      Product.listPrice when volume or seasonal discounts apply.
+    status: ok
+
+  - entity: SalesOrderLine
+    field: offerRef
+    definition: >
+      Foreign key to the Offer/discount applied on this line.
+      offerRef=1 = No Discount; higher values = volume or seasonal discounts.
+    status: ok
+
+ambiguities:
+  - term: fatturato / revenue
+    context: SalesOrder (ERP — OrionSales)
+    candidates:
+      - label: subtotalAmount — net commercial revenue
+        desc: >
+          Net commercial revenue, excl. taxes and freight.
+          Use for sales performance, rep KPIs, territory ranking.
+        recommended: true
+      - label: totalDue — gross billed amount
+        desc: >
+          Gross billed amount including taxes + freight delta.
+          Use for finance, AR, billing reconciliation.
+        recommended: false
+    resolution: >
+      Query AI disambiguates at query time. "commercial revenue" → subtotalAmount.
+      "billed" / "total due" / "invoiced" → totalDue.
+      When ambiguous, shows both and asks.
+
+  - term: customer count / clienti
+    context: CRM — ClientHub (SQLite)
+    candidates:
+      - label: CRM raw — all accounts including duplicates
+        desc: >
+          Includes duplicates with accountId < 0 from legacy migration.
+          Inflates customer count by ~1.9%.
+        recommended: false
+      - label: CRM dedup — unique accounts after deduplication
+        desc: >
+          Clean unique accounts after removing negative-ID duplicates.
+          Canonical source for the Knowledge Graph.
+        recommended: true
+    resolution: >
+      Knowledge Graph always uses deduped unique accounts.
+      Any query on "customers" or "clienti" returns the dedup figure.
+      Raw count only shown in audit/data quality views.
+
+  - term: bonus vs commissionPct
+    context: Salesperson (ERP)
+    candidates:
+      - label: bonus — fixed annual amount
+        desc: >
+          Discretionary bonus paid annually. Not performance-proportional —
+          a rep with lower revenue may receive higher bonus.
+        recommended: false
+      - label: commissionPct × salesYTD
+        desc: >
+          Variable commission: actual earnings proportional to net sales (1.0%–2.0%).
+          Better measure of rep economic outcome.
+        recommended: true
+    resolution: >
+      Use commissionPct × salesYTD to compare rep economic outcomes.
+      Bonus is a separate discretionary component — do not conflate with performance pay.
+
+  - term: top salesperson
+    context: Salesperson × Employee (ERP × HR)
+    candidates:
+      - label: By salesYTD — highest revenue producer
+        desc: >
+          Highest revenue producer YTD. Canonical measure for sales performance ranking.
+        recommended: true
+      - label: By bonus — highest bonus recipient
+        desc: >
+          Highest bonus but not necessarily highest revenue.
+          Bonus not revenue-correlated.
+        recommended: false
+    resolution: >
+      "Top salesperson" in sales context = highest salesYTD.
+      Query AI defaults to this. Only use bonus ranking when explicitly asked about compensation.

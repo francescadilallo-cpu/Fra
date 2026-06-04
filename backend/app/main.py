@@ -2060,6 +2060,32 @@ def get_system_prompt() -> dict:
     return {"prompt": base_prompt + frontend_format}
 
 
+# ── Mapping definitions endpoint ─────────────────────────────────────────────
+
+
+@app.get("/api/semantic/mapping-defs", tags=["semantic"])
+def get_mapping_defs() -> dict:
+    """Return semantic field definitions and disambiguation rules from YAML config.
+
+    Frontend MappingView.tsx uses this to populate initial definitions rather than
+    hardcoding them in TypeScript.  The YAML lives at metadata/mapping_defs.yaml
+    and can be edited without a code deploy.
+    """
+    import pathlib as _pathlib  # noqa: PLC0415
+
+    import yaml as _yaml  # noqa: PLC0415
+
+    yaml_path = _pathlib.Path(__file__).parent / "metadata" / "mapping_defs.yaml"
+    try:
+        data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return {
+        "definitions": data.get("definitions", []),
+        "ambiguities": data.get("ambiguities", []),
+    }
+
+
 # ── Live Config endpoint ──────────────────────────────────────────────────────
 
 

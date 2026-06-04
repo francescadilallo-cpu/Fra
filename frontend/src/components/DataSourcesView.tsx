@@ -14,7 +14,7 @@ import {
   getConnectorBackendDef,
   type BackendSource, type ParamField,
 } from '../api/sources'
-import { buildSemanticLayer } from '../api/semantic'
+import { buildSemanticLayer, semanticSources } from '../api/semantic'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -81,17 +81,39 @@ const AW_SOURCES: AWSourceDef[] = [
 ]
 
 function AWSourcesPanel() {
+  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({})
+  const [liveSync, setLiveSync] = useState<string | null>(null)
+
+  useEffect(() => {
+    semanticSources().then(srcs => {
+      const counts: Record<string, number> = {}
+      let sync: string | null = null
+      srcs.forEach(s => {
+        Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n })
+        if (s.loaded_at && !sync) sync = s.loaded_at.slice(0, 10)
+      })
+      setLiveCounts(counts)
+      if (sync) setLiveSync(sync)
+    }).catch(() => {})
+  }, [])
+
+  const sources = AW_SOURCES.map(src => {
+    const tables = src.tables.map(t => ({ ...t, rows: liveCounts[t.name] ?? t.rows }))
+    const totalRows = tables.reduce((s, t) => s + t.rows, 0)
+    return { ...src, tables, totalRows, lastSync: liveSync ?? src.lastSync }
+  })
+
   return (
     <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-2.5">
         <Database className="w-4 h-4 text-teal-600" />
         <h2 className="text-sm font-bold text-slate-800">Active Sources</h2>
         <span className="flex items-center gap-1 text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">
-          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />3 connected
+          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />{sources.length} connected
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {AW_SOURCES.map(src => (
+        {sources.map(src => (
           <div key={src.label} className="bg-white border border-teal-100 rounded-xl p-3 space-y-2.5 shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div>
