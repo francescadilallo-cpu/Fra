@@ -148,6 +148,7 @@ class NeuroSymbolicPlan:
 
 
 _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
+    # ── structural intents (no SQL, return system info) ───────────────────────
     "entity_not_modeled": {
         "metric": None,
         "entities": [],
@@ -166,199 +167,10 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "properties": [],
         "relations": [],
     },
-    "customers_without_orders": {
-        "metric": None,
-        "entities": ["Customer", "SalesOrder"],
-        "properties": ["Customer.accountId", "SalesOrder.order_id"],
-        "relations": [],
-    },
-    "employees_with_duplicate_customers": {
-        "metric": None,
-        "entities": ["Employee", "Customer"],
-        "properties": ["Employee.MatricolaDip", "Customer.accountId"],
-        "relations": [],
-    },
     "certified_metrics": {
         "metric": None,
         "entities": [],
         "properties": [],
-        "relations": [],
-    },
-    "count_employees": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.MatricolaDip", "Employee.Reparto"],
-        "relations": [],
-    },
-    "count_employees_by_group": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.GruppoReparto"],
-        "relations": [],
-    },
-    "avg_hourly_rate": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.RetribuzioneOraria", "Employee.Reparto"],
-        "relations": [],
-    },
-    "product_price": {
-        "metric": None,
-        "entities": ["Product"],
-        "properties": [
-            "Product.displayName",
-            "Product.listPrice",
-            "Product.standardCost",
-        ],
-        "relations": [],
-    },
-    "count_make_only": {
-        "metric": None,
-        "entities": ["Product"],
-        "properties": ["Product.isMakeOnly"],
-        "relations": [],
-    },
-    "count_orders": {
-        "metric": None,
-        "entities": ["SalesOrder"],
-        "properties": ["SalesOrder.order_id", "SalesOrder.order_date"],
-        "relations": [],
-    },
-    "list_b2b_active": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": [
-            "Customer.accountType",
-            "Customer.isActive",
-            "Customer.ragioneSociale",
-        ],
-        "relations": [],
-    },
-    "customers_by_state": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": ["Customer.accountId"],
-        "relations": [],
-    },
-    "top_salesperson_by_orders": {
-        "metric": None,
-        "entities": ["SalesOrder", "Employee"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrder.order_id",
-            "Employee.MatricolaDip",
-        ],
-        "relations": ["SalesOrder.salesperson_ref->Employee"],
-    },
-    "top_salespersons_by_revenue": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Employee"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrder.total_due",
-            "Employee.MatricolaDip",
-        ],
-        "relations": ["SalesOrder.salesperson_ref->Employee"],
-    },
-    "revenue_by_territory": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Territory"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.territory_ref"],
-        "relations": ["SalesOrder.territory_ref->Territory"],
-    },
-    "revenue_vs_quota": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Salesperson"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.salesperson_ref"],
-        "relations": ["SalesOrder.salesperson_ref->Salesperson"],
-    },
-    "top_customer_by_spend": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.total_due",
-            "Customer.accountId",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "top_products_by_qty": {
-        "metric": None,
-        "entities": ["SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.displayName",
-        ],
-        "relations": ["SalesOrderLine.product_ref->Product"],
-    },
-    "customer_state_most_orders": {
-        "metric": None,
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.order_id",
-            "Customer.accountId",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "margin_per_salesperson": {
-        "metric": "margin",
-        "entities": ["SalesOrder", "SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.standardCost",
-            "Product.listPrice",
-        ],
-        "relations": [
-            "SalesOrder.hasLine->SalesOrderLine",
-            "SalesOrderLine.product_ref->Product",
-        ],
-    },
-    "avg_revenue_by_segment": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.total_due",
-            "Customer.accountType",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "top_category_by_margin": {
-        "metric": "margin",
-        "entities": ["SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.categoryPath",
-            "Product.standardCost",
-            "Product.listPrice",
-        ],
-        "relations": ["SalesOrderLine.product_ref->Product"],
-    },
-    "orders_with_discount": {
-        "metric": None,
-        "entities": ["SalesOrderLine"],
-        "properties": ["SalesOrderLine.offer_ref"],
-        "relations": [],
-    },
-    "count_customers_unique": {
-        "metric": "active_customers",
-        "entities": ["Customer"],
-        "properties": ["Customer.accountId"],
-        "relations": [],
-    },
-    "check_duplicate_accounts": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": [
-            "Customer.accountId",
-            "Customer.ragioneSociale",
-            "Customer.nomeContatto",
-        ],
         "relations": [],
     },
     "data_provenance": {
@@ -367,29 +179,13 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "properties": [],
         "relations": [],
     },
-    "revenue_with_tax": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.order_date"],
-        "relations": [],
-    },
-    "lookup_employee": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": [
-            "Employee.MatricolaDip",
-            "Employee.Nome",
-            "Employee.Cognome",
-            "Employee.Reparto",
-        ],
-        "relations": [],
-    },
     "impossible": {
         "metric": None,
         "entities": [],
         "properties": [],
         "relations": [],
     },
+    # ── fallback / LLM-generated ──────────────────────────────────────────────
     "unknown": {
         "metric": None,
         "entities": [],
