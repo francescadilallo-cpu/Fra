@@ -2007,6 +2007,185 @@ def list_example_questions() -> list[dict[str, str]]:
     ]
 
 
+# ── Live Config endpoint ──────────────────────────────────────────────────────
+
+
+import math as _math
+
+
+def _auto_layout_positions(entities: list[dict], relations: list[dict]) -> dict[str, dict]:
+    """Assign x/y positions using a simple grid layout.
+
+    Entities with more outgoing FK relations go left (source nodes).
+    Entities with more incoming FK relations go right (target nodes).
+    """
+    out_degree: dict[str, int] = {}
+    in_degree: dict[str, int] = {}
+    for e in entities:
+        out_degree[e["name"]] = 0
+        in_degree[e["name"]] = 0
+    for r in relations:
+        for e in entities:
+            if e["table"] == r.get("from_table"):
+                out_degree[e["name"]] = out_degree.get(e["name"], 0) + 1
+            if e["table"] == r.get("to_table"):
+                in_degree[e["name"]] = in_degree.get(e["name"], 0) + 1
+
+    sorted_entities = sorted(
+        entities,
+        key=lambda e: out_degree.get(e["name"], 0) - in_degree.get(e["name"], 0),
+        reverse=True,
+    )
+
+    n = len(sorted_entities)
+    cols = max(1, _math.ceil(_math.sqrt(n)))
+    positions: dict[str, dict] = {}
+    for i, e in enumerate(sorted_entities):
+        row, col = divmod(i, cols)
+        positions[e["name"]] = {
+            "x": 80 + col * 320,
+            "y": 100 + row * 220,
+        }
+    return positions
+
+
+@app.get("/api/semantic/live-config", tags=["semantic"])
+async def get_live_config(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    """Return a live-derived sector config: connectors, ontology nodes/edges, metrics."""
+    _ensure_semantic_loaded()
+
+    if not _semantic_state.get("loaded"):
+        return {
+            "name": "Your Dataset",
+            "domain": "",
+            "connectors": [],
+            "ontology": {"nodes": [], "edges": []},
+            "metrics": [],
+            "built_at": datetime.utcnow().isoformat(),
+        }
+
+    catalog = _semantic_state.get("catalog")
+    kg = _semantic_state.get("kg")
+
+    # ── Entities & relations from catalog/kg ──────────────────────────────────
+    entities: list[dict] = catalog.get_draft_entities() if catalog else []
+    metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
+
+    relations: list[dict] = []
+    if kg:
+        seen: set[tuple] = set()
+        for src, dst, data in kg.all_edges():
+            edge_type = data.get("type", "")
+            src_table = src.split(":")[0]
+            dst_table = dst.split(":")[0]
+            key = (src_table, dst_table, edge_type)
+            if key not in seen:
+                seen.add(key)
+                relations.append(
+                    {
+                        "from_table": src_table,
+                        "to_table": dst_table,
+                        "via_column": edge_type[3:] if edge_type.startswith("FK_") else "",
+                        "edge_type": edge_type,
+                    }
+                )
+
+    # ── Connectors & domain from source registry ──────────────────────────────
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    sources = [
+        c for c in registry.list()
+        if c.connector_type not in ("context_doc",)
+    ]
+    connector_names = [c.label for c in sources] if sources else []
+
+    # Build domain string from connector types
+    type_labels = []
+    seen_types: set[str] = set()
+    for c in sources:
+        ct = c.connector_type
+        if ct not in seen_types:
+            seen_types.add(ct)
+            type_labels.append(ct.replace("_", " ").title())
+    domain = " × ".join(type_labels) if type_labels else ""
+
+    # Dataset name: first source label or fallback
+    name = sources[0].label if sources else "Your Dataset"
+
+    # ── Auto-layout & build graph nodes ──────────────────────────────────────
+    positions = _auto_layout_positions(entities, relations)
+
+    # Build a lookup: table → entity name
+    table_to_name: dict[str, str] = {}
+    for e in entities:
+        table_to_name[e["table"]] = e["name"]
+
+    nodes = []
+    for e in entities:
+        nodes.append(
+            {
+                "id": e["name"],
+                "type": "ontologyNode",
+                "position": positions.get(e["name"], {"x": 80, "y": 100}),
+                "data": {
+                    "label": e["name"],
+                    "uri": f"aw:{e['name']}",
+                    "db_table": e["table"],
+                    "row_count": e.get("record_count", 0),
+                    "properties": [
+                        {"name": col, "type": "string"}
+                        for col in e.get("columns", [])[:15]
+                    ],
+                },
+            }
+        )
+
+    # ── Build graph edges ─────────────────────────────────────────────────────
+    edges = []
+    seen_edges: set[tuple] = set()
+    for r in relations:
+        src_name = table_to_name.get(r["from_table"])
+        dst_name = table_to_name.get(r["to_table"])
+        if src_name is None or dst_name is None:
+            continue
+        edge_key = (src_name, dst_name)
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        edges.append(
+            {
+                "id": f"{r['from_table']}-{r['to_table']}",
+                "source": src_name,
+                "target": dst_name,
+                "type": "smoothstep",
+                "animated": False,
+                "label": r.get("via_column", ""),
+            }
+        )
+
+    metrics = [
+        {
+            "name": m["name"],
+            "label": m.get("label") or m["name"],
+            "formula": m.get("formula", ""),
+            "unit": m.get("unit", ""),
+        }
+        for m in metrics_raw
+    ]
+
+    return {
+        "name": name,
+        "domain": domain,
+        "connectors": connector_names,
+        "ontology": {"nodes": nodes, "edges": edges},
+        "metrics": metrics,
+        "built_at": datetime.utcnow().isoformat(),
+    }
+
+
 # ── Custom Agents persistence ─────────────────────────────────────────────────
 #
 # A lightweight SQLite store (separate from the main DuckDB pipeline) that

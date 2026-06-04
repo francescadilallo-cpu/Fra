@@ -3,7 +3,7 @@ import { GitBranch, MessageSquare, ArrowRight, CheckCircle2, Activity, Brain, Pl
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { useAgentStore, countFindings } from '../data/agentStore'
-import { semanticStatus, type SemanticStatus } from '../api/semantic'
+import { semanticStatus, getLiveConfig, type SemanticStatus, type LiveConfig } from '../api/semantic'
 import type { NavTab } from '../types'
 
 interface Props { onNavigate: (tab: NavTab) => void }
@@ -62,9 +62,11 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const agentRuns = useAgentStore(sectorId)
   const findings = countFindings(agentRuns)
   const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
 
   useEffect(() => {
     semanticStatus().then(setSemStatus).catch(() => {})
+    getLiveConfig().then(setLiveConfig).catch(() => {})
   }, [])
 
   const entityCount = semStatus?.loaded ? semStatus.entities.length : ontology.nodes.length
@@ -114,7 +116,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <span className="w-2 h-2 bg-teal-400 rounded-full" />
             <span className="text-xs text-slate-300">Sources</span>
             <span className="text-xs font-semibold text-white ml-1">
-              {sector.connectors.slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {sector.connectors.length} connected
+              {(liveConfig?.connectors ?? sector.connectors).slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {(liveConfig?.connectors ?? sector.connectors).length} connected
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -262,9 +264,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
-              <p className="text-3xl font-extrabold text-red-500 mb-2">{sector.connectors.length}</p>
+              <p className="text-3xl font-extrabold text-red-500 mb-2">{(liveConfig?.connectors ?? sector.connectors).length}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
-              <p className="text-xs text-slate-500">{sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+              <p className="text-xs text-slate-500">{liveConfig?.domain ?? sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
@@ -350,7 +352,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {[
-              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${sector.connectors.length} connected systems`,
+              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${(liveConfig?.connectors ?? sector.connectors).length} connected systems`,
               ...(isAW ? [`Knowledge Graph with ${kgNodes > 0 ? kgNodes.toLocaleString('en-US') : '193k'} nodes and ${edgeCount > 0 ? edgeCount.toLocaleString('en-US') : '313k'} edges`] : []),
               'Natural language Query AI — ask questions in plain English',
               'Download CSV for each entity from the Data Explorer',

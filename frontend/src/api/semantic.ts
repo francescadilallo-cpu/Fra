@@ -416,6 +416,45 @@ export const updateQueryTemplate = (
 export const deleteQueryTemplate = (id: number): Promise<void> =>
   http.delete(`/api/semantic/templates/${id}`).then(() => undefined)
 
+// ── Live Config ───────────────────────────────────────────────────────────────
+
+export interface LiveOntologyNode {
+  id: string
+  type: string
+  position: { x: number; y: number }
+  data: {
+    label: string
+    uri: string
+    db_table: string
+    row_count: number
+    properties: { name: string; type: string }[]
+  }
+}
+
+export interface LiveOntologyEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  animated: boolean
+  label: string
+}
+
+export interface LiveConfig {
+  name: string
+  domain: string
+  connectors: string[]
+  ontology: {
+    nodes: LiveOntologyNode[]
+    edges: LiveOntologyEdge[]
+  }
+  metrics: { name: string; label: string; formula: string; unit: string }[]
+  built_at: string
+}
+
+export const getLiveConfig = (): Promise<LiveConfig> =>
+  http.get<LiveConfig>('/api/semantic/live-config').then(r => r.data)
+
 // ── Example Questions ─────────────────────────────────────────────────────────
 
 export interface ExampleQuestion {
