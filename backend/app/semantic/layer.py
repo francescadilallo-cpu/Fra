@@ -566,22 +566,28 @@ class _RuleParser:
 # Applied to the lowercased question before pattern matching. Replacements use
 # word boundaries and only rewrite English tokens, so Italian questions (which
 # never contain these English words) are left unchanged.
-_EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bhow many\b"), "quanti"),
-    (re.compile(r"\bnumber of\b"), "numero"),
-    (re.compile(r"\bcustomers?\b"), "clienti"),
-    (re.compile(r"\bclients?\b"), "clienti"),
-    (re.compile(r"\borders?\b"), "ordini"),
-    (re.compile(r"\bemployees?\b"), "dipendenti"),
-    (re.compile(r"\bstaff\b"), "dipendenti"),
-    (re.compile(r"\bproducts?\b"), "prodotti"),
-    (re.compile(r"\bsalespe(?:rson|ople)\b"), "venditori"),
-    (re.compile(r"\bsellers?\b"), "venditori"),
-    (re.compile(r"\bterritor(?:y|ies)\b"), "territorio"),
-    (re.compile(r"\bdepartments?\b"), "reparto"),
-    (re.compile(r"\b(?:salary|salaries|wage|pay rate)\b"), "retribuzione"),
-    (re.compile(r"\brevenue\b"), "incassi"),
-]
+
+
+def _load_term_map() -> list[tuple[re.Pattern[str], str]]:
+    """Load English-to-Italian term mappings from term_map.json.
+
+    Falls back to empty list if the file is missing or malformed.
+    """
+    import json as _json
+    import pathlib as _pathlib
+
+    _path = _pathlib.Path(__file__).parent / "term_map.json"
+    try:
+        data = _json.loads(_path.read_text(encoding="utf-8"))
+        return [
+            (re.compile(pattern), replacement)
+            for pattern, replacement in data.get("mappings", [])
+        ]
+    except (FileNotFoundError, KeyError, ValueError):
+        return []
+
+
+_EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = _load_term_map()
 
 
 def _normalize_english_terms(q: str) -> str:
@@ -590,25 +596,6 @@ def _normalize_english_terms(q: str) -> str:
     for pattern, replacement in _EN_TERM_MAP:
         q = pattern.sub(replacement, q)
     return q
-
-
-_PRODUCT_CODE_RE = re.compile(r"\b([A-Z][A-Za-z]+-\d{2,4})\b")
-
-
-def _extract_product_code(text: str) -> str | None:
-    """Extract an AdventureWorks-style product code like 'Road-650'."""
-    m = _PRODUCT_CODE_RE.search(text)
-    return m.group(1) if m else None
-
-
-def _extract_state(text: str) -> str | None:
-    """Extract US state name from text."""
-    known = ["california", "washington", "texas", "oregon", "arizona", "colorado"]
-    tl = text.lower()
-    for s in known:
-        if s in tl:
-            return s.title()
-    return None
 
 
 # ── SemanticLayer ─────────────────────────────────────────────────────────────
