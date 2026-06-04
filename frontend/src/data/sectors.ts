@@ -1,6 +1,8 @@
 import type { OntologyGraphData, OntologyProperty, ProcessFunnelStage } from '../types'
 
-export type SectorId = 'manufacturing' | 'retail' | 'healthcare' | 'finance'
+export type SectorId = string
+
+export const KNOWN_SECTOR_IDS = ['manufacturing', 'retail', 'healthcare', 'finance'] as const
 
 export interface SectorConfig {
   id: SectorId
@@ -20,7 +22,7 @@ function p(name: string, type: OntologyProperty['type'], opts?: { required?: boo
   return { name, type, ...opts }
 }
 
-export const SECTORS: Record<SectorId, SectorConfig> = {
+export const SECTORS: Record<string, SectorConfig> = {
   manufacturing: {
     id: 'manufacturing',
     name: 'Manufacturing',
