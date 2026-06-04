@@ -556,7 +556,7 @@ class _RuleParser:
         r'"([^"]+)"|\'([^\']+)\'|reparto\s+([A-Za-z &]+)', re.IGNORECASE
     )
 
-    def parse(self, question: str) -> Intent:
+    def parse(self, question: str, templates: list[dict] | None = None) -> Intent:
         q = question.lower()
         # The deterministic patterns below were authored for Italian questions.
         # The product UI is now English, so normalise the most common English
@@ -944,6 +944,20 @@ class _RuleParser:
         if "quanti clienti" in q or "numero clienti" in q:
             return Intent(intent_type="count_customers_unique", raw_question=question)
 
+        # ── Template keyword matching (before unknown fallback) ────────────────
+        if templates:
+            q_lower = q.lower()
+            for tpl in templates:
+                if not tpl.get("is_active", True):
+                    continue
+                for kw in tpl.get("keywords", []):
+                    if kw.lower() in q_lower:
+                        return Intent(
+                            intent_type=tpl["intent_type"],
+                            filters={},
+                            raw_question=question,
+                        )
+
         # Fallback — unknown
         return Intent(intent_type="unknown", raw_question=question)
 
@@ -1065,6 +1079,8 @@ class SemanticLayer:
         self._hr_pim = None
         # DuckDB manager — set by set_manager() for schema-driven LLM SQL generation
         self._mgr = None
+        # User-defined query templates — hot-reloaded via set_templates()
+        self._templates: list[dict] = []
 
     @property
     def _effective_docs(self) -> SemanticDocs | None:
@@ -1090,6 +1106,14 @@ class SemanticLayer:
     def set_context_docs(self, docs: list[dict]) -> None:
         """Inject global context documents into LLM SQL generation prompts."""
         self._context_docs: list[dict] = list(docs or [])
+
+    def set_templates(self, templates: list[dict]) -> None:
+        """Hot-reload query templates from the catalog (called after DB writes)."""
+        self._templates = list(templates)
+
+    def _reload_templates(self) -> None:
+        """No-op placeholder; hot-reload is done via set_templates()."""
+        pass
 
     def _exec(self, sql: str, params: tuple = ()) -> list[dict]:
         """Execute SQL against the unified DuckDB snapshot.
@@ -1152,7 +1176,7 @@ class SemanticLayer:
     def _resolve(self, question: str, context) -> Result:
         # Stage 1: deterministic baseline parse
         try:
-            baseline_intent = self._parser.parse(question)
+            baseline_intent = self._parser.parse(question, templates=self._templates)
         except AmbiguityError:
             raise
         except Exception as exc:
@@ -1186,7 +1210,9 @@ class SemanticLayer:
             mapping = self._fallback_mapping_from_rule(baseline_intent)
 
         intent_type = mapping.intent_type or baseline_intent.intent_type
-        if intent_type not in _INTENT_CONTRACTS:
+        # Preserve dynamic template intents (tpl_<id>) before contract check
+        _is_template_intent = intent_type.startswith("tpl_")
+        if not _is_template_intent and intent_type not in _INTENT_CONTRACTS:
             # The model picked an intent we don't support: treat it as 'unknown'
             # so the executor returns a friendly hint rather than raising a 422.
             logger.info("LLM mapped to unsupported intent '%s' → unknown", intent_type)
@@ -1457,6 +1483,19 @@ class SemanticLayer:
         intent: Intent,
         mapping: OntologyIntentMapping,
     ) -> NeuroSymbolicPlan:
+        # Dynamic template intents have no ontology contract — return a minimal plan
+        if intent.intent_type.startswith("tpl_"):
+            return NeuroSymbolicPlan(
+                intent_type=intent.intent_type,
+                metric=None,
+                entities=[],
+                properties=[],
+                relations=[],
+                connectors=[],
+                tables=[],
+                validation_steps=["template_intent"],
+            )
+
         contract = _INTENT_CONTRACTS.get(intent.intent_type)
         if not contract:
             raise SemanticOntologyViolationError(
@@ -1638,6 +1677,11 @@ class SemanticLayer:
             "lookup_employee": self._q_lookup_employee,
             "impossible": self._q_impossible,
         }
+        # inject dynamic template handlers
+        for tpl in self._templates:
+            if tpl.get("is_active", True):
+                dispatch[tpl["intent_type"]] = self._execute_template_query
+
         fn = dispatch.get(intent.intent_type)
         if fn is None:
             return self._execute_llm_sql(intent)

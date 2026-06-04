@@ -82,6 +82,20 @@ class MetricMetaRow(Base):
     sources_touched_json = Column(Text, default="[]")
 
 
+class QueryTemplateRow(Base):
+    __tablename__ = "query_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, default="")
+    sql_query = Column(Text, nullable=False)
+    keywords_json = Column(Text, default="[]")
+    sources_json = Column(Text, default="[]")
+    created_at = Column(String, default="")
+    updated_at = Column(String, default="")
+    is_active = Column(Integer, default=1)
+
+
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
 
 
@@ -601,6 +615,95 @@ class MetadataCatalog:
                 }
                 for r in rows
             ]
+
+    # ── Query template CRUD ────────────────────────────────────────────────
+
+    @staticmethod
+    def _template_to_dict(row: "QueryTemplateRow") -> dict:
+        import json
+
+        return {
+            "id": row.id,
+            "name": row.name,
+            "description": row.description or "",
+            "sql_query": row.sql_query,
+            "keywords": json.loads(row.keywords_json or "[]"),
+            "sources": json.loads(row.sources_json or "[]"),
+            "intent_type": f"tpl_{row.id}",
+            "is_active": bool(row.is_active),
+            "created_at": row.created_at or "",
+            "updated_at": row.updated_at or "",
+        }
+
+    def list_templates(self, active_only: bool = True) -> list[dict]:
+        with self._Session() as s:
+            q = s.query(QueryTemplateRow)
+            if active_only:
+                q = q.filter(QueryTemplateRow.is_active == 1)
+            rows = q.order_by(QueryTemplateRow.id).all()
+            return [self._template_to_dict(r) for r in rows]
+
+    def create_template(
+        self,
+        name: str,
+        description: str,
+        sql_query: str,
+        keywords: list[str],
+        sources: list[str],
+    ) -> dict:
+        import json
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        row = QueryTemplateRow(
+            name=name,
+            description=description,
+            sql_query=sql_query,
+            keywords_json=json.dumps(keywords),
+            sources_json=json.dumps(sources),
+            created_at=now,
+            updated_at=now,
+            is_active=1,
+        )
+        with self._Session() as s:
+            s.add(row)
+            s.flush()
+            result = self._template_to_dict(row)
+        return result
+
+    def update_template(self, template_id: int, **kwargs) -> dict:
+        import json
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        with self._Session() as s:
+            row = s.query(QueryTemplateRow).filter_by(id=template_id).first()
+            if row is None:
+                raise KeyError(f"Template {template_id} not found")
+            if "name" in kwargs and kwargs["name"] is not None:
+                row.name = kwargs["name"]
+            if "description" in kwargs and kwargs["description"] is not None:
+                row.description = kwargs["description"]
+            if "sql_query" in kwargs and kwargs["sql_query"] is not None:
+                row.sql_query = kwargs["sql_query"]
+            if "keywords" in kwargs and kwargs["keywords"] is not None:
+                row.keywords_json = json.dumps(kwargs["keywords"])
+            if "sources" in kwargs and kwargs["sources"] is not None:
+                row.sources_json = json.dumps(kwargs["sources"])
+            row.updated_at = now
+            result = self._template_to_dict(row)
+        return result
+
+    def delete_template(self, template_id: int) -> None:
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        with self._Session() as s:
+            row = s.query(QueryTemplateRow).filter_by(id=template_id).first()
+            if row is None:
+                raise KeyError(f"Template {template_id} not found")
+            row.is_active = 0
+            row.updated_at = now
 
     # ── internal helpers ──────────────────────────────────────────────────────
 
