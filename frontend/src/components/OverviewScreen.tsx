@@ -180,7 +180,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Active sector — {sector.name}</p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(sector.connectors.length),  sub: sector.domain },
+                  { label: 'Data Sources',    value: String((liveConfig?.connectors ?? sector.connectors).length),  sub: sector.domain },
                   { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
                   { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
                 ].map(s => (

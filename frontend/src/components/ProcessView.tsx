@@ -516,7 +516,7 @@ export default function ProcessView() {
         {runState === 'done' && (
           <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
             {[
-              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${sector.connectors.length} sources connected` },
+              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${(liveConfig?.connectors ?? sector.connectors).length} sources connected` },
               { label: 'Entities Mapped',  value: String(summary.entities),        sub: `${summary.entities} ontology classes` },
               { label: 'KG Nodes Created', value: summary.enrichments,             sub: 'instances in Knowledge Graph' },
               { label: 'KG Edges Indexed', value: summary.triples,                 sub: '3 cross-source bridges' },
