@@ -8,7 +8,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
-import { semanticStatus, type SemanticStatus } from '../api/semantic'
+import { semanticStatus, getLiveConfig, type SemanticStatus, type LiveConfig } from '../api/semantic'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
 
@@ -411,7 +411,12 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const ontology = useExtendedOntology(sectorId)
   const agentRuns = useAgentStore(sectorId)
 
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   const [reporting, setReporting] = useState(false)
+
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+  }, [])
 
   const [pipelineLastRun, setPipelineLastRun] = useState<Date | null>(() => {
     const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
@@ -463,9 +468,16 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const currVal = trendSeries[trendSeries.length - 1]
   const trendPct = Math.round(((currVal - prevVal) / Math.max(1, prevVal)) * 100)
 
+  const kpiLabels = {
+    quotes: liveConfig?.metrics.find(m => m.name === 'revenue')?.label ?? sector.kpiLabels.quotes,
+    orders: sector.kpiLabels.orders,
+    conversion: sector.kpiLabels.conversion,
+    openValue: sector.kpiLabels.openValue,
+  }
+
   const kpis = [
     {
-      label: sector.kpiLabels.quotes,
+      label: kpiLabels.quotes,
       value: `${totalQuotes}`,
       icon: FileText,
       color: 'text-blue-600', bg: 'bg-blue-50',
@@ -474,7 +486,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +12,
     },
     {
-      label: sector.kpiLabels.orders,
+      label: kpiLabels.orders,
       value: `${totalOrders}`,
       icon: ShoppingCart,
       color: 'text-purple-600', bg: 'bg-purple-50',
@@ -483,7 +495,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +8,
     },
     {
-      label: sector.kpiLabels.conversion,
+      label: kpiLabels.conversion,
       value: `${conversion}%`,
       icon: TrendingUp,
       color: 'text-teal-600', bg: 'bg-teal-50',
@@ -492,7 +504,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +3,
     },
     {
-      label: sector.kpiLabels.openValue,
+      label: kpiLabels.openValue,
       value: hasMonetary ? fmt(openValue) : `${totalQuotes}`,
       icon: Users,
       color: 'text-amber-600', bg: 'bg-amber-50',

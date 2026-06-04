@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math as _math
 import sqlite3 as _sqlite3
 import logging
 import os
@@ -2010,10 +2011,9 @@ def list_example_questions() -> list[dict[str, str]]:
 # ── Live Config endpoint ──────────────────────────────────────────────────────
 
 
-import math as _math
-
-
-def _auto_layout_positions(entities: list[dict], relations: list[dict]) -> dict[str, dict]:
+def _auto_layout_positions(
+    entities: list[dict], relations: list[dict]
+) -> dict[str, dict]:
     """Assign x/y positions using a simple grid layout.
 
     Entities with more outgoing FK relations go left (source nodes).
@@ -2087,7 +2087,9 @@ async def get_live_config(
                     {
                         "from_table": src_table,
                         "to_table": dst_table,
-                        "via_column": edge_type[3:] if edge_type.startswith("FK_") else "",
+                        "via_column": edge_type[3:]
+                        if edge_type.startswith("FK_")
+                        else "",
                         "edge_type": edge_type,
                     }
                 )
@@ -2096,10 +2098,7 @@ async def get_live_config(
     from .connectors.source_registry import get_source_registry
 
     registry = get_source_registry()
-    sources = [
-        c for c in registry.list()
-        if c.connector_type not in ("context_doc",)
-    ]
+    sources = [c for c in registry.list() if c.connector_type not in ("context_doc",)]
     connector_names = [c.label for c in sources] if sources else []
 
     # Build domain string from connector types
