@@ -1,20 +1,11 @@
 """
-AdventureWorks Unified Query Engine.
+Unified Query Engine.
 
-Loads all 4 sources (ERP, CRM, HR, PIM) into a single DuckDB in-memory
+Loads all available data sources into a single DuckDB in-memory
 instance and exposes a Claude-powered NL→SQL→execute pipeline.
 
-Tables registered in DuckDB (no schema prefix needed in SQL):
-  ERP:  sales_order_header, sales_order_line, salesperson, territory, offer
-  CRM:  account, contact, address, account_address, state_province
-  HR:   hr_employees  (columns: MatricolaDip, Nome, Cognome, Mansione, Reparto,
-                        GruppoReparto, DataAssunzione, DataNascita, Genere,
-                        StatoCivile, OreFerieResidue, OreMalattiaResidue,
-                        RetribuzioneOraria, FrequenzaPaga)
-  PIM:  pim_products  (columns: sku, internal_id, displayName, categoryPath,
-                        modelName, color, size, weight, weightUnit, standardCost,
-                        listPrice, isMakeOnly, isPurchasable, sellStartDate,
-                        sellEndDate)
+Tables registered in DuckDB (no schema prefix needed in SQL) are
+discovered dynamically from the active scenario / semantic layer.
 """
 
 from __future__ import annotations
@@ -48,188 +39,197 @@ def _get_client() -> anthropic.Anthropic:
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a data intelligence assistant for an AdventureWorks manufacturing company.
-You have access to a unified DuckDB in-memory database with data from 4 sources.
 
-== SOURCE 1: ERP (OrionSales / AdventureWorks) ==
+def build_system_prompt(catalog=None, layer=None) -> str:
+    """Build a dynamic system prompt from semantic layer metadata."""
+    parts = [
+        "You are a data intelligence assistant. "
+        "Answer questions using the available data sources described below."
+    ]
 
-TABLE: sales_order_header
-  - order_id (INTEGER PK) — unique order identifier
-  - order_number (TEXT) — human-readable order number (e.g. SO43659)
-  - order_date (TEXT ISO date) — date the order was placed
-  - ship_date (TEXT ISO date) — date shipped (may be NULL)
-  - due_date (TEXT ISO date) — expected delivery date
-  - status_code (INTEGER) — 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled
-  - customer_ref (INTEGER FK → CRM account.accountId) — bridges to CRM
-  - salesperson_ref (INTEGER FK → salesperson.salesperson_id) — bridges to HR via MatricolaDip
-  - territory_ref (INTEGER FK → territory.territory_id)
-  - subtotal_amount (REAL) — net revenue before tax and freight
-  - tax_amount (REAL) — tax charged
-  - freight_amount (REAL) — freight cost
-  - total_due (REAL) — total billed (subtotal + tax + freight)
-  - currency_iso (TEXT) — currency code (USD)
+    if catalog is not None:
+        try:
+            entities = (
+                catalog.list_entities() if hasattr(catalog, "list_entities") else []
+            )
+            metrics = catalog.list_metrics() if hasattr(catalog, "list_metrics") else []
+            if entities:
+                entity_names = ", ".join(e.get("name", "") for e in entities[:10])
+                parts.append(f"\nAvailable entities: {entity_names}")
+            if metrics:
+                metric_names = ", ".join(
+                    m.get("label") or m.get("name", "") for m in metrics[:5]
+                )
+                parts.append(f"\nKey metrics: {metric_names}")
+        except Exception:
+            pass
 
-TABLE: sales_order_line
-  - order_id (INTEGER FK → sales_order_header.order_id)
-  - line_id (INTEGER) — line number within the order
-  - product_ref (INTEGER FK → pim_products.internal_id) — bridges to PIM
-  - qty (REAL) — quantity ordered
-  - unit_price (REAL) — price per unit
-  - unit_discount (REAL) — discount applied per unit
-  - line_total (REAL) — qty * (unit_price - unit_discount)
-  - offer_ref (INTEGER FK → offer.offer_id, may be NULL)
+    parts.append(
+        "\n\n== AVAILABLE TABLES ==\n"
+        "\nTABLE: sales_order_header\n"
+        "  - order_id (INTEGER PK) — unique order identifier\n"
+        "  - order_number (TEXT) — human-readable order number\n"
+        "  - order_date (TEXT ISO date) — date the order was placed\n"
+        "  - ship_date (TEXT ISO date) — date shipped (may be NULL)\n"
+        "  - due_date (TEXT ISO date) — expected delivery date\n"
+        "  - status_code (INTEGER) — 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled\n"
+        "  - customer_ref (INTEGER FK → account.accountId)\n"
+        "  - salesperson_ref (INTEGER FK → salesperson.salesperson_id)\n"
+        "  - territory_ref (INTEGER FK → territory.territory_id)\n"
+        "  - subtotal_amount (REAL) — net revenue before tax and freight\n"
+        "  - tax_amount (REAL) — tax charged\n"
+        "  - freight_amount (REAL) — freight cost\n"
+        "  - total_due (REAL) — total billed (subtotal + tax + freight)\n"
+        "  - currency_iso (TEXT) — currency code\n"
+        "\nTABLE: sales_order_line\n"
+        "  - order_id (INTEGER FK → sales_order_header.order_id)\n"
+        "  - line_id (INTEGER) — line number within the order\n"
+        "  - product_ref (INTEGER FK → pim_products.internal_id)\n"
+        "  - qty (REAL) — quantity ordered\n"
+        "  - unit_price (REAL) — price per unit\n"
+        "  - unit_discount (REAL) — discount applied per unit\n"
+        "  - line_total (REAL) — qty * (unit_price - unit_discount)\n"
+        "  - offer_ref (INTEGER FK → offer.offer_id, may be NULL)\n"
+        "\nTABLE: salesperson\n"
+        "  - salesperson_id (INTEGER PK)\n"
+        "  - territory_ref (INTEGER FK → territory.territory_id)\n"
+        "  - sales_quota (REAL)\n"
+        "  - bonus (REAL)\n"
+        "  - commission_pct (REAL)\n"
+        "  - sales_ytd (REAL) — year-to-date sales\n"
+        "  - sales_last_year (REAL)\n"
+        "\nTABLE: territory\n"
+        "  - territory_id (INTEGER PK)\n"
+        "  - territory_name (TEXT)\n"
+        "  - country_code (TEXT)\n"
+        "  - region_group (TEXT)\n"
+        "  - sales_ytd (REAL)\n"
+        "  - cost_ytd (REAL)\n"
+        "\nTABLE: offer\n"
+        "  - offer_id (INTEGER PK)\n"
+        "  - description (TEXT)\n"
+        "  - discount_pct (REAL)\n"
+        "  - offer_type (TEXT)\n"
+        "  - category (TEXT)\n"
+        "  - start_date (TEXT ISO date)\n"
+        "  - end_date (TEXT ISO date)\n"
+        "  - min_qty (REAL)\n"
+        "  - max_qty (REAL)\n"
+        "\nTABLE: account\n"
+        "  - accountId (INTEGER PK) — negative IDs indicate duplicate records\n"
+        "  - accountType (TEXT) — customer type\n"
+        "  - personRef (INTEGER FK → contact.contactId)\n"
+        "  - storeRef (INTEGER)\n"
+        "  - ragioneSociale (TEXT) — company name\n"
+        "  - nomeContatto (TEXT) — contact name\n"
+        "  - emailContatto (TEXT)\n"
+        "  - telefonoContatto (TEXT)\n"
+        "  - territoryHint (INTEGER)\n"
+        "  - createdAt (TEXT ISO date)\n"
+        "  - isActive (INTEGER) — 1=active\n"
+        "\nTABLE: contact\n"
+        "  - contactId (INTEGER PK)\n"
+        "  - firstName (TEXT)\n"
+        "  - middleName (TEXT)\n"
+        "  - lastName (TEXT)\n"
+        "  - personType (TEXT)\n"
+        "  - email (TEXT)\n"
+        "  - phone (TEXT)\n"
+        "\nTABLE: address\n"
+        "  - addressId (INTEGER PK)\n"
+        "  - line1 (TEXT)\n"
+        "  - line2 (TEXT)\n"
+        "  - city (TEXT)\n"
+        "  - stateProvinceId (INTEGER FK → state_province.stateId)\n"
+        "  - postalCode (TEXT)\n"
+        "\nTABLE: account_address\n"
+        "  - accountRef (INTEGER FK → account.accountId)\n"
+        "  - addressRef (INTEGER FK → address.addressId)\n"
+        "  - addressType (TEXT)\n"
+        "\nTABLE: state_province\n"
+        "  - stateId (INTEGER PK)\n"
+        "  - stateCode (TEXT)\n"
+        "  - stateName (TEXT)\n"
+        "  - countryCode (TEXT)\n"
+        "  - territoryRef (INTEGER FK → territory.territory_id)\n"
+        "\nTABLE: hr_employees\n"
+        "  - MatricolaDip (TEXT) — employee ID, bridges to salesperson_ref\n"
+        "  - Nome (TEXT) — first name\n"
+        "  - Cognome (TEXT) — last name\n"
+        "  - Mansione (TEXT) — job title/role\n"
+        "  - Reparto (TEXT) — department\n"
+        "  - GruppoReparto (TEXT) — department group\n"
+        "  - DataAssunzione (TEXT ISO date) — hire date\n"
+        "  - DataNascita (TEXT ISO date) — birth date\n"
+        "  - Genere (TEXT)\n"
+        "  - StatoCivile (TEXT)\n"
+        "  - OreFerieResidue (TEXT) — remaining vacation hours\n"
+        "  - OreMalattiaResidue (TEXT) — remaining sick leave hours\n"
+        "  - RetribuzioneOraria (TEXT) — hourly rate\n"
+        "  - FrequenzaPaga (TEXT) — pay frequency\n"
+        "\nTABLE: pim_products\n"
+        "  - sku (TEXT) — stock keeping unit\n"
+        "  - internal_id (INTEGER PK) — bridges to sales_order_line.product_ref\n"
+        "  - displayName (TEXT) — product name\n"
+        "  - categoryPath (TEXT) — full category hierarchy path\n"
+        "  - modelName (TEXT)\n"
+        "  - color (TEXT)\n"
+        "  - size (TEXT)\n"
+        "  - weight (REAL)\n"
+        "  - weightUnit (TEXT)\n"
+        "  - standardCost (REAL) — production cost\n"
+        "  - listPrice (REAL) — list price\n"
+        "  - isMakeOnly (INTEGER) — 1=manufactured in-house only\n"
+        "  - isPurchasable (INTEGER)\n"
+        "  - sellStartDate (TEXT ISO date)\n"
+        "  - sellEndDate (TEXT ISO date)\n"
+        "\n== BRIDGE RELATIONSHIPS ==\n"
+        "\n  ERP ↔ HR:    sales_order_header.salesperson_ref = hr_employees.MatricolaDip\n"
+        "               (CAST one side to TEXT/INTEGER as needed for join)\n"
+        "  ERP ↔ PIM:   sales_order_line.product_ref = pim_products.internal_id\n"
+        "  ERP ↔ CRM:   sales_order_header.customer_ref = account.accountId\n"
+        "\n== SQL DIALECT RULES ==\n"
+        "\n- Database: DuckDB (not SQLite, not PostgreSQL)\n"
+        "- Do NOT use backticks for identifiers; use double-quotes if quoting is needed\n"
+        "- IMPORTANT: All date columns (order_date, ship_date, due_date, DataAssunzione, etc.)\n"
+        "  are stored as TEXT in ISO format (YYYY-MM-DD). You MUST cast them before using\n"
+        "  date functions: CAST(order_date AS DATE)\n"
+        "  Examples:\n"
+        "    YEAR(CAST(order_date AS DATE))\n"
+        "    MONTH(CAST(order_date AS DATE))\n"
+        "    DATE_TRUNC('month', CAST(order_date AS DATE))\n"
+        "    EXTRACT(YEAR FROM CAST(order_date AS DATE))\n"
+        "- String functions: CONCAT(), LOWER(), UPPER(), TRIM(), LIKE, ILIKE\n"
+        "- CAST: CAST(col AS INTEGER), CAST(col AS REAL), CAST(col AS TEXT), CAST(col AS DATE)\n"
+        "- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc.\n"
+        "- LIMIT results to 100 rows maximum\n"
+        "- Only generate read-only SELECT statements\n"
+        "- Join hr_employees using: CAST(sales_order_header.salesperson_ref AS TEXT) = hr_employees.MatricolaDip\n"
+        "\n== RESPONSE FORMAT ==\n"
+        "\nAlways respond with valid JSON exactly matching this structure:\n"
+        "{\n"
+        '  "interpreted_as": "Clear English description of what the question is asking",\n'
+        '  "sql": "SELECT ...",\n'
+        '  "chart_hint": {"type": "bar"|"line"|"pie"|"table", "label_col": "column_name", "value_col": "column_name"} or null\n'
+        "}\n"
+        "\nRules:\n"
+        "- interpreted_as: describe the question in clear English\n"
+        "- sql: valid DuckDB SELECT query, limit 100 rows\n"
+        "- chart_hint: suggest the best visualization, or null if tabular only\n"
+        "- If the question is ambiguous, make the most reasonable interpretation\n"
+        "- If the question cannot be answered with available data, return sql as "
+        '"SELECT 1 AS unsupported" and explain in interpreted_as'
+    )
 
-TABLE: salesperson
-  - salesperson_id (INTEGER PK)
-  - territory_ref (INTEGER FK → territory.territory_id)
-  - sales_quota (REAL)
-  - bonus (REAL)
-  - commission_pct (REAL)
-  - sales_ytd (REAL) — year-to-date sales
-  - sales_last_year (REAL)
+    parts.append(
+        "\nWhen asked about data, write precise SQL queries. "
+        "If a question is ambiguous, ask for clarification. "
+        "If data is not available in the schema, say so clearly."
+    )
+    return "\n".join(parts)
 
-TABLE: territory
-  - territory_id (INTEGER PK)
-  - territory_name (TEXT) — e.g. "Northwest", "Canada", "France"
-  - country_code (TEXT) — e.g. "US", "CA", "FR"
-  - region_group (TEXT) — e.g. "North America", "Europe", "Pacific"
-  - sales_ytd (REAL)
-  - cost_ytd (REAL)
 
-TABLE: offer
-  - offer_id (INTEGER PK)
-  - description (TEXT)
-  - discount_pct (REAL)
-  - offer_type (TEXT)
-  - category (TEXT)
-  - start_date (TEXT ISO date)
-  - end_date (TEXT ISO date)
-  - min_qty (REAL)
-  - max_qty (REAL)
-
-== SOURCE 2: CRM (ClientHub) ==
-
-TABLE: account
-  - accountId (INTEGER PK) — negative IDs indicate duplicate records
-  - accountType (TEXT) — customer type
-  - personRef (INTEGER FK → contact.contactId)
-  - storeRef (INTEGER)
-  - ragioneSociale (TEXT) — company name (Italian)
-  - nomeContatto (TEXT) — contact name
-  - emailContatto (TEXT)
-  - telefonoContatto (TEXT)
-  - territoryHint (INTEGER) — approximate territory_id
-  - createdAt (TEXT ISO date)
-  - isActive (INTEGER) — 1=active
-
-TABLE: contact
-  - contactId (INTEGER PK)
-  - firstName (TEXT)
-  - middleName (TEXT)
-  - lastName (TEXT)
-  - personType (TEXT)
-  - email (TEXT)
-  - phone (TEXT)
-
-TABLE: address
-  - addressId (INTEGER PK)
-  - line1 (TEXT)
-  - line2 (TEXT)
-  - city (TEXT)
-  - stateProvinceId (INTEGER FK → state_province.stateId)
-  - postalCode (TEXT)
-
-TABLE: account_address
-  - accountRef (INTEGER FK → account.accountId)
-  - addressRef (INTEGER FK → address.addressId)
-  - addressType (TEXT) — e.g. "Main Office", "Shipping"
-
-TABLE: state_province
-  - stateId (INTEGER PK)
-  - stateCode (TEXT)
-  - stateName (TEXT)
-  - countryCode (TEXT)
-  - territoryRef (INTEGER FK → territory.territory_id)
-
-== SOURCE 3: HR (dipendenti_hr.csv) ==
-
-TABLE: hr_employees
-  - MatricolaDip (TEXT) — employee ID, bridges to ERP salesperson_ref
-  - Nome (TEXT) — first name
-  - Cognome (TEXT) — last name
-  - Mansione (TEXT) — job title/role
-  - Reparto (TEXT) — department
-  - GruppoReparto (TEXT) — department group
-  - DataAssunzione (TEXT ISO date) — hire date
-  - DataNascita (TEXT ISO date) — birth date
-  - Genere (TEXT)
-  - StatoCivile (TEXT)
-  - OreFerieResidue (TEXT) — remaining vacation hours
-  - OreMalattiaResidue (TEXT) — remaining sick leave hours
-  - RetribuzioneOraria (TEXT) — hourly rate
-  - FrequenzaPaga (TEXT) — pay frequency
-
-== SOURCE 4: PIM (product_catalog_pim.json) ==
-
-TABLE: pim_products
-  - sku (TEXT) — stock keeping unit
-  - internal_id (INTEGER PK) — bridges to ERP sales_order_line.product_ref
-  - displayName (TEXT) — product name
-  - categoryPath (TEXT) — full category hierarchy path
-  - modelName (TEXT)
-  - color (TEXT)
-  - size (TEXT)
-  - weight (REAL)
-  - weightUnit (TEXT)
-  - standardCost (REAL) — production cost
-  - listPrice (REAL) — list price
-  - isMakeOnly (INTEGER) — 1=manufactured in-house only
-  - isPurchasable (INTEGER)
-  - sellStartDate (TEXT ISO date)
-  - sellEndDate (TEXT ISO date)
-
-== BRIDGE RELATIONSHIPS ==
-
-  ERP ↔ HR:    sales_order_header.salesperson_ref = hr_employees.MatricolaDip
-               (CAST one side to TEXT/INTEGER as needed for join)
-  ERP ↔ PIM:   sales_order_line.product_ref = pim_products.internal_id
-  ERP ↔ CRM:   sales_order_header.customer_ref = account.accountId
-
-== SQL DIALECT RULES ==
-
-- Database: DuckDB (not SQLite, not PostgreSQL)
-- Do NOT use backticks for identifiers; use double-quotes if quoting is needed
-- IMPORTANT: All date columns (order_date, ship_date, due_date, DataAssunzione, etc.)
-  are stored as TEXT in ISO format (YYYY-MM-DD). You MUST cast them before using
-  date functions: CAST(order_date AS DATE)
-  Examples:
-    YEAR(CAST(order_date AS DATE))
-    MONTH(CAST(order_date AS DATE))
-    DATE_TRUNC('month', CAST(order_date AS DATE))
-    EXTRACT(YEAR FROM CAST(order_date AS DATE))
-- String functions: CONCAT(), LOWER(), UPPER(), TRIM(), LIKE, ILIKE
-- CAST: CAST(col AS INTEGER), CAST(col AS REAL), CAST(col AS TEXT), CAST(col AS DATE)
-- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc.
-- LIMIT results to 100 rows maximum
-- Only generate read-only SELECT statements
-- Join hr_employees using: CAST(sales_order_header.salesperson_ref AS TEXT) = hr_employees.MatricolaDip
-
-== RESPONSE FORMAT ==
-
-Always respond with valid JSON exactly matching this structure:
-{
-  "interpreted_as": "Clear English description of what the question is asking",
-  "sql": "SELECT ...",
-  "chart_hint": {"type": "bar"|"line"|"pie"|"table", "label_col": "column_name", "value_col": "column_name"} or null
-}
-
-Rules:
-- interpreted_as: describe the question in clear English
-- sql: valid DuckDB SELECT query, limit 100 rows
-- chart_hint: suggest the best visualization, or null if tabular only
-- If the question is ambiguous, make the most reasonable interpretation
-- If the question cannot be answered with available data, return sql as "SELECT 1 AS unsupported" and explain in interpreted_as
-"""
+SYSTEM_PROMPT = build_system_prompt()  # generic fallback, overridden at call time
 
 
 # ── Unified DuckDB connection (scalable — persistent file or live pushdown) ────

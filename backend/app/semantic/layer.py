@@ -1419,8 +1419,8 @@ class SemanticLayer:
         reason = intent.filters.get("reason", "unknown")
         messages = {
             "nationality_not_available": (
-                "The field 'employee nationality' is not available in any of the data sources "
-                "(ERP, CRM, HR/PIM). AdventureWorks does not contain this attribute. "
+                "The field 'employee nationality' is not available in any of the configured data sources. "
+                "This attribute is not available in the current dataset. "
                 "Unable to answer the question."
             ),
         }
@@ -1694,8 +1694,8 @@ class SemanticLayer:
         },
         {
             "name": "count_employees",
-            "definition": "COUNT(*) FROM dipendenti_hr",
-            "source": "HR/PIM dipendenti_hr",
+            "definition": "COUNT(*) FROM hr_employees",
+            "source": "HR/PIM hr_employees",
             "unit": "count",
             "status": "certified",
             "freshness": "Delayed — data not in real time",
