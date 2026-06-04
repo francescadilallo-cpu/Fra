@@ -470,6 +470,11 @@ def _ensure_semantic_loaded() -> None:
         n = catalog.seed_glossary_docs(DEFAULT_GLOSSARY)
         if n:
             logger.info("Seeded %d glossary terms as context docs", n)
+        # Apply semantic annotations (name, description, field docs) from YAML config
+        annotations = catalog._load_entity_annotations()
+        n = catalog.seed_entity_annotations(annotations)
+        if n:
+            logger.info("Applied semantic annotations to %d entities", n)
         # Load user-defined query templates into the semantic layer
         layer.set_templates(catalog.list_templates())
         # Inject any registered context documents into the LLM prompt

@@ -837,6 +837,63 @@ class MetadataCatalog:
                 count += 1
         return count
 
+    # ── entity annotation seeding ────────────────────────────────────────────
+
+    @staticmethod
+    def _load_entity_annotations() -> list[dict]:
+        """Load entity annotations from entities_config.yaml next to this module."""
+        import pathlib as _pathlib
+
+        import yaml as _yaml
+
+        path = _pathlib.Path(__file__).parent / "entities_config.yaml"
+        try:
+            data = _yaml.safe_load(path.read_text(encoding="utf-8"))
+            return data.get("entities", [])
+        except Exception:
+            return []
+
+    def seed_entity_annotations(self, annotations: list[dict]) -> int:
+        """Apply semantic annotations (name, description, field docs) to entities.
+
+        Looks up each entity by table name — matching the ``name`` column used by
+        ``populate_from_manager`` when it auto-discovers DuckDB tables.
+
+        Only annotates entities whose tables actually exist in the DB.
+        Never overwrites user-edited fields (user_description, context_notes).
+        Returns count of entities annotated.
+        """
+        available = self._get_available_tables()
+        count = 0
+        for ann in annotations:
+            table = ann.get("table", "")
+            if available and table not in available:
+                continue
+            with self._Session() as s:
+                # populate_from_manager stores entities with name=table
+                row = s.query(EntityMetaRow).filter_by(name=table).first()
+                if row is None:
+                    continue  # entity not yet in catalog — auto-extract will create it
+                changed = False
+                if not row.description or row.description.startswith("Auto-discovered"):
+                    new_desc = ann.get("description", "")
+                    if new_desc:
+                        row.description = new_desc
+                        changed = True
+                if not row.user_description:
+                    new_ud = ann.get("user_description", "")
+                    if new_ud:
+                        row.user_description = new_ud
+                        changed = True
+                if not row.context_notes:
+                    new_cn = ann.get("context_notes", "")
+                    if new_cn:
+                        row.context_notes = new_cn
+                        changed = True
+                if changed:
+                    count += 1
+        return count
+
     # ── internal helpers ──────────────────────────────────────────────────────
 
     def _upsert_entity(
@@ -1001,6 +1058,9 @@ class MetadataCatalog:
     def _populate_erp(
         self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
+        # DEPRECATED: entity annotations now loaded from entities_config.yaml via
+        # seed_entity_annotations(). This method is kept as a fallback for legacy
+        # deployments and will be removed in a future version.
         erp = _find_connector(connectors, "erp")
         if erp is None and mgr is None:
             return
@@ -1170,6 +1230,9 @@ class MetadataCatalog:
     def _populate_crm(
         self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
+        # DEPRECATED: entity annotations now loaded from entities_config.yaml via
+        # seed_entity_annotations(). This method is kept as a fallback for legacy
+        # deployments and will be removed in a future version.
         crm = _find_connector(connectors, "crm")
         if crm is None and mgr is None:
             return
@@ -1226,6 +1289,9 @@ class MetadataCatalog:
     def _populate_hr_pim(
         self, session: Session, connectors: list, ontology, kg, now: str, mgr=None
     ) -> None:
+        # DEPRECATED: entity annotations now loaded from entities_config.yaml via
+        # seed_entity_annotations(). This method is kept as a fallback for legacy
+        # deployments and will be removed in a future version.
         hr_pim = _find_connector(connectors, "hr_pim")
         if hr_pim is None and mgr is None:
             return
