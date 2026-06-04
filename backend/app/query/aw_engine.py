@@ -41,191 +41,77 @@ def _get_client() -> anthropic.Anthropic:
 
 
 def build_system_prompt(catalog=None, layer=None) -> str:
-    """Build a dynamic system prompt from semantic layer metadata."""
+    """Build a dynamic system prompt from semantic layer metadata.
+
+    Uses catalog.get_schema_context() for the table schema section so the
+    prompt automatically reflects the loaded dataset rather than any
+    hardcoded schema.
+    """
     parts = [
         "You are a data intelligence assistant. "
-        "Answer questions using the available data sources described below."
+        "Answer questions using the available data sources described below. "
+        "Respond in the same language as the question (English or Italian)."
     ]
 
+    # Schema section — always dynamic from catalog
+    schema_ctx = ""
     if catalog is not None:
         try:
-            entities = (
-                catalog.list_entities() if hasattr(catalog, "list_entities") else []
-            )
-            metrics = catalog.list_metrics() if hasattr(catalog, "list_metrics") else []
-            if entities:
-                entity_names = ", ".join(e.get("name", "") for e in entities[:10])
-                parts.append(f"\nAvailable entities: {entity_names}")
-            if metrics:
-                metric_names = ", ".join(
-                    m.get("label") or m.get("name", "") for m in metrics[:5]
-                )
-                parts.append(f"\nKey metrics: {metric_names}")
+            schema_ctx = catalog.get_schema_context()
+        except Exception:
+            pass
+
+    if schema_ctx and schema_ctx.strip() not in ("", "No schema available."):
+        parts.append(f"\n\n== AVAILABLE TABLES ==\n\n{schema_ctx}")
+    else:
+        parts.append(
+            "\n\nNo schema information available yet. "
+            "Ask the user to load data sources first."
+        )
+
+    # Bridges from semantic layer relations (if available)
+    if layer is not None:
+        try:
+            draft = getattr(layer, "draft", None)
+            rels = getattr(draft, "relations", []) if draft else []
+            if rels:
+                bridge_lines = ["\n\n== BRIDGE RELATIONSHIPS ==\n"]
+                for rel in rels[:10]:
+                    fe = rel.get("from_entity", "")
+                    te = rel.get("to_entity", "")
+                    ff = rel.get("from_field", "")
+                    tf = rel.get("to_field", "")
+                    bridge_lines.append(f"  {fe}.{ff} = {te}.{tf}")
+                parts.append("\n".join(bridge_lines))
         except Exception:
             pass
 
     parts.append(
-        "\n\n== AVAILABLE TABLES ==\n"
-        "\nTABLE: sales_order_header\n"
-        "  - order_id (INTEGER PK) — unique order identifier\n"
-        "  - order_number (TEXT) — human-readable order number\n"
-        "  - order_date (TEXT ISO date) — date the order was placed\n"
-        "  - ship_date (TEXT ISO date) — date shipped (may be NULL)\n"
-        "  - due_date (TEXT ISO date) — expected delivery date\n"
-        "  - status_code (INTEGER) — 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled\n"
-        "  - customer_ref (INTEGER FK → account.accountId)\n"
-        "  - salesperson_ref (INTEGER FK → salesperson.salesperson_id)\n"
-        "  - territory_ref (INTEGER FK → territory.territory_id)\n"
-        "  - subtotal_amount (REAL) — net revenue before tax and freight\n"
-        "  - tax_amount (REAL) — tax charged\n"
-        "  - freight_amount (REAL) — freight cost\n"
-        "  - total_due (REAL) — total billed (subtotal + tax + freight)\n"
-        "  - currency_iso (TEXT) — currency code\n"
-        "\nTABLE: sales_order_line\n"
-        "  - order_id (INTEGER FK → sales_order_header.order_id)\n"
-        "  - line_id (INTEGER) — line number within the order\n"
-        "  - product_ref (INTEGER FK → pim_products.internal_id)\n"
-        "  - qty (REAL) — quantity ordered\n"
-        "  - unit_price (REAL) — price per unit\n"
-        "  - unit_discount (REAL) — discount applied per unit\n"
-        "  - line_total (REAL) — qty * (unit_price - unit_discount)\n"
-        "  - offer_ref (INTEGER FK → offer.offer_id, may be NULL)\n"
-        "\nTABLE: salesperson\n"
-        "  - salesperson_id (INTEGER PK)\n"
-        "  - territory_ref (INTEGER FK → territory.territory_id)\n"
-        "  - sales_quota (REAL)\n"
-        "  - bonus (REAL)\n"
-        "  - commission_pct (REAL)\n"
-        "  - sales_ytd (REAL) — year-to-date sales\n"
-        "  - sales_last_year (REAL)\n"
-        "\nTABLE: territory\n"
-        "  - territory_id (INTEGER PK)\n"
-        "  - territory_name (TEXT)\n"
-        "  - country_code (TEXT)\n"
-        "  - region_group (TEXT)\n"
-        "  - sales_ytd (REAL)\n"
-        "  - cost_ytd (REAL)\n"
-        "\nTABLE: offer\n"
-        "  - offer_id (INTEGER PK)\n"
-        "  - description (TEXT)\n"
-        "  - discount_pct (REAL)\n"
-        "  - offer_type (TEXT)\n"
-        "  - category (TEXT)\n"
-        "  - start_date (TEXT ISO date)\n"
-        "  - end_date (TEXT ISO date)\n"
-        "  - min_qty (REAL)\n"
-        "  - max_qty (REAL)\n"
-        "\nTABLE: account\n"
-        "  - accountId (INTEGER PK) — negative IDs indicate duplicate records\n"
-        "  - accountType (TEXT) — customer type\n"
-        "  - personRef (INTEGER FK → contact.contactId)\n"
-        "  - storeRef (INTEGER)\n"
-        "  - ragioneSociale (TEXT) — company name\n"
-        "  - nomeContatto (TEXT) — contact name\n"
-        "  - emailContatto (TEXT)\n"
-        "  - telefonoContatto (TEXT)\n"
-        "  - territoryHint (INTEGER)\n"
-        "  - createdAt (TEXT ISO date)\n"
-        "  - isActive (INTEGER) — 1=active\n"
-        "\nTABLE: contact\n"
-        "  - contactId (INTEGER PK)\n"
-        "  - firstName (TEXT)\n"
-        "  - middleName (TEXT)\n"
-        "  - lastName (TEXT)\n"
-        "  - personType (TEXT)\n"
-        "  - email (TEXT)\n"
-        "  - phone (TEXT)\n"
-        "\nTABLE: address\n"
-        "  - addressId (INTEGER PK)\n"
-        "  - line1 (TEXT)\n"
-        "  - line2 (TEXT)\n"
-        "  - city (TEXT)\n"
-        "  - stateProvinceId (INTEGER FK → state_province.stateId)\n"
-        "  - postalCode (TEXT)\n"
-        "\nTABLE: account_address\n"
-        "  - accountRef (INTEGER FK → account.accountId)\n"
-        "  - addressRef (INTEGER FK → address.addressId)\n"
-        "  - addressType (TEXT)\n"
-        "\nTABLE: state_province\n"
-        "  - stateId (INTEGER PK)\n"
-        "  - stateCode (TEXT)\n"
-        "  - stateName (TEXT)\n"
-        "  - countryCode (TEXT)\n"
-        "  - territoryRef (INTEGER FK → territory.territory_id)\n"
-        "\nTABLE: hr_employees\n"
-        "  - MatricolaDip (TEXT) — employee ID, bridges to salesperson_ref\n"
-        "  - Nome (TEXT) — first name\n"
-        "  - Cognome (TEXT) — last name\n"
-        "  - Mansione (TEXT) — job title/role\n"
-        "  - Reparto (TEXT) — department\n"
-        "  - GruppoReparto (TEXT) — department group\n"
-        "  - DataAssunzione (TEXT ISO date) — hire date\n"
-        "  - DataNascita (TEXT ISO date) — birth date\n"
-        "  - Genere (TEXT)\n"
-        "  - StatoCivile (TEXT)\n"
-        "  - OreFerieResidue (TEXT) — remaining vacation hours\n"
-        "  - OreMalattiaResidue (TEXT) — remaining sick leave hours\n"
-        "  - RetribuzioneOraria (TEXT) — hourly rate\n"
-        "  - FrequenzaPaga (TEXT) — pay frequency\n"
-        "\nTABLE: pim_products\n"
-        "  - sku (TEXT) — stock keeping unit\n"
-        "  - internal_id (INTEGER PK) — bridges to sales_order_line.product_ref\n"
-        "  - displayName (TEXT) — product name\n"
-        "  - categoryPath (TEXT) — full category hierarchy path\n"
-        "  - modelName (TEXT)\n"
-        "  - color (TEXT)\n"
-        "  - size (TEXT)\n"
-        "  - weight (REAL)\n"
-        "  - weightUnit (TEXT)\n"
-        "  - standardCost (REAL) — production cost\n"
-        "  - listPrice (REAL) — list price\n"
-        "  - isMakeOnly (INTEGER) — 1=manufactured in-house only\n"
-        "  - isPurchasable (INTEGER)\n"
-        "  - sellStartDate (TEXT ISO date)\n"
-        "  - sellEndDate (TEXT ISO date)\n"
-        "\n== BRIDGE RELATIONSHIPS ==\n"
-        "\n  ERP ↔ HR:    sales_order_header.salesperson_ref = hr_employees.MatricolaDip\n"
-        "               (CAST one side to TEXT/INTEGER as needed for join)\n"
-        "  ERP ↔ PIM:   sales_order_line.product_ref = pim_products.internal_id\n"
-        "  ERP ↔ CRM:   sales_order_header.customer_ref = account.accountId\n"
-        "\n== SQL DIALECT RULES ==\n"
-        "\n- Database: DuckDB (not SQLite, not PostgreSQL)\n"
-        "- Do NOT use backticks for identifiers; use double-quotes if quoting is needed\n"
-        "- IMPORTANT: All date columns (order_date, ship_date, due_date, DataAssunzione, etc.)\n"
-        "  are stored as TEXT in ISO format (YYYY-MM-DD). You MUST cast them before using\n"
-        "  date functions: CAST(order_date AS DATE)\n"
-        "  Examples:\n"
-        "    YEAR(CAST(order_date AS DATE))\n"
-        "    MONTH(CAST(order_date AS DATE))\n"
-        "    DATE_TRUNC('month', CAST(order_date AS DATE))\n"
-        "    EXTRACT(YEAR FROM CAST(order_date AS DATE))\n"
-        "- String functions: CONCAT(), LOWER(), UPPER(), TRIM(), LIKE, ILIKE\n"
-        "- CAST: CAST(col AS INTEGER), CAST(col AS REAL), CAST(col AS TEXT), CAST(col AS DATE)\n"
-        "- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc.\n"
-        "- LIMIT results to 100 rows maximum\n"
-        "- Only generate read-only SELECT statements\n"
-        "- Join hr_employees using: CAST(sales_order_header.salesperson_ref AS TEXT) = hr_employees.MatricolaDip\n"
-        "\n== RESPONSE FORMAT ==\n"
-        "\nAlways respond with valid JSON exactly matching this structure:\n"
-        "{\n"
-        '  "interpreted_as": "Clear English description of what the question is asking",\n'
-        '  "sql": "SELECT ...",\n'
-        '  "chart_hint": {"type": "bar"|"line"|"pie"|"table", "label_col": "column_name", "value_col": "column_name"} or null\n'
-        "}\n"
-        "\nRules:\n"
-        "- interpreted_as: describe the question in clear English\n"
-        "- sql: valid DuckDB SELECT query, limit 100 rows\n"
-        "- chart_hint: suggest the best visualization, or null if tabular only\n"
-        "- If the question is ambiguous, make the most reasonable interpretation\n"
-        "- If the question cannot be answered with available data, return sql as "
-        '"SELECT 1 AS unsupported" and explain in interpreted_as'
+        "\n\n== SQL DIALECT RULES =="
+        "\n- Database: DuckDB (not SQLite, not PostgreSQL)"
+        "\n- Use double-quotes for identifiers if quoting is needed, never backticks"
+        "\n- Date columns are stored as TEXT in ISO format (YYYY-MM-DD);"
+        " cast before using date functions: CAST(col AS DATE)"
+        "\n- Only generate read-only SELECT statements"
+        "\n- LIMIT results to 100 rows maximum"
+        "\n- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc."
     )
 
     parts.append(
-        "\nWhen asked about data, write precise SQL queries. "
-        "If a question is ambiguous, ask for clarification. "
-        "If data is not available in the schema, say so clearly."
+        "\n\n== RESPONSE FORMAT =="
+        "\nAlways respond with valid JSON exactly matching this structure:\n"
+        "{\n"
+        '  "interpreted_as": "Clear description of what the question is asking",\n'
+        '  "sql": "SELECT ...",\n'
+        '  "chart_hint": {"type": "bar"|"line"|"pie"|"table",'
+        ' "label_col": "column_name", "value_col": "column_name"} or null\n'
+        "}\n"
+        "\n- interpreted_as: describe the question clearly"
+        "\n- sql: valid DuckDB SELECT, limit 100 rows"
+        "\n- chart_hint: best visualization, or null if tabular only"
+        "\n- If question cannot be answered: sql = 'SELECT 1 AS unsupported', explain in interpreted_as"
     )
+
     return "\n".join(parts)
 
 
@@ -283,7 +169,27 @@ def _extract_json(text: str) -> dict:
 # ── Main query function ────────────────────────────────────────────────────────
 
 
-def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, Any]:
+def _build_table_source_map(catalog) -> dict[str, str]:
+    """Return {table_name: source_id} from catalog entity metadata (public API only)."""
+    mapping: dict[str, str] = {}
+    try:
+        names = catalog.list_entities()
+        for name in names:
+            entity = catalog.get_entity(name)
+            if entity is None:
+                continue
+            for src in entity.sources:
+                if isinstance(src, dict) and src.get("source"):
+                    mapping[name] = src["source"]
+                    break
+    except Exception:
+        pass
+    return mapping
+
+
+def run_aw_query(
+    question: str, erp=None, crm=None, hr_pim=None, catalog=None
+) -> dict[str, Any]:
     """
     Translate a natural-language question to SQL using Claude, execute it on
     the unified DuckDB connection, and return a structured result dict.
@@ -368,23 +274,13 @@ def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, An
     # Determine sources touched based on which table names appear in the SQL
     sources_touched: list[str] = []
     sql_lower = sql.lower()
-    if any(
-        t in sql_lower
-        for t in [
-            "sales_order_header",
-            "sales_order_line",
-            "salesperson",
-            "territory",
-            "offer",
-        ]
-    ):
-        sources_touched.append("erp")
-    if any(t in sql_lower for t in ["account", "contact", "address", "state_province"]):
-        sources_touched.append("crm")
-    if "hr_employees" in sql_lower:
-        sources_touched.append("hr")
-    if "pim_products" in sql_lower:
-        sources_touched.append("pim")
+    if catalog is not None:
+        table_source_map = _build_table_source_map(catalog)
+        seen_sources: set[str] = set()
+        for table, source_id in table_source_map.items():
+            if table.lower() in sql_lower and source_id not in seen_sources:
+                sources_touched.append(source_id)
+                seen_sources.add(source_id)
 
     # ── Step 3: Generate summary via Claude ─────────────────────────────────
     summary = ""

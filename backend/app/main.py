@@ -2014,6 +2014,52 @@ def list_example_questions() -> list[dict[str, str]]:
     ]
 
 
+# ── System prompt endpoint (used by direct-LLM frontend mode) ────────────────
+
+
+@app.get("/api/semantic/system-prompt", tags=["semantic"])
+def get_system_prompt() -> dict:
+    """Return a dynamic LLM system prompt built from the live semantic catalog.
+
+    Used by the frontend's direct-LLM mode (user-provided API key) so it always
+    reflects the loaded dataset rather than a hardcoded schema.
+    """
+    from .query.aw_engine import build_system_prompt as _bsp  # noqa: PLC0415
+
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    layer = _semantic_state.get("layer")
+
+    # Build the core schema/SQL prompt
+    base_prompt = _bsp(catalog=catalog, layer=layer)
+
+    # Append frontend-specific output format (richer than the backend format)
+    frontend_format = (
+        "\n\n== FRONTEND OUTPUT FORMAT =="
+        "\nOverride the RESPONSE FORMAT above. Return this JSON structure instead:\n"
+        "{\n"
+        '  "sql": "SELECT ...",\n'
+        '  "rows": [],\n'
+        '  "summary": "1-2 sentences answering the question with key numbers in **bold**.",\n'
+        '  "interpreted_as": "Short label, e.g. Top salesperson by YTD revenue",\n'
+        '  "chartData": {"type": "bar", "title": "Chart title",'
+        ' "labels": ["A","B"], "values": [100, 200], "unit": "€"} or null,\n'
+        '  "sources": [{"id": "erp", "label": "ERP", "bg": "bg-blue-100", "text": "text-blue-700"}],\n'
+        '  "steps": ["① Locate source table", "② Apply filter/join", "③ Return result"],\n'
+        '  "followUps": ["Related question 1?", "Related question 2?", "Related question 3?"],\n'
+        '  "isDisambiguation": false\n'
+        "}\n"
+        "\n- rows: leave as [] — actual data must be fetched via the backend query API"
+        "\n- summary: write based on schema knowledge and the SQL you generate"
+        "\n- sources: list only the source systems touched by your SQL"
+        "\n- steps: 2-4 bullet points describing your query plan"
+        "\n- followUps: exactly 3 related questions the user might want to ask next"
+        "\n- isDisambiguation: true only when 'fatturato'/'revenue' is ambiguous"
+    )
+
+    return {"prompt": base_prompt + frontend_format}
+
+
 # ── Live Config endpoint ──────────────────────────────────────────────────────
 
 
