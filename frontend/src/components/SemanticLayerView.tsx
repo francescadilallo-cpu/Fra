@@ -59,144 +59,41 @@ function loadUserRules(id: string): UserRule[] {
 }
 function saveUserRules(id: string, v: UserRule[]) { localStorage.setItem(RULES_KEY(id), JSON.stringify(v)) }
 
-// ── AdventureWorks static data ────────────────────────────────────────────────
+// ── Live-data helpers (replaced hardcoded AdventureWorks stubs) ───────────────
 
-const AW_SOURCES = [
-  { id: 'erp', name: 'ERP — OrionSales', type: 'PostgreSQL', icon: '🏭',
-    colorBorder: 'border-blue-200', colorBg: 'bg-blue-50', colorText: 'text-blue-700', colorDot: 'bg-blue-500',
-    entities: [{ name: 'SalesOrder', rows: 31465 }, { name: 'SalesOrderLine', rows: 121317 }, { name: 'Salesperson', rows: 17 }, { name: 'Territory', rows: 10 }, { name: 'SpecialOffer', rows: 16 }], total: 152825 },
-  { id: 'crm', name: 'CRM — ClientHub', type: 'SQLite', icon: '🤝',
-    colorBorder: 'border-teal-200', colorBg: 'bg-teal-50', colorText: 'text-teal-700', colorDot: 'bg-teal-500',
-    entities: [{ name: 'accounts', rows: 20201 }, { name: 'contacts', rows: 19302 }, { name: 'addresses', rows: 19614 }, { name: 'territories', rows: 70 }], total: 59193,
-    warning: '372 duplicate accounts (accountId < 0) — removed from KG' },
-  { id: 'hr', name: 'HR — Employees', type: 'CSV (Italian schema)', icon: '👥',
-    colorBorder: 'border-violet-200', colorBg: 'bg-violet-50', colorText: 'text-violet-700', colorDot: 'bg-violet-500',
-    entities: [{ name: 'dipendenti_hr', rows: 290 }], total: 290,
-    warning: 'Italian schema: matricolaDip, cognome, nome, stipendio — translated by semantic layer' },
-  { id: 'pim', name: 'PIM — Catalog', type: 'JSON', icon: '📦',
-    colorBorder: 'border-amber-200', colorBg: 'bg-amber-50', colorText: 'text-amber-700', colorDot: 'bg-amber-500',
-    entities: [{ name: 'product_catalog', rows: 504 }], total: 504 },
-]
+type _AWSrcType = {
+  id: string; name: string; type: string; icon: string
+  colorBorder: string; colorBg: string; colorText: string; colorDot: string
+  entities: { name: string; rows: number }[]; total: number; warning?: string
+}
+const AW_SOURCES: _AWSrcType[] = []
 
-const AW_BRIDGES = [
-  { id: 1, label: 'PLACED_BY', cardinality: 'N:1', matchRate: 93.2,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrder', field: 'customer_ref : int' },
-    to:   { source: 'CRM — ClientHub',  entity: 'accounts',   field: 'accountId : int' },
-    detail: '18,484 / 19,829 matched · 1,345 CRM-only prospects excluded',
-    note: '19,829 unique customers after dedup', impact: 'Enables: customer geography, segment, creditLimit on orders' },
-  { id: 2, label: 'SOLD_BY', cardinality: 'N:1', matchRate: 100,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrder',    field: 'salesPersonId : int' },
-    to:   { source: 'HR — Employees',   entity: 'dipendenti_hr', field: 'matricolaDip : int' },
-    detail: '14 / 14 sales reps matched · Italian ↔ ERP schema resolved', note: '',
-    impact: 'Enables: salesperson name, salary, department from HR on sales queries' },
-  { id: 3, label: 'OF_PRODUCT', cardinality: 'N:1', matchRate: 99.6,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrderLine', field: 'productId : int' },
-    to:   { source: 'PIM — Catalog',    entity: 'product_catalog', field: 'internal_id : int' },
-    detail: '121,270 / 121,317 matched · 47 orphan lines', note: '',
-    impact: 'Enables: product category, cost, margin on order line queries' },
-]
+type _AWBridgeType = {
+  id: number; label: string; cardinality: string; matchRate: number
+  from: { source: string; entity: string; field: string }
+  to:   { source: string; entity: string; field: string }
+  detail: string; note: string; impact: string
+}
+const AW_BRIDGES: _AWBridgeType[] = []
 
 const AW_ENTITY_DETAIL: Record<string, {
   source: string; semanticAlias?: string
   fields: { semantic: string; physical: string; type: string; note?: string; bridge?: string }[]
-}> = {
-  SalesOrder: { source: 'erp.SalesOrder', fields: [
-    { semantic: 'orderId', physical: 'orderId', type: 'integer PK' },
-    { semantic: 'orderDate', physical: 'orderDate', type: 'date' },
-    { semantic: 'revenue.net', physical: 'subtotalAmount', type: 'decimal', note: '⚠ "fatturato" disambiguation — net, excl. tax' },
-    { semantic: 'revenue.gross', physical: 'totalDue', type: 'decimal', note: '⚠ "fatturato" disambiguation — gross, incl. tax+freight' },
-    { semantic: 'taxAmt', physical: 'taxAmt', type: 'decimal' },
-    { semantic: 'freight', physical: 'freight', type: 'decimal' },
-    { semantic: 'channel', physical: 'onlineOrderFlag', type: 'boolean', note: '1=Online (87.9%) / 0=In-store (12.1%)' },
-    { semantic: 'customer →', physical: 'customer_ref', type: 'FK int', bridge: 'PLACED_BY → crm.accounts.accountId' },
-    { semantic: 'salesperson →', physical: 'salesPersonId', type: 'FK int', bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
-    { semantic: 'territory →', physical: 'territoryId', type: 'FK int', bridge: '→ erp.SalesTerritory.territoryId' },
-  ]},
-  Customer: { source: 'crm.accounts', semanticAlias: 'Unified Customer (ERP + CRM)', fields: [
-    { semantic: 'customerId', physical: 'accountId', type: 'integer PK' },
-    { semantic: 'companyName', physical: 'companyName', type: 'string' },
-    { semantic: 'country', physical: 'country', type: 'string' },
-    { semantic: 'segment', physical: 'segment', type: 'string' },
-    { semantic: 'creditLimit', physical: 'creditLimit', type: 'decimal' },
-    { semantic: 'email', physical: 'email', type: 'string' },
-    { semantic: 'ordersIn →', physical: 'accountId', type: 'FK', bridge: 'PLACED_BY ← erp.SalesOrder.customer_ref' },
-  ]},
-  Employee: { source: 'hr.dipendenti_hr', semanticAlias: 'Employee — Italian schema translated', fields: [
-    { semantic: 'employeeId', physical: 'matricolaDip', type: 'integer PK', note: 'Italian field' },
-    { semantic: 'lastName', physical: 'cognome', type: 'string', note: '"cognome"' },
-    { semantic: 'firstName', physical: 'nome', type: 'string', note: '"nome"' },
-    { semantic: 'role', physical: 'ruolo', type: 'string', note: '"ruolo"' },
-    { semantic: 'salary', physical: 'stipendio', type: 'decimal', note: '"stipendio"' },
-    { semantic: 'deptId', physical: 'repartoId', type: 'FK int', note: '"repartoId"' },
-    { semantic: 'salesperson →', physical: 'matricolaDip', type: 'FK', bridge: 'SOLD_BY ← erp.SalesOrder.salesPersonId' },
-  ]},
-  Product: { source: 'pim.product_catalog', fields: [
-    { semantic: 'productId', physical: 'internal_id', type: 'integer PK' },
-    { semantic: 'name', physical: 'name', type: 'string' },
-    { semantic: 'category', physical: 'category', type: 'string', note: 'Bikes=98% revenue' },
-    { semantic: 'subcategory', physical: 'subcategory', type: 'string' },
-    { semantic: 'listPrice', physical: 'listPrice', type: 'decimal' },
-    { semantic: 'standardCost', physical: 'standardCost', type: 'decimal', note: 'Used for margin calc' },
-    { semantic: 'orderLines →', physical: 'internal_id', type: 'FK', bridge: 'OF_PRODUCT ← erp.SalesOrderLine.productId' },
-  ]},
-  SalesOrderLine: { source: 'erp.SalesOrderLine', fields: [
-    { semantic: 'lineId', physical: 'lineId', type: 'integer PK' },
-    { semantic: 'orderId →', physical: 'orderId', type: 'FK int', bridge: '→ erp.SalesOrder.orderId' },
-    { semantic: 'product →', physical: 'productId', type: 'FK int', bridge: 'OF_PRODUCT → pim.product_catalog.internal_id' },
-    { semantic: 'quantity', physical: 'quantity', type: 'integer' },
-    { semantic: 'unitPrice', physical: 'unitPrice', type: 'decimal' },
-    { semantic: 'discount', physical: 'unitPriceDiscount', type: 'decimal', note: '>0 = discounted by SpecialOffer' },
-    { semantic: 'lineTotal', physical: 'lineTotal', type: 'decimal', note: '= qty × (unitPrice − discount)' },
-  ]},
-  Salesperson: { source: 'erp.SalesPerson', fields: [
-    { semantic: 'salesPersonId', physical: 'salesPersonId', type: 'integer PK' },
-    { semantic: 'salesYTD', physical: 'salesYTD', type: 'decimal', note: 'Year-to-date revenue' },
-    { semantic: 'bonus', physical: 'bonus', type: 'decimal' },
-    { semantic: 'commissionPct', physical: 'commissionPct', type: 'decimal' },
-    { semantic: 'territory →', physical: 'territoryId', type: 'FK int', bridge: '→ erp.SalesTerritory' },
-    { semantic: 'employee →', physical: 'salesPersonId', type: 'FK', bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
-  ]},
-}
+}> = {}
 
-const AW_DISAMBIGUATION_RULES = [
-  { term: '"fatturato" / "revenue"', problem: 'Ambiguous — maps to two different ERP fields with a $2.3M difference',
-    options: [
-      { label: 'subtotalAmount', value: '$20,127,070', desc: 'Net commercial revenue (excl. tax & freight)', semantic: 'revenue.net', recommended: true },
-      { label: 'totalDue', value: '$22,410,568', desc: 'Gross billed amount (incl. tax + freight)', semantic: 'revenue.gross', recommended: false },
-    ], resolution: 'Query AI asks for explicit disambiguation before running' },
-  { term: '"dipendente" / "employee"', problem: 'Italian HR schema uses different field names from ERP schema',
-    options: [
-      { label: 'matricolaDip', value: 'HR CSV', desc: 'Italian: unique employee ID in HR system', semantic: 'Employee.employeeId', recommended: false },
-      { label: 'salesPersonId', value: 'ERP', desc: 'ERP: sales representative identifier', semantic: 'Salesperson.salesPersonId', recommended: false },
-    ], resolution: 'Resolved via SOLD_BY bridge (100% match rate) — semantic layer joins transparently' },
-  { term: '"ordini" / "orders"', problem: 'Could mean SalesOrder (header) or SalesOrderLine (detail rows)',
-    options: [
-      { label: 'SalesOrder', value: '31,465 rows', desc: 'Order header — one per transaction', semantic: 'SalesOrder', recommended: true },
-      { label: 'SalesOrderLine', value: '121,317 rows', desc: 'Line items — one per product per order', semantic: 'SalesOrderLine', recommended: false },
-    ], resolution: 'Default: SalesOrder for counts/revenue, SalesOrderLine for product-level analysis' },
-]
+const AW_DISAMBIGUATION_RULES: {
+  term: string; problem: string
+  options: { label: string; value: string; desc: string; semantic: string; recommended: boolean }[]
+  resolution: string
+}[] = []
 
-const AW_QUERY_EXAMPLES = [
-  { question: 'Who is the top salesperson by revenue in 2014?', path: ['SalesOrder (ERP)', '⚡ SOLD_BY', 'Employee (HR)'], bridges: ['SOLD_BY'],
-    sql: `SELECT e.cognome || ' ' || e.nome AS name, sp.salesYTD\nFROM   erp.SalesPerson sp\nJOIN   hr.dipendenti_hr e ON sp.salesPersonId = e.matricolaDip\nORDER  BY sp.salesYTD DESC LIMIT 1`,
-    result: 'Linda Mitchell · $4,251,368 YTD' },
-  { question: 'What is the gross margin by product category?', path: ['SalesOrderLine (ERP)', '⚡ OF_PRODUCT', 'Product (PIM)'], bridges: ['OF_PRODUCT'],
-    sql: `SELECT p.category,\n       ROUND((SUM(sol.lineTotal - sol.quantity*p.standardCost) / SUM(sol.lineTotal)) * 100, 1) AS margin_pct\nFROM   erp.SalesOrderLine sol\nJOIN   pim.product_catalog p ON sol.productId = p.internal_id\nGROUP  BY p.category ORDER BY margin_pct DESC`,
-    result: 'Clothing 65.3% · Accessories 64.5% · Bikes 48.0%' },
-  { question: 'Show customers by country with average order value', path: ['SalesOrder (ERP)', '⚡ PLACED_BY', 'Customer (CRM)'], bridges: ['PLACED_BY'],
-    sql: `SELECT c.country, COUNT(DISTINCT o.customer_ref) AS customers, AVG(o.subtotalAmount) AS avg_order\nFROM   erp.SalesOrder o\nJOIN   crm.accounts c ON o.customer_ref = c.accountId\nGROUP  BY c.country ORDER BY avg_order DESC`,
-    result: 'Canada avg $1,813 · Australia $1,148 · US $905' },
-  { question: 'What is the online vs in-store channel split?', path: ['SalesOrder (ERP)', 'onlineOrderFlag semantic decode'], bridges: [],
-    sql: `SELECT CASE WHEN onlineOrderFlag=1 THEN 'Online' ELSE 'In-store' END AS channel,\n       COUNT(*) AS orders, AVG(subtotalAmount) AS avg_order\nFROM   erp.SalesOrder GROUP BY onlineOrderFlag`,
-    result: 'Online 87.9% (27,659 orders, avg $356) · In-store 12.1% (3,806 orders, avg $2,704)' },
-]
+const AW_QUERY_EXAMPLES: {
+  question: string; path: string[]; bridges: string[]; sql: string; result: string
+}[] = []
 
-const AW_QUALITY_ISSUES = [
-  { severity: 'warning' as const, entity: 'Customer — CRM accounts', issue: '372 accounts with accountId < 0 — duplicates from legacy CRM migration', resolution: 'Filtered in KG build: 20,201 raw → 19,829 clean unique accounts' },
-  { severity: 'warning' as const, entity: 'SalesOrder — revenue field', issue: 'subtotalAmount ($20.1M) vs totalDue ($22.4M) — $2.3M gap from tax + freight', resolution: 'Disambiguated at query time via isDisambiguation flag' },
-  { severity: 'info' as const, entity: 'Employee — HR CSV', issue: 'Italian column names: matricolaDip, cognome, nome, ruolo, stipendio, repartoId', resolution: 'Mapped to semantic aliases in ontology: employeeId, lastName, firstName…' },
-  { severity: 'info' as const, entity: 'SalesOrderLine — product match', issue: '47 / 121,317 order lines have productId not in PIM catalog (0.04% unmatched)', resolution: 'Treated as unknown products — excluded from category analysis' },
-]
+const AW_QUALITY_ISSUES: {
+  severity: 'warning' | 'info'; entity: string; issue: string; resolution: string
+}[] = []
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -545,7 +442,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   const [newField, setNewField] = useState(EMPTY_FIELD)
   const [addingField, setAddingField] = useState(false)
 
-  const prefix = sectorId === 'manufacturing' ? 'mfg' : sectorId === 'retail' ? 'rtl' : sectorId === 'healthcare' ? 'hc' : 'fin'
+  const prefix = sectorId.slice(0, 3).toLowerCase()
 
   function commitField() {
     if (!newField.name.trim()) return
@@ -667,67 +564,14 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   )
 }
 
-// ── Intra-DB Relations data ────────────────────────────────────────────────────
-
-const AW_RELATIONS = [
-  {
-    source: 'ERP — OrionSales',
-    sourceKey: 'erp',
-    colorBorder: 'border-blue-200',
-    colorBg: 'bg-blue-50',
-    colorText: 'text-blue-700',
-    colorDot: 'bg-blue-500',
-    icon: '🏭',
-    relations: [
-      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId',                     cardinality: '1:N' as const, fromRows: 31465,  toRows: 121317, note: 'One order has many line items' },
-      { from: 'SalesOrder', to: 'Territory',       via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 31465,  toRows: 10,     note: 'Each order belongs to a sales territory' },
-      { from: 'SalesOrder', to: 'SalesPerson',     via: 'salesPersonId',               cardinality: 'N:1' as const, fromRows: 31465,  toRows: 17,     note: 'Nullable — online orders have no assigned rep' },
-      { from: 'SalesOrder', to: 'Customer',        via: 'customer_ref → customerId',   cardinality: 'N:1' as const, fromRows: 31465,  toRows: 19185,  note: 'Internal ERP customer ref — distinct from CRM accountId' },
-      { from: 'SalesPerson', to: 'Territory',      via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 17,     toRows: 10,     note: 'Salesperson is assigned to a home territory' },
-      { from: 'SalesOrderLine', to: 'SalesOrder',  via: 'orderId',                     cardinality: 'N:1' as const, fromRows: 121317, toRows: 31465,  note: 'Each line item belongs to one order' },
-    ],
-  },
-  {
-    source: 'CRM — ClientHub',
-    sourceKey: 'crm',
-    colorBorder: 'border-teal-200',
-    colorBg: 'bg-teal-50',
-    colorText: 'text-teal-700',
-    colorDot: 'bg-teal-500',
-    icon: '🤝',
-    relations: [
-      { from: 'Customer',     to: 'Contact',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19302, note: 'Each account can have multiple contacts' },
-      { from: 'Customer',     to: 'Address',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19614, note: 'Shipping and billing addresses per account' },
-      { from: 'Address',      to: 'StateProvince', via: 'stateProvinceId', cardinality: 'N:1' as const, fromRows: 19614, toRows: 70,    note: 'Address belongs to a state/province' },
-      { from: 'StateProvince', to: 'Country',      via: 'countryId',       cardinality: 'N:1' as const, fromRows: 70,    toRows: 6,     note: 'State/province belongs to a country' },
-    ],
-  },
-  {
-    source: 'PIM — Catalog',
-    sourceKey: 'pim',
-    colorBorder: 'border-amber-200',
-    colorBg: 'bg-amber-50',
-    colorText: 'text-amber-700',
-    colorDot: 'bg-amber-500',
-    icon: '📦',
-    relations: [
-      { from: 'Product', to: 'Category',    via: 'category',    cardinality: 'N:1' as const, fromRows: 504, toRows: 4,  note: 'Bikes · Components · Clothing · Accessories', soft: true },
-      { from: 'Product', to: 'Subcategory', via: 'subcategory', cardinality: 'N:1' as const, fromRows: 504, toRows: 37, note: 'Mountain Bikes · Road Bikes · Helmets…', soft: true },
-    ],
-  },
-  {
-    source: 'HR — Employees',
-    sourceKey: 'hr',
-    colorBorder: 'border-violet-200',
-    colorBg: 'bg-violet-50',
-    colorText: 'text-violet-700',
-    colorDot: 'bg-violet-500',
-    icon: '👥',
-    relations: [
-      { from: 'Employee', to: 'Department', via: 'repartoId', cardinality: 'N:1' as const, fromRows: 290, toRows: 0, note: 'Department stored as string — no separate table', soft: true },
-    ],
-  },
-]
+// ── Intra-DB Relations data ───────────────────────────────────────────────────
+// Derived from the live semantic draft in the main component; this empty array
+// is only used as a type anchor — see `liveRelationGroups` derived from draft.
+const AW_RELATIONS: {
+  source: string; sourceKey: string
+  colorBorder: string; colorBg: string; colorText: string; colorDot: string; icon: string
+  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean }[]
+}[] = []
 
 // ── Bridges Builder ───────────────────────────────────────────────────────────
 
@@ -1165,39 +1009,8 @@ interface Metric {
   tags: string[]
 }
 
-const AW_METRICS: Metric[] = [
-  {
-    id: 'revenue', name: 'Revenue', description: 'Net commercial revenue — subtotal before taxes and freight. Canonical sales metric.',
-    type: 'sum', entity: 'SalesOrder', field: 'subtotalAmount', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['sales', 'core'],
-  },
-  {
-    id: 'gross_revenue', name: 'Gross Revenue', description: 'Total billed including taxes and freight. Use for AR and billing reconciliation.',
-    type: 'sum', entity: 'SalesOrder', field: 'totalDue', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['billing'],
-  },
-  {
-    id: 'order_count', name: 'Order Count', description: 'Number of sales orders placed.',
-    type: 'count', entity: 'SalesOrder', field: 'salesOrderId', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'week', 'month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['sales', 'core'],
-  },
-  {
-    id: 'aov', name: 'Avg Order Value', description: 'Average net revenue per order. Revenue ÷ Order Count.',
-    type: 'ratio', entity: 'SalesOrder', numerator: 'Revenue', denominator: 'Order Count', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Sales', tags: ['efficiency'],
-  },
-  {
-    id: 'unique_customers', name: 'Unique Customers', description: 'Count of distinct customers with at least one order.',
-    type: 'count_distinct', entity: 'SalesOrder', field: 'customerId', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['customers'],
-  },
-  {
-    id: 'online_rate', name: 'Online Order Rate', description: 'Share of orders placed online vs. via sales reps.',
-    type: 'ratio', entity: 'SalesOrder', numerator: 'Online orders', denominator: 'Order Count',
-    filters: ["onlineOrderFlag = TRUE for numerator"], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter'], format: 'percentage', status: 'draft', owner: 'Digital', tags: ['channel'],
-  },
-]
+// AW_METRICS is no longer used — backend metrics are loaded via getMetrics()
+const AW_METRICS: Metric[] = []
 
 const METRIC_TYPE_LABEL: Record<MetricType, string> = {
   sum: 'SUM', count: 'COUNT', count_distinct: 'COUNT DISTINCT', avg: 'AVG', ratio: 'RATIO', derived: 'DERIVED',
@@ -1309,36 +1122,8 @@ interface DimHierarchy {
   isBuiltin?: boolean
 }
 
-const AW_HIERARCHIES: DimHierarchy[] = [
-  {
-    id: 'date', name: 'Date', entity: 'SalesOrder', description: 'Drill-down from year to day on order date.',
-    type: 'time', isBuiltin: true,
-    levels: [
-      { name: 'Year',    field: 'YEAR(SalesOrder.orderDate)' },
-      { name: 'Quarter', field: "CONCAT('Q', QUARTER(SalesOrder.orderDate), ' ', YEAR(...))" },
-      { name: 'Month',   field: 'MONTH(SalesOrder.orderDate)' },
-      { name: 'Week',    field: 'WEEK(SalesOrder.orderDate)' },
-      { name: 'Day',     field: 'DATE(SalesOrder.orderDate)' },
-    ],
-  },
-  {
-    id: 'territory', name: 'Territory', entity: 'Territory', description: 'Geographic drill-down from global region to named territory.',
-    type: 'categorical', isBuiltin: true,
-    levels: [
-      { name: 'Group',     field: 'Territory.group' },
-      { name: 'Territory', field: 'Territory.name' },
-    ],
-  },
-  {
-    id: 'product', name: 'Product', entity: 'Product', description: 'Product catalog drill-down from category to individual SKU.',
-    type: 'categorical', isBuiltin: true,
-    levels: [
-      { name: 'Category',    field: 'Product.category' },
-      { name: 'Sub-category',field: 'Product.subCategory' },
-      { name: 'Product',     field: 'Product.name' },
-    ],
-  },
-]
+// AW_HIERARCHIES is no longer used — backend hierarchies are loaded via getHierarchies()
+const AW_HIERARCHIES: DimHierarchy[] = []
 
 function loadHierarchies(sid: string): DimHierarchy[] {
   try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${sid}`) ?? '[]') } catch { return [] }
@@ -1396,33 +1181,8 @@ interface Segment {
   isBuiltin?: boolean
 }
 
-const AW_SEGMENTS: Segment[] = [
-  {
-    id: 'b2b', name: 'B2B Customers', description: 'Corporate accounts — resellers and retailers only.',
-    entity: 'Customer', conditions: [{ field: 'Customer.customerType', operator: '=', value: "'Company'" }],
-    tags: ['channel'], usedBy: ['Revenue', 'Unique Customers'], isBuiltin: true,
-  },
-  {
-    id: 'online', name: 'Online Orders', description: 'Self-service orders placed through the e-commerce channel.',
-    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.onlineOrderFlag', operator: '=', value: 'TRUE' }],
-    tags: ['channel', 'digital'], usedBy: ['Order Count', 'Online Order Rate'], isBuiltin: true,
-  },
-  {
-    id: 'high_value', name: 'High-Value Orders', description: 'Orders with net revenue ≥ $1,000.',
-    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.subtotalAmount', operator: '>=', value: '1000' }],
-    tags: ['tier'], usedBy: ['Revenue'], isBuiltin: true,
-  },
-  {
-    id: 'north_america', name: 'North America', description: 'Orders from the North America territory group.',
-    entity: 'Territory', conditions: [{ field: 'Territory.group', operator: '=', value: "'North America'" }],
-    tags: ['geo'], usedBy: ['Revenue', 'Order Count'], isBuiltin: true,
-  },
-  {
-    id: 'q4', name: 'Q4 Orders', description: 'Orders placed in the fourth quarter (October–December).',
-    entity: 'SalesOrder', conditions: [{ field: 'MONTH(SalesOrder.orderDate)', operator: 'IN', value: '10, 11, 12' }],
-    tags: ['time'], usedBy: ['Revenue'], isBuiltin: true,
-  },
-]
+// AW_SEGMENTS is no longer used — backend segments are loaded via getSegments()
+const AW_SEGMENTS: Segment[] = []
 
 const OPERATOR_LABELS: Record<SegmentOperator, string> = {
   '=': '=', '!=': '≠', 'IN': 'IN', 'NOT IN': 'NOT IN', '>': '>', '<': '<', '>=': '≥', '<=': '≤',
@@ -1473,14 +1233,9 @@ function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void })
   )
 }
 
-// ── Source freshness (manufacturing) ──────────────────────────────────────────
-
-const AW_SOURCE_FRESHNESS: Record<string, { lastSync: string; sla: string; quality: number; status: 'fresh' | 'stale' | 'warning'; label: string }> = {
-  erp: { lastSync: '2026-05-26 02:00', sla: 'Daily',  quality: 97, status: 'fresh',   label: 'ERP (OrionSales)' },
-  crm: { lastSync: '2026-05-26 01:30', sla: 'Daily',  quality: 94, status: 'fresh',   label: 'CRM (ClientHub)' },
-  hr:  { lastSync: '2026-05-20 09:00', sla: 'Weekly', quality: 99, status: 'warning', label: 'HR CSV' },
-  pim: { lastSync: '2026-05-25 18:00', sla: 'Daily',  quality: 91, status: 'fresh',   label: 'PIM JSON' },
-}
+// ── Source freshness ──────────────────────────────────────────────────────────
+// No longer hardcoded — freshness data comes from backendSources (loaded via semanticSources())
+const AW_SOURCE_FRESHNESS: Record<string, { lastSync: string; sla: string; quality: number; status: 'fresh' | 'stale' | 'warning'; label: string }> = {}
 
 function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' | 'warning'; lastSync: string; sla: string }) {
   const colors = { fresh: 'bg-teal-50 text-teal-700 border-teal-200', stale: 'bg-red-50 text-red-600 border-red-200', warning: 'bg-amber-50 text-amber-700 border-amber-200' }
@@ -1511,107 +1266,10 @@ interface PlaygroundScenario {
   rows: Record<string, string>[]
 }
 
-const AW_PLAYGROUND: PlaygroundScenario[] = [
-  {
-    id: 'rev-month',
-    question: 'Total revenue by month this year',
-    keywords: ['revenue', 'month', 'monthly'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: [] },
-    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\nWHERE o.order_date >= '2026-01-01'\nGROUP BY 1\nORDER BY 1`,
-    columns: ['Month', 'Revenue'],
-    rows: [
-      { Month: 'Jan 2026', Revenue: '$3,142,890' },
-      { Month: 'Feb 2026', Revenue: '$2,987,450' },
-      { Month: 'Mar 2026', Revenue: '$3,654,320' },
-      { Month: 'Apr 2026', Revenue: '$4,238,790' },
-    ],
-  },
-  {
-    id: 'rev-territory',
-    question: 'Revenue by territory',
-    keywords: ['territory', 'region', 'geo', 'location'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Territory' }], segments: [] },
-    sql: `SELECT\n  t.group                    AS territory_group,\n  t.name                     AS territory,\n  SUM(o.subtotal_amount)     AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nGROUP BY 1, 2\nORDER BY revenue DESC`,
-    columns: ['Group', 'Territory', 'Revenue'],
-    rows: [
-      { Group: 'North America', Territory: 'Northwest',  Revenue: '$5,432,890' },
-      { Group: 'North America', Territory: 'Southwest',  Revenue: '$4,198,450' },
-      { Group: 'Europe',        Territory: 'France',     Revenue: '$2,892,310' },
-      { Group: 'Europe',        Territory: 'Germany',    Revenue: '$2,644,180' },
-    ],
-  },
-  {
-    id: 'channel-split',
-    question: 'Online vs offline order split',
-    keywords: ['online', 'offline', 'channel', 'digital'],
-    resolution: { metrics: ['Order Count', 'Revenue'], dimensions: [], segments: ['Online Orders', 'Offline Orders'] },
-    sql: `SELECT\n  CASE WHEN o.online_order_flag THEN 'Online'\n       ELSE 'Offline' END    AS channel,\n  COUNT(*)                     AS order_count,\n  SUM(o.subtotal_amount)       AS revenue\nFROM sales_order o\nGROUP BY 1\nORDER BY revenue DESC`,
-    columns: ['Channel', 'Orders', 'Revenue', 'Share'],
-    rows: [
-      { Channel: 'Online',  Orders: '27,659', Revenue: '$8,432,190', Share: '58%' },
-      { Channel: 'Offline', Orders: '3,291',  Revenue: '$6,098,450', Share: '42%' },
-    ],
-  },
-  {
-    id: 'top-customers',
-    question: 'Top 10 B2B customers by revenue',
-    keywords: ['top', 'customer', 'best', 'largest', 'biggest', 'b2b'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Customer' }], segments: ['B2B Customers'] },
-    sql: `SELECT\n  c.company_name             AS customer,\n  COUNT(DISTINCT o.id)       AS orders,\n  SUM(o.subtotal_amount)     AS revenue\nFROM customer c\n  JOIN sales_order o ON o.customer_id = c.customer_id\nWHERE c.customer_type = 'Company'\nGROUP BY 1\nORDER BY revenue DESC\nLIMIT 10`,
-    columns: ['Customer', 'Orders', 'Revenue'],
-    rows: [
-      { Customer: 'Action Bicycle Specialists',   Orders: '29', Revenue: '$934,219' },
-      { Customer: 'Professional Sales & Service', Orders: '24', Revenue: '$812,450' },
-      { Customer: 'Thrifty Parts & Supply',       Orders: '18', Revenue: '$699,120' },
-      { Customer: 'Thorough Parts & Supply Co.',  Orders: '21', Revenue: '$623,890' },
-    ],
-  },
-  {
-    id: 'aov-quarter',
-    question: 'Average order value by quarter',
-    keywords: ['average', 'aov', 'basket', 'quarter', 'quarterly'],
-    resolution: { metrics: ['Avg Order Value', 'Revenue', 'Order Count'], dimensions: [{ name: 'Date', grain: 'quarter' }], segments: [] },
-    sql: `SELECT\n  DATE_TRUNC('quarter', o.order_date)        AS quarter,\n  COUNT(*)                                   AS orders,\n  SUM(o.subtotal_amount) / COUNT(*)          AS avg_order_value\nFROM sales_order o\nGROUP BY 1\nORDER BY 1 DESC\nLIMIT 6`,
-    columns: ['Quarter', 'Orders', 'AOV'],
-    rows: [
-      { Quarter: 'Q1 2026', Orders: '7,832', AOV: '$1,249' },
-      { Quarter: 'Q4 2025', Orders: '8,123', AOV: '$1,260' },
-      { Quarter: 'Q3 2025', Orders: '7,450', AOV: '$1,199' },
-      { Quarter: 'Q2 2025', Orders: '7,210', AOV: '$1,185' },
-    ],
-  },
-  {
-    id: 'product-category',
-    question: 'Revenue by product category',
-    keywords: ['product', 'category', 'sku', 'item', 'bike', 'accessory'],
-    resolution: { metrics: ['Revenue', 'Order Count'], dimensions: [{ name: 'Product' }], segments: [] },
-    sql: `SELECT\n  p.category                            AS category,\n  COUNT(DISTINCT ol.sales_order_id)     AS orders,\n  SUM(ol.unit_price * ol.order_qty)     AS revenue\nFROM sales_order_line ol\n  JOIN product p ON ol.product_id = p.product_id\nGROUP BY 1\nORDER BY revenue DESC`,
-    columns: ['Category', 'Orders', 'Revenue'],
-    rows: [
-      { Category: 'Bikes',       Orders: '18,432', Revenue: '$22,431,890' },
-      { Category: 'Components',  Orders: '27,891', Revenue: '$5,432,100' },
-      { Category: 'Accessories', Orders: '35,120', Revenue: '$1,987,450' },
-      { Category: 'Clothing',    Orders: '8,930',  Revenue: '$892,310' },
-    ],
-  },
-  {
-    id: 'q4-na',
-    question: 'Q4 revenue — North America only',
-    keywords: ['q4', 'fourth quarter', 'north america', 'q4 north'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: ['Q4 Orders', 'North America'] },
-    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nWHERE t.group = 'North America'\n  AND MONTH(o.order_date) IN (10, 11, 12)\nGROUP BY 1\nORDER BY 1`,
-    columns: ['Month', 'Revenue'],
-    rows: [
-      { Month: 'Oct 2025', Revenue: '$2,891,340' },
-      { Month: 'Nov 2025', Revenue: '$3,124,780' },
-      { Month: 'Dec 2025', Revenue: '$4,218,020' },
-    ],
-  },
-]
-
-function resolveQuery(query: string): PlaygroundScenario | null {
-  const q = query.toLowerCase()
-  return AW_PLAYGROUND.find(s => s.keywords.some(k => q.includes(k))) ?? null
+// AW_PLAYGROUND is no longer used — playground scenarios come from query templates loaded via listQueryTemplates()
+// resolveQuery is only used in offline mode; with no hardcoded scenarios it always returns null
+function resolveQuery(_query: string): PlaygroundScenario | null {
+  return null
 }
 
 interface SearchResult { section: SLSection; type: string; label: string; sub: string }
@@ -2234,6 +1892,7 @@ export default function SemanticLayerView() {
   useEffect(() => { loadFromBackend() }, [loadFromBackend])
 
   const isManufacturing = sectorId === 'manufacturing'
+  const pgExamples: { id: number; question: string }[] = []
   const baseNodeIds = new Set(SECTORS[sectorId].ontology.nodes.map(n => n.id))
   const nodeCount = ontology.nodes.length
   const edgeCount = ontology.edges.length
@@ -2812,11 +2471,11 @@ export default function SemanticLayerView() {
             </div>
 
             {/* Quick examples */}
-            {!pgResult && !pgRunning && isManufacturing && (
+            {!pgResult && !pgRunning && pgExamples.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Try an example</p>
                 <div className="flex flex-wrap gap-2">
-                  {AW_PLAYGROUND.map(s => (
+                  {pgExamples.map(s => (
                     <button key={s.id}
                       onClick={() => { setPgQuery(s.question); setPgResult(null); setPgNoMatch(false) }}
                       className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1.5 hover:bg-teal-100 transition-colors font-medium">
