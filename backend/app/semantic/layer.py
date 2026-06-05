@@ -148,6 +148,7 @@ class NeuroSymbolicPlan:
 
 
 _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
+    # ── structural intents (no SQL, return system info) ───────────────────────
     "entity_not_modeled": {
         "metric": None,
         "entities": [],
@@ -166,199 +167,10 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "properties": [],
         "relations": [],
     },
-    "customers_without_orders": {
-        "metric": None,
-        "entities": ["Customer", "SalesOrder"],
-        "properties": ["Customer.accountId", "SalesOrder.order_id"],
-        "relations": [],
-    },
-    "employees_with_duplicate_customers": {
-        "metric": None,
-        "entities": ["Employee", "Customer"],
-        "properties": ["Employee.MatricolaDip", "Customer.accountId"],
-        "relations": [],
-    },
     "certified_metrics": {
         "metric": None,
         "entities": [],
         "properties": [],
-        "relations": [],
-    },
-    "count_employees": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.MatricolaDip", "Employee.Reparto"],
-        "relations": [],
-    },
-    "count_employees_by_group": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.GruppoReparto"],
-        "relations": [],
-    },
-    "avg_hourly_rate": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": ["Employee.RetribuzioneOraria", "Employee.Reparto"],
-        "relations": [],
-    },
-    "product_price": {
-        "metric": None,
-        "entities": ["Product"],
-        "properties": [
-            "Product.displayName",
-            "Product.listPrice",
-            "Product.standardCost",
-        ],
-        "relations": [],
-    },
-    "count_make_only": {
-        "metric": None,
-        "entities": ["Product"],
-        "properties": ["Product.isMakeOnly"],
-        "relations": [],
-    },
-    "count_orders": {
-        "metric": None,
-        "entities": ["SalesOrder"],
-        "properties": ["SalesOrder.order_id", "SalesOrder.order_date"],
-        "relations": [],
-    },
-    "list_b2b_active": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": [
-            "Customer.accountType",
-            "Customer.isActive",
-            "Customer.ragioneSociale",
-        ],
-        "relations": [],
-    },
-    "customers_by_state": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": ["Customer.accountId"],
-        "relations": [],
-    },
-    "top_salesperson_by_orders": {
-        "metric": None,
-        "entities": ["SalesOrder", "Employee"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrder.order_id",
-            "Employee.MatricolaDip",
-        ],
-        "relations": ["SalesOrder.salesperson_ref->Employee"],
-    },
-    "top_salespersons_by_revenue": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Employee"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrder.total_due",
-            "Employee.MatricolaDip",
-        ],
-        "relations": ["SalesOrder.salesperson_ref->Employee"],
-    },
-    "revenue_by_territory": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Territory"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.territory_ref"],
-        "relations": ["SalesOrder.territory_ref->Territory"],
-    },
-    "revenue_vs_quota": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Salesperson"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.salesperson_ref"],
-        "relations": ["SalesOrder.salesperson_ref->Salesperson"],
-    },
-    "top_customer_by_spend": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.total_due",
-            "Customer.accountId",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "top_products_by_qty": {
-        "metric": None,
-        "entities": ["SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.displayName",
-        ],
-        "relations": ["SalesOrderLine.product_ref->Product"],
-    },
-    "customer_state_most_orders": {
-        "metric": None,
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.order_id",
-            "Customer.accountId",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "margin_per_salesperson": {
-        "metric": "margin",
-        "entities": ["SalesOrder", "SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrder.salesperson_ref",
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.standardCost",
-            "Product.listPrice",
-        ],
-        "relations": [
-            "SalesOrder.hasLine->SalesOrderLine",
-            "SalesOrderLine.product_ref->Product",
-        ],
-    },
-    "avg_revenue_by_segment": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder", "Customer"],
-        "properties": [
-            "SalesOrder.customer_ref",
-            "SalesOrder.total_due",
-            "Customer.accountType",
-        ],
-        "relations": ["SalesOrder.customer_ref->Customer"],
-    },
-    "top_category_by_margin": {
-        "metric": "margin",
-        "entities": ["SalesOrderLine", "Product"],
-        "properties": [
-            "SalesOrderLine.product_ref",
-            "SalesOrderLine.qty",
-            "Product.categoryPath",
-            "Product.standardCost",
-            "Product.listPrice",
-        ],
-        "relations": ["SalesOrderLine.product_ref->Product"],
-    },
-    "orders_with_discount": {
-        "metric": None,
-        "entities": ["SalesOrderLine"],
-        "properties": ["SalesOrderLine.offer_ref"],
-        "relations": [],
-    },
-    "count_customers_unique": {
-        "metric": "active_customers",
-        "entities": ["Customer"],
-        "properties": ["Customer.accountId"],
-        "relations": [],
-    },
-    "check_duplicate_accounts": {
-        "metric": None,
-        "entities": ["Customer"],
-        "properties": [
-            "Customer.accountId",
-            "Customer.ragioneSociale",
-            "Customer.nomeContatto",
-        ],
         "relations": [],
     },
     "data_provenance": {
@@ -367,29 +179,13 @@ _INTENT_CONTRACTS: dict[str, dict[str, Any]] = {
         "properties": [],
         "relations": [],
     },
-    "revenue_with_tax": {
-        "metric": "revenue_with_tax",
-        "entities": ["SalesOrder"],
-        "properties": ["SalesOrder.total_due", "SalesOrder.order_date"],
-        "relations": [],
-    },
-    "lookup_employee": {
-        "metric": None,
-        "entities": ["Employee"],
-        "properties": [
-            "Employee.MatricolaDip",
-            "Employee.Nome",
-            "Employee.Cognome",
-            "Employee.Reparto",
-        ],
-        "relations": [],
-    },
     "impossible": {
         "metric": None,
         "entities": [],
         "properties": [],
         "relations": [],
     },
+    # ── fallback / LLM-generated ──────────────────────────────────────────────
     "unknown": {
         "metric": None,
         "entities": [],
@@ -547,17 +343,20 @@ def _extract_json_payload(text: str) -> dict[str, Any]:
 
 
 class _RuleParser:
-    """Rule-based intent parser that handles the 25 golden questions."""
+    """Rule-based intent parser — handles structural intents and template matching.
+
+    SQL-based golden-question handlers have been removed; those questions are
+    now served by seed Query Templates in the DB or by LLM-generated SQL.
+    """
 
     # Compiled patterns (order matters — more specific first)
     _YEAR_RE = re.compile(r"\b(20\d{2})\b")
-    _YEAR_RANGE_RE = re.compile(r"\b(20\d{2})\s*[-–/]\s*(20\d{2})\b")
     _LIMIT_RE = re.compile(r"\btop[\s-]?(\d+)\b", re.IGNORECASE)
     _DEPT_RE = re.compile(
-        r'"([^"]+)"|\'([^\']+)\'|reparto\s+([A-Za-z &]+)', re.IGNORECASE
+        r'"([^"]+)"|\'([^\']+)\'|repasto\s+([A-Za-z &]+)', re.IGNORECASE
     )
 
-    def parse(self, question: str) -> Intent:
+    def parse(self, question: str, templates: list[dict] | None = None) -> Intent:
         q = question.lower()
         # The deterministic patterns below were authored for Italian questions.
         # The product UI is now English, so normalise the most common English
@@ -569,7 +368,28 @@ class _RuleParser:
         year = self._extract_year(question)
         limit = self._extract_limit(q)
 
-        # ── Q25: impossible query — MUST come before fatturato check ─────────
+        # ── Step 1: Template keyword matching — checked FIRST ─────────────────
+        # Templates registered in the DB take priority over structural patterns
+        # so user-defined overrides always win.
+        if templates:
+            q_lower = q.lower()
+            for tpl in templates:
+                if not tpl.get("is_active", True):
+                    continue
+                for kw in tpl.get("keywords", []):
+                    if kw.lower() in q_lower:
+                        return Intent(
+                            intent_type=tpl["intent_type"],
+                            filters={"year": year} if year else {},
+                            limit=limit,
+                            year=year,
+                            raw_question=question,
+                        )
+
+        # ── Step 2: Structural intent patterns ────────────────────────────────
+        # These return system info (no SQL). Keep these regardless of templates.
+
+        # ── Impossible query (nationality field not modeled) ──────────────
         if "italian" in q or "nazionalit" in q or "italiano" in q.split():
             return Intent(
                 intent_type="impossible",
@@ -577,7 +397,7 @@ class _RuleParser:
                 raw_question=question,
             )
 
-        # ── EC-02: entity not modeled — fornitori / supplier / vendor ────────
+        # ── Entity not modeled — fornitori / supplier / vendor ────────────
         if any(kw in q for kw in ["fornitore", "fornitori", "supplier", "vendor"]):
             return Intent(
                 intent_type="entity_not_modeled",
@@ -585,7 +405,7 @@ class _RuleParser:
                 raw_question=question,
             )
 
-        # ── EC-10: glossary lookup — "cosa intendete per", "definizione di" ──
+        # ── Glossary lookup ───────────────────────────────────────────────
         _GLOSSARY_TRIGGERS = [
             "cosa intendete per",
             "definizione di",
@@ -611,52 +431,25 @@ class _RuleParser:
                 raw_question=question,
             )
 
-        # ── DQ-03: disambiguation rules explanation ───────────────────────────
+        # ── Disambiguation rules explanation ──────────────────────────────
         if ("disambiguazion" in q or "regole" in q) and (
             "attiv" in q or "disambiguazion" in q or "spiega" in q
         ):
             return Intent(intent_type="disambiguation_rules", raw_question=question)
 
-        # ── SS-07: certified metrics list ─────────────────────────────────────
+        # ── Certified metrics list ────────────────────────────────────────
         if ("metriche" in q or "metric" in q) and (
             "certif" in q or "disponibil" in q or "quali" in q
         ):
             return Intent(intent_type="certified_metrics", raw_question=question)
 
-        # ── MH-07: employees who managed duplicate-account customers ──────────
-        if ("dipendenti" in q or "employee" in q or "dipendente" in q) and (
-            "account" in q and ("duplicat" in q or "accountid" in q or "negativ" in q)
-        ):
-            return Intent(
-                intent_type="employees_with_duplicate_customers",
-                raw_question=question,
-            )
+        # ── Data provenance ───────────────────────────────────────────────
+        if "provenienza" in q or "fonte" in q or "aggiornato" in q or "freschezza" in q:
+            return Intent(intent_type="data_provenance", raw_question=question)
 
-        # ── 1H-02: customers without orders (anti-join) ───────────────────────
-        if (
-            "client" in q
-            and (
-                "mai" in q
-                or "nessun ordine" in q
-                or "senza ordini" in q
-                or "non hanno" in q
-            )
-            and ("ordine" in q or "ordini" in q or "crm" in q)
-        ):
-            return Intent(intent_type="customers_without_orders", raw_question=question)
+        # ── Ambiguity guards (raise before unknown fallback) ──────────────
 
-        # ── "average revenue" in English (medio + incassi after normalisation) ─
-        if "medio" in q and "incass" in q:
-            return Intent(
-                intent_type="avg_revenue_by_segment",
-                filters=self._seg_filters(q, question, year),
-                raw_question=question,
-            )
-
-        # ── Q21: ambiguous "fatturato" — only when standing alone ────────────
-        # "fatturato totale per territorio", "fatturato per venditore", etc.
-        # are contextually resolved to revenue_with_tax per golden questions hint Q7.
-        # Only raise AmbiguityError when "fatturato" appears without a dimensional qualifier.
+        # "fatturato" standalone — ambiguous between revenue and revenue_with_tax
         _FATTURATO_QUALIFIERS = [
             "per territorio",
             "per venditore",
@@ -680,14 +473,6 @@ class _RuleParser:
         ]
         if "fatturato" in q:
             has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
-            # "fatturato medio" (average revenue) → avg_revenue_by_segment
-            if "medio" in q:
-                return Intent(
-                    intent_type="avg_revenue_by_segment",
-                    filters=self._seg_filters(q, question, year),
-                    raw_question=question,
-                )
-            # Q21 pattern: standalone "fatturato" with year only
             is_standalone = not has_qualifier
             if is_standalone:
                 raise AmbiguityError(
@@ -700,7 +485,7 @@ class _RuleParser:
                     ],
                 )
 
-        # ── EC-01: ambiguous "vendite" — standalone triggers disambiguation ───
+        # "vendite" standalone — ambiguous between order count and revenue
         _VENDITE_QUALIFIERS = [
             "per territorio",
             "per venditore",
@@ -728,315 +513,21 @@ class _RuleParser:
                 ],
             )
 
-        # ── Q22: employee lookup by first name ─────────────────────────────
-        if "dipendente" in q or "employee" in q:
-            name_m = re.search(
-                r'"([^"]+)"|\'([^\']+)\'|\bdipendente\s+["\']?([A-Za-z]+)', q
-            )
-            if not name_m:
-                # Try bare name after keyword
-                name_m = re.search(
-                    r'(?:mostrami|trova|cerca)\s+(?:il\s+)?dipendente\s+["\']?(\w+)',
-                    q,
-                    re.IGNORECASE,
-                )
-            if name_m:
-                name = next(g for g in name_m.groups() if g)
-                return Intent(
-                    intent_type="lookup_employee",
-                    filters={"name": name},
-                    raw_question=question,
-                )
-
-        # ── Q20: unique customers after dedup ─────────────────────────────
-        if "clienti unici" in q or ("quanti clienti" in q and "duplicat" in q):
-            return Intent(intent_type="count_customers_unique", raw_question=question)
-
-        # ── Q24: duplicate accounts check ─────────────────────────────────
-        if "più di un account" in q or ("account" in q and "duplicat" in q):
-            name_m = re.search(r'"([^"]+)"|\'([^\']+)\'', question)
-            company = name_m.group(1) if name_m else None
-            return Intent(
-                intent_type="check_duplicate_accounts",
-                filters={"company": company},
-                raw_question=question,
-            )
-
-        # ── Q23: data provenance ───────────────────────────────────────────
-        if "provenienza" in q or "fonte" in q or "aggiornato" in q or "freschezza" in q:
-            return Intent(intent_type="data_provenance", raw_question=question)
-
-        # ── Q11: employees by department group — MUST come before Q1 ────────
-        if ("gruppo" in q or "group" in q) and ("reparto" in q or "department" in q):
-            return Intent(intent_type="count_employees_by_group", raw_question=question)
-
-        # ── Q19: orders with discount — MUST come before Q3 ──────────────
-        if "sconto" in q or "offerta speciale" in q or "discount" in q:
-            return Intent(intent_type="orders_with_discount", raw_question=question)
-
-        # ── Q1: employees in department ───────────────────────────────────
-        if any(kw in q for kw in ["dipendenti", "quanti dipendenti", "quante persone"]):
-            dept = self._extract_quoted_or_named(question, prefixes=["reparto", "in"])
-            return Intent(
-                intent_type="count_employees",
-                filters={"department": dept},
-                raw_question=question,
-            )
-
-        # ── Q11: employees by department group ────────────────────────────
-        if "gruppo" in q and ("reparto" in q or "department" in q):
-            return Intent(intent_type="count_employees_by_group", raw_question=question)
-
-        # ── Q5: average hourly rate ────────────────────────────────────────
-        if "retribuzione" in q or "paga" in q or "stipendio" in q or "salario" in q:
-            dept = self._extract_quoted_or_named(
-                question, prefixes=["reparto", "in", "nel"]
-            )
-            return Intent(
-                intent_type="avg_hourly_rate",
-                filters={"department": dept},
-                raw_question=question,
-            )
-
-        # ── Q2: product price lookup ──────────────────────────────────────
-        if "prezzo" in q or "listino" in q or "price" in q:
-            prod = self._extract_quoted(question) or _extract_product_code(question)
-            return Intent(
-                intent_type="product_price",
-                filters={"product_name": prod},
-                raw_question=question,
-            )
-
-        # ── Q12: make-only products ───────────────────────────────────────
-        if "make only" in q or "makeonly" in q or "prodotti intern" in q:
-            return Intent(intent_type="count_make_only", raw_question=question)
-
-        # ── Q3: order count ───────────────────────────────────────────────
-        if any(kw in q for kw in ["quanti ordini", "numero ordini", "totale ordini"]):
-            return Intent(
-                intent_type="count_orders",
-                filters={"year": year} if year else {},
-                raw_question=question,
-            )
-
-        # ── Q16: revenue B2B vs B2C — before Q4 ──────────────────────────
-        if ("b2b" in q or "b2c" in q) and (
-            "fatturato" in q or "incass" in q or "medio" in q or "revenue" in q
-        ):
-            return Intent(
-                intent_type="avg_revenue_by_segment",
-                filters=self._seg_filters(q, question, year),
-                raw_question=question,
-            )
-
-        # ── Q4: B2B active companies ──────────────────────────────────────
-        if ("b2b" in q or "aziende" in q) and ("attiv" in q or "client" in q):
-            return Intent(intent_type="list_b2b_active", raw_question=question)
-
-        # ── Q10: customer state with most orders — MUST come before Q13 ────
-        if (
-            ("stato" in q or "provincia" in q or "state" in q)
-            and ("ordini" in q or "orders" in q)
-            and "client" in q
-        ):
-            return Intent(
-                intent_type="customer_state_most_orders", raw_question=question
-            )
-
-        # ── Q13: customers in state ───────────────────────────────────────
-        if ("california" in q or "stato" in q or "provincia" in q) and "client" in q:
-            state = self._extract_quoted(question) or _extract_state(question)
-            return Intent(
-                intent_type="customers_by_state",
-                filters={"state": state},
-                raw_question=question,
-            )
-
-        # ── Q14: top sellers by revenue (fatturato) — before Q6 ──────────
-        if ("venditore" in q or "venditori" in q) and "fatturato" in q and "top" in q:
-            return Intent(
-                intent_type="top_salespersons_by_revenue",
-                filters={"year": year},
-                limit=limit or 3,
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Q6: top seller by orders ──────────────────────────────────────
-        if ("venditore" in q or "venditori" in q or "salesperson" in q) and (
-            "più ordini" in q or "gestito più" in q
-        ):
-            return Intent(
-                intent_type="top_salesperson_by_orders",
-                filters={"year": year},
-                raw_question=question,
-            )
-
-        # ── top sellers by revenue (other forms) ──────────────────────────
-        if (
-            ("venditore" in q or "venditori" in q)
-            and ("incass" in q or "revenue" in q)
-            and "top" in q
-        ):
-            return Intent(
-                intent_type="top_salespersons_by_revenue",
-                filters={"year": year},
-                limit=limit or 3,
-                year=year,
-                raw_question=question,
-            )
-
-        # ── top salesperson / best seller (any English phrasing with "top") ─
-        if ("venditore" in q or "venditori" in q) and "top" in q:
-            return Intent(
-                intent_type="top_salespersons_by_revenue",
-                filters={"year": year},
-                limit=limit or 3,
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Q7: revenue by territory ──────────────────────────────────────
-        if ("territorio" in q or "territory" in q) and (
-            "incass" in q or "revenue" in q or "total" in q or "fatturato" in q
-        ):
-            return Intent(
-                intent_type="revenue_by_territory",
-                filters={"year": year},
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Q17: revenue vs quota ─────────────────────────────────────────
-        if "quota" in q:
-            return Intent(
-                intent_type="revenue_vs_quota",
-                filters={"year": year},
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Q8: top customer by spend ─────────────────────────────────────
-        if (
-            "cliente" in q
-            and ("più" in q or "piu" in q or "top" in q)
-            and ("speso" in q or "spesa" in q or "spend" in q)
-        ):
-            return Intent(intent_type="top_customer_by_spend", raw_question=question)
-
-        # ── Q9: top products by quantity ──────────────────────────────────
-        if ("prodotti" in q or "prodotto" in q) and (
-            "vendut" in q or "quantit" in q or "top" in q
-        ):
-            return Intent(
-                intent_type="top_products_by_qty",
-                limit=limit or 5,
-                raw_question=question,
-            )
-
-        # ── Q15: margin per salesperson ───────────────────────────────────
-        if "margine" in q and ("venditore" in q or "venditori" in q):
-            return Intent(
-                intent_type="margin_per_salesperson",
-                filters={"year": year},
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Q16: revenue B2B vs B2C ───────────────────────────────────────
-        if ("b2b" in q or "b2c" in q or "segment" in q) and (
-            "incass" in q or "revenue" in q or "medio" in q
-        ):
-            return Intent(
-                intent_type="avg_revenue_by_segment",
-                filters=self._seg_filters(q, question, year),
-                raw_question=question,
-            )
-
-        # ── Q18: category with highest margin ─────────────────────────────
-        if "categoria" in q and "margine" in q:
-            return Intent(intent_type="top_category_by_margin", raw_question=question)
-
-        # ── Q19: orders with discount ─────────────────────────────────────
-        if "sconto" in q or "offerta" in q or "discount" in q:
-            return Intent(intent_type="orders_with_discount", raw_question=question)
-
-        # ── incassi → revenue_with_tax ────────────────────────────────────
-        if "incass" in q or "revenue with tax" in q or ("revenue" in q and "tax" in q):
-            return Intent(
-                intent_type="revenue_with_tax",
-                filters={"year": year} if year else {},
-                year=year,
-                raw_question=question,
-            )
-
-        # ── Plain customer count (e.g. "How many customers are there?") ───
-        # Placed late so state/segment/spend customer questions match first.
-        if "quanti clienti" in q or "numero clienti" in q:
-            return Intent(intent_type="count_customers_unique", raw_question=question)
-
-        # ── Domain catch-alls: fire only when no specific pattern matched ─────
-        # These ensure any question containing a recognised domain term returns
-        # something meaningful rather than an "unknown intent" error.
-        if "clienti" in q or "cliente" in q:
-            return Intent(intent_type="count_customers_unique", raw_question=question)
-        if "ordini" in q or "ordine" in q:
-            return Intent(
-                intent_type="count_orders",
-                filters={"year": year} if year else {},
-                raw_question=question,
-            )
-        if "dipendenti" in q or "dipendente" in q:
-            return Intent(intent_type="count_employees", raw_question=question)
-        if "prodotti" in q or "prodotto" in q:
-            return Intent(
-                intent_type="top_products_by_qty",
-                limit=limit or 5,
-                raw_question=question,
-            )
-        if "venditore" in q or "venditori" in q:
-            return Intent(
-                intent_type="top_salespersons_by_revenue",
-                limit=limit or 3,
-                year=year,
-                raw_question=question,
-            )
-        if "incass" in q:
-            return Intent(
-                intent_type="revenue_with_tax",
-                filters={"year": year} if year else {},
-                year=year,
-                raw_question=question,
-            )
-
-        # Fallback — unknown
-        return Intent(intent_type="unknown", raw_question=question)
+        # ── Step 3: Unknown — LLM SQL generation fallback ─────────────────────
+        # Pass year/limit so that LLM-SQL and template paths can use them.
+        return Intent(
+            intent_type="unknown",
+            filters={"year": year} if year else {},
+            limit=limit,
+            year=year,
+            raw_question=question,
+        )
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _extract_year(self, text: str) -> int | None:
         m = self._YEAR_RE.search(text)
         return int(m.group(1)) if m else None
-
-    def _extract_year_range(self, text: str) -> tuple[int, int] | None:
-        m = self._YEAR_RANGE_RE.search(text)
-        if m:
-            return int(m.group(1)), int(m.group(2))
-        return None
-
-    def _seg_filters(self, q: str, question: str, year: int | None) -> dict:
-        """Build segment + year filters for avg_revenue_by_segment intents."""
-        filters: dict = {}
-        yr = self._extract_year_range(question)
-        if yr:
-            filters["year_from"], filters["year_to"] = yr
-        elif year:
-            filters["year"] = year
-        if any(kw in q for kw in ["b2b", "aziende"]):
-            filters["segment"] = "B2B"
-        elif "b2c" in q:
-            filters["segment"] = "B2C"
-        return filters
 
     def _extract_limit(self, text: str) -> int | None:
         m = self._LIMIT_RE.search(text)
@@ -1075,30 +566,28 @@ class _RuleParser:
 # Applied to the lowercased question before pattern matching. Replacements use
 # word boundaries and only rewrite English tokens, so Italian questions (which
 # never contain these English words) are left unchanged.
-_EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bhow many\b"), "quanti"),
-    (re.compile(r"\bnumber of\b"), "numero"),
-    (re.compile(r"\bcount\b"), "quanti"),
-    (re.compile(r"\bcustomers?\b"), "clienti"),
-    (re.compile(r"\bclients?\b"), "clienti"),
-    (re.compile(r"\borders?\b"), "ordini"),
-    (re.compile(r"\bemployees?\b"), "dipendenti"),
-    (re.compile(r"\bstaff\b"), "dipendenti"),
-    (re.compile(r"\bproducts?\b"), "prodotti"),
-    (re.compile(r"\bsalespe(?:rson|ople)\b"), "venditori"),
-    (re.compile(r"\bsellers?\b"), "venditori"),
-    (re.compile(r"\bterritor(?:y|ies)\b"), "territorio"),
-    (re.compile(r"\bdepartments?\b"), "reparto"),
-    (re.compile(r"\b(?:salary|salaries|wage|pay rate)\b"), "retribuzione"),
-    (re.compile(r"\brevenue\b"), "incassi"),
-    (re.compile(r"\b(?:average|avg)\b"), "medio"),
-    (re.compile(r"\bcategor(?:y|ies)\b"), "categoria"),
-    (re.compile(r"\bmargins?\b"), "margine"),
-    (re.compile(r"\bactive\b"), "attiv"),
-    (re.compile(r"\btotal\b"), "totale"),
-    (re.compile(r"\bsales\b"), "incassi"),
-    (re.compile(r"\bcompan(?:y|ies)\b"), "aziende"),
-]
+
+
+def _load_term_map() -> list[tuple[re.Pattern[str], str]]:
+    """Load English-to-Italian term mappings from term_map.json.
+
+    Falls back to empty list if the file is missing or malformed.
+    """
+    import json as _json
+    import pathlib as _pathlib
+
+    _path = _pathlib.Path(__file__).parent / "term_map.json"
+    try:
+        data = _json.loads(_path.read_text(encoding="utf-8"))
+        return [
+            (re.compile(pattern), replacement)
+            for pattern, replacement in data.get("mappings", [])
+        ]
+    except (FileNotFoundError, KeyError, ValueError):
+        return []
+
+
+_EN_TERM_MAP: list[tuple[re.Pattern[str], str]] = _load_term_map()
 
 
 def _normalize_english_terms(q: str) -> str:
@@ -1107,25 +596,6 @@ def _normalize_english_terms(q: str) -> str:
     for pattern, replacement in _EN_TERM_MAP:
         q = pattern.sub(replacement, q)
     return q
-
-
-_PRODUCT_CODE_RE = re.compile(r"\b([A-Z][A-Za-z]+-\d{2,4})\b")
-
-
-def _extract_product_code(text: str) -> str | None:
-    """Extract an AdventureWorks-style product code like 'Road-650'."""
-    m = _PRODUCT_CODE_RE.search(text)
-    return m.group(1) if m else None
-
-
-def _extract_state(text: str) -> str | None:
-    """Extract US state name from text."""
-    known = ["california", "washington", "texas", "oregon", "arizona", "colorado"]
-    tl = text.lower()
-    for s in known:
-        if s in tl:
-            return s.title()
-    return None
 
 
 # ── SemanticLayer ─────────────────────────────────────────────────────────────
@@ -1158,6 +628,8 @@ class SemanticLayer:
         self._hr_pim = None
         # DuckDB manager — set by set_manager() for schema-driven LLM SQL generation
         self._mgr = None
+        # User-defined query templates — hot-reloaded via set_templates()
+        self._templates: list[dict] = []
 
     @property
     def _effective_docs(self) -> SemanticDocs | None:
@@ -1183,6 +655,14 @@ class SemanticLayer:
     def set_context_docs(self, docs: list[dict]) -> None:
         """Inject global context documents into LLM SQL generation prompts."""
         self._context_docs: list[dict] = list(docs or [])
+
+    def set_templates(self, templates: list[dict]) -> None:
+        """Hot-reload query templates from the catalog (called after DB writes)."""
+        self._templates = list(templates)
+
+    def _reload_templates(self) -> None:
+        """No-op placeholder; hot-reload is done via set_templates()."""
+        pass
 
     def _exec(self, sql: str, params: tuple = ()) -> list[dict]:
         """Execute SQL against the unified DuckDB snapshot.
@@ -1245,7 +725,7 @@ class SemanticLayer:
     def _resolve(self, question: str, context) -> Result:
         # Stage 1: deterministic baseline parse
         try:
-            baseline_intent = self._parser.parse(question)
+            baseline_intent = self._parser.parse(question, templates=self._templates)
         except AmbiguityError:
             raise
         except Exception as exc:
@@ -1279,7 +759,9 @@ class SemanticLayer:
             mapping = self._fallback_mapping_from_rule(baseline_intent)
 
         intent_type = mapping.intent_type or baseline_intent.intent_type
-        if intent_type not in _INTENT_CONTRACTS:
+        # Preserve dynamic template intents (tpl_<id>) before contract check
+        _is_template_intent = intent_type.startswith("tpl_")
+        if not _is_template_intent and intent_type not in _INTENT_CONTRACTS:
             # The model picked an intent we don't support: treat it as 'unknown'
             # so the executor returns a friendly hint rather than raising a 422.
             logger.info("LLM mapped to unsupported intent '%s' → unknown", intent_type)
@@ -1550,6 +1032,19 @@ class SemanticLayer:
         intent: Intent,
         mapping: OntologyIntentMapping,
     ) -> NeuroSymbolicPlan:
+        # Dynamic template intents have no ontology contract — return a minimal plan
+        if intent.intent_type.startswith("tpl_"):
+            return NeuroSymbolicPlan(
+                intent_type=intent.intent_type,
+                metric=None,
+                entities=[],
+                properties=[],
+                relations=[],
+                connectors=[],
+                tables=[],
+                validation_steps=["template_intent"],
+            )
+
         contract = _INTENT_CONTRACTS.get(intent.intent_type)
         if not contract:
             raise SemanticOntologyViolationError(
@@ -1698,39 +1193,22 @@ class SemanticLayer:
     # ── executor dispatch ─────────────────────────────────────────────────────
 
     def _execute(self, intent: Intent) -> Result:
+        # Only structural (non-SQL) handlers are wired here.
+        # All SQL-based golden-question handlers have been removed; those
+        # questions are now served by seed Query Templates or LLM-generated SQL.
         dispatch: dict[str, Any] = {
-            "entity_not_modeled": self._q_entity_not_modeled,
-            "glossary_lookup": self._q_glossary_lookup,
-            "disambiguation_rules": self._q_disambiguation_rules,
-            "customers_without_orders": self._q_customers_without_orders,
-            "employees_with_duplicate_customers": self._q_employees_with_duplicate_customers,
-            "certified_metrics": self._q_certified_metrics,
-            "count_employees": self._q_count_employees,
-            "count_employees_by_group": self._q_count_employees_by_group,
-            "avg_hourly_rate": self._q_avg_hourly_rate,
-            "product_price": self._q_product_price,
-            "count_make_only": self._q_count_make_only,
-            "count_orders": self._q_count_orders,
-            "list_b2b_active": self._q_list_b2b_active,
-            "customers_by_state": self._q_customers_by_state,
-            "top_salesperson_by_orders": self._q_top_salesperson_by_orders,
-            "top_salespersons_by_revenue": self._q_top_salespersons_by_revenue,
-            "revenue_by_territory": self._q_revenue_by_territory,
-            "revenue_vs_quota": self._q_revenue_vs_quota,
-            "top_customer_by_spend": self._q_top_customer_by_spend,
-            "top_products_by_qty": self._q_top_products_by_qty,
-            "customer_state_most_orders": self._q_customer_state_most_orders,
-            "margin_per_salesperson": self._q_margin_per_salesperson,
-            "avg_revenue_by_segment": self._q_avg_revenue_by_segment,
-            "top_category_by_margin": self._q_top_category_by_margin,
-            "orders_with_discount": self._q_orders_with_discount,
-            "count_customers_unique": self._q_count_customers_unique,
-            "check_duplicate_accounts": self._q_check_duplicate_accounts,
-            "data_provenance": self._q_data_provenance,
-            "revenue_with_tax": self._q_revenue_with_tax,
-            "lookup_employee": self._q_lookup_employee,
             "impossible": self._q_impossible,
+            "entity_not_modeled": self._q_entity_not_modeled,
+            "disambiguation_rules": self._q_disambiguation_rules,
+            "data_provenance": self._q_data_provenance,
+            "glossary_lookup": self._q_glossary_lookup,
+            "certified_metrics": self._q_certified_metrics,
         }
+        # inject dynamic template handlers
+        for tpl in self._templates:
+            if tpl.get("is_active", True):
+                dispatch[tpl["intent_type"]] = self._execute_template_query
+
         fn = dispatch.get(intent.intent_type)
         if fn is None:
             return self._execute_llm_sql(intent)
@@ -1793,15 +1271,17 @@ class SemanticLayer:
         """
         provider = _llm_intent_provider()
         if provider is None:
+            # Build the hint from actual catalog entities rather than hardcoding domain names.
+            _hint_tables = (
+                sorted(self._catalog.list_entities())[:6] if self._catalog else []
+            )
+            _hint = (
+                f" Try asking about: {', '.join(_hint_tables)}." if _hint_tables else ""
+            )
             return Result(
                 answer=(
-                    "I don't recognise this question yet. "
-                    "Try: **employees** (count, salary, by department), "
-                    "**customers** (count, by state, top spender, without orders), "
-                    "**orders** (count by year, with discount), "
-                    "**products** (price lookup, top by quantity), "
-                    "**revenue** (by territory, vs quota, B2B vs B2C average), "
-                    "**salesperson** (top by revenue or orders, margin)."
+                    "I don't recognize this question type. "
+                    "No LLM key is configured for dynamic SQL generation." + _hint
                 ),
                 notes="unknown_intent_no_llm",
             )
@@ -1917,619 +1397,9 @@ class SemanticLayer:
             notes="Dynamic SQL generated from schema context.",
         )
 
-    # ── query implementations ─────────────────────────────────────────────────
-
-    def _q_count_employees(self, intent: Intent) -> Result:
-        dept = intent.filters.get("department")
-        if dept:
-            sql = "SELECT COUNT(*) as cnt FROM dipendenti_hr WHERE Reparto = ?"
-            params = (dept,)
-            rows = self._exec(sql, params)
-        else:
-            sql = "SELECT COUNT(*) as cnt FROM dipendenti_hr"
-            params = ()
-            rows = self._exec(sql)
-        count = rows[0]["cnt"] if rows else 0
-        return Result(
-            answer=count,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            provenance=self._prov("Employee", ["MatricolaDip", "Reparto"]),
-            notes=(
-                "WARNING: HR data has sync status 'Delayed'. "
-                "The HR/PIM source is not updated in real time: "
-                "the count may not reflect the current situation."
-            ),
-        )
-
-    def _q_count_employees_by_group(self, intent: Intent) -> Result:
-        sql = "SELECT GruppoReparto, COUNT(*) as cnt FROM dipendenti_hr GROUP BY GruppoReparto ORDER BY cnt DESC"
-        rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            provenance=self._prov("Employee", ["GruppoReparto"]),
-        )
-
-    def _q_avg_hourly_rate(self, intent: Intent) -> Result:
-        dept = intent.filters.get("department")
-        if dept:
-            sql = "SELECT ROUND(AVG(CAST(RetribuzioneOraria AS DOUBLE)), 4) as avg_rate FROM dipendenti_hr WHERE Reparto = ?"
-            rows = self._exec(sql, (dept,))
-        else:
-            sql = "SELECT ROUND(AVG(CAST(RetribuzioneOraria AS DOUBLE)), 4) as avg_rate FROM dipendenti_hr"
-            rows = self._exec(sql)
-        avg = rows[0]["avg_rate"] if rows else None
-        return Result(
-            answer=avg,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            provenance=self._prov("Employee", ["RetribuzioneOraria", "Reparto"]),
-        )
-
-    def _q_product_price(self, intent: Intent) -> Result:
-        name = intent.filters.get("product_name")
-        if name:
-            sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim WHERE displayName = ?"
-            rows = self._exec(sql, (name,))
-            if not rows:
-                # fuzzy: contains
-                sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim WHERE displayName LIKE ?"
-                rows = self._exec(sql, (f"%{name}%",))
-        else:
-            sql = "SELECT displayName, listPrice, standardCost FROM product_catalog_pim LIMIT 10"
-            rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            provenance=self._prov("Product", ["displayName", "listPrice"]),
-        )
-
-    def _q_count_make_only(self, intent: Intent) -> Result:
-        sql = "SELECT COUNT(*) as cnt FROM product_catalog_pim WHERE isMakeOnly = true"
-        rows = self._exec(sql)
-        count = rows[0]["cnt"] if rows else 0
-        return Result(
-            answer=count,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            provenance=self._prov("Product", ["isMakeOnly"]),
-        )
-
-    def _q_count_orders(self, intent: Intent) -> Result:
-        year = intent.filters.get("year") or intent.year
-        if year:
-            sql = "SELECT COUNT(*) as cnt FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
-            rows = self._exec(sql, (str(year),))
-        else:
-            sql = "SELECT COUNT(*) as cnt FROM sales_order_header"
-            rows = self._exec(sql)
-        count = rows[0]["cnt"] if rows else 0
-        return Result(
-            answer=count,
-            sql_used=sql,
-            sources_touched=["erp"],
-            provenance=self._prov("SalesOrder", ["order_id"]),
-        )
-
-    def _q_list_b2b_active(self, intent: Intent) -> Result:
-        sql = (
-            "SELECT COUNT(DISTINCT ragioneSociale) as cnt FROM account "
-            "WHERE accountType='B2B' AND isActive=1 "
-            "AND ragioneSociale IS NOT NULL AND ragioneSociale != ''"
-        )
-        rows = self._exec(sql)
-        count = rows[0]["cnt"] if rows else 0
-        detail_sql = (
-            "SELECT accountId, ragioneSociale FROM account "
-            "WHERE accountType='B2B' AND isActive=1 AND accountId > 0 "
-            "ORDER BY ragioneSociale LIMIT 50"
-        )
-        companies = self._exec(detail_sql)
-        return Result(
-            answer={"unique_b2b_active": count, "companies": companies},
-            sql_used=sql,
-            sources_touched=["crm"],
-            provenance=self._prov(
-                "Customer", ["accountType", "isActive", "ragioneSociale"]
-            ),
-        )
-
-    def _q_customers_by_state(self, intent: Intent) -> Result:
-        state = intent.filters.get("state")
-        if state:
-            sql = """
-                SELECT a.accountId, a.ragioneSociale, a.nomeContatto, sp.stateName
-                FROM account a
-                JOIN account_address aa ON aa.accountRef = a.accountId
-                JOIN address addr ON addr.addressId = aa.addressRef
-                JOIN state_province sp ON sp.stateId = addr.stateProvinceId
-                WHERE sp.stateName = ? AND a.accountId > 0
-                ORDER BY a.ragioneSociale, a.nomeContatto
-            """
-            rows = self._exec(sql, (state,))
-            if not rows:
-                sql = sql.replace("sp.stateName = ?", "LOWER(sp.stateName) LIKE ?")
-                rows = self._exec(sql, (f"%{state.lower()}%",))
-        else:
-            sql = """
-                SELECT a.accountId, a.ragioneSociale, a.nomeContatto, sp.stateName
-                FROM account a
-                JOIN account_address aa ON aa.accountRef = a.accountId
-                JOIN address addr ON addr.addressId = aa.addressRef
-                JOIN state_province sp ON sp.stateId = addr.stateProvinceId
-                WHERE a.accountId > 0
-                LIMIT 20
-            """
-            rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["crm"],
-            provenance=self._prov("Customer", ["accountId"]),
-        )
-
-    def _q_top_salesperson_by_orders(self, intent: Intent) -> Result:
-        year = intent.filters.get("year") or intent.year
-        if year:
-            sql = """
-                SELECT salesperson_ref, COUNT(*) as n
-                FROM sales_order_header
-                                WHERE strftime('%Y', CAST(order_date AS DATE)) = ?
-                  AND salesperson_ref IS NOT NULL
-                GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1
-            """
-            rows = self._exec(sql, (str(year),))
-        else:
-            sql = """
-                SELECT salesperson_ref, COUNT(*) as n
-                FROM sales_order_header
-                WHERE salesperson_ref IS NOT NULL
-                GROUP BY salesperson_ref ORDER BY n DESC LIMIT 1
-            """
-            rows = self._exec(sql)
-        if not rows:
-            return Result(answer=None, sql_used=sql, sources_touched=["erp"])
-        sid = rows[0]["salesperson_ref"]
-        n = rows[0]["n"]
-        # Enrich with HR name
-        hr_rows = self._exec(
-            "SELECT Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) = ?",
-            (int(sid),),
-        )
-        name_info = hr_rows[0] if hr_rows else {}
-        return Result(
-            answer={
-                "salesperson_ref": sid,
-                "order_count": n,
-                "Nome": name_info.get("Nome"),
-                "Cognome": name_info.get("Cognome"),
-                "Reparto": name_info.get("Reparto"),
-            },
-            sql_used=sql,
-            sources_touched=["erp", "hr_pim"],
-            provenance={
-                **self._prov("SalesOrder", ["salesperson_ref"]),
-                **self._prov("Employee", ["MatricolaDip", "Nome", "Cognome"]),
-            },
-        )
-
-    def _q_top_salespersons_by_revenue(self, intent: Intent) -> Result:
-        year = intent.year or intent.filters.get("year")
-        limit = max(1, min(int(intent.limit or 3), 50))
-        if year:
-            sql = """
-                SELECT salesperson_ref, ROUND(SUM(total_due), 2) as revenue
-                FROM sales_order_header
-                                WHERE strftime('%Y', CAST(order_date AS DATE)) = ?
-                  AND salesperson_ref IS NOT NULL
-                GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
-            """
-            rows = self._exec(sql, (str(year), limit))
-        else:
-            sql = """
-                SELECT salesperson_ref, ROUND(SUM(total_due), 2) as revenue
-                FROM sales_order_header WHERE salesperson_ref IS NOT NULL
-                GROUP BY salesperson_ref ORDER BY revenue DESC LIMIT ?
-            """
-            rows = self._exec(sql, (limit,))
-        # Batch HR enrichment: one query for all salesperson IDs instead of N queries.
-        if not rows:
-            return Result(
-                answer=[],
-                sql_used=sql,
-                sources_touched=["erp", "hr_pim"],
-                provenance=self._prov("SalesOrder", ["salesperson_ref", "total_due"]),
-                notes="Revenue values in USD ($). revenue = SUM(total_due).",
-            )
-        sp_ids = [int(r["salesperson_ref"]) for r in rows]
-        placeholders = ",".join("?" * len(sp_ids))
-        hr_rows = self._exec(
-            f"SELECT CAST(MatricolaDip AS INTEGER) as mid, Nome, Cognome, Reparto FROM dipendenti_hr WHERE CAST(MatricolaDip AS INTEGER) IN ({placeholders})",
-            tuple(sp_ids),
-        )
-        hr_map = {r["mid"]: r for r in hr_rows}
-        enriched = [{**r, **hr_map.get(int(r["salesperson_ref"]), {})} for r in rows]
-        return Result(
-            answer=enriched,
-            sql_used=sql,
-            sources_touched=["erp", "hr_pim"],
-            provenance={
-                **self._prov("SalesOrder", ["salesperson_ref", "total_due"]),
-                **self._prov("Employee", ["Reparto"]),
-            },
-            notes="Revenue values in USD ($). revenue = SUM(total_due).",
-        )
-
-    def _q_revenue_by_territory(self, intent: Intent) -> Result:
-        year = intent.year or intent.filters.get("year")
-        if year:
-            sql = """
-                SELECT t.territory_name, ROUND(SUM(h.total_due), 2) as revenue
-                FROM sales_order_header h
-                JOIN territory t ON h.territory_ref = t.territory_id
-                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
-                GROUP BY t.territory_name ORDER BY revenue DESC
-            """
-            rows = self._exec(sql, (str(year),))
-        else:
-            sql = """
-                SELECT t.territory_name, ROUND(SUM(h.total_due), 2) as revenue
-                FROM sales_order_header h
-                JOIN territory t ON h.territory_ref = t.territory_id
-                GROUP BY t.territory_name ORDER BY revenue DESC
-            """
-            rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["erp"],
-            provenance=self._prov("SalesOrder", ["total_due", "territory_ref"]),
-            notes="Revenue values in USD ($). revenue = SUM(total_due).",
-        )
-
-    def _q_revenue_vs_quota(self, intent: Intent) -> Result:
-        year = intent.year or intent.filters.get("year")
-        if year:
-            sql = """
-                SELECT h.salesperson_ref,
-                       ROUND(SUM(h.total_due), 2) as revenue,
-                       MAX(sp.sales_quota) as quota,
-                       ROUND(SUM(h.total_due) / NULLIF(MAX(sp.sales_quota), 0) * 100, 1) as pct_quota
-                FROM sales_order_header h
-                JOIN salesperson sp ON h.salesperson_ref = sp.salesperson_id
-                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
-                  AND h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref ORDER BY revenue DESC
-            """
-            rows = self._exec(sql, (str(year),))
-        else:
-            sql = """
-                SELECT h.salesperson_ref,
-                       ROUND(SUM(h.total_due), 2) as revenue,
-                       MAX(sp.sales_quota) as quota,
-                       ROUND(SUM(h.total_due) / NULLIF(MAX(sp.sales_quota), 0) * 100, 1) as pct_quota
-                FROM sales_order_header h
-                JOIN salesperson sp ON h.salesperson_ref = sp.salesperson_id
-                WHERE h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref ORDER BY revenue DESC
-            """
-            rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["erp"],
-            provenance=self._prov("Salesperson", ["sales_quota", "sales_ytd"]),
-            notes="Revenue and quota values in USD ($). revenue = SUM(total_due).",
-        )
-
-    def _q_top_customer_by_spend(self, intent: Intent) -> Result:
-        sql = """
-            SELECT customer_ref, ROUND(SUM(total_due), 2) as spesa
-            FROM sales_order_header GROUP BY customer_ref ORDER BY spesa DESC LIMIT 1
-        """
-        rows = self._exec(sql)
-        if not rows:
-            return Result(answer=None, sql_used=sql, sources_touched=["erp"])
-        cid = rows[0]["customer_ref"]
-        spesa = rows[0]["spesa"]
-        crm_rows = self._exec(
-            "SELECT accountType, ragioneSociale, nomeContatto FROM account WHERE accountId=?",
-            (cid,),
-        )
-        cust_info = crm_rows[0] if crm_rows else {}
-        return Result(
-            answer={
-                "customer_ref": cid,
-                "total_spend": spesa,
-                **cust_info,
-            },
-            sql_used=sql,
-            sources_touched=["erp", "crm"],
-            provenance={
-                **self._prov("SalesOrder", ["customer_ref", "total_due"]),
-                **self._prov("Customer", ["accountId", "ragioneSociale"]),
-            },
-            notes="total_spend value in USD ($). total_spend = SUM(total_due).",
-        )
-
-    def _q_top_products_by_qty(self, intent: Intent) -> Result:
-        limit = max(1, min(int(intent.limit or 5), 50))
-        sql = """
-            SELECT product_ref, SUM(qty) as qty_totale
-            FROM sales_order_line GROUP BY product_ref ORDER BY qty_totale DESC LIMIT ?
-        """
-        rows = self._exec(sql, (limit,))
-        if not rows:
-            return Result(
-                answer=[],
-                sql_used=sql,
-                sources_touched=["erp", "hr_pim"],
-                provenance=self._prov("SalesOrderLine", ["product_ref", "qty"]),
-            )
-        # Batch PIM enrichment: one query for all product IDs instead of N queries.
-        product_ids = [r["product_ref"] for r in rows]
-        placeholders = ",".join("?" * len(product_ids))
-        pim_rows = self._exec(
-            f"SELECT internal_id, displayName, categoryPath FROM product_catalog_pim WHERE internal_id IN ({placeholders})",
-            tuple(product_ids),
-        )
-        pim_map = {r["internal_id"]: r for r in pim_rows}
-        enriched = [{**r, **pim_map.get(r["product_ref"], {})} for r in rows]
-        return Result(
-            answer=enriched,
-            sql_used=sql,
-            sources_touched=["erp", "hr_pim"],
-            provenance={
-                **self._prov("SalesOrderLine", ["product_ref", "qty"]),
-                **self._prov("Product", ["displayName"]),
-            },
-        )
-
-    def _q_customer_state_most_orders(self, intent: Intent) -> Result:
-        sql = """
-            SELECT customer_ref, COUNT(*) as n
-            FROM sales_order_header GROUP BY customer_ref ORDER BY n DESC LIMIT 1
-        """
-        rows = self._exec(sql)
-        if not rows:
-            return Result(answer=None, sql_used=sql, sources_touched=["erp", "crm"])
-        cid = rows[0]["customer_ref"]
-        state_sql = """
-            SELECT sp.stateName
-            FROM account a
-            JOIN account_address aa ON aa.accountRef = a.accountId
-            JOIN address addr ON addr.addressId = aa.addressRef
-            JOIN state_province sp ON sp.stateId = addr.stateProvinceId
-            WHERE a.accountId = ? LIMIT 1
-        """
-        state_rows = self._exec(state_sql, (cid,))
-        state = state_rows[0]["stateName"] if state_rows else "Unknown"
-        return Result(
-            answer={"customer_ref": cid, "order_count": rows[0]["n"], "state": state},
-            sql_used=sql,
-            sources_touched=["erp", "crm"],
-            provenance={
-                **self._prov("SalesOrder", ["customer_ref"]),
-                **self._prov("Customer", ["accountId"]),
-            },
-        )
-
-    def _q_margin_per_salesperson(self, intent: Intent) -> Result:
-        year = intent.year or intent.filters.get("year")
-
-        # Enrich with PIM cost data for true margin calculation
-        cost_sql = (
-            "SELECT internal_id, standardCost, listPrice FROM product_catalog_pim"
-        )
-        pim_rows = {r["internal_id"]: r for r in self._exec(cost_sql)}
-
-        # Build per-salesperson margin using line data
-        if year:
-            margin_sql = """
-                SELECT h.salesperson_ref, l.product_ref,
-                       SUM(l.qty) as total_qty
-                FROM sales_order_header h
-                JOIN sales_order_line l ON l.order_id = h.order_id
-                                WHERE strftime('%Y', CAST(h.order_date AS DATE)) = ?
-                  AND h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref, l.product_ref
-            """
-            margin_rows = self._exec(margin_sql, (str(year),))
-        else:
-            margin_sql = """
-                SELECT h.salesperson_ref, l.product_ref,
-                       SUM(l.qty) as total_qty
-                FROM sales_order_header h
-                JOIN sales_order_line l ON l.order_id = h.order_id
-                WHERE h.salesperson_ref IS NOT NULL
-                GROUP BY h.salesperson_ref, l.product_ref
-            """
-            margin_rows = self._exec(margin_sql)
-
-        margins: dict[int, float] = {}
-        for r in margin_rows:
-            sp = r["salesperson_ref"]
-            pid = r["product_ref"]
-            qty = r["total_qty"] or 0
-            p = pim_rows.get(pid)
-            if p:
-                m = qty * ((p.get("listPrice") or 0) - (p.get("standardCost") or 0))
-                margins[sp] = margins.get(sp, 0) + m
-
-        result = [
-            {"salesperson_ref": sp, "margin": round(m, 2)}
-            for sp, m in sorted(margins.items(), key=lambda x: -x[1])
-        ]
-        return Result(
-            answer=result,
-            sql_used=margin_sql,
-            sources_touched=["erp", "hr_pim"],
-            provenance={
-                **self._prov("SalesOrderLine", ["product_ref", "qty"]),
-                **self._prov("Product", ["standardCost", "listPrice"]),
-            },
-            notes="Margin values in USD ($). margin = SUM(qty * (listPrice - standardCost)).",
-        )
-
-    def _q_avg_revenue_by_segment(self, intent: Intent) -> Result:
-        # Build WHERE conditions — year and segment come from intent.filters.
-        conditions = ["a.accountId > 0"]
-
-        year = intent.year or intent.filters.get("year")
-        year_from = intent.filters.get("year_from")
-        year_to = intent.filters.get("year_to")
-        segment = intent.filters.get("segment")
-
-        if year_from and year_to:
-            conditions.append(
-                f"YEAR(s.order_date) BETWEEN {int(year_from)} AND {int(year_to)}"
-            )
-        elif year:
-            conditions.append(f"YEAR(s.order_date) = {int(year)}")
-
-        # segment is set only from a safe whitelist ("B2B" or "B2C")
-        if segment in ("B2B", "B2C"):
-            conditions.append(f"a.accountType = '{segment}'")
-
-        where = " AND ".join(conditions)
-
-        sql = f"""
-            SELECT
-                a.accountType,
-                COUNT(DISTINCT s.customer_ref)       AS n_customers,
-                ROUND(SUM(s.total_due), 2)           AS total_revenue,
-                ROUND(AVG(s.total_due), 2)           AS avg_per_order,
-                ROUND(SUM(s.total_due) /
-                    NULLIF(COUNT(DISTINCT s.customer_ref), 0), 2) AS avg_per_customer
-            FROM sales_order_header s
-            JOIN account a ON s.customer_ref = a.accountId
-            WHERE {where}
-            GROUP BY a.accountType
-            ORDER BY a.accountType
-        """.strip()
-        rows = self._exec(sql)
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["erp", "crm"],
-            provenance={
-                **self._prov("SalesOrder", ["customer_ref", "total_due"]),
-                **self._prov("Customer", ["accountType"]),
-            },
-            notes=(
-                "total_revenue and avg_per_customer values in USD ($). "
-                "revenue = SUM(total_due)."
-            ),
-        )
-
-    def _q_top_category_by_margin(self, intent: Intent) -> Result:
-        # Get per-product qty from ERP
-        qty_sql = "SELECT product_ref, SUM(qty) as total_qty FROM sales_order_line GROUP BY product_ref"
-        qty_rows = {r["product_ref"]: r["total_qty"] for r in self._exec(qty_sql)}
-        # PIM products with cost data
-        pim_sql = "SELECT internal_id, categoryPath, listPrice, standardCost FROM product_catalog_pim"
-        pim_rows = self._exec(pim_sql)
-
-        cat_revenue: dict[str, float] = {}
-        cat_cost: dict[str, float] = {}
-        for p in pim_rows:
-            pid = p["internal_id"]
-            cat = (p.get("categoryPath") or "").split("/")[0] or "Unknown"
-            qty = qty_rows.get(pid, 0) or 0
-            rev = qty * (p.get("listPrice") or 0)
-            cost = qty * (p.get("standardCost") or 0)
-            cat_revenue[cat] = cat_revenue.get(cat, 0) + rev
-            cat_cost[cat] = cat_cost.get(cat, 0) + cost
-
-        result = []
-        for cat in cat_revenue:
-            rev = cat_revenue[cat]
-            cost = cat_cost.get(cat, 0)
-            margin = rev - cost
-            margin_pct = round((margin / rev * 100) if rev > 0 else 0, 2)
-            result.append(
-                {
-                    "category": cat,
-                    "revenue": round(rev, 2),
-                    "cost": round(cost, 2),
-                    "margin": round(margin, 2),
-                    "margin_pct": margin_pct,
-                }
-            )
-        result.sort(key=lambda x: -x["margin_pct"])
-        return Result(
-            answer=result,
-            sql_used=qty_sql,
-            sources_touched=["erp", "hr_pim"],
-            provenance={
-                **self._prov("SalesOrderLine", ["product_ref", "qty"]),
-                **self._prov("Product", ["categoryPath", "listPrice", "standardCost"]),
-            },
-            notes="Revenue, cost, and margin values in USD ($). margin = revenue - cost.",
-        )
-
-    def _q_orders_with_discount(self, intent: Intent) -> Result:
-        sql = "SELECT COUNT(DISTINCT order_id) as cnt FROM sales_order_line WHERE offer_ref != 1"
-        rows = self._exec(sql)
-        count = rows[0]["cnt"] if rows else 0
-        return Result(
-            answer=count,
-            sql_used=sql,
-            sources_touched=["erp"],
-            provenance=self._prov("SalesOrderLine", ["offer_ref"]),
-        )
-
-    def _q_count_customers_unique(self, intent: Intent) -> Result:
-        sql_total = "SELECT COUNT(*) as total FROM account"
-        sql_dups = "SELECT COUNT(*) as dups FROM account WHERE accountId < 0"
-        total = self._exec(sql_total)[0]["total"]
-        dups = self._exec(sql_dups)[0]["dups"]
-        unique = total - dups
-        return Result(
-            answer={"total": total, "duplicates": dups, "unique": unique},
-            sql_used=sql_dups,
-            sources_touched=["crm"],
-            provenance=self._prov("Customer", ["accountId"]),
-            notes="accountId < 0 records are duplicates and excluded from unique count",
-        )
-
-    def _q_check_duplicate_accounts(self, intent: Intent) -> Result:
-        company = intent.filters.get("company")
-        if company:
-            sql = (
-                "SELECT accountId, accountType, ragioneSociale, nomeContatto, emailContatto, isActive "
-                "FROM account WHERE ragioneSociale LIKE ? OR nomeContatto LIKE ? "
-                "ORDER BY ABS(accountId)"
-            )
-            rows = self._exec(sql, (f"%{company}%", f"%{company}%"))
-            positives = [r for r in rows if r["accountId"] > 0]
-            negatives = [r for r in rows if r["accountId"] < 0]
-            has_dups = len(negatives) > 0
-            return Result(
-                answer={
-                    "company": company,
-                    "has_duplicates": has_dups,
-                    "positive_accounts": positives,
-                    "duplicate_accounts": negatives,
-                },
-                sql_used=sql,
-                sources_touched=["crm"],
-                disambiguation_required=has_dups,
-                candidates=[str(r["accountId"]) for r in positives] if has_dups else [],
-                provenance=self._prov("Customer", ["accountId", "ragioneSociale"]),
-                notes="accountId < 0 = duplicate record per CRM deduplication rule",
-            )
-        sql = "SELECT COUNT(*) as dups FROM account WHERE accountId < 0"
-        rows = self._exec(sql)
-        return Result(
-            answer={"duplicate_count": rows[0]["dups"]},
-            sql_used=sql,
-            sources_touched=["crm"],
-            provenance=self._prov("Customer", ["accountId"]),
-        )
+    # ── structural query handlers ─────────────────────────────────────────────
+    # SQL-based golden-question handlers have been removed. Those questions are
+    # now served by seed Query Templates (DB) or LLM-generated SQL fallback.
 
     def _q_data_provenance(self, intent: Intent) -> Result:
         entities = self._catalog.list_entities() if self._catalog else []
@@ -2545,62 +1415,16 @@ class SemanticLayer:
             notes="Full provenance dump from MetadataCatalog",
         )
 
-    def _q_revenue_with_tax(self, intent: Intent) -> Result:
-        year = intent.year or intent.filters.get("year")
-        if year:
-            sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header WHERE strftime('%Y', CAST(order_date AS DATE)) = ?"
-            rows = self._exec(sql, (str(year),))
-        else:
-            sql = "SELECT ROUND(SUM(total_due), 2) as revenue_with_tax FROM sales_order_header"
-            rows = self._exec(sql)
-        val = rows[0]["revenue_with_tax"] if rows else None
-        return Result(
-            answer=val,
-            sql_used=sql,
-            sources_touched=["erp"],
-            provenance=self._prov("SalesOrder", ["total_due"]),
-            notes="revenue_with_tax = SUM(total_due) includes taxes and freight. Values in USD ($).",
-        )
-
-    def _q_lookup_employee(self, intent: Intent) -> Result:
-        name = intent.filters.get("name", "")
-        sql = "SELECT * FROM dipendenti_hr WHERE LOWER(Nome) LIKE ? OR LOWER(Cognome) LIKE ?"
-        rows = self._exec(sql, (f"%{name.lower()}%", f"%{name.lower()}%"))
-        if len(rows) > 1:
-            # Multiple matches → disambiguation required
-            return Result(
-                answer=rows,
-                sql_used=sql,
-                sources_touched=["hr_pim"],
-                disambiguation_required=True,
-                candidates=[
-                    f"{r['Nome']} {r['Cognome']} (matricola {r['MatricolaDip']}, {r['Reparto']})"
-                    for r in rows
-                ],
-                provenance=self._prov("Employee", ["MatricolaDip", "Nome", "Cognome"]),
-                notes=f"Multiple employees found matching '{name}'. Please specify.",
-            )
-        return Result(
-            answer=rows,
-            sql_used=sql,
-            sources_touched=["hr_pim"],
-            disambiguation_required=False,
-            provenance=self._prov("Employee", ["MatricolaDip", "Nome", "Cognome"]),
-        )
-
     def _q_impossible(self, intent: Intent) -> Result:
         reason = intent.filters.get("reason", "unknown")
         messages = {
             "nationality_not_available": (
-                "This data is not available. The field 'employee nationality' does not "
-                "exist in any of the connected sources (ERP, CRM, HR/PIM). "
-                "The AdventureWorks dataset does not capture nationality information."
+                "The field 'employee nationality' is not available in any of the configured data sources. "
+                "This attribute is not available in the current dataset. "
+                "Unable to answer the question."
             ),
         }
-        msg = messages.get(
-            reason,
-            "This question cannot be answered with the current data sources.",
-        )
+        msg = messages.get(reason, "Data not available in the current sources.")
         return Result(
             answer=msg,
             sources_touched=[],
@@ -2619,14 +1443,10 @@ class SemanticLayer:
         elif self._catalog:
             available = ", ".join(sorted(self._catalog.list_entities())[:12])
         else:
-            available = (
-                "Customer, SalesOrder, SalesOrderLine, Product, Employee, "
-                "Territory, Salesperson"
-            )
+            available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
         msg = (
-            f"**{entity}** is not part of the connected data model. "
-            f"The semantic layer covers: {available}. "
-            f"If you need {entity} data, it would need to be added as a new source."
+            f"The entity '{entity}' is not modeled in the semantic layer. "
+            f"Available entities are: {available}."
         )
         return Result(
             answer=msg,
@@ -2637,6 +1457,11 @@ class SemanticLayer:
 
     # ── EC-10: glossary lookup ────────────────────────────────────────────────
 
+    # DEPRECATED: _GLOSSARY is kept as a last-resort fallback only.
+    # On startup, these terms are seeded as Context Documents in the catalog
+    # (see app.semantic.glossary.DEFAULT_GLOSSARY + catalog.seed_glossary_docs).
+    # The handler now reads from the catalog first so users can edit/extend terms
+    # without touching Python code.  Do not add new terms here.
     _GLOSSARY: dict[str, str] = {
         "cliente attivo": (
             "An 'active customer' is a CRM account with isActive=1 and accountId > 0 "
@@ -2713,7 +1538,41 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
-        # Fallback to hardcoded glossary
+        # Try catalog context docs (titles starting with "Glossary: ") — user-editable
+        if self._catalog:
+            catalog_docs = self._catalog.list_context_docs()
+            glossary_docs = [
+                d for d in catalog_docs if d["title"].startswith("Glossary: ")
+            ]
+            if glossary_docs:
+                definition = None
+                for doc in glossary_docs:
+                    term_key = doc["title"][len("Glossary: ") :].lower()
+                    if term_key == raw_term:
+                        definition = doc["content"]
+                        break
+                if definition is None:
+                    for doc in glossary_docs:
+                        term_key = doc["title"][len("Glossary: ") :].lower()
+                        if raw_term in term_key or term_key in raw_term:
+                            definition = doc["content"]
+                            break
+                if definition is None:
+                    available = ", ".join(
+                        sorted(d["title"][len("Glossary: ") :] for d in glossary_docs)
+                    )
+                    definition = (
+                        f"The term '{raw_term}' is not present in the semantic layer glossary. "
+                        f"Available terms: {available}."
+                    )
+                return Result(
+                    answer=definition,
+                    sources_touched=[],
+                    notes="Response from the semantic layer glossary/ontology.",
+                    disambiguation_required=False,
+                )
+
+        # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs)
         definition = self._GLOSSARY.get(raw_term)
         if definition is None:
             for key, val in self._GLOSSARY.items():
@@ -2793,67 +1652,12 @@ class SemanticLayer:
             disambiguation_required=False,
         )
 
-    # ── 1H-02: customers without orders (anti-join) ───────────────────────────
-
-    def _q_customers_without_orders(self, intent: Intent) -> Result:
-        # Fetch valid CRM customers in batches; cap at 10 000 to avoid OOM.
-        crm_sql = (
-            "SELECT accountId, ragioneSociale, nomeContatto, accountType "
-            "FROM account WHERE accountId > 0 ORDER BY ragioneSociale LIMIT 10000"
-        )
-        customers = self._exec(crm_sql)
-        # All customer_refs that appear in at least one order (ERP side).
-        erp_sql = (
-            "SELECT DISTINCT customer_ref FROM sales_order_header "
-            "WHERE customer_ref IS NOT NULL"
-        )
-        ordered_refs = {r["customer_ref"] for r in self._exec(erp_sql)}
-        # Python-side anti-join.
-        no_orders = [c for c in customers if c["accountId"] not in ordered_refs]
-        total_count = len(no_orders)
-        # Cap returned rows at 200 to keep response payload manageable.
-        sql_note = crm_sql + "  --  anti-join with ERP: " + erp_sql
-        return Result(
-            answer={"count": total_count, "customers": no_orders[:200]},
-            sql_used=sql_note,
-            sources_touched=["crm", "erp"],
-            provenance={
-                **self._prov("Customer", ["accountId", "ragioneSociale"]),
-                **self._prov("SalesOrder", ["order_id"]),
-            },
-            notes=(
-                "Anti-join CRM × ERP: customers with accountId > 0 that do not appear "
-                "in any sales_order_header. Duplicates (accountId < 0) are excluded. "
-                + (f"Showing first 200 of {total_count}." if total_count > 200 else "")
-            ),
-        )
-
-    # ── MH-07: employees who managed duplicate-account customers ─────────────
-
-    def _q_employees_with_duplicate_customers(self, intent: Intent) -> Result:
-        # Per Rule R1, records with accountId < 0 are filtered upstream.
-        # In the clean system no employee has "managed" duplicate customers.
-        return Result(
-            answer={
-                "employee_count": 0,
-                "explanation": (
-                    "Records with accountId < 0 are duplicates filtered by deduplication Rule R1. "
-                    "In the clean system no order is associated with accountId < 0, "
-                    "so no employee is found to have managed customers with duplicate accounts."
-                ),
-            },
-            sql_used=None,
-            sources_touched=[],
-            notes=(
-                "Deterministic result: 0 employees. "
-                "Rule R1 (accountId<0 = duplicates) ensures that no order "
-                "in the clean system is linked to a duplicate account."
-            ),
-            disambiguation_required=False,
-        )
-
     # ── SS-07: certified metrics list ─────────────────────────────────────────
 
+    # DEPRECATED: _CERTIFIED_METRICS is kept as a last-resort fallback only.
+    # The handler now reads from self._catalog.list_metric_objects() first.
+    # Only used when the catalog returns zero metrics (e.g. during cold-start tests).
+    # Do not add new metrics here — add them to the catalog instead.
     _CERTIFIED_METRICS: list[dict[str, str]] = [
         {
             "name": "revenue",
@@ -2892,8 +1696,8 @@ class SemanticLayer:
         },
         {
             "name": "count_employees",
-            "definition": "COUNT(*) FROM dipendenti_hr",
-            "source": "HR/PIM dipendenti_hr",
+            "definition": "COUNT(*) FROM hr_employees",
+            "source": "HR/PIM hr_employees",
             "unit": "count",
             "status": "certified",
             "freshness": "Delayed — data not in real time",
@@ -2923,6 +1727,33 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
+        # Try catalog metrics — user-editable via the metadata catalog
+        if self._catalog:
+            catalog_metrics = self._catalog.list_metric_objects()
+            if catalog_metrics:
+                answer = [
+                    {
+                        "name": m.name,
+                        "definition": m.formula,
+                        "source": ", ".join(m.sources_touched)
+                        if m.sources_touched
+                        else "",
+                        "unit": m.unit,
+                        "status": "certified",
+                    }
+                    for m in catalog_metrics
+                ]
+                return Result(
+                    answer=answer,
+                    sources_touched=[],
+                    notes=(
+                        f"{len(answer)} certified metrics available in the semantic layer. "
+                        "Fixed and deterministic list."
+                    ),
+                    disambiguation_required=False,
+                )
+
+        # Fallback to hardcoded list (deprecated — metrics should come from the catalog)
         return Result(
             answer=self._CERTIFIED_METRICS,
             sources_touched=[],
@@ -2947,3 +1778,81 @@ class SemanticLayer:
             if attr_meta:
                 prov[f"{entity}.{attr}"] = attr_meta.to_dict()
         return prov
+
+    def _execute_template_query(self, intent: "Intent") -> "Result":
+        """Execute a user-defined query template with safe token substitution."""
+        import re as _re
+
+        tpl_id_str = intent.intent_type[4:]  # strip "tpl_"
+        tpl = next(
+            (
+                t
+                for t in self._templates
+                if str(t["id"]) == tpl_id_str and t.get("is_active", True)
+            ),
+            None,
+        )
+        if tpl is None:
+            return Result(
+                answer="Template not found or inactive.",
+                notes="template_missing",
+            )
+
+        sql = tpl["sql_query"]
+
+        # Safe substitution of {year}
+        year_val = intent.filters.get("year")
+        if year_val is not None:
+            try:
+                y = int(year_val)
+                if not (2000 <= y <= 2100):
+                    raise ValueError
+                sql = sql.replace("{year}", str(y))
+            except ValueError:
+                sql = sql.replace("{year}", "2024")
+        else:
+            sql = sql.replace("{year}", "2024")
+
+        # Safe substitution of {limit}
+        limit_val = intent.filters.get("limit")
+        if limit_val is not None:
+            try:
+                lim = int(limit_val)
+                lim = max(1, min(lim, 100))
+                sql = sql.replace("{limit}", str(lim))
+            except ValueError:
+                sql = sql.replace("{limit}", "10")
+        else:
+            sql = sql.replace("{limit}", "10")
+
+        # Reject any remaining unfilled tokens
+        remaining = _re.findall(r"\{(\w+)\}", sql)
+        if remaining:
+            return Result(
+                answer=f"Template has unsupported tokens: {remaining}",
+                notes="template_bad_tokens",
+            )
+
+        try:
+            self._validate_generated_sql(sql)
+        except Exception as exc:
+            return Result(
+                answer=f"Template SQL is invalid: {exc}",
+                notes="template_invalid_sql",
+            )
+
+        try:
+            rows = self._exec(sql)
+        except Exception as exc:
+            return Result(
+                answer=f"Template query failed: {exc}",
+                sql_used=sql,
+                notes="template_exec_error",
+            )
+
+        return Result(
+            answer=rows,
+            sql_used=sql,
+            sources_touched=tpl.get("sources", []) or ["duckdb_unified"],
+            notes=f"template:{tpl['name']}",
+        )

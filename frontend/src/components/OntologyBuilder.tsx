@@ -18,6 +18,7 @@ import {
 } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
 import { showConfirm } from './ConfirmDialog'
+import { getLiveConfig, type LiveConfig } from '../api/semantic'
 
 // ── Type color map (same as OntologyGraph) ───────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -827,11 +828,23 @@ function buildAddClassWithLinkIntent(
 }
 
 // Build initial canvas state by merging sector ontology + saved extensions
-function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string | number>; labelStyle: Record<string, string | number> }[] } }, sectorId: string): { nodes: Node[]; edges: Edge[] } {
+function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string | number>; labelStyle: Record<string, string | number> }[] } }, sectorId: string, liveConfig?: LiveConfig | null): { nodes: Node[]; edges: Edge[] } {
   const ext = loadExtension(sectorId)
 
+  const sourceNodes = liveConfig?.ontology.nodes.length
+    ? liveConfig.ontology.nodes.map((n) => ({
+        id: n.id,
+        type: n.type ?? 'builderNode',
+        position: n.position,
+        data: n.data,
+      }))
+    : sector.ontology.nodes
+  const sourceEdges = liveConfig?.ontology.edges?.length
+    ? liveConfig.ontology.edges
+    : (sector.ontology.edges ?? [])
+
   // Base nodes (possibly with extra properties added via builder)
-  const baseNodes: Node[] = sector.ontology.nodes.map((n) => {
+  const baseNodes: Node[] = sourceNodes.map((n) => {
     const extraProps: OntologyProperty[] = ext.addedProperties
       .filter((p) => p.nodeId === n.id)
       .map((p) => typeof p.property === 'string' ? { name: p.property, type: 'string' as PropertyType } : p.property)
@@ -862,15 +875,15 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
     },
   }))
 
-  const baseEdges: Edge[] = sector.ontology.edges.map((e) => ({
+  const baseEdges: Edge[] = sourceEdges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
     label: e.label,
     type: 'smoothstep',
     animated: e.animated,
-    style: e.style,
-    labelStyle: e.labelStyle,
+    style: (e as { style?: Record<string, string | number> }).style,
+    labelStyle: (e as { labelStyle?: Record<string, string | number> }).labelStyle,
   }))
 
   const extEdges: Edge[] = ext.edges.map((e) => ({
@@ -891,7 +904,12 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
 export default function OntologyBuilder() {
   const { sector, sectorId } = useSector()
 
-  const initial = useMemo(() => buildInitialState(sector, sectorId), [sector, sectorId])
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+  }, [])
+
+  const initial = useMemo(() => buildInitialState(sector, sectorId, liveConfig), [sector, sectorId, liveConfig])
   const [nodes, setNodes] = useState<Node[]>(initial.nodes)
   const [edges, setEdges] = useState<Edge[]>(initial.edges)
 
@@ -900,13 +918,13 @@ export default function OntologyBuilder() {
   useEffect(() => {
     if (lastSectorRef.current !== sectorId) {
       lastSectorRef.current = sectorId
-      const s = buildInitialState(sector, sectorId)
+      const s = buildInitialState(sector, sectorId, liveConfig)
       setNodes(s.nodes)
       setEdges(s.edges)
       setMessages([WELCOME])
       setPending([])
     }
-  }, [sectorId, sector])
+  }, [sectorId, sector, liveConfig])
 
   const WELCOME: ChatMessage = useMemo(
     () => ({
@@ -1169,11 +1187,11 @@ export default function OntologyBuilder() {
     const ok = await showConfirm(`All custom extensions for ${sector.name} will be permanently removed.`, { title: 'Reset ontology?', dangerous: true })
     if (!ok) return
     saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
-    const s = buildInitialState(sector, sectorId)
+    const s = buildInitialState(sector, sectorId, liveConfig)
     setNodes(s.nodes)
     setEdges(s.edges)
     setPending([])
-  }, [sectorId, sector])
+  }, [sectorId, sector, liveConfig])
 
   // ── Editing an existing entity (canvas node click) ─────────────────────
   const [editingEntity, setEditingEntity] = useState<{
@@ -1206,12 +1224,12 @@ export default function OntologyBuilder() {
       if (!editingEntity) return
       applyNodeChange(sectorId, editingEntity.nodeId, patch, editingEntity.isBaseNode)
       // Reload canvas from storage to reflect the change
-      const s = buildInitialState(sector, sectorId)
+      const s = buildInitialState(sector, sectorId, liveConfig)
       setNodes(s.nodes)
       setEdges(s.edges)
       setEditingEntity(null)
     },
-    [editingEntity, sector, sectorId],
+    [editingEntity, sector, sectorId, liveConfig],
   )
 
   const deleteEntity = useCallback(async () => {
@@ -1219,11 +1237,11 @@ export default function OntologyBuilder() {
     const ok = await showConfirm(`Relations involving "${editingEntity.label}" will also be removed.`, { title: `Delete "${editingEntity.label}"?`, dangerous: true })
     if (!ok) return
     removeNode(sectorId, editingEntity.nodeId, editingEntity.isBaseNode)
-    const s = buildInitialState(sector, sectorId)
+    const s = buildInitialState(sector, sectorId, liveConfig)
     setNodes(s.nodes)
     setEdges(s.edges)
     setEditingEntity(null)
-  }, [editingEntity, sector, sectorId])
+  }, [editingEntity, sector, sectorId, liveConfig])
 
   // ── Editing a pending change ───────────────────────────────────────────-
   const [editingChange, setEditingChange] = useState<PendingChange | null>(null)

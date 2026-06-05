@@ -1,20 +1,11 @@
 """
-AdventureWorks Unified Query Engine.
+Unified Query Engine.
 
-Loads all 4 sources (ERP, CRM, HR, PIM) into a single DuckDB in-memory
+Loads all available data sources into a single DuckDB in-memory
 instance and exposes a Claude-powered NL→SQL→execute pipeline.
 
-Tables registered in DuckDB (no schema prefix needed in SQL):
-  ERP:  sales_order_header, sales_order_line, salesperson, territory, offer
-  CRM:  account, contact, address, account_address, state_province
-  HR:   hr_employees  (columns: MatricolaDip, Nome, Cognome, Mansione, Reparto,
-                        GruppoReparto, DataAssunzione, DataNascita, Genere,
-                        StatoCivile, OreFerieResidue, OreMalattiaResidue,
-                        RetribuzioneOraria, FrequenzaPaga)
-  PIM:  pim_products  (columns: sku, internal_id, displayName, categoryPath,
-                        modelName, color, size, weight, weightUnit, standardCost,
-                        listPrice, isMakeOnly, isPurchasable, sellStartDate,
-                        sellEndDate)
+Tables registered in DuckDB (no schema prefix needed in SQL) are
+discovered dynamically from the active scenario / semantic layer.
 """
 
 from __future__ import annotations
@@ -48,188 +39,83 @@ def _get_client() -> anthropic.Anthropic:
 
 # ── System prompt ──────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a data intelligence assistant for an AdventureWorks manufacturing company.
-You have access to a unified DuckDB in-memory database with data from 4 sources.
 
-== SOURCE 1: ERP (OrionSales / AdventureWorks) ==
+def build_system_prompt(catalog=None, layer=None) -> str:
+    """Build a dynamic system prompt from semantic layer metadata.
 
-TABLE: sales_order_header
-  - order_id (INTEGER PK) — unique order identifier
-  - order_number (TEXT) — human-readable order number (e.g. SO43659)
-  - order_date (TEXT ISO date) — date the order was placed
-  - ship_date (TEXT ISO date) — date shipped (may be NULL)
-  - due_date (TEXT ISO date) — expected delivery date
-  - status_code (INTEGER) — 1=In Process, 2=Approved, 3=Backordered, 4=Rejected, 5=Shipped, 6=Cancelled
-  - customer_ref (INTEGER FK → CRM account.accountId) — bridges to CRM
-  - salesperson_ref (INTEGER FK → salesperson.salesperson_id) — bridges to HR via MatricolaDip
-  - territory_ref (INTEGER FK → territory.territory_id)
-  - subtotal_amount (REAL) — net revenue before tax and freight
-  - tax_amount (REAL) — tax charged
-  - freight_amount (REAL) — freight cost
-  - total_due (REAL) — total billed (subtotal + tax + freight)
-  - currency_iso (TEXT) — currency code (USD)
+    Uses catalog.get_schema_context() for the table schema section so the
+    prompt automatically reflects the loaded dataset rather than any
+    hardcoded schema.
+    """
+    parts = [
+        "You are a data intelligence assistant. "
+        "Answer questions using the available data sources described below. "
+        "Respond in the same language as the question (English or Italian)."
+    ]
 
-TABLE: sales_order_line
-  - order_id (INTEGER FK → sales_order_header.order_id)
-  - line_id (INTEGER) — line number within the order
-  - product_ref (INTEGER FK → pim_products.internal_id) — bridges to PIM
-  - qty (REAL) — quantity ordered
-  - unit_price (REAL) — price per unit
-  - unit_discount (REAL) — discount applied per unit
-  - line_total (REAL) — qty * (unit_price - unit_discount)
-  - offer_ref (INTEGER FK → offer.offer_id, may be NULL)
+    # Schema section — always dynamic from catalog
+    schema_ctx = ""
+    if catalog is not None:
+        try:
+            schema_ctx = catalog.get_schema_context()
+        except Exception:
+            pass
 
-TABLE: salesperson
-  - salesperson_id (INTEGER PK)
-  - territory_ref (INTEGER FK → territory.territory_id)
-  - sales_quota (REAL)
-  - bonus (REAL)
-  - commission_pct (REAL)
-  - sales_ytd (REAL) — year-to-date sales
-  - sales_last_year (REAL)
+    if schema_ctx and schema_ctx.strip() not in ("", "No schema available."):
+        parts.append(f"\n\n== AVAILABLE TABLES ==\n\n{schema_ctx}")
+    else:
+        parts.append(
+            "\n\nNo schema information available yet. "
+            "Ask the user to load data sources first."
+        )
 
-TABLE: territory
-  - territory_id (INTEGER PK)
-  - territory_name (TEXT) — e.g. "Northwest", "Canada", "France"
-  - country_code (TEXT) — e.g. "US", "CA", "FR"
-  - region_group (TEXT) — e.g. "North America", "Europe", "Pacific"
-  - sales_ytd (REAL)
-  - cost_ytd (REAL)
+    # Bridges from semantic layer relations (if available)
+    if layer is not None:
+        try:
+            draft = getattr(layer, "draft", None)
+            rels = getattr(draft, "relations", []) if draft else []
+            if rels:
+                bridge_lines = ["\n\n== BRIDGE RELATIONSHIPS ==\n"]
+                for rel in rels[:10]:
+                    fe = rel.get("from_entity", "")
+                    te = rel.get("to_entity", "")
+                    ff = rel.get("from_field", "")
+                    tf = rel.get("to_field", "")
+                    bridge_lines.append(f"  {fe}.{ff} = {te}.{tf}")
+                parts.append("\n".join(bridge_lines))
+        except Exception:
+            pass
 
-TABLE: offer
-  - offer_id (INTEGER PK)
-  - description (TEXT)
-  - discount_pct (REAL)
-  - offer_type (TEXT)
-  - category (TEXT)
-  - start_date (TEXT ISO date)
-  - end_date (TEXT ISO date)
-  - min_qty (REAL)
-  - max_qty (REAL)
+    parts.append(
+        "\n\n== SQL DIALECT RULES =="
+        "\n- Database: DuckDB (not SQLite, not PostgreSQL)"
+        "\n- Use double-quotes for identifiers if quoting is needed, never backticks"
+        "\n- Date columns are stored as TEXT in ISO format (YYYY-MM-DD);"
+        " cast before using date functions: CAST(col AS DATE)"
+        "\n- Only generate read-only SELECT statements"
+        "\n- LIMIT results to 100 rows maximum"
+        "\n- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc."
+    )
 
-== SOURCE 2: CRM (ClientHub) ==
+    parts.append(
+        "\n\n== RESPONSE FORMAT =="
+        "\nAlways respond with valid JSON exactly matching this structure:\n"
+        "{\n"
+        '  "interpreted_as": "Clear description of what the question is asking",\n'
+        '  "sql": "SELECT ...",\n'
+        '  "chart_hint": {"type": "bar"|"line"|"pie"|"table",'
+        ' "label_col": "column_name", "value_col": "column_name"} or null\n'
+        "}\n"
+        "\n- interpreted_as: describe the question clearly"
+        "\n- sql: valid DuckDB SELECT, limit 100 rows"
+        "\n- chart_hint: best visualization, or null if tabular only"
+        "\n- If question cannot be answered: sql = 'SELECT 1 AS unsupported', explain in interpreted_as"
+    )
 
-TABLE: account
-  - accountId (INTEGER PK) — negative IDs indicate duplicate records
-  - accountType (TEXT) — customer type
-  - personRef (INTEGER FK → contact.contactId)
-  - storeRef (INTEGER)
-  - ragioneSociale (TEXT) — company name (Italian)
-  - nomeContatto (TEXT) — contact name
-  - emailContatto (TEXT)
-  - telefonoContatto (TEXT)
-  - territoryHint (INTEGER) — approximate territory_id
-  - createdAt (TEXT ISO date)
-  - isActive (INTEGER) — 1=active
+    return "\n".join(parts)
 
-TABLE: contact
-  - contactId (INTEGER PK)
-  - firstName (TEXT)
-  - middleName (TEXT)
-  - lastName (TEXT)
-  - personType (TEXT)
-  - email (TEXT)
-  - phone (TEXT)
 
-TABLE: address
-  - addressId (INTEGER PK)
-  - line1 (TEXT)
-  - line2 (TEXT)
-  - city (TEXT)
-  - stateProvinceId (INTEGER FK → state_province.stateId)
-  - postalCode (TEXT)
-
-TABLE: account_address
-  - accountRef (INTEGER FK → account.accountId)
-  - addressRef (INTEGER FK → address.addressId)
-  - addressType (TEXT) — e.g. "Main Office", "Shipping"
-
-TABLE: state_province
-  - stateId (INTEGER PK)
-  - stateCode (TEXT)
-  - stateName (TEXT)
-  - countryCode (TEXT)
-  - territoryRef (INTEGER FK → territory.territory_id)
-
-== SOURCE 3: HR (dipendenti_hr.csv) ==
-
-TABLE: hr_employees
-  - MatricolaDip (TEXT) — employee ID, bridges to ERP salesperson_ref
-  - Nome (TEXT) — first name
-  - Cognome (TEXT) — last name
-  - Mansione (TEXT) — job title/role
-  - Reparto (TEXT) — department
-  - GruppoReparto (TEXT) — department group
-  - DataAssunzione (TEXT ISO date) — hire date
-  - DataNascita (TEXT ISO date) — birth date
-  - Genere (TEXT)
-  - StatoCivile (TEXT)
-  - OreFerieResidue (TEXT) — remaining vacation hours
-  - OreMalattiaResidue (TEXT) — remaining sick leave hours
-  - RetribuzioneOraria (TEXT) — hourly rate
-  - FrequenzaPaga (TEXT) — pay frequency
-
-== SOURCE 4: PIM (product_catalog_pim.json) ==
-
-TABLE: pim_products
-  - sku (TEXT) — stock keeping unit
-  - internal_id (INTEGER PK) — bridges to ERP sales_order_line.product_ref
-  - displayName (TEXT) — product name
-  - categoryPath (TEXT) — full category hierarchy path
-  - modelName (TEXT)
-  - color (TEXT)
-  - size (TEXT)
-  - weight (REAL)
-  - weightUnit (TEXT)
-  - standardCost (REAL) — production cost
-  - listPrice (REAL) — list price
-  - isMakeOnly (INTEGER) — 1=manufactured in-house only
-  - isPurchasable (INTEGER)
-  - sellStartDate (TEXT ISO date)
-  - sellEndDate (TEXT ISO date)
-
-== BRIDGE RELATIONSHIPS ==
-
-  ERP ↔ HR:    sales_order_header.salesperson_ref = hr_employees.MatricolaDip
-               (CAST one side to TEXT/INTEGER as needed for join)
-  ERP ↔ PIM:   sales_order_line.product_ref = pim_products.internal_id
-  ERP ↔ CRM:   sales_order_header.customer_ref = account.accountId
-
-== SQL DIALECT RULES ==
-
-- Database: DuckDB (not SQLite, not PostgreSQL)
-- Do NOT use backticks for identifiers; use double-quotes if quoting is needed
-- IMPORTANT: All date columns (order_date, ship_date, due_date, DataAssunzione, etc.)
-  are stored as TEXT in ISO format (YYYY-MM-DD). You MUST cast them before using
-  date functions: CAST(order_date AS DATE)
-  Examples:
-    YEAR(CAST(order_date AS DATE))
-    MONTH(CAST(order_date AS DATE))
-    DATE_TRUNC('month', CAST(order_date AS DATE))
-    EXTRACT(YEAR FROM CAST(order_date AS DATE))
-- String functions: CONCAT(), LOWER(), UPPER(), TRIM(), LIKE, ILIKE
-- CAST: CAST(col AS INTEGER), CAST(col AS REAL), CAST(col AS TEXT), CAST(col AS DATE)
-- Window functions supported: ROW_NUMBER(), RANK(), SUM() OVER(), etc.
-- LIMIT results to 100 rows maximum
-- Only generate read-only SELECT statements
-- Join hr_employees using: CAST(sales_order_header.salesperson_ref AS TEXT) = hr_employees.MatricolaDip
-
-== RESPONSE FORMAT ==
-
-Always respond with valid JSON exactly matching this structure:
-{
-  "interpreted_as": "Clear English description of what the question is asking",
-  "sql": "SELECT ...",
-  "chart_hint": {"type": "bar"|"line"|"pie"|"table", "label_col": "column_name", "value_col": "column_name"} or null
-}
-
-Rules:
-- interpreted_as: describe the question in clear English
-- sql: valid DuckDB SELECT query, limit 100 rows
-- chart_hint: suggest the best visualization, or null if tabular only
-- If the question is ambiguous, make the most reasonable interpretation
-- If the question cannot be answered with available data, return sql as "SELECT 1 AS unsupported" and explain in interpreted_as
-"""
+SYSTEM_PROMPT = build_system_prompt()  # generic fallback, overridden at call time
 
 
 # ── Unified DuckDB connection (scalable — persistent file or live pushdown) ────
@@ -283,7 +169,27 @@ def _extract_json(text: str) -> dict:
 # ── Main query function ────────────────────────────────────────────────────────
 
 
-def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, Any]:
+def _build_table_source_map(catalog) -> dict[str, str]:
+    """Return {table_name: source_id} from catalog entity metadata (public API only)."""
+    mapping: dict[str, str] = {}
+    try:
+        names = catalog.list_entities()
+        for name in names:
+            entity = catalog.get_entity(name)
+            if entity is None:
+                continue
+            for src in entity.sources:
+                if isinstance(src, dict) and src.get("source"):
+                    mapping[name] = src["source"]
+                    break
+    except Exception:
+        pass
+    return mapping
+
+
+def run_aw_query(
+    question: str, erp=None, crm=None, hr_pim=None, catalog=None
+) -> dict[str, Any]:
     """
     Translate a natural-language question to SQL using Claude, execute it on
     the unified DuckDB connection, and return a structured result dict.
@@ -368,23 +274,13 @@ def run_aw_query(question: str, erp=None, crm=None, hr_pim=None) -> dict[str, An
     # Determine sources touched based on which table names appear in the SQL
     sources_touched: list[str] = []
     sql_lower = sql.lower()
-    if any(
-        t in sql_lower
-        for t in [
-            "sales_order_header",
-            "sales_order_line",
-            "salesperson",
-            "territory",
-            "offer",
-        ]
-    ):
-        sources_touched.append("erp")
-    if any(t in sql_lower for t in ["account", "contact", "address", "state_province"]):
-        sources_touched.append("crm")
-    if "hr_employees" in sql_lower:
-        sources_touched.append("hr")
-    if "pim_products" in sql_lower:
-        sources_touched.append("pim")
+    if catalog is not None:
+        table_source_map = _build_table_source_map(catalog)
+        seen_sources: set[str] = set()
+        for table, source_id in table_source_map.items():
+            if table.lower() in sql_lower and source_id not in seen_sources:
+                sources_touched.append(source_id)
+                seen_sources.add(source_id)
 
     # ── Step 3: Generate summary via Claude ─────────────────────────────────
     summary = ""

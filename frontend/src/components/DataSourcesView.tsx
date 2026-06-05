@@ -14,7 +14,8 @@ import {
   getConnectorBackendDef,
   type BackendSource, type ParamField,
 } from '../api/sources'
-import { buildSemanticLayer } from '../api/semantic'
+import { buildSemanticLayer, semanticSources } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -52,46 +53,70 @@ const AW_SOURCES: AWSourceDef[] = [
   {
     label: 'ERP — OrionSales', type: 'PostgreSQL / DuckDB',
     tables: [
-      { name: 'sales_order_header', rows: 31465 },
-      { name: 'sales_order_line',   rows: 121317 },
-      { name: 'salesperson',        rows: 17 },
-      { name: 'territory',          rows: 10 },
-      { name: 'offer',              rows: 16 },
+      { name: 'sales_order_header', rows: IS_DEMO_MODE ? 31465  : 0 },
+      { name: 'sales_order_line',   rows: IS_DEMO_MODE ? 121317 : 0 },
+      { name: 'salesperson',        rows: IS_DEMO_MODE ? 17     : 0 },
+      { name: 'territory',          rows: IS_DEMO_MODE ? 10     : 0 },
+      { name: 'offer',              rows: IS_DEMO_MODE ? 16     : 0 },
     ],
-    totalRows: 152825, lastSync: '2014-12-31',
+    totalRows: IS_DEMO_MODE ? 152825 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
     downloadEntity: 'SalesOrder', downloadFilename: 'aw_sales_order_sample.csv',
   },
   {
     label: 'CRM — ClientHub', type: 'SQLite',
     tables: [
-      { name: 'account', rows: 20201 }, { name: 'contact', rows: 19302 },
-      { name: 'address', rows: 19614 }, { name: 'state_province', rows: 70 },
+      { name: 'account',        rows: IS_DEMO_MODE ? 20201 : 0 },
+      { name: 'contact',        rows: IS_DEMO_MODE ? 19302 : 0 },
+      { name: 'address',        rows: IS_DEMO_MODE ? 19614 : 0 },
+      { name: 'state_province', rows: IS_DEMO_MODE ? 70    : 0 },
     ],
-    totalRows: 59193, lastSync: '2014-12-31',
-    warning: '372 duplicate accounts removed (accountId<0)',
+    totalRows: IS_DEMO_MODE ? 59193 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
+    warning: IS_DEMO_MODE ? '372 duplicate accounts removed (accountId<0)' : undefined,
     downloadEntity: 'Customer', downloadFilename: 'aw_customer_sample.csv',
   },
   {
     label: 'HR + PIM — Files', type: 'CSV + JSON',
-    tables: [{ name: 'dipendenti_hr', rows: 290 }, { name: 'product_catalog_pim', rows: 504 }],
-    totalRows: 794, lastSync: '2014-12-31',
+    tables: [{ name: 'dipendenti_hr', rows: IS_DEMO_MODE ? 290 : 0 }, { name: 'product_catalog_pim', rows: IS_DEMO_MODE ? 504 : 0 }],
+    totalRows: IS_DEMO_MODE ? 794 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
     note: 'Italian schema · HR CSV + PIM JSON',
     downloadEntity: 'Employee', downloadFilename: 'aw_employee_sample.csv',
   },
 ]
 
 function AWSourcesPanel() {
+  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({})
+  const [liveSync, setLiveSync] = useState<string | null>(null)
+
+  useEffect(() => {
+    semanticSources().then(srcs => {
+      const counts: Record<string, number> = {}
+      let sync: string | null = null
+      srcs.forEach(s => {
+        Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n })
+        if (s.loaded_at && !sync) sync = s.loaded_at.slice(0, 10)
+      })
+      setLiveCounts(counts)
+      if (sync) setLiveSync(sync)
+    }).catch(() => {})
+  }, [])
+
+  const sources = AW_SOURCES.map(src => {
+    const tables = src.tables.map(t => ({ ...t, rows: liveCounts[t.name] ?? t.rows }))
+    const totalRows = tables.reduce((s, t) => s + t.rows, 0)
+    return { ...src, tables, totalRows, lastSync: liveSync ?? src.lastSync }
+  })
+
   return (
     <div className="bg-teal-50/60 border border-teal-200 rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-2.5">
         <Database className="w-4 h-4 text-teal-600" />
         <h2 className="text-sm font-bold text-slate-800">Active Sources</h2>
         <span className="flex items-center gap-1 text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2 py-0.5">
-          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />3 connected
+          <span className="w-1.5 h-1.5 bg-teal-500 rounded-full" />{sources.length} connected
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {AW_SOURCES.map(src => (
+        {sources.map(src => (
           <div key={src.label} className="bg-white border border-teal-100 rounded-xl p-3 space-y-2.5 shadow-sm">
             <div className="flex items-start justify-between gap-2">
               <div>

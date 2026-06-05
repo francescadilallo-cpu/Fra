@@ -1,0 +1,95 @@
+# Entity semantic annotations — loaded on first install.
+# Provides business names, descriptions and field docs on top of auto-discovered schema.
+# Only applied to tables that actually exist in the database.
+# Edit here to annotate a new dataset — no Python changes needed.
+
+entities:
+  # ── ERP (AdventureWorks sales data) ────────────────────────────────────────
+
+  - table: sales_order_header          # DuckDB/SQLite table name
+    name: SalesOrder                   # Semantic entity name
+    description: "Sales order header."
+    user_description: "Top-level sales order record linking a customer, salesperson and territory to a transaction."
+    context_notes: "Join to sales_order_line on order_id for line-item detail. subtotal_amount drives the revenue metric."
+    field_annotations:
+      order_id: "Identificatore ordine"
+      order_number: "Numero ordine (stringa, es. SO43659)"
+      order_date: "Data ordine"
+      total_due: "Totale dovuto (subtotale + tasse + spedizione)"
+      subtotal_amount: "Ricavi puri (senza tasse)"
+      customer_ref: "Riferimento cliente (CRM accountId)"
+      salesperson_ref: "Riferimento venditore (HR MatricolaDip)"
+      territory_ref: "Riferimento territorio"
+
+  - table: sales_order_line
+    name: SalesOrderLine
+    description: "Sales order line item."
+    user_description: "Individual product line within a sales order, capturing quantity, price and offer applied."
+    context_notes: "Join to sales_order_header on order_id, to product_catalog_pim on product_ref=internal_id."
+    field_annotations:
+      product_ref: "Riferimento prodotto (PIM internal_id)"
+      qty: "Quantità ordinata"
+      unit_price: "Prezzo unitario"
+      line_total: "Totale riga"
+      offer_ref: "Offerta applicata (1 = nessuna offerta)"
+
+  - table: salesperson
+    name: Salesperson
+    description: "Venditore (sub-ruolo di Employee, con attributi commerciali)."
+    user_description: "Sales representative record bridging the ERP and HR domains. salesperson_id matches MatricolaDip."
+    context_notes: "salesperson_id is the same as MatricolaDip in dipendenti_hr. Use to join ERP sales data to HR records."
+    field_annotations: {}
+
+  - table: territory
+    name: Territory
+    description: "Territorio commerciale."
+    user_description: "Geographic sales territory used to segment orders and assign salespeople."
+    context_notes: "territory_ref in sales_order_header references territory_id here."
+    field_annotations: {}
+
+  # ── CRM ─────────────────────────────────────────────────────────────────────
+
+  - table: account
+    name: Customer
+    description: "Cliente B2C o B2B. accountId < 0 indica duplicato."
+    user_description: "CRM account representing either an individual (B2C) or a company (B2B). Records with accountId < 0 are detected duplicates excluded from clean reporting."
+    context_notes: "Always filter accountId > 0 for clean customer counts. emailContatto may be null for some B2B records."
+    field_annotations:
+      accountId: "Identificatore account CRM"
+      accountType: "Tipo account: B2C o B2B"
+      ragioneSociale: "Ragione sociale (solo B2B)"
+      nomeContatto: "Nome contatto (solo B2C)"
+      emailContatto: "Email principale"
+      territoryHint: "Territorio suggerito"
+      isActive: "Flag cliente attivo"
+
+  # ── HR / PIM ─────────────────────────────────────────────────────────────────
+
+  - table: dipendenti_hr
+    name: Employee
+    description: "Dipendente HR. MatricolaDip è anche salesperson_id in ERP."
+    user_description: "HR employee record. MatricolaDip is the primary key and doubles as salesperson_id in the ERP system."
+    context_notes: "Join to salesperson on MatricolaDip=salesperson_id to enrich sales data with HR attributes."
+    field_annotations:
+      MatricolaDip: "Matricola dipendente (= salesperson_id ERP)"
+      Nome: "Nome"
+      Cognome: "Cognome"
+      Reparto: "Reparto (es. Engineering, Production)"
+      GruppoReparto: "Gruppo reparto"
+      DataAssunzione: "Data assunzione (normalizzata ISO 8601)"
+      RetribuzioneOraria: "Retribuzione oraria (USD)"
+
+  - table: product_catalog_pim
+    name: Product
+    description: "Prodotto del catalogo PIM."
+    user_description: "Product master record from the PIM system. internal_id links to product_ref in sales order lines."
+    context_notes: "Join to sales_order_line on internal_id=product_ref. standardCost and listPrice feed the margin metric."
+    field_annotations:
+      internal_id: "ID prodotto (= product_ref ERP)"
+      sku: "SKU alternativo"
+      displayName: "Nome visualizzato prodotto"
+      categoryPath: "Percorso categoria (es. Bikes/Mountain Bikes)"
+      standardCost: "Costo standard (USD)"
+      listPrice: "Prezzo di listino (USD)"
+      isMakeOnly: "Prodotto solo internamente"
+      sellStartDate: "Data inizio vendita (ISO 8601)"

@@ -1,6 +1,11 @@
-"""Tests for _RuleParser, _normalize_english_terms, and remaining _q_* handlers.
+"""Tests for _RuleParser, _normalize_english_terms, and structural _q_* handlers.
 
-Covers the full intent-routing path plus handlers not yet unit-tested.
+The SQL-based golden-question handlers have been removed from the semantic layer.
+This file now covers:
+  - _normalize_english_terms
+  - _RuleParser structural-intent routing (impossible, entity_not_modeled, etc.)
+  - Parser fallback to 'unknown' for questions formerly handled by SQL methods
+  - The six structural handlers that remain
 """
 
 from __future__ import annotations
@@ -83,53 +88,7 @@ def test_normalize_italian_passthrough():
     assert _normalize_english_terms(original) == original
 
 
-# ── _RuleParser: intent routing ───────────────────────────────────────────────
-
-
-def test_parser_count_orders_italian():
-    intent = _parser().parse("Quanti ordini abbiamo nel 2014?")
-    assert intent.intent_type == "count_orders"
-    assert intent.filters.get("year") == 2014 or intent.year == 2014
-
-
-def test_parser_count_orders_english():
-    intent = _parser().parse("How many orders do we have in 2014?")
-    assert intent.intent_type == "count_orders"
-
-
-def test_parser_count_employees_with_dept():
-    intent = _parser().parse("Quanti dipendenti ci sono nel reparto Sales?")
-    assert intent.intent_type == "count_employees"
-    assert intent.filters.get("department") is not None
-
-
-def test_parser_top_salespersons_by_revenue():
-    intent = _parser().parse("Top 3 venditori per fatturato nel 2014")
-    assert intent.intent_type == "top_salespersons_by_revenue"
-    assert intent.limit == 3
-    assert intent.year == 2014 or intent.filters.get("year") == 2014
-
-
-def test_parser_product_price_with_code():
-    intent = _parser().parse("Qual è il prezzo del prodotto Road-650?")
-    assert intent.intent_type == "product_price"
-    assert intent.filters.get("product_name") is not None
-
-
-def test_parser_make_only():
-    intent = _parser().parse("Quanti prodotti make only abbiamo?")
-    assert intent.intent_type == "count_make_only"
-
-
-def test_parser_margin_per_salesperson():
-    intent = _parser().parse("Mostra il margine per venditore nel 2014")
-    assert intent.intent_type == "margin_per_salesperson"
-    assert intent.year == 2014 or intent.filters.get("year") == 2014
-
-
-def test_parser_revenue_with_tax():
-    intent = _parser().parse("Qual è il revenue with tax totale nel 2014?")
-    assert intent.intent_type == "revenue_with_tax"
+# ── _RuleParser: structural intent routing ────────────────────────────────────
 
 
 def test_parser_impossible_nationality():
@@ -144,6 +103,26 @@ def test_parser_entity_not_modeled_supplier():
     assert intent.filters.get("entity") == "Supplier"
 
 
+def test_parser_glossary_lookup():
+    intent = _parser().parse("Cosa intendete per revenue?")
+    assert intent.intent_type == "glossary_lookup"
+
+
+def test_parser_disambiguation_rules():
+    intent = _parser().parse("Spiega le regole di disambiguazione attive")
+    assert intent.intent_type == "disambiguation_rules"
+
+
+def test_parser_certified_metrics():
+    intent = _parser().parse("Quali metriche certificate sono disponibili?")
+    assert intent.intent_type == "certified_metrics"
+
+
+def test_parser_data_provenance():
+    intent = _parser().parse("Qual è la provenienza dei dati?")
+    assert intent.intent_type == "data_provenance"
+
+
 def test_parser_fatturato_standalone_raises_ambiguity():
     from app.semantic.layer import AmbiguityError
 
@@ -151,14 +130,11 @@ def test_parser_fatturato_standalone_raises_ambiguity():
         _parser().parse("Qual è il fatturato nel 2014?")
 
 
-def test_parser_fatturato_with_qualifier_does_not_raise():
+def test_parser_fatturato_with_qualifier_falls_to_unknown():
+    """With qualifier 'per territorio', no AmbiguityError; goes to unknown (→ LLM/template)."""
     intent = _parser().parse("Qual è il fatturato per territorio nel 2014?")
-    assert intent.intent_type == "revenue_by_territory"
-
-
-def test_parser_customer_state_most_orders():
-    intent = _parser().parse("Qual è lo stato con più ordini clienti?")
-    assert intent.intent_type == "customer_state_most_orders"
+    # No longer matches a hardcoded handler — falls through to unknown or template
+    assert intent.intent_type in {"unknown", "revenue_by_territory"}
 
 
 def test_parser_unknown_falls_through():
@@ -166,210 +142,57 @@ def test_parser_unknown_falls_through():
     assert intent.intent_type == "unknown"
 
 
-def test_parser_top_limit_extraction():
-    intent = _parser().parse("Top 10 prodotti per quantità venduta")
-    assert intent.intent_type == "top_products_by_qty"
-    assert intent.limit == 10
-
-
-def test_parser_orders_with_discount():
-    intent = _parser().parse("Quanti ordini hanno avuto uno sconto applicato?")
-    assert intent.intent_type == "orders_with_discount"
-
-
-def test_parser_customers_without_orders():
-    intent = _parser().parse("Quali clienti non hanno mai fatto un ordine nel CRM?")
-    assert intent.intent_type == "customers_without_orders"
-
-
-def test_parser_customers_unique():
-    intent = _parser().parse("Quanti clienti unici abbiamo?")
-    assert intent.intent_type == "count_customers_unique"
-
-
-def test_parser_year_extracted_correctly():
+def test_parser_year_extracted_and_passed_to_unknown():
+    """Year is extracted and passed through even on unknown intent."""
     intent = _parser().parse("Quanti ordini nel 2023?")
     assert (intent.year == 2023) or (intent.filters.get("year") == 2023)
 
 
-# ── _q_count_employees ────────────────────────────────────────────────────────
+def test_parser_formerly_sql_questions_now_unknown():
+    """Questions that used to route to SQL handlers now fall to unknown (LLM fallback)."""
+    questions = [
+        "Quanti ordini abbiamo nel 2014?",
+        "Quanti dipendenti ci sono nel reparto Sales?",
+        "Top 3 venditori per fatturato nel 2014",
+        "Qual è il prezzo del prodotto Road-650?",
+        "Quanti prodotti make only abbiamo?",
+        "Quanti ordini hanno avuto uno sconto applicato?",
+    ]
+    p = _parser()
+    for q in questions:
+        intent = p.parse(q)
+        assert intent.intent_type in {"unknown", "impossible", "entity_not_modeled"}, (
+            f"Expected unknown/structural for '{q}', got '{intent.intent_type}'"
+        )
 
 
-def test_count_employees_all():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"cnt": 290}]
-    result = layer._q_count_employees(_intent("count_employees"))
-    assert result.answer == 290
-    assert result.sources_touched == ["hr_pim"]
-
-
-def test_count_employees_with_department():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"cnt": 47}]
-    result = layer._q_count_employees(
-        _intent("count_employees", filters={"department": "Sales"})
-    )
-    assert result.answer == 47
-    call_sql = layer._mgr.execute.call_args[0][0]
-    assert "Reparto" in call_sql
-
-
-def test_count_employees_zero_on_empty():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = []
-    result = layer._q_count_employees(_intent("count_employees"))
-    assert result.answer == 0
-
-
-def test_count_employees_includes_hr_freshness_warning():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"cnt": 5}]
-    result = layer._q_count_employees(_intent("count_employees"))
-    assert "Delayed" in result.notes
-
-
-# ── _q_avg_hourly_rate ────────────────────────────────────────────────────────
-
-
-def test_avg_hourly_rate_all():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"avg_rate": 18.75}]
-    result = layer._q_avg_hourly_rate(_intent("avg_hourly_rate"))
-    assert result.answer == pytest.approx(18.75)
-    assert result.sources_touched == ["hr_pim"]
-
-
-def test_avg_hourly_rate_by_dept():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"avg_rate": 22.10}]
-    result = layer._q_avg_hourly_rate(
-        _intent("avg_hourly_rate", filters={"department": "Engineering"})
-    )
-    call_sql = layer._mgr.execute.call_args[0][0]
-    assert "Reparto" in call_sql
-    assert result.answer == pytest.approx(22.10)
-
-
-def test_avg_hourly_rate_none_on_empty():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = []
-    result = layer._q_avg_hourly_rate(_intent("avg_hourly_rate"))
-    assert result.answer is None
-
-
-# ── _q_count_make_only ────────────────────────────────────────────────────────
-
-
-def test_count_make_only():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"cnt": 115}]
-    result = layer._q_count_make_only(_intent("count_make_only"))
-    assert result.answer == 115
-    assert result.sources_touched == ["hr_pim"]
-    assert "isMakeOnly" in layer._mgr.execute.call_args[0][0]
-
-
-# ── _q_product_price ─────────────────────────────────────────────────────────
-
-
-def test_product_price_exact_match():
-    layer = _make_layer()
-    # First call: exact match returns a result
-    layer._mgr.execute.return_value = [
+def test_parser_template_keyword_takes_priority():
+    """A template with a matching keyword is returned before structural patterns."""
+    templates = [
         {
-            "displayName": "Road-650 Black, 48",
-            "listPrice": 782.99,
-            "standardCost": 486.76,
+            "id": 1,
+            "intent_type": "tpl_1",
+            "keywords": ["quanti ordini"],
+            "sql_query": "SELECT COUNT(*) FROM sales_order_header",
+            "is_active": True,
+            "name": "count_orders_template",
         }
     ]
-    result = layer._q_product_price(
-        _intent("product_price", filters={"product_name": "Road-650"})
-    )
-    assert result.sources_touched == ["hr_pim"]
-    assert len(result.answer) == 1
+    intent = _parser().parse("Quanti ordini abbiamo nel 2014?", templates=templates)
+    assert intent.intent_type == "tpl_1"
 
 
-def test_product_price_falls_back_to_fuzzy():
-    layer = _make_layer()
-    # First exact call: no result; second fuzzy call: result
-    layer._mgr.execute.side_effect = [
-        [],
-        [
-            {
-                "displayName": "Road-650 Black, 48",
-                "listPrice": 782.99,
-                "standardCost": 486.76,
-            }
-        ],
+def test_parser_inactive_template_not_matched():
+    """Inactive templates are skipped."""
+    templates = [
+        {
+            "id": 2,
+            "intent_type": "tpl_2",
+            "keywords": ["quanti ordini"],
+            "sql_query": "SELECT COUNT(*) FROM sales_order_header",
+            "is_active": False,
+            "name": "inactive",
+        }
     ]
-    result = layer._q_product_price(
-        _intent("product_price", filters={"product_name": "Road-650"})
-    )
-    assert layer._mgr.execute.call_count == 2
-    assert len(result.answer) == 1
-
-
-def test_product_price_no_name_returns_top10():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [
-        {"displayName": "X", "listPrice": 1.0, "standardCost": 0.5}
-    ] * 10
-    result = layer._q_product_price(_intent("product_price"))
-    call_sql = layer._mgr.execute.call_args[0][0]
-    assert "LIMIT 10" in call_sql
-    assert len(result.answer) == 10
-
-
-# ── _q_list_b2b_active ───────────────────────────────────────────────────────
-
-
-def test_list_b2b_active_returns_count_and_companies():
-    layer = _make_layer()
-    layer._mgr.execute.side_effect = [
-        [{"cnt": 42}],
-        [{"accountId": 1, "ragioneSociale": "Acme"}],
-    ]
-    result = layer._q_list_b2b_active(_intent("list_b2b_active"))
-    assert result.answer["unique_b2b_active"] == 42
-    assert len(result.answer["companies"]) == 1
-    assert result.sources_touched == ["crm"]
-
-
-# ── _q_count_employees_by_group ──────────────────────────────────────────────
-
-
-def test_count_employees_by_group():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [
-        {"GruppoReparto": "Production", "cnt": 120},
-        {"GruppoReparto": "Sales", "cnt": 47},
-    ]
-    result = layer._q_count_employees_by_group(_intent("count_employees_by_group"))
-    assert result.sources_touched == ["hr_pim"]
-    assert len(result.answer) == 2
-    assert result.answer[0]["GruppoReparto"] == "Production"
-
-
-# ── _q_orders_with_discount ──────────────────────────────────────────────────
-
-
-def test_orders_with_discount():
-    layer = _make_layer()
-    layer._mgr.execute.return_value = [{"cnt": 5432}]
-    result = layer._q_orders_with_discount(_intent("orders_with_discount"))
-    assert result.answer == 5432
-    assert result.sources_touched == ["erp"]
-    assert "offer_ref" in layer._mgr.execute.call_args[0][0]
-
-
-# ── _q_employees_with_duplicate_customers ─────────────────────────────────────
-
-
-def test_employees_with_duplicate_customers_always_zero():
-    layer = _make_layer()
-    result = layer._q_employees_with_duplicate_customers(
-        _intent("employees_with_duplicate_customers")
-    )
-    assert result.answer["employee_count"] == 0
-    assert result.sources_touched == []
-    assert not result.disambiguation_required
+    intent = _parser().parse("Quanti ordini abbiamo nel 2014?", templates=templates)
+    assert intent.intent_type == "unknown"

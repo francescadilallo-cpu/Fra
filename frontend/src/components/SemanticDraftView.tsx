@@ -6,11 +6,13 @@ import {
 import {
   getDraft, patchDraftEntity, patchDraftMetric,
   addContextDoc, deleteContextDoc,
+  createQueryTemplate, updateQueryTemplate, deleteQueryTemplate,
   type SemanticDraft, type DraftEntity, type DraftMetric, type ContextDoc,
+  type QueryTemplate, type QueryTemplateCreate,
 } from '../api/semantic'
 import { toast } from './Toast'
 
-type DraftTab = 'entities' | 'relations' | 'metrics' | 'context'
+type DraftTab = 'entities' | 'relations' | 'metrics' | 'context' | 'templates'
 
 export function SemanticDraftView() {
   const [draft, setDraft] = useState<SemanticDraft | null>(null)
@@ -39,6 +41,7 @@ export function SemanticDraftView() {
     { id: 'relations', label: 'Relations', icon: <GitBranch  className="w-3.5 h-3.5" />, count: draft.relations.length },
     { id: 'metrics',   label: 'Metrics',   icon: <BarChart3  className="w-3.5 h-3.5" />, count: draft.metrics.length },
     { id: 'context',   label: 'Context',   icon: <FileText   className="w-3.5 h-3.5" />, count: draft.context_docs.length },
+    { id: 'templates', label: 'Query Templates', icon: <Zap className="w-3.5 h-3.5" />, count: draft.templates?.length ?? 0 },
   ]
 
   function handleExport() {
@@ -107,6 +110,7 @@ export function SemanticDraftView() {
         {activeTab === 'relations' && <RelationsTab relations={draft.relations} />}
         {activeTab === 'metrics'   && <MetricsTab   metrics={draft.metrics}            onUpdate={loadDraft} />}
         {activeTab === 'context'   && <ContextDocsTab docs={draft.context_docs}        onUpdate={loadDraft} />}
+        {activeTab === 'templates' && <QueryTemplatesTab templates={draft.templates ?? []} onUpdate={loadDraft} />}
       </div>
     </div>
   )
@@ -569,6 +573,309 @@ function ContextDocsTab({ docs, onUpdate }: { docs: ContextDoc[]; onUpdate: () =
           <Plus className="w-3.5 h-3.5" /> Add context document
         </button>
       )}
+    </div>
+  )
+}
+
+// ── Query Templates tab ───────────────────────────────────────────────────────────
+
+const BLANK_TEMPLATE: QueryTemplateCreate = {
+  name: '', description: '', sql_query: '', keywords: [], sources: [],
+}
+
+function QueryTemplatesTab({
+  templates, onUpdate,
+}: {
+  templates: QueryTemplate[]
+  onUpdate: () => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+
+  function startAdd() { setAdding(true); setEditingId(null) }
+  function cancelAdd() { setAdding(false) }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Query Templates are auto-generated from your semantic layer at build time and matched by keywords.
+        You can add custom ones or edit any template — edited templates survive future rebuilds.
+        Use <code className="font-mono bg-slate-100 px-1 rounded">{'{year}'}</code> and{' '}
+        <code className="font-mono bg-slate-100 px-1 rounded">{'{limit}'}</code> as safe substitution tokens.
+      </p>
+
+      {templates.map(t => (
+        <QueryTemplateCard
+          key={t.id}
+          template={t}
+          isEditing={editingId === t.id}
+          onEdit={() => { setEditingId(t.id); setAdding(false) }}
+          onCancelEdit={() => setEditingId(null)}
+          onSaved={() => { setEditingId(null); onUpdate() }}
+          onDeleted={() => onUpdate()}
+        />
+      ))}
+
+      {adding ? (
+        <QueryTemplateForm
+          initial={BLANK_TEMPLATE}
+          onSave={async (data) => {
+            await createQueryTemplate(data)
+            setAdding(false)
+            onUpdate()
+            toast('Query template created', 'success')
+          }}
+          onCancel={cancelAdd}
+        />
+      ) : (
+        <button
+          onClick={startAdd}
+          className="flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-lg text-xs text-slate-500 hover:border-teal-400 hover:text-teal-600 w-full transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> Add query template
+        </button>
+      )}
+    </div>
+  )
+}
+
+function QueryTemplateCard({
+  template, isEditing, onEdit, onCancelEdit, onSaved, onDeleted,
+}: {
+  template: QueryTemplate
+  isEditing: boolean
+  onEdit: () => void
+  onCancelEdit: () => void
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!confirm(`Delete template "${template.name}"? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await deleteQueryTemplate(template.id)
+      onDeleted()
+      toast(`"${template.name}" deleted`, 'info')
+    } catch {
+      toast('Could not delete template', 'error')
+      setDeleting(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <QueryTemplateForm
+        initial={{
+          name: template.name,
+          description: template.description,
+          sql_query: template.sql_query,
+          keywords: template.keywords,
+          sources: template.sources,
+        }}
+        onSave={async (data) => {
+          await updateQueryTemplate(template.id, data)
+          onSaved()
+          toast(`"${template.name}" saved`, 'success')
+        }}
+        onCancel={onCancelEdit}
+      />
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 text-left gap-3 transition-colors"
+        onClick={() => setExpanded(v => !v)}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="font-mono text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded flex-shrink-0">
+            {template.intent_type}
+          </span>
+          <span className="text-sm font-semibold text-slate-800 truncate">{template.name}</span>
+          {template.auto_generated && (
+            <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full flex-shrink-0">auto</span>
+          )}
+          {!template.is_active && (
+            <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full flex-shrink-0">inactive</span>
+          )}
+        </div>
+        <span className="text-slate-400 text-xs flex-shrink-0">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="p-3 space-y-2.5 border-t border-slate-100">
+          {template.description && (
+            <p className="text-xs text-slate-500">{template.description}</p>
+          )}
+
+          {template.keywords.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              <span className="text-[10px] text-slate-400 mr-1 self-center">keywords:</span>
+              {template.keywords.map(kw => (
+                <span key={kw} className="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-1.5 py-0.5 rounded-full">{kw}</span>
+              ))}
+            </div>
+          )}
+
+          {template.sources.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              <span className="text-[10px] text-slate-400 mr-1 self-center">sources:</span>
+              {template.sources.map(s => (
+                <span key={s} className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{s}</span>
+              ))}
+            </div>
+          )}
+
+          <pre className="text-[10px] font-mono text-slate-600 bg-slate-50 border border-slate-100 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+            {template.sql_query}
+          </pre>
+
+          <div className="flex gap-2 pt-0.5">
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+            >
+              <Edit2 className="w-3 h-3" /> Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-red-400 hover:text-red-600 border border-red-100 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />} Delete
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QueryTemplateForm({
+  initial, onSave, onCancel,
+}: {
+  initial: QueryTemplateCreate
+  onSave: (data: QueryTemplateCreate) => Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initial.name)
+  const [description, setDescription] = useState(initial.description)
+  const [sqlQuery, setSqlQuery] = useState(initial.sql_query)
+  const [keywordsRaw, setKeywordsRaw] = useState(initial.keywords.join(', '))
+  const [sourcesRaw, setSourcesRaw] = useState(initial.sources.join(', '))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const parseList = (raw: string) =>
+    raw.split(',').map(s => s.trim()).filter(Boolean)
+
+  async function handleSave() {
+    setError(null)
+    if (!name.trim()) { setError('Name is required'); return }
+    if (sqlQuery.trim().length < 10) { setError('SQL query must be at least 10 characters'); return }
+    setSaving(true)
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim(),
+        sql_query: sqlQuery.trim(),
+        keywords: parseList(keywordsRaw),
+        sources: parseList(sourcesRaw),
+      })
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not save template'
+      setError(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-teal-200 bg-teal-50/40 p-3 space-y-2.5">
+      <div>
+        <label className="text-xs font-medium text-slate-600 block mb-1">Name <span className="text-red-400">*</span></label>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. Top customers by revenue"
+          className="w-full text-xs border border-slate-200 rounded p-2 outline-none focus:border-teal-400 bg-white"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-600 block mb-1">Description</label>
+        <input
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="What this template answers…"
+          className="w-full text-xs border border-slate-200 rounded p-2 outline-none focus:border-teal-400 bg-white"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-600 block mb-1">
+          SQL Query <span className="text-red-400">*</span>
+          <span className="text-slate-400 font-normal ml-1">
+            — use <code className="font-mono bg-slate-100 px-1 rounded">{'{year}'}</code> and{' '}
+            <code className="font-mono bg-slate-100 px-1 rounded">{'{limit}'}</code> as tokens
+          </span>
+        </label>
+        <textarea
+          value={sqlQuery}
+          onChange={e => setSqlQuery(e.target.value)}
+          rows={6}
+          placeholder={'SELECT customer_name, SUM(amount) AS revenue\nFROM orders\nWHERE YEAR(order_date) = {year}\nGROUP BY customer_name\nORDER BY revenue DESC\nLIMIT {limit}'}
+          className="w-full font-mono text-xs border border-slate-200 rounded p-2 outline-none focus:border-teal-400 resize-y bg-white"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-600 block mb-1">
+          Keywords <span className="text-slate-400 font-normal">(comma-separated — trigger this template)</span>
+        </label>
+        <input
+          value={keywordsRaw}
+          onChange={e => setKeywordsRaw(e.target.value)}
+          placeholder="top customers, migliori clienti, best clients"
+          className="w-full text-xs border border-slate-200 rounded p-2 outline-none focus:border-teal-400 bg-white"
+        />
+      </div>
+
+      <div>
+        <label className="text-xs font-medium text-slate-600 block mb-1">
+          Sources <span className="text-slate-400 font-normal">(comma-separated table names)</span>
+        </label>
+        <input
+          value={sourcesRaw}
+          onChange={e => setSourcesRaw(e.target.value)}
+          placeholder="orders, customers"
+          className="w-full text-xs border border-slate-200 rounded p-2 outline-none focus:border-teal-400 bg-white"
+        />
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded px-2 py-1.5">{error}</p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white text-xs rounded-md transition-colors"
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+        </button>
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 text-slate-600 text-xs rounded-md hover:bg-slate-50"
+        >
+          <X className="w-3 h-3" /> Cancel
+        </button>
+      </div>
     </div>
   )
 }

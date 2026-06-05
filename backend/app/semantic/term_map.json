@@ -1,0 +1,19 @@
+{
+  "comment": "English-to-Italian term normalization for the semantic rule parser. Each entry is a [regex_pattern, italian_replacement] pair applied in order. Add entries here to support new language pairs without touching Python code.",
+  "mappings": [
+    ["\\bhow many\\b", "quanti"],
+    ["\\bnumber of\\b", "numero"],
+    ["\\bcustomers?\\b", "clienti"],
+    ["\\bclients?\\b", "clienti"],
+    ["\\borders?\\b", "ordini"],
+    ["\\bemployees?\\b", "dipendenti"],
+    ["\\bstaff\\b", "dipendenti"],
+    ["\\bproducts?\\b", "prodotti"],
+    ["\\bsalespe(?:rson|ople)\\b", "venditori"],
+    ["\\bsellers?\\b", "venditori"],
+    ["\\bterritor(?:y|ies)\\b", "territorio"],
+    ["\\bdepartments?\\b", "reparto"],
+    ["\\b(?:salary|salaries|wage|pay rate)\\b", "retribuzione"],
+    ["\\brevenue\\b", "incassi"]
+  ]
+}

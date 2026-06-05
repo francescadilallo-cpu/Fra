@@ -11,7 +11,9 @@ import {
   getHierarchies, createHierarchy, deleteHierarchy as apiDeleteHierarchy,
   getSegments, createSegment, deleteSegment as apiDeleteSegment,
   ask as backendAsk, adaptAskResult,
+  getDraft, listQueryTemplates,
   type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
+  type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
 import { SemanticDraftView } from './SemanticDraftView'
@@ -59,144 +61,13 @@ function loadUserRules(id: string): UserRule[] {
 }
 function saveUserRules(id: string, v: UserRule[]) { localStorage.setItem(RULES_KEY(id), JSON.stringify(v)) }
 
-// ── AdventureWorks static data ────────────────────────────────────────────────
+// ── Live-data helpers (replaced hardcoded AdventureWorks stubs) ───────────────
 
-const AW_SOURCES = [
-  { id: 'erp', name: 'ERP — OrionSales', type: 'PostgreSQL', icon: '🏭',
-    colorBorder: 'border-blue-200', colorBg: 'bg-blue-50', colorText: 'text-blue-700', colorDot: 'bg-blue-500',
-    entities: [{ name: 'SalesOrder', rows: 31465 }, { name: 'SalesOrderLine', rows: 121317 }, { name: 'Salesperson', rows: 17 }, { name: 'Territory', rows: 10 }, { name: 'SpecialOffer', rows: 16 }], total: 152825 },
-  { id: 'crm', name: 'CRM — ClientHub', type: 'SQLite', icon: '🤝',
-    colorBorder: 'border-teal-200', colorBg: 'bg-teal-50', colorText: 'text-teal-700', colorDot: 'bg-teal-500',
-    entities: [{ name: 'accounts', rows: 20201 }, { name: 'contacts', rows: 19302 }, { name: 'addresses', rows: 19614 }, { name: 'territories', rows: 70 }], total: 59193,
-    warning: '372 duplicate accounts (accountId < 0) — removed from KG' },
-  { id: 'hr', name: 'HR — Employees', type: 'CSV (Italian schema)', icon: '👥',
-    colorBorder: 'border-violet-200', colorBg: 'bg-violet-50', colorText: 'text-violet-700', colorDot: 'bg-violet-500',
-    entities: [{ name: 'dipendenti_hr', rows: 290 }], total: 290,
-    warning: 'Italian schema: matricolaDip, cognome, nome, stipendio — translated by semantic layer' },
-  { id: 'pim', name: 'PIM — Catalog', type: 'JSON', icon: '📦',
-    colorBorder: 'border-amber-200', colorBg: 'bg-amber-50', colorText: 'text-amber-700', colorDot: 'bg-amber-500',
-    entities: [{ name: 'product_catalog', rows: 504 }], total: 504 },
-]
-
-const AW_BRIDGES = [
-  { id: 1, label: 'PLACED_BY', cardinality: 'N:1', matchRate: 93.2,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrder', field: 'customer_ref : int' },
-    to:   { source: 'CRM — ClientHub',  entity: 'accounts',   field: 'accountId : int' },
-    detail: '18,484 / 19,829 matched · 1,345 CRM-only prospects excluded',
-    note: '19,829 unique customers after dedup', impact: 'Enables: customer geography, segment, creditLimit on orders' },
-  { id: 2, label: 'SOLD_BY', cardinality: 'N:1', matchRate: 100,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrder',    field: 'salesPersonId : int' },
-    to:   { source: 'HR — Employees',   entity: 'dipendenti_hr', field: 'matricolaDip : int' },
-    detail: '14 / 14 sales reps matched · Italian ↔ ERP schema resolved', note: '',
-    impact: 'Enables: salesperson name, salary, department from HR on sales queries' },
-  { id: 3, label: 'OF_PRODUCT', cardinality: 'N:1', matchRate: 99.6,
-    from: { source: 'ERP — OrionSales', entity: 'SalesOrderLine', field: 'productId : int' },
-    to:   { source: 'PIM — Catalog',    entity: 'product_catalog', field: 'internal_id : int' },
-    detail: '121,270 / 121,317 matched · 47 orphan lines', note: '',
-    impact: 'Enables: product category, cost, margin on order line queries' },
-]
-
+// AW_ENTITY_DETAIL: empty — entity details come from live draft entities
 const AW_ENTITY_DETAIL: Record<string, {
   source: string; semanticAlias?: string
   fields: { semantic: string; physical: string; type: string; note?: string; bridge?: string }[]
-}> = {
-  SalesOrder: { source: 'erp.SalesOrder', fields: [
-    { semantic: 'orderId', physical: 'orderId', type: 'integer PK' },
-    { semantic: 'orderDate', physical: 'orderDate', type: 'date' },
-    { semantic: 'revenue.net', physical: 'subtotalAmount', type: 'decimal', note: '⚠ "fatturato" disambiguation — net, excl. tax' },
-    { semantic: 'revenue.gross', physical: 'totalDue', type: 'decimal', note: '⚠ "fatturato" disambiguation — gross, incl. tax+freight' },
-    { semantic: 'taxAmt', physical: 'taxAmt', type: 'decimal' },
-    { semantic: 'freight', physical: 'freight', type: 'decimal' },
-    { semantic: 'channel', physical: 'onlineOrderFlag', type: 'boolean', note: '1=Online (87.9%) / 0=In-store (12.1%)' },
-    { semantic: 'customer →', physical: 'customer_ref', type: 'FK int', bridge: 'PLACED_BY → crm.accounts.accountId' },
-    { semantic: 'salesperson →', physical: 'salesPersonId', type: 'FK int', bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
-    { semantic: 'territory →', physical: 'territoryId', type: 'FK int', bridge: '→ erp.SalesTerritory.territoryId' },
-  ]},
-  Customer: { source: 'crm.accounts', semanticAlias: 'Unified Customer (ERP + CRM)', fields: [
-    { semantic: 'customerId', physical: 'accountId', type: 'integer PK' },
-    { semantic: 'companyName', physical: 'companyName', type: 'string' },
-    { semantic: 'country', physical: 'country', type: 'string' },
-    { semantic: 'segment', physical: 'segment', type: 'string' },
-    { semantic: 'creditLimit', physical: 'creditLimit', type: 'decimal' },
-    { semantic: 'email', physical: 'email', type: 'string' },
-    { semantic: 'ordersIn →', physical: 'accountId', type: 'FK', bridge: 'PLACED_BY ← erp.SalesOrder.customer_ref' },
-  ]},
-  Employee: { source: 'hr.dipendenti_hr', semanticAlias: 'Employee — Italian schema translated', fields: [
-    { semantic: 'employeeId', physical: 'matricolaDip', type: 'integer PK', note: 'Italian field' },
-    { semantic: 'lastName', physical: 'cognome', type: 'string', note: '"cognome"' },
-    { semantic: 'firstName', physical: 'nome', type: 'string', note: '"nome"' },
-    { semantic: 'role', physical: 'ruolo', type: 'string', note: '"ruolo"' },
-    { semantic: 'salary', physical: 'stipendio', type: 'decimal', note: '"stipendio"' },
-    { semantic: 'deptId', physical: 'repartoId', type: 'FK int', note: '"repartoId"' },
-    { semantic: 'salesperson →', physical: 'matricolaDip', type: 'FK', bridge: 'SOLD_BY ← erp.SalesOrder.salesPersonId' },
-  ]},
-  Product: { source: 'pim.product_catalog', fields: [
-    { semantic: 'productId', physical: 'internal_id', type: 'integer PK' },
-    { semantic: 'name', physical: 'name', type: 'string' },
-    { semantic: 'category', physical: 'category', type: 'string', note: 'Bikes=98% revenue' },
-    { semantic: 'subcategory', physical: 'subcategory', type: 'string' },
-    { semantic: 'listPrice', physical: 'listPrice', type: 'decimal' },
-    { semantic: 'standardCost', physical: 'standardCost', type: 'decimal', note: 'Used for margin calc' },
-    { semantic: 'orderLines →', physical: 'internal_id', type: 'FK', bridge: 'OF_PRODUCT ← erp.SalesOrderLine.productId' },
-  ]},
-  SalesOrderLine: { source: 'erp.SalesOrderLine', fields: [
-    { semantic: 'lineId', physical: 'lineId', type: 'integer PK' },
-    { semantic: 'orderId →', physical: 'orderId', type: 'FK int', bridge: '→ erp.SalesOrder.orderId' },
-    { semantic: 'product →', physical: 'productId', type: 'FK int', bridge: 'OF_PRODUCT → pim.product_catalog.internal_id' },
-    { semantic: 'quantity', physical: 'quantity', type: 'integer' },
-    { semantic: 'unitPrice', physical: 'unitPrice', type: 'decimal' },
-    { semantic: 'discount', physical: 'unitPriceDiscount', type: 'decimal', note: '>0 = discounted by SpecialOffer' },
-    { semantic: 'lineTotal', physical: 'lineTotal', type: 'decimal', note: '= qty × (unitPrice − discount)' },
-  ]},
-  Salesperson: { source: 'erp.SalesPerson', fields: [
-    { semantic: 'salesPersonId', physical: 'salesPersonId', type: 'integer PK' },
-    { semantic: 'salesYTD', physical: 'salesYTD', type: 'decimal', note: 'Year-to-date revenue' },
-    { semantic: 'bonus', physical: 'bonus', type: 'decimal' },
-    { semantic: 'commissionPct', physical: 'commissionPct', type: 'decimal' },
-    { semantic: 'territory →', physical: 'territoryId', type: 'FK int', bridge: '→ erp.SalesTerritory' },
-    { semantic: 'employee →', physical: 'salesPersonId', type: 'FK', bridge: 'SOLD_BY → hr.dipendenti_hr.matricolaDip' },
-  ]},
-}
-
-const AW_DISAMBIGUATION_RULES = [
-  { term: '"fatturato" / "revenue"', problem: 'Ambiguous — maps to two different ERP fields with a $2.3M difference',
-    options: [
-      { label: 'subtotalAmount', value: '$20,127,070', desc: 'Net commercial revenue (excl. tax & freight)', semantic: 'revenue.net', recommended: true },
-      { label: 'totalDue', value: '$22,410,568', desc: 'Gross billed amount (incl. tax + freight)', semantic: 'revenue.gross', recommended: false },
-    ], resolution: 'Query AI asks for explicit disambiguation before running' },
-  { term: '"dipendente" / "employee"', problem: 'Italian HR schema uses different field names from ERP schema',
-    options: [
-      { label: 'matricolaDip', value: 'HR CSV', desc: 'Italian: unique employee ID in HR system', semantic: 'Employee.employeeId', recommended: false },
-      { label: 'salesPersonId', value: 'ERP', desc: 'ERP: sales representative identifier', semantic: 'Salesperson.salesPersonId', recommended: false },
-    ], resolution: 'Resolved via SOLD_BY bridge (100% match rate) — semantic layer joins transparently' },
-  { term: '"ordini" / "orders"', problem: 'Could mean SalesOrder (header) or SalesOrderLine (detail rows)',
-    options: [
-      { label: 'SalesOrder', value: '31,465 rows', desc: 'Order header — one per transaction', semantic: 'SalesOrder', recommended: true },
-      { label: 'SalesOrderLine', value: '121,317 rows', desc: 'Line items — one per product per order', semantic: 'SalesOrderLine', recommended: false },
-    ], resolution: 'Default: SalesOrder for counts/revenue, SalesOrderLine for product-level analysis' },
-]
-
-const AW_QUERY_EXAMPLES = [
-  { question: 'Who is the top salesperson by revenue in 2014?', path: ['SalesOrder (ERP)', '⚡ SOLD_BY', 'Employee (HR)'], bridges: ['SOLD_BY'],
-    sql: `SELECT e.cognome || ' ' || e.nome AS name, sp.salesYTD\nFROM   erp.SalesPerson sp\nJOIN   hr.dipendenti_hr e ON sp.salesPersonId = e.matricolaDip\nORDER  BY sp.salesYTD DESC LIMIT 1`,
-    result: 'Linda Mitchell · $4,251,368 YTD' },
-  { question: 'What is the gross margin by product category?', path: ['SalesOrderLine (ERP)', '⚡ OF_PRODUCT', 'Product (PIM)'], bridges: ['OF_PRODUCT'],
-    sql: `SELECT p.category,\n       ROUND((SUM(sol.lineTotal - sol.quantity*p.standardCost) / SUM(sol.lineTotal)) * 100, 1) AS margin_pct\nFROM   erp.SalesOrderLine sol\nJOIN   pim.product_catalog p ON sol.productId = p.internal_id\nGROUP  BY p.category ORDER BY margin_pct DESC`,
-    result: 'Clothing 65.3% · Accessories 64.5% · Bikes 48.0%' },
-  { question: 'Show customers by country with average order value', path: ['SalesOrder (ERP)', '⚡ PLACED_BY', 'Customer (CRM)'], bridges: ['PLACED_BY'],
-    sql: `SELECT c.country, COUNT(DISTINCT o.customer_ref) AS customers, AVG(o.subtotalAmount) AS avg_order\nFROM   erp.SalesOrder o\nJOIN   crm.accounts c ON o.customer_ref = c.accountId\nGROUP  BY c.country ORDER BY avg_order DESC`,
-    result: 'Canada avg $1,813 · Australia $1,148 · US $905' },
-  { question: 'What is the online vs in-store channel split?', path: ['SalesOrder (ERP)', 'onlineOrderFlag semantic decode'], bridges: [],
-    sql: `SELECT CASE WHEN onlineOrderFlag=1 THEN 'Online' ELSE 'In-store' END AS channel,\n       COUNT(*) AS orders, AVG(subtotalAmount) AS avg_order\nFROM   erp.SalesOrder GROUP BY onlineOrderFlag`,
-    result: 'Online 87.9% (27,659 orders, avg $356) · In-store 12.1% (3,806 orders, avg $2,704)' },
-]
-
-const AW_QUALITY_ISSUES = [
-  { severity: 'warning' as const, entity: 'Customer — CRM accounts', issue: '372 accounts with accountId < 0 — duplicates from legacy CRM migration', resolution: 'Filtered in KG build: 20,201 raw → 19,829 clean unique accounts' },
-  { severity: 'warning' as const, entity: 'SalesOrder — revenue field', issue: 'subtotalAmount ($20.1M) vs totalDue ($22.4M) — $2.3M gap from tax + freight', resolution: 'Disambiguated at query time via isDisambiguation flag' },
-  { severity: 'info' as const, entity: 'Employee — HR CSV', issue: 'Italian column names: matricolaDip, cognome, nome, ruolo, stipendio, repartoId', resolution: 'Mapped to semantic aliases in ontology: employeeId, lastName, firstName…' },
-  { severity: 'info' as const, entity: 'SalesOrderLine — product match', issue: '47 / 121,317 order lines have productId not in PIM catalog (0.04% unmatched)', resolution: 'Treated as unknown products — excluded from category analysis' },
-]
+}> = {}
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -545,7 +416,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   const [newField, setNewField] = useState(EMPTY_FIELD)
   const [addingField, setAddingField] = useState(false)
 
-  const prefix = sectorId === 'manufacturing' ? 'mfg' : sectorId === 'retail' ? 'rtl' : sectorId === 'healthcare' ? 'hc' : 'fin'
+  const prefix = sectorId.slice(0, 3).toLowerCase()
 
   function commitField() {
     if (!newField.name.trim()) return
@@ -667,67 +538,53 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   )
 }
 
-// ── Intra-DB Relations data ────────────────────────────────────────────────────
+// ── Intra-DB Relations data ───────────────────────────────────────────────────
+// Derived from the live semantic draft in the main component; this empty array
+// is only used as a type anchor — see `liveRelationGroups` derived from draft.
+const AW_RELATIONS: {
+  source: string; sourceKey: string
+  colorBorder: string; colorBg: string; colorText: string; colorDot: string; icon: string
+  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean }[]
+}[] = []
 
-const AW_RELATIONS = [
-  {
-    source: 'ERP — OrionSales',
-    sourceKey: 'erp',
-    colorBorder: 'border-blue-200',
-    colorBg: 'bg-blue-50',
-    colorText: 'text-blue-700',
-    colorDot: 'bg-blue-500',
-    icon: '🏭',
-    relations: [
-      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId',                     cardinality: '1:N' as const, fromRows: 31465,  toRows: 121317, note: 'One order has many line items' },
-      { from: 'SalesOrder', to: 'Territory',       via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 31465,  toRows: 10,     note: 'Each order belongs to a sales territory' },
-      { from: 'SalesOrder', to: 'SalesPerson',     via: 'salesPersonId',               cardinality: 'N:1' as const, fromRows: 31465,  toRows: 17,     note: 'Nullable — online orders have no assigned rep' },
-      { from: 'SalesOrder', to: 'Customer',        via: 'customer_ref → customerId',   cardinality: 'N:1' as const, fromRows: 31465,  toRows: 19185,  note: 'Internal ERP customer ref — distinct from CRM accountId' },
-      { from: 'SalesPerson', to: 'Territory',      via: 'territoryId',                 cardinality: 'N:1' as const, fromRows: 17,     toRows: 10,     note: 'Salesperson is assigned to a home territory' },
-      { from: 'SalesOrderLine', to: 'SalesOrder',  via: 'orderId',                     cardinality: 'N:1' as const, fromRows: 121317, toRows: 31465,  note: 'Each line item belongs to one order' },
-    ],
-  },
-  {
-    source: 'CRM — ClientHub',
-    sourceKey: 'crm',
-    colorBorder: 'border-teal-200',
-    colorBg: 'bg-teal-50',
-    colorText: 'text-teal-700',
-    colorDot: 'bg-teal-500',
-    icon: '🤝',
-    relations: [
-      { from: 'Customer',     to: 'Contact',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19302, note: 'Each account can have multiple contacts' },
-      { from: 'Customer',     to: 'Address',       via: 'accountId',       cardinality: '1:N' as const, fromRows: 19829, toRows: 19614, note: 'Shipping and billing addresses per account' },
-      { from: 'Address',      to: 'StateProvince', via: 'stateProvinceId', cardinality: 'N:1' as const, fromRows: 19614, toRows: 70,    note: 'Address belongs to a state/province' },
-      { from: 'StateProvince', to: 'Country',      via: 'countryId',       cardinality: 'N:1' as const, fromRows: 70,    toRows: 6,     note: 'State/province belongs to a country' },
-    ],
-  },
-  {
-    source: 'PIM — Catalog',
-    sourceKey: 'pim',
-    colorBorder: 'border-amber-200',
-    colorBg: 'bg-amber-50',
-    colorText: 'text-amber-700',
-    colorDot: 'bg-amber-500',
-    icon: '📦',
-    relations: [
-      { from: 'Product', to: 'Category',    via: 'category',    cardinality: 'N:1' as const, fromRows: 504, toRows: 4,  note: 'Bikes · Components · Clothing · Accessories', soft: true },
-      { from: 'Product', to: 'Subcategory', via: 'subcategory', cardinality: 'N:1' as const, fromRows: 504, toRows: 37, note: 'Mountain Bikes · Road Bikes · Helmets…', soft: true },
-    ],
-  },
-  {
-    source: 'HR — Employees',
-    sourceKey: 'hr',
-    colorBorder: 'border-violet-200',
-    colorBg: 'bg-violet-50',
-    colorText: 'text-violet-700',
-    colorDot: 'bg-violet-500',
-    icon: '👥',
-    relations: [
-      { from: 'Employee', to: 'Department', via: 'repartoId', cardinality: 'N:1' as const, fromRows: 290, toRows: 0, note: 'Department stored as string — no separate table', soft: true },
-    ],
-  },
+// Color palette for dynamically derived relation groups
+const SOURCE_COLOR_PALETTE = [
+  { colorBorder: 'border-blue-200',   colorBg: 'bg-blue-50',   colorText: 'text-blue-700',   colorDot: 'bg-blue-500',   icon: '🗄️' },
+  { colorBorder: 'border-violet-200', colorBg: 'bg-violet-50', colorText: 'text-violet-700', colorDot: 'bg-violet-500', icon: '💬' },
+  { colorBorder: 'border-amber-200',  colorBg: 'bg-amber-50',  colorText: 'text-amber-700',  colorDot: 'bg-amber-500',  icon: '📦' },
+  { colorBorder: 'border-teal-200',   colorBg: 'bg-teal-50',   colorText: 'text-teal-700',   colorDot: 'bg-teal-500',   icon: '👥' },
 ]
+
+function buildRelationGroups(
+  relations: DraftRelation[],
+  entities: DraftEntity[],
+): typeof AW_RELATIONS {
+  // Group relations by from_table source (first source tag or table prefix)
+  const groups: Map<string, typeof AW_RELATIONS[0]> = new Map()
+  let colorIdx = 0
+  for (const rel of relations) {
+    const fromEntity = entities.find(e => e.table === rel.from_table || e.name === rel.from_table)
+    const toEntity   = entities.find(e => e.table === rel.to_table   || e.name === rel.to_table)
+    const sourceKey  = (fromEntity?.sources?.[0] ?? rel.from_table.split('_')[0] ?? 'default').toLowerCase()
+    const sourceName = sourceKey.toUpperCase()
+    if (!groups.has(sourceKey)) {
+      const colors = SOURCE_COLOR_PALETTE[colorIdx % SOURCE_COLOR_PALETTE.length]
+      colorIdx++
+      groups.set(sourceKey, { source: sourceName, sourceKey, ...colors, relations: [] })
+    }
+    const group = groups.get(sourceKey)!
+    group.relations.push({
+      from: fromEntity?.name || rel.from_table,
+      to:   toEntity?.name   || rel.to_table,
+      via:  rel.via_column,
+      cardinality: '1:N',
+      fromRows: fromEntity?.record_count ?? 0,
+      toRows:   toEntity?.record_count   ?? 0,
+      note: rel.edge_type ?? '',
+    })
+  }
+  return Array.from(groups.values())
+}
 
 // ── Bridges Builder ───────────────────────────────────────────────────────────
 
@@ -931,46 +788,6 @@ function StatCard({ label, value, sub, accent = false }: { label: string; value:
   )
 }
 
-function SourceCard({ source }: { source: typeof AW_SOURCES[0] }) {
-  return (
-    <div className={`border ${source.colorBorder} rounded-xl p-4 bg-white`}>
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{source.icon}</span>
-            <span className="font-semibold text-slate-900 text-sm">{source.name}</span>
-          </div>
-          <span className={`mt-1 inline-block text-[10px] font-mono px-2 py-0.5 rounded-full ${source.colorBg} ${source.colorText} font-medium`}>{source.type}</span>
-        </div>
-        <div className="text-right">
-          <p className="text-lg font-bold text-slate-800">{source.total.toLocaleString('en-US')}</p>
-          <p className="text-[11px] text-slate-400">total rows</p>
-          {AW_SOURCE_FRESHNESS[source.id] && (
-            <FreshnessBadge status={AW_SOURCE_FRESHNESS[source.id].status}
-              lastSync={AW_SOURCE_FRESHNESS[source.id].lastSync} sla={AW_SOURCE_FRESHNESS[source.id].sla} />
-          )}
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        {source.entities.map(e => (
-          <div key={e.name} className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${source.colorDot}`} />
-              <span className="text-slate-600 font-mono">{e.name}</span>
-            </div>
-            <span className="text-slate-400">{e.rows.toLocaleString('en-US')}</span>
-          </div>
-        ))}
-      </div>
-      {'warning' in source && source.warning && (
-        <div className="mt-3 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
-          <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />{source.warning}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function UserSourceCard({ source, onDelete }: { source: SourceDef; onDelete: () => void }) {
   const chips: Record<string, string> = { PostgreSQL: 'bg-blue-50 text-blue-700', MySQL: 'bg-orange-50 text-orange-700', SQLite: 'bg-sky-50 text-sky-700', MongoDB: 'bg-green-50 text-green-700', Snowflake: 'bg-cyan-50 text-cyan-700', BigQuery: 'bg-yellow-50 text-yellow-700', CSV: 'bg-violet-50 text-violet-700', JSON: 'bg-amber-50 text-amber-700', 'REST API': 'bg-teal-50 text-teal-700' }
   const chip = chips[source.type] ?? 'bg-slate-100 text-slate-600'
@@ -994,122 +811,6 @@ function UserSourceCard({ source, onDelete }: { source: SourceDef; onDelete: () 
       <button onClick={onDelete} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
-    </div>
-  )
-}
-
-function BridgeCard({ bridge }: { bridge: typeof AW_BRIDGES[0] }) {
-  const pct = bridge.matchRate
-  const color = pct === 100 ? 'bg-teal-500' : pct >= 95 ? 'bg-blue-500' : 'bg-amber-500'
-  const textColor = pct === 100 ? 'text-teal-700 bg-teal-100' : pct >= 95 ? 'text-blue-700 bg-blue-100' : 'text-amber-700 bg-amber-100'
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">From</p>
-          <p className="text-xs font-semibold text-slate-700 mt-0.5">{bridge.from.entity}</p>
-          <p className="text-[11px] font-mono text-slate-500">{bridge.from.source}</p>
-          <p className="text-[10px] font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.from.field}</p>
-        </div>
-        <div className="flex flex-col items-center gap-1.5 flex-shrink-0 px-2">
-          <span className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1 whitespace-nowrap">⚡ {bridge.label}</span>
-          <span className="text-[10px] text-slate-400">{bridge.cardinality}</span>
-          <ArrowRight className="w-3.5 h-3.5 text-teal-500" />
-        </div>
-        <div className="flex-1 min-w-0 text-right">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">To</p>
-          <p className="text-xs font-semibold text-slate-700 mt-0.5">{bridge.to.entity}</p>
-          <p className="text-[11px] font-mono text-slate-500">{bridge.to.source}</p>
-          <p className="text-[10px] font-mono text-teal-600 bg-teal-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.to.field}</p>
-        </div>
-        <div className="flex flex-col items-center gap-1 flex-shrink-0 ml-3">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${textColor}`}>{pct}%</span>
-          <p className="text-[10px] text-slate-400">match</p>
-        </div>
-      </div>
-      <div>
-        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-        </div>
-        <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{bridge.detail}</p>
-      </div>
-      <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-0.5">Enables</p>
-        <p className="text-[11px] text-slate-600">{bridge.impact}</p>
-      </div>
-    </div>
-  )
-}
-
-
-function DisambiguationCard({ rule }: { rule: typeof AW_DISAMBIGUATION_RULES[0] }) {
-  return (
-    <div className="bg-white border border-amber-200 rounded-xl p-4">
-      <div className="flex items-start gap-3 mb-3">
-        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-slate-900">{rule.term}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{rule.problem}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        {rule.options.map((opt, i) => (
-          <div key={i} className={`border rounded-lg p-2.5 ${opt.recommended ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
-            <p className="text-[10px] font-mono font-bold text-slate-700">{opt.label}</p>
-            <p className="text-xs font-bold text-slate-900 mt-0.5">{opt.value}</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</p>
-            <p className="text-[10px] font-mono text-violet-600 mt-1">{opt.semantic}</p>
-            {opt.recommended && <p className="text-[10px] text-teal-600 font-semibold mt-1">← recommended</p>}
-          </div>
-        ))}
-      </div>
-      <div className="flex items-start gap-1.5 text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-2">
-        <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />{rule.resolution}
-      </div>
-    </div>
-  )
-}
-
-function QueryExampleCard({ ex }: { ex: typeof AW_QUERY_EXAMPLES[0] }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
-      <div className="flex items-start gap-3">
-        <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-900">"{ex.question}"</p>
-          <div className="flex items-center gap-1 flex-wrap mt-2">
-            {ex.path.map((step, i) => (
-              <span key={i} className="flex items-center gap-1">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${step.startsWith('⚡') ? 'bg-teal-100 text-teal-700 font-bold' : 'bg-slate-100 text-slate-600'}`}>{step}</span>
-                {i < ex.path.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
-              </span>
-            ))}
-          </div>
-          {ex.bridges.length > 0 && (
-            <div className="flex items-center gap-1 mt-2 flex-wrap">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mr-1">Bridges:</span>
-              {ex.bridges.map(b => <span key={b} className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">⚡ {b}</span>)}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="text-right">
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">Result</p>
-            <p className="text-xs font-semibold text-teal-700 max-w-[160px] leading-snug">{ex.result}</p>
-          </div>
-          <button onClick={() => tryInQueryAI(ex.question)}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors">
-            <Play className="w-3 h-3" />Try
-          </button>
-        </div>
-      </div>
-      <button onClick={() => setOpen(v => !v)} className="mt-2.5 flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
-        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}View SQL
-      </button>
-      {open && (
-        <pre className="mt-2 text-[10px] font-mono bg-slate-900 text-teal-300 rounded-lg px-3 py-2.5 overflow-x-auto whitespace-pre leading-relaxed">{ex.sql}</pre>
-      )}
     </div>
   )
 }
@@ -1164,40 +865,6 @@ interface Metric {
   owner?: string
   tags: string[]
 }
-
-const AW_METRICS: Metric[] = [
-  {
-    id: 'revenue', name: 'Revenue', description: 'Net commercial revenue — subtotal before taxes and freight. Canonical sales metric.',
-    type: 'sum', entity: 'SalesOrder', field: 'subtotalAmount', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['sales', 'core'],
-  },
-  {
-    id: 'gross_revenue', name: 'Gross Revenue', description: 'Total billed including taxes and freight. Use for AR and billing reconciliation.',
-    type: 'sum', entity: 'SalesOrder', field: 'totalDue', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Finance', tags: ['billing'],
-  },
-  {
-    id: 'order_count', name: 'Order Count', description: 'Number of sales orders placed.',
-    type: 'count', entity: 'SalesOrder', field: 'salesOrderId', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['day', 'week', 'month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['sales', 'core'],
-  },
-  {
-    id: 'aov', name: 'Avg Order Value', description: 'Average net revenue per order. Revenue ÷ Order Count.',
-    type: 'ratio', entity: 'SalesOrder', numerator: 'Revenue', denominator: 'Order Count', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter', 'year'], format: 'currency', status: 'verified', owner: 'Sales', tags: ['efficiency'],
-  },
-  {
-    id: 'unique_customers', name: 'Unique Customers', description: 'Count of distinct customers with at least one order.',
-    type: 'count_distinct', entity: 'SalesOrder', field: 'customerId', filters: [], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter', 'year'], format: 'number', status: 'verified', owner: 'Sales', tags: ['customers'],
-  },
-  {
-    id: 'online_rate', name: 'Online Order Rate', description: 'Share of orders placed online vs. via sales reps.',
-    type: 'ratio', entity: 'SalesOrder', numerator: 'Online orders', denominator: 'Order Count',
-    filters: ["onlineOrderFlag = TRUE for numerator"], timeDimension: 'SalesOrder.orderDate',
-    grains: ['month', 'quarter'], format: 'percentage', status: 'draft', owner: 'Digital', tags: ['channel'],
-  },
-]
 
 const METRIC_TYPE_LABEL: Record<MetricType, string> = {
   sum: 'SUM', count: 'COUNT', count_distinct: 'COUNT DISTINCT', avg: 'AVG', ratio: 'RATIO', derived: 'DERIVED',
@@ -1309,37 +976,6 @@ interface DimHierarchy {
   isBuiltin?: boolean
 }
 
-const AW_HIERARCHIES: DimHierarchy[] = [
-  {
-    id: 'date', name: 'Date', entity: 'SalesOrder', description: 'Drill-down from year to day on order date.',
-    type: 'time', isBuiltin: true,
-    levels: [
-      { name: 'Year',    field: 'YEAR(SalesOrder.orderDate)' },
-      { name: 'Quarter', field: "CONCAT('Q', QUARTER(SalesOrder.orderDate), ' ', YEAR(...))" },
-      { name: 'Month',   field: 'MONTH(SalesOrder.orderDate)' },
-      { name: 'Week',    field: 'WEEK(SalesOrder.orderDate)' },
-      { name: 'Day',     field: 'DATE(SalesOrder.orderDate)' },
-    ],
-  },
-  {
-    id: 'territory', name: 'Territory', entity: 'Territory', description: 'Geographic drill-down from global region to named territory.',
-    type: 'categorical', isBuiltin: true,
-    levels: [
-      { name: 'Group',     field: 'Territory.group' },
-      { name: 'Territory', field: 'Territory.name' },
-    ],
-  },
-  {
-    id: 'product', name: 'Product', entity: 'Product', description: 'Product catalog drill-down from category to individual SKU.',
-    type: 'categorical', isBuiltin: true,
-    levels: [
-      { name: 'Category',    field: 'Product.category' },
-      { name: 'Sub-category',field: 'Product.subCategory' },
-      { name: 'Product',     field: 'Product.name' },
-    ],
-  },
-]
-
 function loadHierarchies(sid: string): DimHierarchy[] {
   try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${sid}`) ?? '[]') } catch { return [] }
 }
@@ -1396,34 +1032,6 @@ interface Segment {
   isBuiltin?: boolean
 }
 
-const AW_SEGMENTS: Segment[] = [
-  {
-    id: 'b2b', name: 'B2B Customers', description: 'Corporate accounts — resellers and retailers only.',
-    entity: 'Customer', conditions: [{ field: 'Customer.customerType', operator: '=', value: "'Company'" }],
-    tags: ['channel'], usedBy: ['Revenue', 'Unique Customers'], isBuiltin: true,
-  },
-  {
-    id: 'online', name: 'Online Orders', description: 'Self-service orders placed through the e-commerce channel.',
-    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.onlineOrderFlag', operator: '=', value: 'TRUE' }],
-    tags: ['channel', 'digital'], usedBy: ['Order Count', 'Online Order Rate'], isBuiltin: true,
-  },
-  {
-    id: 'high_value', name: 'High-Value Orders', description: 'Orders with net revenue ≥ $1,000.',
-    entity: 'SalesOrder', conditions: [{ field: 'SalesOrder.subtotalAmount', operator: '>=', value: '1000' }],
-    tags: ['tier'], usedBy: ['Revenue'], isBuiltin: true,
-  },
-  {
-    id: 'north_america', name: 'North America', description: 'Orders from the North America territory group.',
-    entity: 'Territory', conditions: [{ field: 'Territory.group', operator: '=', value: "'North America'" }],
-    tags: ['geo'], usedBy: ['Revenue', 'Order Count'], isBuiltin: true,
-  },
-  {
-    id: 'q4', name: 'Q4 Orders', description: 'Orders placed in the fourth quarter (October–December).',
-    entity: 'SalesOrder', conditions: [{ field: 'MONTH(SalesOrder.orderDate)', operator: 'IN', value: '10, 11, 12' }],
-    tags: ['time'], usedBy: ['Revenue'], isBuiltin: true,
-  },
-]
-
 const OPERATOR_LABELS: Record<SegmentOperator, string> = {
   '=': '=', '!=': '≠', 'IN': 'IN', 'NOT IN': 'NOT IN', '>': '>', '<': '<', '>=': '≥', '<=': '≤',
 }
@@ -1473,15 +1081,7 @@ function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void })
   )
 }
 
-// ── Source freshness (manufacturing) ──────────────────────────────────────────
-
-const AW_SOURCE_FRESHNESS: Record<string, { lastSync: string; sla: string; quality: number; status: 'fresh' | 'stale' | 'warning'; label: string }> = {
-  erp: { lastSync: '2026-05-26 02:00', sla: 'Daily',  quality: 97, status: 'fresh',   label: 'ERP (OrionSales)' },
-  crm: { lastSync: '2026-05-26 01:30', sla: 'Daily',  quality: 94, status: 'fresh',   label: 'CRM (ClientHub)' },
-  hr:  { lastSync: '2026-05-20 09:00', sla: 'Weekly', quality: 99, status: 'warning', label: 'HR CSV' },
-  pim: { lastSync: '2026-05-25 18:00', sla: 'Daily',  quality: 91, status: 'fresh',   label: 'PIM JSON' },
-}
-
+// ── Source freshness ──────────────────────────────────────────────────────────
 function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' | 'warning'; lastSync: string; sla: string }) {
   const colors = { fresh: 'bg-teal-50 text-teal-700 border-teal-200', stale: 'bg-red-50 text-red-600 border-red-200', warning: 'bg-amber-50 text-amber-700 border-amber-200' }
   const labels = { fresh: '● Fresh', stale: '● Stale', warning: '⚠ Delayed' }
@@ -1511,116 +1111,19 @@ interface PlaygroundScenario {
   rows: Record<string, string>[]
 }
 
-const AW_PLAYGROUND: PlaygroundScenario[] = [
-  {
-    id: 'rev-month',
-    question: 'Total revenue by month this year',
-    keywords: ['revenue', 'month', 'monthly'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: [] },
-    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\nWHERE o.order_date >= '2026-01-01'\nGROUP BY 1\nORDER BY 1`,
-    columns: ['Month', 'Revenue'],
-    rows: [
-      { Month: 'Jan 2026', Revenue: '$3,142,890' },
-      { Month: 'Feb 2026', Revenue: '$2,987,450' },
-      { Month: 'Mar 2026', Revenue: '$3,654,320' },
-      { Month: 'Apr 2026', Revenue: '$4,238,790' },
-    ],
-  },
-  {
-    id: 'rev-territory',
-    question: 'Revenue by territory',
-    keywords: ['territory', 'region', 'geo', 'location'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Territory' }], segments: [] },
-    sql: `SELECT\n  t.group                    AS territory_group,\n  t.name                     AS territory,\n  SUM(o.subtotal_amount)     AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nGROUP BY 1, 2\nORDER BY revenue DESC`,
-    columns: ['Group', 'Territory', 'Revenue'],
-    rows: [
-      { Group: 'North America', Territory: 'Northwest',  Revenue: '$5,432,890' },
-      { Group: 'North America', Territory: 'Southwest',  Revenue: '$4,198,450' },
-      { Group: 'Europe',        Territory: 'France',     Revenue: '$2,892,310' },
-      { Group: 'Europe',        Territory: 'Germany',    Revenue: '$2,644,180' },
-    ],
-  },
-  {
-    id: 'channel-split',
-    question: 'Online vs offline order split',
-    keywords: ['online', 'offline', 'channel', 'digital'],
-    resolution: { metrics: ['Order Count', 'Revenue'], dimensions: [], segments: ['Online Orders', 'Offline Orders'] },
-    sql: `SELECT\n  CASE WHEN o.online_order_flag THEN 'Online'\n       ELSE 'Offline' END    AS channel,\n  COUNT(*)                     AS order_count,\n  SUM(o.subtotal_amount)       AS revenue\nFROM sales_order o\nGROUP BY 1\nORDER BY revenue DESC`,
-    columns: ['Channel', 'Orders', 'Revenue', 'Share'],
-    rows: [
-      { Channel: 'Online',  Orders: '27,659', Revenue: '$8,432,190', Share: '58%' },
-      { Channel: 'Offline', Orders: '3,291',  Revenue: '$6,098,450', Share: '42%' },
-    ],
-  },
-  {
-    id: 'top-customers',
-    question: 'Top 10 B2B customers by revenue',
-    keywords: ['top', 'customer', 'best', 'largest', 'biggest', 'b2b'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Customer' }], segments: ['B2B Customers'] },
-    sql: `SELECT\n  c.company_name             AS customer,\n  COUNT(DISTINCT o.id)       AS orders,\n  SUM(o.subtotal_amount)     AS revenue\nFROM customer c\n  JOIN sales_order o ON o.customer_id = c.customer_id\nWHERE c.customer_type = 'Company'\nGROUP BY 1\nORDER BY revenue DESC\nLIMIT 10`,
-    columns: ['Customer', 'Orders', 'Revenue'],
-    rows: [
-      { Customer: 'Action Bicycle Specialists',   Orders: '29', Revenue: '$934,219' },
-      { Customer: 'Professional Sales & Service', Orders: '24', Revenue: '$812,450' },
-      { Customer: 'Thrifty Parts & Supply',       Orders: '18', Revenue: '$699,120' },
-      { Customer: 'Thorough Parts & Supply Co.',  Orders: '21', Revenue: '$623,890' },
-    ],
-  },
-  {
-    id: 'aov-quarter',
-    question: 'Average order value by quarter',
-    keywords: ['average', 'aov', 'basket', 'quarter', 'quarterly'],
-    resolution: { metrics: ['Avg Order Value', 'Revenue', 'Order Count'], dimensions: [{ name: 'Date', grain: 'quarter' }], segments: [] },
-    sql: `SELECT\n  DATE_TRUNC('quarter', o.order_date)        AS quarter,\n  COUNT(*)                                   AS orders,\n  SUM(o.subtotal_amount) / COUNT(*)          AS avg_order_value\nFROM sales_order o\nGROUP BY 1\nORDER BY 1 DESC\nLIMIT 6`,
-    columns: ['Quarter', 'Orders', 'AOV'],
-    rows: [
-      { Quarter: 'Q1 2026', Orders: '7,832', AOV: '$1,249' },
-      { Quarter: 'Q4 2025', Orders: '8,123', AOV: '$1,260' },
-      { Quarter: 'Q3 2025', Orders: '7,450', AOV: '$1,199' },
-      { Quarter: 'Q2 2025', Orders: '7,210', AOV: '$1,185' },
-    ],
-  },
-  {
-    id: 'product-category',
-    question: 'Revenue by product category',
-    keywords: ['product', 'category', 'sku', 'item', 'bike', 'accessory'],
-    resolution: { metrics: ['Revenue', 'Order Count'], dimensions: [{ name: 'Product' }], segments: [] },
-    sql: `SELECT\n  p.category                            AS category,\n  COUNT(DISTINCT ol.sales_order_id)     AS orders,\n  SUM(ol.unit_price * ol.order_qty)     AS revenue\nFROM sales_order_line ol\n  JOIN product p ON ol.product_id = p.product_id\nGROUP BY 1\nORDER BY revenue DESC`,
-    columns: ['Category', 'Orders', 'Revenue'],
-    rows: [
-      { Category: 'Bikes',       Orders: '18,432', Revenue: '$22,431,890' },
-      { Category: 'Components',  Orders: '27,891', Revenue: '$5,432,100' },
-      { Category: 'Accessories', Orders: '35,120', Revenue: '$1,987,450' },
-      { Category: 'Clothing',    Orders: '8,930',  Revenue: '$892,310' },
-    ],
-  },
-  {
-    id: 'q4-na',
-    question: 'Q4 revenue — North America only',
-    keywords: ['q4', 'fourth quarter', 'north america', 'q4 north'],
-    resolution: { metrics: ['Revenue'], dimensions: [{ name: 'Date', grain: 'month' }], segments: ['Q4 Orders', 'North America'] },
-    sql: `SELECT\n  DATE_TRUNC('month', o.order_date)  AS month,\n  SUM(o.subtotal_amount)             AS revenue\nFROM sales_order o\n  JOIN territory t ON o.territory_id = t.territory_id\nWHERE t.group = 'North America'\n  AND MONTH(o.order_date) IN (10, 11, 12)\nGROUP BY 1\nORDER BY 1`,
-    columns: ['Month', 'Revenue'],
-    rows: [
-      { Month: 'Oct 2025', Revenue: '$2,891,340' },
-      { Month: 'Nov 2025', Revenue: '$3,124,780' },
-      { Month: 'Dec 2025', Revenue: '$4,218,020' },
-    ],
-  },
-]
-
-function resolveQuery(query: string): PlaygroundScenario | null {
-  const q = query.toLowerCase()
-  return AW_PLAYGROUND.find(s => s.keywords.some(k => q.includes(k))) ?? null
+// AW_PLAYGROUND is no longer used — playground scenarios come from query templates loaded via listQueryTemplates()
+// resolveQuery is only used in offline mode; with no hardcoded scenarios it always returns null
+function resolveQuery(_query: string): PlaygroundScenario | null {
+  return null
 }
 
 interface SearchResult { section: SLSection; type: string; label: string; sub: string }
 
 function buildSearchIndex(
   ontologyNodes: { data: { label: string; description?: string } }[],
-  metrics: Metric[],
-  hierarchies: DimHierarchy[],
-  segments: Segment[],
+  metrics: { name: string; description: string }[],
+  hierarchies: { name: string; description: string }[],
+  segments: { name: string; description: string }[],
 ): SearchResult[] {
   return [
     ...ontologyNodes.map(n => ({ section: 'entities' as SLSection, type: 'Entity', label: n.data.label, sub: n.data.description ?? '' })),
@@ -1638,7 +1141,8 @@ function scoreSearch(item: SearchResult, q: string): number {
   return 0
 }
 
-// ── Definitions data (from Semantic Layer / MappingView) ─────────────────────
+// ── Definitions data ─────────────────────────────────────────────────────────
+// Definitions are now derived from live draft entity data; no hardcoded content.
 
 interface SemanticDef {
   entity: string
@@ -1647,71 +1151,29 @@ interface SemanticDef {
   status: 'ok' | 'ambiguous' | 'todo'
 }
 
-const INITIAL_DEFS: SemanticDef[] = [
-  { entity: 'SalesOrder',     field: 'subtotalAmount',  definition: 'Net order amount before taxes and shipping costs. Canonical "commercial revenue" — use for sales metrics ($20.1M total 2014).', status: 'ok' },
-  { entity: 'SalesOrder',     field: 'totalDue',        definition: 'Gross amount billed to customer — includes taxes and freight. Use for finance/accounting contexts ($22.4M total 2014, +$2.3M vs subtotal).', status: 'ambiguous' },
-  { entity: 'SalesOrder',     field: 'onlineOrderFlag', definition: 'TRUE = online B2C order (self-service). FALSE = offline B2B order placed through a sales representative.', status: 'ok' },
-  { entity: 'SalesOrder',     field: 'status',          definition: 'Order lifecycle status: Confirmed, Processing, Shipped, Delivered.', status: 'ok' },
-  { entity: 'SalesOrder',     field: 'orderDate',       definition: 'Date the order was placed. Reference date for all revenue period calculations.', status: 'ok' },
-  { entity: 'Customer',       field: 'accountId',       definition: 'CRM primary key. Values < 0 are duplicates from a legacy migration — 372 such records removed.', status: 'ok' },
-  { entity: 'Customer',       field: 'accountNumber',   definition: 'Human-readable customer code. Stable across system migrations.', status: 'ok' },
-  { entity: 'Customer',       field: 'customerType',    definition: 'Customer classification: "Company" (B2B) or "Individual" (B2C).', status: 'todo' },
-  { entity: 'Salesperson',    field: 'salesPersonId',   definition: 'ERP primary key for the salesperson. Bridges to HR.matricolaDip for cross-source ERP↔HR join.', status: 'ok' },
-  { entity: 'Salesperson',    field: 'salesYTD',        definition: 'Year-to-date sales revenue attributed to this rep. Top: Linda Mitchell $4.25M (2014).', status: 'ok' },
-  { entity: 'Salesperson',    field: 'bonus',           definition: 'Annual bonus paid. Not proportional to revenue — Jae Pak highest bonus ($6,700) but ranks 8th in YTD.', status: 'ambiguous' },
-  { entity: 'Salesperson',    field: 'commissionPct',   definition: 'Commission rate applied to net sales (subtotalAmount). Ranges from 1.0% to 2.0%.', status: 'ok' },
-  { entity: 'Employee',       field: 'matricolaDip',    definition: 'HR employee ID (Italian schema). ERP↔HR bridge key — maps to Salesperson.salesPersonId.', status: 'ok' },
-  { entity: 'Employee',       field: 'cognome',         definition: 'Employee last name (Italian schema). Maps to Employee.lastName in queries.', status: 'ok' },
-  { entity: 'Employee',       field: 'nome',            definition: 'Employee first name (Italian schema). Maps to Employee.firstName in queries.', status: 'ok' },
-  { entity: 'Employee',       field: 'ruolo',           definition: 'Job title (Italian: "ruolo"). Maps to Employee.jobTitle.', status: 'ok' },
-  { entity: 'Employee',       field: 'dataAssunzione',  definition: 'Hire date (Italian). All sales staff hired 2007–2009.', status: 'ok' },
-  { entity: 'Product',        field: 'internalId',      definition: 'PIM product identifier. ERP↔PIM bridge key — maps to SalesOrderLine.product_ref.', status: 'ok' },
-  { entity: 'Product',        field: 'listPrice',       definition: 'Published catalog price. Not the actual sale price — discounts applied at SalesOrderLine level.', status: 'ok' },
-  { entity: 'Product',        field: 'category',        definition: 'Top-level category: Bikes (~85% revenue), Accessories, Clothing, Components.', status: 'ok' },
-  { entity: 'Territory',      field: 'salesYTD',        definition: 'Territory year-to-date revenue. Southwest leads at $10.5M, Northwest $7.9M, Canada $6.8M.', status: 'ok' },
-  { entity: 'Territory',      field: 'group',           definition: 'Geographic group: "North America" (5), "Europe" (3), "Pacific" (Australia).', status: 'ok' },
-  { entity: 'SalesOrderLine', field: 'unitPrice',       definition: 'Actual unit sale price after any list price adjustments.', status: 'ok' },
-  { entity: 'SalesOrderLine', field: 'offerRef',        definition: 'Foreign key to applied discount. offerRef=1 = No Discount; higher values = up to 50% off.', status: 'ok' },
-]
+// Build initial definitions from draft entities — used as initial state in SemanticDefsPanel
+function buildInitialDefs(entities: DraftEntity[]): SemanticDef[] {
+  const defs: SemanticDef[] = []
+  for (const e of entities) {
+    for (const col of e.columns) {
+      defs.push({
+        entity: e.name || e.table,
+        field:  col,
+        definition: (e.user_description || e.description || '').trim() || col,
+        status: 'todo' as const,
+      })
+    }
+  }
+  return defs
+}
 
-const DEF_AMBIGUITIES = [
-  {
-    term: 'fatturato / revenue',
-    context: 'SalesOrder (ERP — OrionSales)',
-    candidates: [
-      { label: 'subtotalAmount — $20,127,070', desc: 'Net commercial revenue, excl. taxes and freight. Use for sales performance, rep KPIs, territory ranking.', recommended: true },
-      { label: 'totalDue — $22,410,568',       desc: 'Gross billed amount including taxes + freight. Use for finance, AR, billing reconciliation.', recommended: false },
-    ],
-    resolution: '"commercial revenue" → subtotalAmount. "billed" / "total due" / "invoiced" → totalDue. When ambiguous, shows both and asks.',
-  },
-  {
-    term: 'customer count / clienti',
-    context: 'CRM — ClientHub (SQLite)',
-    candidates: [
-      { label: 'CRM raw — 20,201 accounts', desc: 'Includes 372 duplicates with accountId < 0 from legacy migration.', recommended: false },
-      { label: 'CRM dedup — 19,829 accounts', desc: 'Clean unique accounts after removing negative-ID duplicates.', recommended: true },
-    ],
-    resolution: 'Knowledge Graph always uses 19,829 unique accounts. Raw count only shown in audit/data quality views.',
-  },
-  {
-    term: 'bonus vs commissionPct',
-    context: 'Salesperson (ERP)',
-    candidates: [
-      { label: 'bonus — fixed annual ($75–$6,700)', desc: 'Discretionary annual bonus. Not performance-proportional.', recommended: false },
-      { label: 'commissionPct × salesYTD', desc: 'Variable commission proportional to net sales (1.0%–2.0%).', recommended: true },
-    ],
-    resolution: 'Use commissionPct × salesYTD to compare rep economic outcomes. Bonus is a separate discretionary component.',
-  },
-  {
-    term: 'top salesperson',
-    context: 'Salesperson × Employee (ERP × HR)',
-    candidates: [
-      { label: 'By salesYTD — Linda Mitchell ($4.25M)', desc: 'Highest revenue producer 2014.', recommended: true },
-      { label: 'By bonus — Jae Pak ($6,700)', desc: 'Highest bonus but 8th in revenue. Bonus not revenue-correlated.', recommended: false },
-    ],
-    resolution: '"Top salesperson" defaults to highest salesYTD = Linda Mitchell. Only use bonus ranking when explicitly asked.',
-  },
-]
+// DEF_AMBIGUITIES: no hardcoded data — users define disambiguation via RulesBuilder
+const DEF_AMBIGUITIES: {
+  term: string; context: string
+  candidates: { label: string; desc: string; recommended: boolean }[]
+  resolution: string
+}[] = []
+
 
 const DEF_STATUS_BADGE: Record<SemanticDef['status'], string> = {
   ok:        'bg-teal-50 text-teal-700 border border-teal-200',
@@ -1848,8 +1310,14 @@ function MappingTableGroup({ table, rows, savedEdits, onSave }: {
   )
 }
 
-function SemanticDefsPanel() {
-  const [defs, setDefs] = useState<SemanticDef[]>(INITIAL_DEFS)
+function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
+  const [defs, setDefs] = useState<SemanticDef[]>(initialDefs)
+  // Re-seed when draft loads for the first time
+  const [seeded, setSeeded] = useState(false)
+  if (!seeded && initialDefs.length > 0 && defs.length === 0) {
+    setDefs(initialDefs)
+    setSeeded(true)
+  }
   const [editing, setEditing] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [newForm, setNewForm] = useState({ entity: '', field: '', definition: '' })
@@ -1869,6 +1337,12 @@ function SemanticDefsPanel() {
 
   return (
     <div className="space-y-5">
+      {defs.length === 0 && (
+        <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+          <p className="text-sm font-semibold">No definitions yet</p>
+          <p className="text-xs mt-1">Build the semantic layer to auto-populate definitions from entity columns, or add them manually below.</p>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">{defs.length} definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
         <button onClick={() => setShowAdd(v => !v)}
@@ -1932,6 +1406,16 @@ function SemanticDefsPanel() {
 }
 
 function AmbiguityLogPanel() {
+  // DEF_AMBIGUITIES is now always empty — users define disambiguation via RulesBuilder
+  if (DEF_AMBIGUITIES.length === 0) {
+    return (
+      <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+        <AlertTriangle className="w-6 h-6 mx-auto mb-2 opacity-30" />
+        <p className="text-sm font-semibold">No ambiguities logged yet</p>
+        <p className="text-xs mt-1">Add disambiguation rules in the <span className="font-semibold">Rules</span> section to document terms that map to multiple fields.</p>
+      </div>
+    )
+  }
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500">{DEF_AMBIGUITIES.length} documented ambiguities — resolved at query time by the semantic layer</p>
@@ -1985,8 +1469,8 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
 
 // ── Relations Section ─────────────────────────────────────────────────────────
 
-function RelationsSection({ isManufacturing, onNavigate }: {
-  isManufacturing: boolean
+function RelationsSection({ relationsData, onNavigate }: {
+  relationsData: typeof AW_RELATIONS
   onNavigate: (s: SLSection) => void
 }) {
   const [filterSource, setFilterSource] = useState<string>('all')
@@ -1994,12 +1478,13 @@ function RelationsSection({ isManufacturing, onNavigate }: {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
 
-  const totalRelations = AW_RELATIONS.reduce((a, g) => a + g.relations.length, 0)
-  const oneToN = AW_RELATIONS.flatMap(g => g.relations).filter(r => r.cardinality === '1:N').length
-  const nToOne = AW_RELATIONS.flatMap(g => g.relations).filter(r => r.cardinality === 'N:1').length
-  const softCount = AW_RELATIONS.flatMap(g => g.relations).filter(r => 'soft' in r && r.soft).length
+  const totalRelations = relationsData.reduce((a, g) => a + g.relations.length, 0)
+  const oneToN = relationsData.flatMap(g => g.relations).filter(r => r.cardinality === '1:N').length
+  const nToOne = relationsData.flatMap(g => g.relations).filter(r => r.cardinality === 'N:1').length
+  const softCount = relationsData.flatMap(g => g.relations).filter(r => 'soft' in r && (r as { soft?: boolean }).soft).length
+  const sourceKeys = ['all', ...Array.from(new Set(relationsData.map(g => g.sourceKey)))]
 
-  const filtered = AW_RELATIONS
+  const filtered = relationsData
     .filter(g => filterSource === 'all' || g.sourceKey === filterSource)
     .map(g => ({
       ...g,
@@ -2046,7 +1531,7 @@ function RelationsSection({ isManufacturing, onNavigate }: {
           />
         </div>
         <div className="flex items-center gap-1 ml-1">
-          {['all', 'erp', 'crm', 'pim', 'hr'].map(k => (
+          {sourceKeys.map(k => (
             <button key={k} onClick={() => setFilterSource(k)}
               className={`text-[10px] font-semibold px-2.5 py-1 rounded-full transition-colors ${
                 filterSource === k ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -2067,87 +1552,87 @@ function RelationsSection({ isManufacturing, onNavigate }: {
         </div>
       </div>
 
-      {isManufacturing ? (
-        filtered.length === 0 ? (
-          <div className="border border-dashed border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">
-            No relations match the current filters.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filtered.map(group => {
-              const isOpen = collapsed[group.sourceKey] !== true
-              return (
-                <div key={group.source} className={`border ${group.colorBorder} rounded-xl overflow-hidden`}>
-                  {/* Group header — clickable to collapse */}
-                  <button
-                    onClick={() => toggleCollapse(group.sourceKey)}
-                    className={`w-full ${group.colorBg} px-4 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity`}
-                  >
-                    <span className="text-base">{group.icon}</span>
-                    <span className={`text-xs font-semibold ${group.colorText}`}>{group.source}</span>
-                    <span className="ml-1 text-[10px] text-slate-400">
-                      {group.relations.length} relation{group.relations.length !== 1 ? 's' : ''}
-                    </span>
-                    <ChevronDown className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
-                  </button>
+      {filtered.length === 0 ? (
+        <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 space-y-2">
+          {relationsData.length === 0 ? (
+            <>
+              <p className="text-xs text-slate-400">No relations found in the semantic layer yet.</p>
+              <p className="text-[11px] text-slate-400">
+                Build the semantic layer to auto-populate entity relations, or define FK edges in the{' '}
+                <button onClick={() => onNavigate('entities')} className="text-teal-600 hover:underline">Entities</button> section.
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-slate-400">No relations match the current filters.</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filtered.map(group => {
+            const isOpen = collapsed[group.sourceKey] !== true
+            return (
+              <div key={group.source} className={`border ${group.colorBorder} rounded-xl overflow-hidden`}>
+                {/* Group header — clickable to collapse */}
+                <button
+                  onClick={() => toggleCollapse(group.sourceKey)}
+                  className={`w-full ${group.colorBg} px-4 py-3 flex items-center gap-2 hover:opacity-90 transition-opacity`}
+                >
+                  <span className="text-xs font-mono font-bold text-slate-500">{group.icon}</span>
+                  <span className={`text-xs font-semibold ${group.colorText}`}>{group.source}</span>
+                  <span className="ml-1 text-[10px] text-slate-400">
+                    {group.relations.length} relation{group.relations.length !== 1 ? 's' : ''}
+                  </span>
+                  <ChevronDown className={`ml-auto w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                </button>
 
-                  {/* Relations list */}
-                  {isOpen && (
-                    <div className="divide-y divide-slate-100">
-                      {group.relations.map((r, i) => {
-                        const isSoft = 'soft' in r && r.soft === true
-                        return (
-                          <div key={i} className="px-4 py-3.5 bg-white hover:bg-slate-50 transition-colors">
-                            {/* Top row: entity → entity + badges */}
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.from}</span>
-                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
-                                {r.cardinality === '1:N' ? (
-                                  <>
-                                    <span className="text-blue-500">1</span>
-                                    <ArrowRight className="w-3 h-3" />
-                                    <span className="text-blue-500">N</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="text-teal-500">N</span>
-                                    <ArrowRight className="w-3 h-3" />
-                                    <span className="text-teal-500">1</span>
-                                  </>
-                                )}
-                              </div>
-                              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.to}</span>
-                              {isSoft && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium">soft FK</span>
+                {/* Relations list */}
+                {isOpen && (
+                  <div className="divide-y divide-slate-100">
+                    {group.relations.map((r, i) => {
+                      const isSoft = 'soft' in r && (r as { soft?: boolean }).soft === true
+                      return (
+                        <div key={i} className="px-4 py-3.5 bg-white hover:bg-slate-50 transition-colors">
+                          {/* Top row: entity → entity + badges */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.from}</span>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                              {r.cardinality === '1:N' ? (
+                                <>
+                                  <span className="text-blue-500">1</span>
+                                  <ArrowRight className="w-3 h-3" />
+                                  <span className="text-blue-500">N</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-teal-500">N</span>
+                                  <ArrowRight className="w-3 h-3" />
+                                  <span className="text-teal-500">1</span>
+                                </>
                               )}
                             </div>
-                            {/* Bottom row: key + counts + note */}
-                            <div className="mt-1.5 flex items-center gap-3 flex-wrap">
-                              <span className="font-mono text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
-                                via {r.via}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {r.fromRows.toLocaleString('en-US')} → {r.toRows > 0 ? r.toRows.toLocaleString('en-US') : 'n/a'}
-                              </span>
-                              <span className="text-[10px] text-slate-500">{r.note}</span>
-                            </div>
+                            <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.to}</span>
+                            {isSoft && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium">soft FK</span>
+                            )}
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )
-      ) : (
-        <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 space-y-2">
-          <p className="text-xs text-slate-400">No relations defined for this sector yet.</p>
-          <p className="text-[11px] text-slate-400">
-            Relations are inferred from FK edges you define in the{' '}
-            <button onClick={() => onNavigate('entities')} className="text-teal-600 hover:underline">Entities</button> section.
-          </p>
+                          {/* Bottom row: key + counts + note */}
+                          <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+                            <span className="font-mono text-[10px] text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
+                              via {r.via}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {r.fromRows.toLocaleString('en-US')} → {r.toRows > 0 ? r.toRows.toLocaleString('en-US') : 'n/a'}
+                            </span>
+                            <span className="text-[10px] text-slate-500">{r.note}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -2173,6 +1658,9 @@ export default function SemanticLayerView() {
   const [backendHierarchies, setBackendHierarchies] = useState<BackendHierarchy[]>([])
   const [backendSegments, setBackendSegments] = useState<BackendSegment[]>([])
   const [_loadingSemantics, setLoadingSemantics] = useState(false)
+  // Semantic draft (entities, relations, context docs, templates)
+  const [draft, setDraft] = useState<SemanticDraft | null>(null)
+  const [queryTemplates, setQueryTemplates] = useState<QueryTemplate[]>([])
   // localStorage fallback (used only when backend offline)
   const [userMetrics, setUserMetrics] = useState<Metric[]>(() => loadMetrics(sectorId))
   const [userHierarchies, setUserHierarchies] = useState<DimHierarchy[]>(() => loadHierarchies(sectorId))
@@ -2214,16 +1702,20 @@ export default function SemanticLayerView() {
       const ok = await checkBackend()
       setBackendOnline(ok)
       if (!ok) return
-      const [srcs, mets, hiers, segs] = await Promise.all([
+      const [srcs, mets, hiers, segs, draftData, templates] = await Promise.all([
         semanticSources().catch(() => []),
         getMetrics(sectorId).catch(() => []),
         getHierarchies(sectorId).catch(() => []),
         getSegments(sectorId).catch(() => []),
+        getDraft().catch(() => null),
+        listQueryTemplates().catch(() => []),
       ])
       setBackendSources(srcs)
       setBackendMetrics(mets)
       setBackendHierarchies(hiers)
       setBackendSegments(segs)
+      if (draftData) setDraft(draftData)
+      setQueryTemplates(templates)
     } catch {
       setBackendOnline(false)
     } finally {
@@ -2233,18 +1725,34 @@ export default function SemanticLayerView() {
 
   useEffect(() => { loadFromBackend() }, [loadFromBackend])
 
-  const isManufacturing = sectorId === 'manufacturing'
+  // Query examples derived from live templates
+  const pgExamples = queryTemplates.slice(0, 8).map(t => ({ id: t.id, question: t.name }))
   const baseNodeIds = new Set(SECTORS[sectorId].ontology.nodes.map(n => n.id))
   const nodeCount = ontology.nodes.length
   const edgeCount = ontology.edges.length
   const userBridgesCount = loadExtension(sectorId).edges.length
   const userRulesCount = loadUserRules(sectorId).length
-  const totalRows = isManufacturing ? 193062 : ontology.nodes.reduce((sum, n) => sum + (n.data.row_count ?? 0), 0)
+  // Use draft total rows if available; otherwise count from ontology nodes
+  const draftTotalRows = draft ? draft.entities.reduce((s, e) => s + (e.record_count ?? 0), 0) : 0
+  const totalRows = draftTotalRows > 0 ? draftTotalRows : ontology.nodes.reduce((sum, n) => sum + (n.data.row_count ?? 0), 0)
   const entityOptions = ontology.nodes.map(n => n.data.label)
 
-  const sourcesCount = isManufacturing ? 4 : userSources.length
-  const bridgesCount = isManufacturing ? 3 + userBridgesCount : userBridgesCount
-  const rulesCount = isManufacturing ? 3 + userRulesCount : userRulesCount
+  // Source/bridge/rule counts — prefer live backend/draft counts
+  const sourcesCount = backendSources.length > 0 ? backendSources.length : userSources.length
+  const bridgesCount = userBridgesCount
+  const rulesCount = userRulesCount
+
+  // Relations from draft — used by RelationsSection
+  const liveRelationGroups = useMemo(
+    () => buildRelationGroups(draft?.relations ?? [], draft?.entities ?? []),
+    [draft],
+  )
+
+  // Semantic definitions seeded from draft entities
+  const initialDefs = useMemo(
+    () => buildInitialDefs(draft?.entities ?? []),
+    [draft],
+  )
 
   const allMappings = useMemo(() => generateMappings(ontology.nodes), [ontology.nodes])
   const filteredMappings = useMemo(() => {
@@ -2261,18 +1769,18 @@ export default function SemanticLayerView() {
   function handleMappingSave(key: string, value: string) { setSavedEdits(p => ({ ...p, [key]: value })); setEditCount(c => c + 1) }
 
   const progressItems = [
-    { label: 'Sources defined',    done: sourcesCount > 0,              section: 'sources'   as SLSection },
-    { label: 'Entities mapped',    done: nodeCount > 0,                  section: 'entities'  as SLSection },
-    { label: 'Bridges configured', done: bridgesCount > 0,              section: 'bridges'   as SLSection },
-    { label: 'Rules defined',      done: rulesCount > 0 || isManufacturing, section: 'rules' as SLSection },
+    { label: 'Sources defined',    done: sourcesCount > 0,  section: 'sources'   as SLSection },
+    { label: 'Entities mapped',    done: nodeCount > 0,      section: 'entities'  as SLSection },
+    { label: 'Bridges configured', done: bridgesCount > 0,  section: 'bridges'   as SLSection },
+    { label: 'Rules defined',      done: rulesCount > 0,    section: 'rules'     as SLSection },
   ]
   const progressPct = Math.round((progressItems.filter(p => p.done).length / progressItems.length) * 100)
 
-  // When backend is online, use backend data; otherwise fall back to hardcoded + localStorage
+  // When backend is online, use backend data; otherwise fall back to localStorage
   const useBackendData = backendOnline === true
-  const builtinMetrics = useBackendData ? [] : (isManufacturing ? AW_METRICS : [])
-  const builtinHierarchies = useBackendData ? [] : (isManufacturing ? AW_HIERARCHIES : [])
-  const builtinSegments = useBackendData ? [] : (isManufacturing ? AW_SEGMENTS : [])
+  const builtinMetrics: Metric[] = []
+  const builtinHierarchies: DimHierarchy[] = []
+  const builtinSegments: Segment[] = []
   // Backend data is already split into builtin+user on the server; show as one unified list
   const allMetricsList = useBackendData ? backendMetrics : [...builtinMetrics, ...userMetrics]
   const allHierarchiesList = useBackendData ? backendHierarchies : [...builtinHierarchies, ...userHierarchies]
@@ -2285,7 +1793,7 @@ export default function SemanticLayerView() {
     if (id === 'sources')     return sourcesCount
     if (id === 'entities')    return nodeCount
     if (id === 'bridges')     return bridgesCount
-    if (id === 'relations')   return isManufacturing ? AW_RELATIONS.reduce((acc, g) => acc + g.relations.length, 0) : 0
+    if (id === 'relations')   return liveRelationGroups.reduce((acc, g) => acc + g.relations.length, 0)
     if (id === 'rules')       return rulesCount
     if (id === 'definitions') return allMappings.length
     if (id === 'metrics')     return metricsCount
@@ -2362,9 +1870,10 @@ export default function SemanticLayerView() {
     }
   }
 
-  const allMetricsData = [...builtinMetrics, ...userMetrics]
-  const allHierarchiesData = [...builtinHierarchies, ...userHierarchies]
-  const allSegmentsData = [...builtinSegments, ...userSegments]
+  // Use live backend lists for export/search (allMetricsList/allHierarchiesList/allSegmentsList already defined)
+  const allMetricsData = allMetricsList
+  const allHierarchiesData = allHierarchiesList
+  const allSegmentsData = allSegmentsList
 
   const searchIndex = useMemo(
     () => buildSearchIndex(ontology.nodes, allMetricsData, allHierarchiesData, allSegmentsData),
@@ -2414,15 +1923,12 @@ export default function SemanticLayerView() {
         setPgRunning(false)
       }
     } else {
+      // Offline mode: no live playground available
       setTimeout(() => {
-        if (isManufacturing) {
-          const match = resolveQuery(pgQuery)
-          if (match) { setPgResult(match) } else { setPgNoMatch(true) }
-        } else {
-          setPgNoMatch(true)
-        }
+        const match = resolveQuery(pgQuery)
+        if (match) { setPgResult(match) } else { setPgNoMatch(true) }
         setPgRunning(false)
-      }, 700)
+      }, 300)
     }
   }
 
@@ -2431,12 +1937,9 @@ export default function SemanticLayerView() {
       semantic_layer: {
         version: 1,
         sector: sector.name,
-        sources: isManufacturing ? [
-          { id: 'erp', name: 'ERP — OrionSales', type: 'PostgreSQL' },
-          { id: 'crm', name: 'CRM — ClientHub',  type: 'SQLite' },
-          { id: 'hr',  name: 'HR CSV',           type: 'CSV' },
-          { id: 'pim', name: 'PIM JSON',         type: 'JSON' },
-        ] : userSources.map(s => ({ id: s.id, name: s.name, type: s.type })),
+        sources: backendSources.length > 0
+          ? backendSources.map(s => ({ id: s.id, name: s.name, type: s.source_type }))
+          : userSources.map(s => ({ id: s.id, name: s.name, type: s.type })),
         entities: ontology.nodes.map(n => ({ id: n.id, label: n.data.label })),
         metrics: allMetricsData.map(m => ({
           id: m.id, name: m.name, type: m.type, entity: m.entity,
@@ -2625,8 +2128,8 @@ export default function SemanticLayerView() {
             <div className="grid grid-cols-4 gap-4">
               <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
               <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
-              <StatCard label="KG Nodes"            value={isManufacturing ? '193,062' : totalRows.toLocaleString()} sub="entity instances" accent />
-              <StatCard label="KG Edges"            value={isManufacturing ? '313,193' : (edgeCount * 8).toLocaleString()} sub="semantic relations" accent />
+              <StatCard label="KG Nodes"            value={totalRows.toLocaleString()} sub="entity instances" accent />
+              <StatCard label="KG Edges"            value={(edgeCount * 8).toLocaleString()} sub="semantic relations" accent />
             </div>
 
             {/* Completeness score */}
@@ -2657,36 +2160,31 @@ export default function SemanticLayerView() {
               </div>
             </div>
 
-            {/* Quality summary */}
-            {isManufacturing && (
+            {/* Live source freshness from backend */}
+            {backendSources.length > 0 && (
               <div className="grid grid-cols-4 gap-3">
-                {Object.entries(AW_SOURCE_FRESHNESS).map(([, f]) => (
-                  <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                {backendSources.map(src => (
+                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex items-start justify-between mb-2">
-                      <p className="text-xs font-bold text-slate-800">{f.label}</p>
-                      <FreshnessBadge status={f.status} lastSync={f.lastSync} sla={f.sla} />
+                      <p className="text-xs font-bold text-slate-800">{src.name}</p>
+                      <FreshnessBadge status={src.freshness_status} lastSync={src.loaded_at ?? '—'} sla="Live" />
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
                         <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${f.quality >= 95 ? 'bg-teal-400' : f.quality >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${f.quality}%` }} />
+                          <div className={`h-full rounded-full ${src.quality_score >= 95 ? 'bg-teal-400' : src.quality_score >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${src.quality_score}%` }} />
                         </div>
-                        <span className="text-[10px] font-bold text-slate-600">{f.quality}%</span>
+                        <span className="text-[10px] font-bold text-slate-600">{src.quality_score}%</span>
                       </div>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${f.quality >= 95 ? 'bg-teal-400' : f.quality >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${f.quality}%` }} />
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-600">{f.quality}% quality</span>
-                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">{src.total_rows.toLocaleString()} rows · {src.source_type}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Non-manufacturing: setup guide */}
-            {!isManufacturing && (
+            {/* Setup guide (always shown when no live data yet) */}
+            {sourcesCount === 0 && (
               <div className="bg-gradient-to-br from-teal-50 to-slate-50 border border-teal-200 rounded-2xl p-6">
                 <div className="flex items-center gap-2 mb-1">
                   <Zap className="w-4 h-4 text-teal-600" />
@@ -2726,47 +2224,39 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {/* Manufacturing: data quality */}
-            {isManufacturing && (
-              <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-slate-400" /> Data Quality Issues
-                </h3>
-                <div className="space-y-2">
-                  {AW_QUALITY_ISSUES.map((issue, i) => {
-                    const isWarn = issue.severity === 'warning'
-                    return (
-                      <div key={i} className={`border rounded-xl p-4 ${isWarn ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
-                        <div className="flex items-start gap-3">
-                          {isWarn ? <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" /> : <Info className="w-4 h-4 text-sky-500 mt-0.5 flex-shrink-0" />}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <span className="text-xs font-semibold text-slate-700">{issue.entity}</span>
-                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${isWarn ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>{issue.severity}</span>
-                            </div>
-                            <p className="text-sm text-slate-700">{issue.issue}</p>
-                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3 text-teal-500 flex-shrink-0" />{issue.resolution}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Manufacturing: query examples */}
-            {isManufacturing && (
+            {/* Query template examples from the semantic layer */}
+            {queryTemplates.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-slate-400" /> Cross-source Query Examples
+                  <FileCode className="w-4 h-4 text-slate-400" /> Query Templates
                   <span className="text-xs text-slate-400 font-normal">— click "Try" to run in Query AI</span>
                 </h3>
-                <p className="text-xs text-slate-400 mb-3">Full resolution path: natural language → entities → bridges → SQL.</p>
-                <div className="space-y-3">
-                  {AW_QUERY_EXAMPLES.map((ex, i) => <QueryExampleCard key={i} ex={ex} />)}
+                <p className="text-xs text-slate-400 mb-3">Saved query templates from the semantic layer. Use these as starting points.</p>
+                <div className="space-y-2">
+                  {queryTemplates.slice(0, 6).map(t => (
+                    <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900">{t.name}</p>
+                          {t.description && <p className="text-xs text-slate-500 mt-0.5">{t.description}</p>}
+                          {t.keywords.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {t.keywords.map(k => (
+                                <span key={k} className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">#{k}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => tryInQueryAI(t.name)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors flex-shrink-0">
+                          <Play className="w-3 h-3" />Try
+                        </button>
+                      </div>
+                      {t.sql_query && (
+                        <pre className="mt-2 text-[10px] font-mono bg-slate-900 text-teal-300 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre leading-relaxed">{t.sql_query.slice(0, 300)}{t.sql_query.length > 300 ? '…' : ''}</pre>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -2796,13 +2286,13 @@ export default function SemanticLayerView() {
                 value={pgQuery}
                 onChange={e => setPgQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && runPlayground()}
-                placeholder={isManufacturing
-                  ? 'e.g. "Revenue by territory last quarter" or "Top B2B customers"'
-                  : 'Connect sources and define metrics first to use the playground'}
+                placeholder={useBackendData
+                  ? 'Ask a question about your data…'
+                  : 'Connect the backend to use the live playground'}
                 className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
-                disabled={!isManufacturing}
+                disabled={!useBackendData}
               />
-              <button onClick={runPlayground} disabled={pgRunning || !isManufacturing}
+              <button onClick={runPlayground} disabled={pgRunning || !useBackendData}
                 className="px-5 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
                 {pgRunning
                   ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -2812,11 +2302,11 @@ export default function SemanticLayerView() {
             </div>
 
             {/* Quick examples */}
-            {!pgResult && !pgRunning && isManufacturing && (
+            {!pgResult && !pgRunning && pgExamples.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Try an example</p>
                 <div className="flex flex-wrap gap-2">
-                  {AW_PLAYGROUND.map(s => (
+                  {pgExamples.map(s => (
                     <button key={s.id}
                       onClick={() => { setPgQuery(s.question); setPgResult(null); setPgNoMatch(false) }}
                       className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1.5 hover:bg-teal-100 transition-colors font-medium">
@@ -2936,11 +2426,11 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {!isManufacturing && (
+            {!useBackendData && (
               <div className="text-center py-12 text-slate-400">
                 <Play className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-semibold">No semantic layer to query yet</p>
-                <p className="text-xs mt-1">Connect sources, model entities, and define metrics first.</p>
+                <p className="text-sm font-semibold">Backend not connected</p>
+                <p className="text-xs mt-1">Connect to the backend to use the live query playground.</p>
               </div>
             )}
           </div>
@@ -2950,15 +2440,14 @@ export default function SemanticLayerView() {
         {section === 'sources' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Database} title="Data Sources"
-              desc={isManufacturing ? '4 heterogeneous systems integrated into the semantic layer' : 'Register every physical data system that feeds your semantic layer'}
-              action={!isManufacturing
-                ? <button onClick={() => setShowAddSource(v => !v)}
+              desc="Register every physical data system that feeds your semantic layer"
+              action={
+                <button onClick={() => setShowAddSource(v => !v)}
                     className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
                       showAddSource ? 'bg-slate-200 text-slate-700' : 'bg-teal-600 text-white hover:bg-teal-700'
                     }`}>
                     <Plus className="w-3.5 h-3.5" /> Add source
                   </button>
-                : undefined
               }
             />
 
@@ -2983,12 +2472,7 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {isManufacturing ? (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-                {AW_SOURCES.map(s => <SourceCard key={s.id} source={s} />)}
-              </div>
-            ) : (
-              <div className="space-y-3">
+            <div className="space-y-3">
                 {/* Add form */}
                 {showAddSource && (
                   <div className="bg-teal-50 border border-teal-200 rounded-xl p-5 space-y-4">
@@ -3050,8 +2534,7 @@ export default function SemanticLayerView() {
                     setUserSources(u); saveSources(sectorId, u)
                   }} />
                 ))}
-              </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -3097,19 +2580,8 @@ export default function SemanticLayerView() {
               This enables a single query to pull data from multiple sources without knowing the underlying schema differences.
             </p>
 
-            {/* Built-in bridges (manufacturing) */}
-            {isManufacturing && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in bridges</p>
-                {AW_BRIDGES.map(b => <BridgeCard key={b.id} bridge={b} />)}
-              </div>
-            )}
-
-            {/* User bridges (all sectors) */}
-            <div className={isManufacturing ? 'border-t border-slate-200 pt-5' : ''}>
-              {isManufacturing && (
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Custom bridges</p>
-              )}
+            {/* User bridges */}
+            <div>
               <BridgesBuilder sectorId={sectorId} entityOptions={entityOptions} />
             </div>
           </div>
@@ -3117,7 +2589,7 @@ export default function SemanticLayerView() {
 
         {/* ── RELATIONS ── */}
         {section === 'relations' && (
-          <RelationsSection isManufacturing={isManufacturing} onNavigate={setSection} />
+          <RelationsSection relationsData={liveRelationGroups} onNavigate={setSection} />
         )}
 
         {/* ── RULES ── */}
@@ -3130,21 +2602,8 @@ export default function SemanticLayerView() {
               ask the right question upfront — instead of silently picking the wrong field and returning incorrect results.
             </p>
 
-            {/* Built-in rules (manufacturing) */}
-            {isManufacturing && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in rules</p>
-                {AW_DISAMBIGUATION_RULES.map((rule, i) => <DisambiguationCard key={i} rule={rule} />)}
-              </div>
-            )}
-
             {/* User rules (all sectors) */}
-            <div className={isManufacturing ? 'border-t border-slate-200 pt-5' : ''}>
-              {isManufacturing && (
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Custom rules</p>
-              )}
-              <RulesBuilder sectorId={sectorId} />
-            </div>
+            <RulesBuilder sectorId={sectorId} />
           </div>
         )}
 
@@ -3202,16 +2661,8 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {isManufacturing && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Verified · Built-in</p>
-                {AW_METRICS.map(m => <MetricCard key={m.id} metric={m} />)}
-              </div>
-            )}
-
             {userMetrics.length > 0 && (
-              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
-                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom metrics</p>}
+              <div className="space-y-3">
                 {userMetrics.map(m => <MetricCard key={m.id} metric={m} onDelete={() => removeMetric(m.id)} />)}
               </div>
             )}
@@ -3275,16 +2726,8 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {isManufacturing && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in</p>
-                {AW_HIERARCHIES.map(h => <HierarchyCard key={h.id} h={h} />)}
-              </div>
-            )}
-
             {userHierarchies.length > 0 && (
-              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
-                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom hierarchies</p>}
+              <div className="space-y-3">
                 {userHierarchies.map(h => <HierarchyCard key={h.id} h={h} onDelete={() => removeHierarchy(h.id)} />)}
               </div>
             )}
@@ -3351,16 +2794,8 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {isManufacturing && (
-              <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Built-in</p>
-                {AW_SEGMENTS.map(s => <SegmentCard key={s.id} seg={s} />)}
-              </div>
-            )}
-
             {userSegments.length > 0 && (
-              <div className={isManufacturing ? 'border-t border-slate-200 pt-5 space-y-3' : 'space-y-3'}>
-                {isManufacturing && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Custom segments</p>}
+              <div className="space-y-3">
                 {userSegments.map(s => <SegmentCard key={s.id} seg={s} onDelete={() => removeSegment(s.id)} />)}
               </div>
             )}
@@ -3429,7 +2864,7 @@ export default function SemanticLayerView() {
             )}
 
             {/* Semantic Definitions tab */}
-            {defTab === 'definitions' && <SemanticDefsPanel />}
+            {defTab === 'definitions' && <SemanticDefsPanel initialDefs={initialDefs} />}
 
             {/* Ambiguity Log tab */}
             {defTab === 'ambiguity' && <AmbiguityLogPanel />}

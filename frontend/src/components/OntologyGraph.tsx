@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ReactFlow, Background, Controls, MiniMap, Handle, Position, type NodeProps, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Search, Download, Copy, Check, Table2 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import type { OntologyNodeData, PropertyType } from '../types'
+import { getLiveConfig, type LiveConfig } from '../api/semantic'
+import type { OntologyNodeData, OntologyNode, OntologyEdge, PropertyType } from '../types'
 
 // ── Type color map ───────────────────────────────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -552,6 +553,39 @@ SELECT (COUNT(?x) AS ?total) WHERE {
   )
 }
 
+// ── Live config → OntologyGraphData converter ────────────────────────────────
+function liveConfigToNodes(liveConfig: LiveConfig): OntologyNode[] {
+  return liveConfig.ontology.nodes.map(n => ({
+    id: n.id,
+    type: n.type,
+    position: n.position,
+    data: {
+      label: n.data.label,
+      uri: n.data.uri,
+      db_table: n.data.db_table,
+      row_count: n.data.row_count,
+      properties: n.data.properties.map(p => ({
+        name: p.name,
+        type: (p.type as PropertyType) ?? 'string',
+      })),
+    },
+  }))
+}
+
+function liveConfigToEdges(liveConfig: LiveConfig): OntologyEdge[] {
+  return liveConfig.ontology.edges.map(e => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    label: e.label,
+    type: e.type ?? 'smoothstep',
+    animated: e.animated,
+    style: { stroke: '#0D9488', strokeWidth: 1.5 },
+    labelStyle: { fill: '#0D9488', fontSize: 10 },
+    markerEnd: { type: 'ArrowClosed' },
+  }))
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 type SubTab = 'graph' | 'entities' | 'architecture' | 'code'
 
@@ -561,6 +595,11 @@ export default function OntologyGraph() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('graph')
   const [selectedNode, setSelectedNode] = useState<OntologyNodeData | null>(null)
   const [graphSearch, setGraphSearch] = useState('')
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+  }, [])
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node.data as unknown as OntologyNodeData)
@@ -573,25 +612,34 @@ export default function OntologyGraph() {
     { id: 'code',         label: 'OWL/RDF Code',        icon: Code2 },
   ]
 
+  // Use live config nodes/edges if available, otherwise fall back to local extended ontology
+  const graphNodes: OntologyNode[] = (liveConfig?.ontology.nodes.length ?? 0) > 0
+    ? liveConfigToNodes(liveConfig!)
+    : extendedOntology.nodes
+
+  const graphEdges: OntologyEdge[] = (liveConfig?.ontology.edges.length ?? 0) > 0
+    ? liveConfigToEdges(liveConfig!)
+    : extendedOntology.edges
+
   // Filter graph nodes by search
   const filteredNodes = graphSearch
-    ? extendedOntology.nodes.filter(n =>
+    ? graphNodes.filter(n =>
         n.data.label.toLowerCase().includes(graphSearch.toLowerCase()) ||
         (n.data.db_table ?? '').toLowerCase().includes(graphSearch.toLowerCase())
       )
-    : extendedOntology.nodes
+    : graphNodes
 
   const filteredNodeIds = new Set(filteredNodes.map(n => n.id))
   const filteredEdges = graphSearch
-    ? extendedOntology.edges.filter(e => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
-    : extendedOntology.edges
+    ? graphEdges.filter(e => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
+    : graphEdges
 
   return (
     <div className="flex flex-col h-full">
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Ontology</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.ontologyTitle} · {extendedOntology.nodes.length} classes · {extendedOntology.edges.length} object properties
+          {sector.ontologyTitle} · {graphNodes.length} classes · {graphEdges.length} object properties
           {extendedOntology.nodes.length > sector.ontology.nodes.length && (
             <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
               +{extendedOntology.nodes.length - sector.ontology.nodes.length} from Builder
@@ -640,7 +688,7 @@ export default function OntologyGraph() {
               </div>
               {graphSearch && (
                 <p className="text-center text-xs text-slate-500 mt-1 bg-white/80 rounded px-2">
-                  {filteredNodes.length} of {extendedOntology.nodes.length} entities shown
+                  {filteredNodes.length} of {graphNodes.length} entities shown
                 </p>
               )}
             </div>

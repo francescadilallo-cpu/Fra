@@ -1,5 +1,32 @@
 import type { EngineResult } from './queryEngine'
 
+// ── Dynamic system prompt (fetched from backend, cached per session) ──────────
+
+let _cachedSystemPrompt: string | null = null
+
+async function getSystemPrompt(): Promise<string> {
+  if (_cachedSystemPrompt) return _cachedSystemPrompt
+  try {
+    const res = await fetch('/api/semantic/system-prompt')
+    if (res.ok) {
+      const data = await res.json() as { prompt?: string }
+      if (data.prompt) {
+        _cachedSystemPrompt = data.prompt
+        return _cachedSystemPrompt
+      }
+    }
+  } catch {
+    // backend unavailable — fall through to minimal fallback
+  }
+  // Minimal fallback: no schema knowledge, LLM will say "no data available"
+  _cachedSystemPrompt =
+    'You are a data intelligence assistant. ' +
+    'Respond in the user\'s language. ' +
+    'Output ONLY valid JSON: {"sql":"SELECT 1","rows":[],"summary":"...","interpreted_as":"...","chartData":null,"sources":[],"steps":[],"followUps":[],"isDisambiguation":false}. ' +
+    'If no schema is loaded, set summary to "Data sources not yet loaded." and sql to "SELECT 1 AS not_available".'
+  return _cachedSystemPrompt
+}
+
 // ── Provider definitions ──────────────────────────────────────────────────────
 
 export type LLMProvider = 'anthropic' | 'groq' | 'gemini'
@@ -44,80 +71,6 @@ export const PROVIDERS: ProviderConfig[] = [
   },
 ]
 
-// ── AdventureWorks system prompt ──────────────────────────────────────────────
-
-const AW_SYSTEM_PROMPT = `You are a semantic query engine for AdventureWorks 2014 (4-source data platform).
-Respond in the same language as the question (English or Italian).
-Output ONLY a single valid JSON object — no markdown, no explanation, no text outside the JSON.
-
-## SCHEMA
-
-ERP (PostgreSQL):
-  SalesOrder: orderId, orderDate, shipDate, status, subtotalAmount, taxAmt, freight, totalDue, territoryId, customer_ref, salesPersonId, onlineOrderFlag — 31,465 rows
-  SalesPerson: salesPersonId, salesYTD, salesLastYear, bonus, commissionPct, territoryId — 17 rows
-  SalesOrderLine: orderId, productId, quantity, unitPrice, unitPriceDiscount, lineTotal — 121,317 rows
-  SalesTerritory: territoryId, name, countryRegion, group, salesYTD — 10 rows
-  Customer: customerId, accountNumber, territoryId — 19,185 rows
-CRM (SQLite): accounts: accountId, companyName, creditLimit, country, segment — 19,829 clean (372 dupes with accountId<0 excluded)
-HR (CSV): dipendenti_hr: matricolaDip, cognome, nome, ruolo, stipendio, repartoId — 290 rows
-PIM (JSON): product_catalog: internal_id, name, category, subcategory, listPrice, standardCost, color, size, weight — 504 products
-
-Bridges: ERP.salesPersonId ↔ HR.matricolaDip (100% match); ERP.productId ↔ PIM.internal_id (99.6%); ERP.customer_ref ↔ CRM.accountId (93.2%)
-
-## KEY FACTS — use these exact numbers, never invent others
-
-Revenue 2014: subtotalAmount (net) = $20,127,070 | totalDue (gross) = $22,410,568 | tax+freight = $2,283,498 (11.3%)
-Orders: 31,465 total | avg net $639.65 | Online: 27,659 (87.9%, avg $356) | In-store: 3,806 (12.1%, avg $2,704)
-Customers (deduped CRM): 19,829 | ERP-matched: 18,484 (93.2%) | CRM-only prospects: 1,345
-Quarterly net: Q1 $4,121,485 (7,312 orders) | Q2 $5,182,930 (8,204) | Q3 $5,847,621 (8,847) | Q4 $4,975,034 (7,102)
-Monthly net 2014: Jan $1,247,000 | Feb $1,397,000 | Mar $1,477,485 | Apr $1,617,000 | May $1,726,000 | Jun $1,839,930 | Jul $1,891,000 | Aug $2,007,621 (peak) | Sep $1,949,000 | Oct $1,621,000 | Nov $1,646,034 | Dec $1,708,000 | Total $20,127,070
-YoY: 2011 had 1,607 orders avg $7,868 net $12,646,110 | 2014 had 31,465 orders avg $640 net $20,127,070
-
-Product categories (ERP×PIM): Bikes 97 SKUs $19,791,723 (98.3% of revenue) | Components 189 SKUs $207,915 | Clothing 35 SKUs $75,788 | Accessories 36 SKUs $51,644 | Total $20,127,070
-Top products: Mountain-200 Black,38 $261,436 | Road-150 Red,62 $106,420 | Touring-1000 Blue,60 $32,726
-
-Top salespersons by salesYTD:
-  1. Linda Mitchell #276 — $4,251,368 | bonus $2,000 | comm 1.5%
-  2. Rachel Reiter #289 — $4,116,871 | bonus $5,150 | comm 2.0% ← highest est. total comp
-  3. José Saraiva #275 — $3,763,178 | bonus $4,100 | comm 1.2%
-  4. Lynn Tsoflias #277 — $3,189,418 | bonus $2,500 | comm 1.5%
-  5. Ranjit Vargas #290 — $3,121,616 | bonus $985  | comm 1.6%
-  6. David Campbell #282 — $2,604,540 | bonus $5,000 | comm 1.5%
-  7. Sonia Valdez #281 — $2,458,535 | bonus $3,550 | comm 1.0%
-  8. Jae Pak #279 — $2,315,185 | bonus $6,700 ← highest bonus but ranks 8th by revenue
-
-Territories by salesYTD: Southwest $10,510,853 (8,512 orders) | Northwest $7,887,186 | Canada $6,771,829 | Australia $5,977,814 | UK $5,012,905 | France $4,772,398 | Germany $3,805,202 | Central $3,072,175
-
-## SEMANTIC RULES
-
-- "revenue" / "fatturato" / "ricavi" without qualifier → isDisambiguation: true, explain both subtotalAmount ($20.1M net) and totalDue ($22.4M gross)
-- "subtotal" / "net revenue" / "subtotalAmount" → use $20,127,070, isDisambiguation: false
-- "total due" / "gross" / "billed" → use $22,410,568, isDisambiguation: false
-- Cross-source joins: mention the bridge used in steps
-
-## OUTPUT FORMAT
-
-Return exactly this JSON structure:
-{
-  "sql": "-- brief comment\nSELECT ... FROM ...",
-  "rows": [{"column": "value"}],
-  "summary": "Answer with **bold** key numbers. 1-2 sentences.",
-  "interpreted_as": "Short label e.g. Top salesperson by YTD revenue",
-  "chartData": {"type": "bar", "title": "Chart title", "labels": ["A","B"], "values": [100, 200], "unit": "$"},
-  "sources": [{"id": "erp", "label": "ERP OrionSales", "bg": "bg-blue-100", "text": "text-blue-700"}],
-  "steps": ["① Locate source table", "② Apply filter/join", "③ Return result"],
-  "followUps": ["Related question 1?", "Related question 2?", "Related question 3?"],
-  "isDisambiguation": false
-}
-
-Source badge values (copy exactly):
-  ERP:  {"id":"erp","label":"ERP OrionSales","bg":"bg-blue-100","text":"text-blue-700"}
-  CRM:  {"id":"crm","label":"CRM ClientHub","bg":"bg-violet-100","text":"text-violet-700"}
-  HR:   {"id":"hr","label":"HR CSV","bg":"bg-amber-100","text":"text-amber-700"}
-  PIM:  {"id":"pim","label":"PIM JSON","bg":"bg-teal-100","text":"text-teal-700"}
-  KG:   {"id":"kg","label":"Knowledge Graph","bg":"bg-slate-100","text":"text-slate-600"}
-
-Rules: rows max 10 entries | steps 2-4 items | followUps exactly 3 | include chartData whenever a ranked list or comparison makes sense.`
 
 // ── Parse raw LLM text → EngineResult ─────────────────────────────────────────
 
@@ -159,6 +112,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 // ── Provider-specific callers ──────────────────────────────────────────────────
 
 async function callAnthropic(question: string, apiKey: string): Promise<EngineResult> {
+  const systemPrompt = await getSystemPrompt()
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -170,7 +124,7 @@ async function callAnthropic(question: string, apiKey: string): Promise<EngineRe
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
-      system: AW_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: 'user', content: question }],
     }),
   })
@@ -183,6 +137,7 @@ async function callAnthropic(question: string, apiKey: string): Promise<EngineRe
 }
 
 async function callGroqOnce(question: string, apiKey: string, model: string): Promise<EngineResult> {
+  const systemPrompt = await getSystemPrompt()
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -195,7 +150,7 @@ async function callGroqOnce(question: string, apiKey: string, model: string): Pr
       temperature: 0.1,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: AW_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: question },
       ],
     }),
@@ -235,12 +190,13 @@ async function callGroq(question: string, apiKey: string): Promise<EngineResult>
 }
 
 async function callGemini(question: string, apiKey: string): Promise<EngineResult> {
+  const systemPrompt = await getSystemPrompt()
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: AW_SYSTEM_PROMPT }] },
+      systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ parts: [{ text: question }] }],
       generationConfig: {
         maxOutputTokens: 2048,
