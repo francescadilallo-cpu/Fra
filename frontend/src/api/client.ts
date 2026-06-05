@@ -74,6 +74,7 @@ interface LoginResponse {
   token_type: 'bearer'
   expires_in: number
   role: 'admin' | 'user'
+  mode: 'demo' | 'live'
 }
 
 interface SemanticAskApiResponse {
@@ -88,10 +89,12 @@ interface SemanticAskApiResponse {
   ambiguity_error: boolean
 }
 
-export const login = async (username: string, password: string): Promise<void> => {
+export const login = async (username: string, password: string, mode: 'demo' | 'live' = 'demo'): Promise<void> => {
   if (IS_MOCK) {
     await delay(250)
-    const fake = `mock.${btoa(`${username}:${Date.now()}`)}.token`
+    // Encode mode into a fake JWT-like structure so demoMode.ts can read it
+    const fakePayload = btoa(JSON.stringify({ sub: username, mode, role: 'user' }))
+    const fake = `mock.${fakePayload}.sig`
     setAuthToken(fake)
     return
   }
@@ -99,6 +102,7 @@ export const login = async (username: string, password: string): Promise<void> =
   const form = new URLSearchParams()
   form.set('username', username)
   form.set('password', password)
+  form.set('mode', mode)
 
   const response = await api.post<LoginResponse>('/api/auth/token', form.toString(), {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

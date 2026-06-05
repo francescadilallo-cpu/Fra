@@ -273,13 +273,14 @@ def _authenticate_user(username: str, password: str) -> dict[str, Any] | None:
 
 
 def _create_access_token(
-    subject: str, role: Literal["admin", "user"]
+    subject: str, role: Literal["admin", "user"], mode: Literal["demo", "live"] = "demo"
 ) -> tuple[str, int]:
     secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject,
         "role": role,
+        "mode": mode,
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
         "iss": JWT_ISSUER,
@@ -303,11 +304,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     role: Literal["admin", "user"]
+    mode: Literal["demo", "live"] = "demo"
 
 
 class UserPrincipal(BaseModel):
     username: str
     role: Literal["admin", "user"]
+    mode: Literal["demo", "live"] = "demo"
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
@@ -333,7 +336,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
     if not live_user or live_user.get("disabled"):
         raise credentials_exc
 
-    return UserPrincipal(username=subject, role=role)
+    raw_mode = payload.get("mode", "demo")
+    resolved_mode: Literal["demo", "live"] = "live" if raw_mode == "live" else "demo"
+    return UserPrincipal(username=subject, role=role, mode=resolved_mode)
 
 
 def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincipal]:
@@ -806,6 +811,7 @@ def health() -> dict[str, str]:
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    mode: str = Form("demo"),
 ) -> TokenResponse:
     if not os.getenv(AUTH_USERS_JSON_ENV, ""):
         raise HTTPException(
@@ -821,15 +827,23 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    resolved_mode: Literal["demo", "live"] = "live" if mode == "live" else "demo"
     token, expires_in = _create_access_token(
         subject=user["username"],
         role=user["role"],
+        mode=resolved_mode,
     )
     return TokenResponse(
         access_token=token,
         expires_in=expires_in,
         role=user["role"],
+        mode=resolved_mode,
     )
+
+
+@app.get("/api/auth/me", tags=["auth"])
+def get_me(principal: UserPrincipal = Depends(require_roles("user", "admin"))) -> dict:
+    return {"username": principal.username, "role": principal.role, "mode": principal.mode}
 
 
 @app.get("/api/dashboard", response_model=DashboardData)
