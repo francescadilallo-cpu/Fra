@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SemanticIntelligence — Sales Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #08101f;
+    --bg2:       #0e1a2e;
+    --bg3:       #111e35;
+    --teal:      #00c4b4;
+    --teal-dim:  rgba(0,196,180,.15);
+    --teal-dim2: rgba(0,196,180,.07);
+    --violet:    #7c3aed;
+    --violet-dim:rgba(124,58,237,.15);
+    --gold:      #f59e0b;
+    --red:       #ef4444;
+    --green:     #22c55e;
+    --text:      #e8f0fb;
+    --muted:     #6b82a0;
+    --border:    rgba(255,255,255,.08);
+    --card:      rgba(255,255,255,.04);
+    --card2:     rgba(255,255,255,.06);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── DECK SHELL ─────────────────────────────────────────── */
+  #deck {
+    width: 100vw; height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 56px 72px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity .45s ease, transform .45s ease;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-60px);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+
+  /* ── NAV ────────────────────────────────────────────────── */
+  #nav {
+    position: fixed;
+    bottom: 28px; right: 40px;
+    display: flex; align-items: center; gap: 14px;
+    z-index: 100;
+  }
+  #counter {
+    font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .04em;
+  }
+  .nav-btn {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .2s, border-color .2s;
+  }
+  .nav-btn:hover { background: var(--teal-dim); border-color: var(--teal); }
+
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--teal);
+    transition: width .4s ease;
+    z-index: 200;
+  }
+
+  /* ── COMMON ELEMENTS ────────────────────────────────────── */
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+  }
+  .tag-teal  { background: var(--teal-dim);   color: var(--teal);   border: 1px solid rgba(0,196,180,.3); }
+  .tag-violet{ background: var(--violet-dim); color: #a78bfa;       border: 1px solid rgba(124,58,237,.3);}
+  .tag-gold  { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.3);}
+  .tag-plain { background: var(--card2);       color: var(--muted);  border: 1px solid var(--border); }
+
+  h1 { font-size: clamp(36px,4.5vw,64px); font-weight: 900; line-height: 1.08; letter-spacing: -.03em; }
+  h2 { font-size: clamp(28px,3.2vw,48px); font-weight: 800; line-height: 1.12; letter-spacing: -.025em; }
+  h3 { font-size: clamp(16px,1.8vw,24px); font-weight: 700; }
+  h4 { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+  .accent  { color: var(--teal); }
+  .accent2 { color: #a78bfa; }
+  .accent3 { color: var(--gold); }
+  .muted   { color: var(--muted); }
+
+  .slide-header { margin-bottom: 40px; }
+  .slide-header p.lead {
+    font-size: clamp(14px,1.5vw,18px);
+    color: var(--muted);
+    margin-top: 10px;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  ul.bullets { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  ul.bullets li {
+    display: flex; align-items: flex-start; gap: 12px;
+    font-size: clamp(13px,1.3vw,16px);
+    line-height: 1.55;
+    color: #c8d8ee;
+  }
+  ul.bullets li::before {
+    content: '';
+    min-width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    margin-top: 7px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 28px;
+  }
+  .card-grid { display: grid; gap: 16px; }
+
+  .kv { display: flex; flex-direction: column; gap: 4px; }
+  .kv .val { font-size: clamp(24px,2.5vw,36px); font-weight: 800; color: var(--teal); }
+  .kv .lbl { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .04em; }
+
+  /* ── SLIDE 1 · COVER ────────────────────────────────────── */
+  #s1 { justify-content: center; }
+  #s1 .logo-mark {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-bottom: 40px;
+  }
+  #s1 .logo-mark .dot {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--teal), #008cff);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 900; color: #fff;
+  }
+  #s1 .logo-mark span { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+  #s1 .tagline {
+    font-size: clamp(16px, 1.8vw, 22px);
+    color: var(--muted);
+    margin-top: 20px;
+    margin-bottom: 50px;
+    line-height: 1.6;
+    max-width: 680px;
+    font-weight: 400;
+  }
+  #s1 .pill-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  #s1 .pill {
+    padding: 8px 18px;
+    border-radius: 40px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 13px; font-weight: 500; color: #a0b4cc;
+  }
+  #s1 .bg-glow {
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(0,196,180,.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  #s1 .bg-glow2 {
+    position: absolute;
+    bottom: -300px; left: -100px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(124,58,237,.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── SLIDE 2 · PROBLEMA ─────────────────────────────────── */
+  #s2 .pain-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    flex: 1;
+  }
+  #s2 .pain-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    display: flex; align-items: flex-start; gap: 14px;
+  }
+  #s2 .pain-item .ico {
+    font-size: 28px;
+    min-width: 40px;
+  }
+  #s2 .pain-item .txt strong {
+    display: block; font-size: 14px; font-weight: 700; margin-bottom: 5px;
+  }
+  #s2 .pain-item .txt span { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  #s2 .pain-item:nth-child(5) { grid-column: 1 / -1; }
+
+  /* ── SLIDE 3 · SOLUZIONE ────────────────────────────────── */
+  #s3 .sol-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    flex: 1;
+  }
+  #s3 .sol-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 24px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  #s3 .sol-card .ico { font-size: 32px; }
+  #s3 .sol-card h3 { font-size: 16px; }
+  #s3 .sol-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  #s3 .sol-card.highlight { border-color: rgba(0,196,180,.4); background: var(--teal-dim2); }
+
+  /* ── SLIDE 4 · ARCHITETTURA ─────────────────────────────── */
+  #s4 .arch {
+    flex: 1;
+    display: flex; flex-direction: column; gap: 14px;
+    justify-content: center;
+  }
+  #s4 .layer {
+    border-radius: 14px;
+    padding: 20px 28px;
+    display: flex; align-items: center; gap: 24px;
+    border: 1px solid var(--border);
+  }
+  #s4 .layer.l1 { background: rgba(0,196,180,.08); border-color: rgba(0,196,180,.25); }
+  #s4 .layer.l2 { background: rgba(124,58,237,.08); border-color: rgba(124,58,237,.25); }
+  #s4 .layer.l3 { background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.25); }
+  #s4 .layer .layer-num {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; min-width: 72px;
+  }
+  #s4 .layer.l1 .layer-num { color: var(--teal); }
+  #s4 .layer.l2 .layer-num { color: #a78bfa; }
+  #s4 .layer.l3 .layer-num { color: var(--gold); }
+  #s4 .layer .layer-name { font-size: 18px; font-weight: 800; min-width: 140px; }
+  #s4 .layer .layer-desc {
+    font-size: 13px; color: var(--muted); line-height: 1.6;
+  }
+  #s4 .arrow {
+    text-align: center;
+    font-size: 18px;
+    color: var(--muted);
+    margin: -4px 0;
+  }
+  #s4 .conn-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-top: 28px;
+  }
+  #s4 .conn-badge {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    color: #a0b4cc;
+  }
+
+  /* ── SLIDE 5 · IT: SEMANTIC LAYER ──────────────────────── */
+  #s5 .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    flex: 1;
+  }
+  #s5 .stat-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    margin-top: auto;
+  }
+  #s5 .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+
+  /* ── SLIDE 6 · IT: GOVERNANCE ───────────────────────────── */
+  #s6 .gov-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    flex: 1;
+  }
+  #s6 .gov-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  #s6 .gov-card .ico { font-size: 26px; margin-bottom: 12px; }
+  #s6 .gov-card h3 { font-size: 15px; margin-bottom: 8px; }
+  #s6 .gov-card p  { font-size: 13px; color: var(--muted); line-height: 1.55; }
+  #s6 .gov-card.highlight { border-color: rgba(124,58,237,.4); background: var(--violet-dim); }
+
+  /* ── SLIDE 7 · BUSINESS: NL QUERY ──────────────────────── */
+  #s7 .query-demo {
+    background: #06101e;
+    border: 1px solid rgba(0,196,180,.3);
+    border-radius: 16px;
+    padding: 28px 32px;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    max-height: 360px;
+  }
+  #s7 .q-row { display: flex; gap: 12px; align-items: flex-start; }
+  #s7 .q-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 6px; white-space: nowrap; margin-top: 2px;
+  }
+  #s7 .q-label.user { background: rgba(0,196,180,.2); color: var(--teal); }
+  #s7 .q-label.ai   { background: rgba(124,58,237,.2); color: #a78bfa; }
+  #s7 .q-text { font-size: 13px; line-height: 1.6; color: #c8d8ee; }
+  #s7 .provenance {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+  }
+  #s7 .prov-tag {
+    font-size: 11px; padding: 4px 10px; border-radius: 6px;
+    background: var(--card2); border: 1px solid var(--border); color: var(--muted);
+  }
+  #s7 .features-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-top: 16px;
+  }
+  #s7 .feat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 13px;
+  }
+  #s7 .feat strong { display: block; font-size: 12px; color: var(--teal); margin-bottom: 4px; font-weight: 600; letter-spacing: .04em; }
+
+  /* ── SLIDE 8 · BUSINESS: AGENTI ────────────────────────── */
+  #s8 .agent-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  #s8 .agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+  #s8 .agent-card .a-head {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  }
+  #s8 .agent-card .a-head .ico { font-size: 26px; }
+  #s8 .agent-card .a-head h3 { font-size: 15px; }
+  #s8 .agent-card p  { font-size: 13px; color: var(--muted); line-height: 1.55; margin-bottom: 12px; }
+  #s8 .agent-card .result {
+    font-size: 12px; font-weight: 700;
+    padding: 6px 12px; border-radius: 8px;
+    background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,196,180,.3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  #s8 .workflow {
+    margin-top: 20px;
+    display: flex; align-items: center; gap: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 24px;
+    overflow: hidden;
+  }
+  #s8 .wf-step {
+    flex: 1;
+    text-align: center;
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    color: var(--muted);
+  }
+  #s8 .wf-step.done { color: var(--teal); }
+  #s8 .wf-arrow { color: var(--border); font-size: 14px; flex: 0; padding: 0 4px; }
+
+  /* ── SLIDE 9 · DEMO ─────────────────────────────────────── */
+  #s9 .journey {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  #s9 .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  #s9 .step .s-num {
+    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--teal);
+  }
+  #s9 .step .s-ico { font-size: 24px; }
+  #s9 .step .s-lbl { font-size: 11px; color: var(--muted); font-weight: 500; }
+  #s9 .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  #s9 .m-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  #s9 .m-card .val { font-size: 28px; font-weight: 800; color: var(--teal); }
+  #s9 .m-card .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+  #s9 .pipeline-log {
+    background: #06101e;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 14px;
+  }
+  #s9 .log-line { color: var(--muted); }
+  #s9 .log-line .ok { color: var(--green); }
+  #s9 .log-line .num { color: var(--teal); }
+
+  /* ── SLIDE 10 · SETTORI ─────────────────────────────────── */
+  #s10 .sector-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    flex: 1;
+  }
+  #s10 .sector {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 26px;
+  }
+  #s10 .sector .s-head {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+  }
+  #s10 .sector .s-head .ico { font-size: 28px; }
+  #s10 .sector .s-head h3 { font-size: 16px; }
+  #s10 .sector .sources {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+  }
+  #s10 .sector .src-tag {
+    font-size: 11px; padding: 3px 10px; border-radius: 6px;
+    background: var(--card2); border: 1px solid var(--border); color: var(--muted);
+  }
+  #s10 .sector ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  #s10 .sector ul li { font-size: 13px; color: #b0c4de; }
+  #s10 .sector ul li::before { content: '▸ '; color: var(--teal); font-size: 11px; }
+
+  /* ── SLIDE 11 · PERCHÉ NOI ──────────────────────────────── */
+  #s11 .vs-table {
+    flex: 1;
+    display: flex; flex-direction: column; gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  #s11 .vs-row {
+    display: grid;
+    grid-template-columns: 2fr 2fr 2fr 2fr;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  #s11 .vs-row:last-child { border-bottom: none; }
+  #s11 .vs-cell {
+    padding: 14px 20px;
+    font-size: 13px;
+    border-right: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    line-height: 1.45;
+  }
+  #s11 .vs-cell:last-child { border-right: none; }
+  #s11 .vs-cell.header { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: var(--card2); color: var(--muted); }
+  #s11 .vs-cell.us { background: var(--teal-dim2); }
+  #s11 .vs-cell .chk { color: var(--green); font-size: 16px; }
+  #s11 .vs-cell .cross { color: var(--red); font-size: 16px; }
+  #s11 .vs-cell .part { color: var(--gold); font-size: 14px; }
+  #s11 .bottom-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-top: 20px;
+  }
+  #s11 .bottom-pill {
+    background: var(--card);
+    border: 1px solid rgba(0,196,180,.25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    text-align: center;
+  }
+  #s11 .bottom-pill strong { display: block; color: var(--teal); font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+
+  /* ── SLIDE 12 · CTA ─────────────────────────────────────── */
+  #s12 .cta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 30px;
+  }
+  #s12 .cta-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 30px 26px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  #s12 .cta-card .tier {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 12px; border-radius: 20px; align-self: flex-start;
+  }
+  #s12 .cta-card:nth-child(1) .tier { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,196,180,.3); }
+  #s12 .cta-card:nth-child(2) .tier { background: var(--violet-dim); color: #a78bfa; border: 1px solid rgba(124,58,237,.3); }
+  #s12 .cta-card:nth-child(3) .tier { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.3); }
+  #s12 .cta-card:nth-child(2) { border-color: rgba(124,58,237,.3); background: var(--violet-dim); }
+  #s12 .cta-card h3 { font-size: 18px; }
+  #s12 .cta-card .time { font-size: 13px; color: var(--muted); font-weight: 600; }
+  #s12 .cta-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  #s12 .cta-card ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  #s12 .cta-card ul li { font-size: 13px; color: #b0c4de; }
+  #s12 .cta-card ul li::before { content: '✓ '; color: var(--teal); font-weight: 700; }
+  #s12 .contact-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #s12 .contact-bar span { font-size: 13px; color: var(--muted); }
+  #s12 .contact-bar strong { color: var(--text); }
+
+  /* ── PAGE NUMBER BADGE (SLIDE SPECIFIC) ─────────────────── */
+  .slide-num {
+    position: absolute;
+    top: 28px; right: 40px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── PRINT ──────────────────────────────────────────────── */
+  @media print {
+    html, body { overflow: visible; height: auto; }
+    #deck { width: 100%; height: auto; overflow: visible; }
+    .slide {
+      position: relative; opacity: 1 !important; transform: none !important;
+      pointer-events: all;
+      page-break-after: always;
+      width: 100%; height: 100vh;
+      display: flex !important;
+    }
+    #nav, #progress-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="progress-bar"></div>
+<div id="deck">
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 1 · COVER
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide active" id="s1">
+    <div class="bg-glow"></div>
+    <div class="bg-glow2"></div>
+
+    <div class="logo-mark">
+      <div class="dot">S</div>
+      <span>SemanticIntelligence</span>
+    </div>
+
+    <h1>
+      L'AI che capisce<br>
+      <span class="accent">i tuoi dati aziendali</span>
+    </h1>
+
+    <p class="tagline">
+      Un'unica piattaforma che collega qualunque fonte dati, costruisce un Knowledge Graph aziendale,
+      risponde a domande in linguaggio naturale e fa girare agenti autonomi con piena tracciabilità AI.
+    </p>
+
+    <div class="pill-row">
+      <div class="pill">🧠 Semantic Layer</div>
+      <div class="pill">🕸️ Knowledge Graph</div>
+      <div class="pill">💬 Natural Language Query</div>
+      <div class="pill">🤖 Agenti Autonomi</div>
+      <div class="pill">🛡️ EU AI Act Ready</div>
+      <div class="pill">🏭 Manufacturing &nbsp;·&nbsp; 🛒 Retail &nbsp;·&nbsp; 🏥 Healthcare &nbsp;·&nbsp; 🏦 Finance</div>
+    </div>
+
+    <div class="slide-num">01 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 2 · PROBLEMA
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s2">
+    <div class="slide-header">
+      <div class="tag tag-plain">⚠️ Il Problema</div>
+      <h2>Ogni azienda ha gli stessi dati.<br><span class="accent">Non tutte riescono a usarli.</span></h2>
+    </div>
+
+    <div class="pain-grid">
+      <div class="pain-item">
+        <div class="ico">🗃️</div>
+        <div class="txt">
+          <strong>Silos ovunque</strong>
+          <span>ERP, CRM, HR, PIM parlano lingue diverse. Nessuno li collega davvero. Ogni join è un progetto.</span>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="ico">⏳</div>
+        <div class="txt">
+          <strong>Attesa per i report</strong>
+          <span>Il business aspetta giorni o settimane per una query che attraversa due sistemi.</span>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="ico">💻</div>
+        <div class="txt">
+          <strong>L'IT risponde a domande operative</strong>
+          <span>I data engineer scrivono SQL su richiesta invece di costruire infrastruttura di valore.</span>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="ico">📊</div>
+        <div class="txt">
+          <strong>Excel aggiornato a mano</strong>
+          <span>Le decisioni si basano su export statici, spesso obsoleti. La fonte di verità non esiste.</span>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="ico">🔍</div>
+        <div class="txt">
+          <strong>Compliance senza tracciabilità</strong>
+          <span>GDPR, EU AI Act e audit interni richiedono spiegazione di ogni calcolo AI — impossibile con i tool attuali.</span>
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">02 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 3 · SOLUZIONE
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s3">
+    <div class="slide-header">
+      <div class="tag tag-teal">✦ La Risposta</div>
+      <h2>Un semantic layer che <span class="accent">unifica, capisce e agisce</span></h2>
+      <p class="lead">Non un altro BI tool. Non un'altra pipeline. Una piattaforma che porta intelligenza semantica sopra i dati che hai già.</p>
+    </div>
+
+    <div class="sol-grid">
+      <div class="sol-card highlight">
+        <div class="ico">🔗</div>
+        <h3>Connetti qualsiasi fonte</h3>
+        <p>SAP, Oracle, Salesforce, PostgreSQL, REST API, CSV. 12+ connettori nativi. Schema detection automatica. Nessun ETL custom.</p>
+      </div>
+      <div class="sol-card highlight">
+        <div class="ico">🕸️</div>
+        <h3>Knowledge Graph aziendale</h3>
+        <p>Ontologia OWL/RDF che modella entità, relazioni e regole di identity resolution tra sistemi. Versionabile e interrogabile.</p>
+      </div>
+      <div class="sol-card highlight">
+        <div class="ico">💬</div>
+        <h3>Query in linguaggio naturale</h3>
+        <p>Neuro-simbolico: intent detection deterministico + Claude AI come fallback. SQL sempre templato, mai arbitrario. Zero allucinazioni.</p>
+      </div>
+      <div class="sol-card">
+        <div class="ico">🤖</div>
+        <h3>Agenti autonomi</h3>
+        <p>Monitor, Alert, Reconciler, Validator. Girano sopra il semantic layer con approvazione umana e audit completo prima di ogni azione.</p>
+      </div>
+      <div class="sol-card">
+        <div class="ico">🛡️</div>
+        <h3>Governance & EU AI Act</h3>
+        <p>Audit trail immutabile, RBAC granulare, data sovereignty UE, right-to-explanation su ogni output AI. Compliance by design.</p>
+      </div>
+      <div class="sol-card">
+        <div class="ico">⚡</div>
+        <h3>Multi-settore, multi-tenant</h3>
+        <p>Stessa piattaforma per Manufacturing, Retail, Healthcare, Finance. Ontologia personalizzata per dominio. API-first, nessun lock-in.</p>
+      </div>
+    </div>
+    <div class="slide-num">03 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 4 · ARCHITETTURA
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s4">
+    <div class="slide-header">
+      <div class="tag tag-plain">🏗️ Architettura</div>
+      <h2>3 livelli. Un unico <span class="accent">stack semantico</span>.</h2>
+      <p class="lead">Ogni layer è indipendente, componibile e si integra con lo stack esistente.</p>
+    </div>
+
+    <div class="arch">
+      <div class="layer l3">
+        <div class="layer-num">Livello 3</div>
+        <div class="layer-name" style="color:var(--gold)">Utenti &amp; App</div>
+        <div class="layer-desc">Query in linguaggio naturale &nbsp;·&nbsp; Dashboard KPI &nbsp;·&nbsp; Agenti Autonomi &nbsp;·&nbsp; Audit &amp; Governance &nbsp;·&nbsp; API REST</div>
+      </div>
+      <div class="arrow">↕</div>
+      <div class="layer l2">
+        <div class="layer-num">Livello 2</div>
+        <div class="layer-name" style="color:#a78bfa">Semantica</div>
+        <div class="layer-desc">Ontologia OWL/RDF &nbsp;·&nbsp; Knowledge Graph (NetworkX) &nbsp;·&nbsp; Neuro-symbolic AI &nbsp;·&nbsp; Metadata Catalog &nbsp;·&nbsp; Cache Redis &nbsp;·&nbsp; Identity Resolution</div>
+      </div>
+      <div class="arrow">↕</div>
+      <div class="layer l1">
+        <div class="layer-num">Livello 1</div>
+        <div class="layer-name" style="color:var(--teal)">Dati</div>
+        <div class="layer-desc">PostgreSQL &nbsp;·&nbsp; SQLite &nbsp;·&nbsp; DuckDB &nbsp;·&nbsp; REST API &nbsp;·&nbsp; CSV/JSON &nbsp;·&nbsp; SAP &nbsp;·&nbsp; Oracle &nbsp;·&nbsp; Salesforce &nbsp;·&nbsp; Snowflake</div>
+      </div>
+    </div>
+
+    <div class="conn-row">
+      <span class="conn-badge">FastAPI + Python 3.11</span>
+      <span class="conn-badge">React 18 + TypeScript</span>
+      <span class="conn-badge">rdflib OWL</span>
+      <span class="conn-badge">NetworkX KG</span>
+      <span class="conn-badge">DuckDB</span>
+      <span class="conn-badge">Redis Cache</span>
+      <span class="conn-badge">JWT Auth HS256</span>
+      <span class="conn-badge">Anthropic Claude</span>
+      <span class="conn-badge">SlowAPI Rate Limiting</span>
+    </div>
+    <div class="slide-num">04 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 5 · IT: SEMANTIC LAYER
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s5">
+    <div class="slide-header">
+      <div class="tag tag-teal">💻 Per IT</div>
+      <h2>Semantic Layer &amp; <span class="accent">Knowledge Graph</span></h2>
+      <p class="lead">Date all'IT uno strumento vero, non un'altra pipeline da mantenere a mano.</p>
+    </div>
+
+    <div class="two-col">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <ul class="bullets">
+          <li>Costruisci il modello ontologico aziendale visualmente: entità, relazioni, proprietà con tipi XSD</li>
+          <li>Definisci le regole di <strong>identity resolution</strong> tra sistemi — es. <code style="background:var(--card2);padding:2px 6px;border-radius:4px;font-size:12px">ERP.customer_ref ↔ CRM.accountId</code></li>
+          <li>Il Knowledge Graph si costruisce automaticamente dalla pipeline ETL (Connect → Extract → Map → Enrich → Index)</li>
+          <li>Mappature semantiche versionabili: sinonimi, alias, metriche certificate (fatturato, margine, ROI)</li>
+          <li>Ogni modifica al mapping invalida il cache Redis e aggiorna la lineage — <strong>zero semantic drift</strong></li>
+          <li>Neuro-symbolic intent detection: regole deterministiche + Claude fallback per query ambigue</li>
+          <li>SQL sempre <strong>templato e firmato</strong> — nessuna generazione arbitraria da LLM</li>
+        </ul>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card">
+          <h4 style="margin-bottom:14px">Demo Manufacturing · AdventureWorks</h4>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="kv"><span class="val">193K</span><span class="lbl">Nodi nel KG</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="kv"><span class="val">313K</span><span class="lbl">Archi nel KG</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="kv"><span class="val">8</span><span class="lbl">Entità ontologia</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="kv"><span class="val">47</span><span class="lbl">Definizioni semantiche</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="kv"><span class="val">3</span><span class="lbl">Cross-source bridge</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="kv"><span class="val">12+</span><span class="lbl">Connettori nativi</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="font-size:13px;color:var(--muted);line-height:1.6">
+          <strong style="color:var(--text);display:block;margin-bottom:8px">Entità modellate</strong>
+          Customer · SalesOrder · OrderLineItem · Product · Employee · Quote · QuoteLineItem · Territory
+        </div>
+      </div>
+    </div>
+    <div class="slide-num">05 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 6 · IT: GOVERNANCE
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s6">
+    <div class="slide-header">
+      <div class="tag tag-violet">🛡️ Per IT · Governance</div>
+      <h2>Nessuna black box. <span class="accent2">Ogni decisione tracciata.</span></h2>
+    </div>
+
+    <div class="gov-grid">
+      <div class="gov-card highlight">
+        <div class="ico">📋</div>
+        <h3>Audit Trail Immutabile</h3>
+        <p>Chi ha fatto quale query, quale SQL è stato eseguito, da quali fonti, con quale latenza. Ogni record locked, ogni modifica loggata.</p>
+      </div>
+      <div class="gov-card highlight">
+        <div class="ico">⚖️</div>
+        <h3>EU AI Act Ready</h3>
+        <p>Right-to-explanation su ogni output AI. Data sovereignty UE configurabile. Human-in-the-loop obbligatorio sotto soglia di confidenza (&lt;80%).</p>
+      </div>
+      <div class="gov-card">
+        <div class="ico">🔐</div>
+        <h3>RBAC Granulare</h3>
+        <p>Ruoli user / admin / manager con permessi distinti. Ogni azione ad alto rischio (write-back) richiede approvazione esplicita del manager.</p>
+      </div>
+      <div class="gov-card">
+        <div class="ico">🔒</div>
+        <h3>Security by Design</h3>
+        <p>Rate limiting (60 query/min), blocco SQL injection, keyword filtering (DROP/ALTER/DELETE), blocco tabelle di sistema. JWT HS256.</p>
+      </div>
+      <div class="gov-card">
+        <div class="ico">🔗</div>
+        <h3>Data Lineage End-to-End</h3>
+        <p>Ogni risposta include: tabelle toccate, connettori usati, bridge semantici attraversati, latenza. Tracciabile a ritroso fino alla fonte raw.</p>
+      </div>
+      <div class="gov-card">
+        <div class="ico">🏛️</div>
+        <h3>Connettori Enterprise Certificati</h3>
+        <p>SAP S/4HANA · Oracle ERP · Salesforce · Epic EHR (HL7 FHIR) · Snowflake · Anthropic Claude · PostgreSQL · REST/CSV</p>
+      </div>
+    </div>
+    <div class="slide-num">06 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 7 · BUSINESS: NL QUERY
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s7">
+    <div class="slide-header">
+      <div class="tag tag-gold">💼 Per Business</div>
+      <h2>Chiedi. <span class="accent">Ottieni.</span> Decidi.</h2>
+      <p class="lead">Il business interroga i dati come farebbe con un analista senior — senza SQL, senza attesa.</p>
+    </div>
+
+    <div class="query-demo">
+      <div class="q-row">
+        <span class="q-label user">Utente</span>
+        <span class="q-text">"Chi è il miglior venditore nel Q4 per revenue netto?"</span>
+      </div>
+      <div class="q-row">
+        <span class="q-label ai">SI</span>
+        <span class="q-text"><strong style="color:var(--teal)">Linda Mitchell</strong> — $4.251.368 YTD &nbsp;·&nbsp; +12% vs Q3 &nbsp;·&nbsp; Territorio: Northwest<br>
+        <span style="color:var(--muted);font-size:12px">JOIN automatico ERP.salesperson × ERP.sales_order_header × HR.dipendenti_hr via bridge salesperson_ref ↔ MatricolaDip</span></span>
+      </div>
+      <div class="provenance">
+        <span class="prov-tag">⏱ 145ms</span>
+        <span class="prov-tag">📂 ERP salesperson</span>
+        <span class="prov-tag">📂 ERP sales_order_header</span>
+        <span class="prov-tag">📂 HR dipendenti_hr</span>
+        <span class="prov-tag">🔗 bridge: salesperson_ref ↔ MatricolaDip</span>
+        <span class="prov-tag">✓ intent: ERP_SALES_TOP</span>
+        <span class="prov-tag">SQL disponibile</span>
+      </div>
+    </div>
+
+    <div class="features-row">
+      <div class="feat"><strong>Ambiguità gestita</strong>Se "fatturato" mappa su due metriche, il sistema chiede e documenta la scelta nel semantic layer.</div>
+      <div class="feat"><strong>Cross-source automatico</strong>Join tra ERP, CRM, HR seguono il Knowledge Graph — nessun SQL scritto a mano.</div>
+      <div class="feat"><strong>Provenance sempre</strong>Ogni risposta include SQL, fonti, latenza, lineage, note semantiche. Nessuna black box.</div>
+    </div>
+    <div class="slide-num">07 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 8 · BUSINESS: AGENTI
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s8">
+    <div class="slide-header">
+      <div class="tag tag-teal">🤖 Per Business · Automazione</div>
+      <h2>Non solo risponde. <span class="accent">Agisce.</span> Con supervisione.</h2>
+    </div>
+
+    <div class="agent-grid">
+      <div class="agent-card">
+        <div class="a-head"><span class="ico">📡</span><h3>Monitor Agent</h3></div>
+        <p>Scansione continua di KPI, soglie e anomalie sui dati aziendali. Si attiva su schedule o su evento.</p>
+        <div class="result">▶ Sales Performance Monitor attivo · report YTD inviato</div>
+      </div>
+      <div class="agent-card">
+        <div class="a-head"><span class="ico">🔔</span><h3>Alert Agent</h3></div>
+        <p>Notifica i team quando i dati escono dai parametri semantici definiti nell'ontologia.</p>
+        <div class="result">▶ 3 venditori sotto soglia · alert inviato a manager</div>
+      </div>
+      <div class="agent-card">
+        <div class="a-head"><span class="ico">🔁</span><h3>Reconciler Agent</h3></div>
+        <p>Deduplica account CRM, valida bridge ERP↔CRM, sana inconsistenze attraverso le fonti.</p>
+        <div class="result">▶ 372 account rimossi · 18.484/19.829 customer matched</div>
+      </div>
+      <div class="agent-card">
+        <div class="a-head"><span class="ico">✅</span><h3>Validator Agent</h3></div>
+        <p>Verifica integrità referenziale, vincoli semantici, cardinalità e ownership delle entità ontologiche.</p>
+        <div class="result">▶ Bridge ERP↔CRM validato · accuracy 99.7%</div>
+      </div>
+    </div>
+
+    <div class="workflow">
+      <div class="wf-step done">PROPOSTA</div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step done">VALIDAZIONE<br><span style="font-size:10px;color:var(--muted)">semantic layer</span></div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step done">APPROVAZIONE<br><span style="font-size:10px;color:var(--muted)">manager</span></div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step done">ESECUZIONE</div>
+      <div class="wf-arrow">→</div>
+      <div class="wf-step done">AUDIT LOG<br><span style="font-size:10px;color:var(--muted)">immutabile</span></div>
+    </div>
+    <div class="slide-num">08 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 9 · DEMO ADVENTUREWORKS
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s9">
+    <div class="slide-header">
+      <div class="tag tag-teal">🏭 Demo Live</div>
+      <h2>Manufacturing con <span class="accent">AdventureWorks</span> — pronto oggi</h2>
+    </div>
+
+    <div class="journey">
+      <div class="step"><span class="s-num">01</span><span class="s-ico">🔌</span><span class="s-lbl">Connect<br>3 fonti</span></div>
+      <div class="step"><span class="s-num">02</span><span class="s-ico">🧩</span><span class="s-lbl">Ontologia<br>8 entità</span></div>
+      <div class="step"><span class="s-num">03</span><span class="s-ico">🕸️</span><span class="s-lbl">Knowledge<br>Graph</span></div>
+      <div class="step"><span class="s-num">04</span><span class="s-ico">📖</span><span class="s-lbl">Semantic<br>Layer</span></div>
+      <div class="step"><span class="s-num">05</span><span class="s-ico">💬</span><span class="s-lbl">Query<br>NL</span></div>
+      <div class="step"><span class="s-num">06</span><span class="s-ico">🤖</span><span class="s-lbl">Agenti<br>Autonomi</span></div>
+    </div>
+
+    <div class="metrics-row">
+      <div class="m-card"><div class="val">152K</div><div class="lbl">Righe ERP</div></div>
+      <div class="m-card"><div class="val">59K</div><div class="lbl">Righe CRM</div></div>
+      <div class="m-card"><div class="val">8.8s</div><div class="lbl">Pipeline completa</div></div>
+      <div class="m-card"><div class="val">145ms</div><div class="lbl">Query NL avg</div></div>
+    </div>
+
+    <div class="pipeline-log">
+      <div class="log-line"><span class="ok">✓</span> [CONNECT] PostgreSQL ERP — connected in <span class="num">18ms</span></div>
+      <div class="log-line"><span class="ok">✓</span> [EXTRACT] ERP · <span class="num">152.825</span> righe estratte · SQLite loaded in <span class="num">42ms</span></div>
+      <div class="log-line"><span class="ok">✓</span> [MAP] Identity resolution: <span class="num">18.484 / 19.829</span> customer matched tra ERP ↔ CRM</div>
+      <div class="log-line"><span class="ok">✓</span> [ENRICH] <span class="num">372</span> account CRM deduplicati · <span class="num">2</span> ambiguità semantiche documentate</div>
+      <div class="log-line"><span class="ok">✓</span> [INDEX] DuckDB materialized · KG: <span class="num">193.062</span> nodi · <span class="num">313.218</span> archi in <span class="num">2.1s</span></div>
+    </div>
+    <div class="slide-num">09 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 10 · SETTORI
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s10">
+    <div class="slide-header">
+      <div class="tag tag-plain">🌐 Verticali</div>
+      <h2>Una piattaforma. <span class="accent">Quattro settori.</span> Stesso motore semantico.</h2>
+    </div>
+
+    <div class="sector-grid">
+      <div class="sector">
+        <div class="s-head"><span class="ico">🏭</span><h3>Manufacturing</h3></div>
+        <div class="sources">
+          <span class="src-tag">ERP</span><span class="src-tag">CRM</span><span class="src-tag">HR</span><span class="src-tag">PIM</span><span class="src-tag">MES</span>
+        </div>
+        <ul>
+          <li>Sales performance cross-source (ERP × HR)</li>
+          <li>Deduplication CRM &amp; bridge validation</li>
+          <li>Supply chain visibility &amp; anomaly detection</li>
+          <li><em style="color:var(--teal)">Demo disponibile oggi con AdventureWorks</em></li>
+        </ul>
+      </div>
+      <div class="sector">
+        <div class="s-head"><span class="ico">🛒</span><h3>Retail</h3></div>
+        <div class="sources">
+          <span class="src-tag">POS</span><span class="src-tag">eCommerce</span><span class="src-tag">Inventory</span><span class="src-tag">CRM</span><span class="src-tag">Workforce</span>
+        </div>
+        <ul>
+          <li>Customer 360 unificato da tutti i touchpoint</li>
+          <li>Inventory anomaly &amp; stockout prediction</li>
+          <li>Promo effectiveness cross-canale</li>
+          <li>Workforce scheduling ottimizzato per vendite</li>
+        </ul>
+      </div>
+      <div class="sector">
+        <div class="s-head"><span class="ico">🏥</span><h3>Healthcare</h3></div>
+        <div class="sources">
+          <span class="src-tag">EHR Epic</span><span class="src-tag">HL7 FHIR</span><span class="src-tag">Claims</span><span class="src-tag">Lab</span><span class="src-tag">Scheduling</span>
+        </div>
+        <ul>
+          <li>Patient pathway tracking cross-sistema</li>
+          <li>Clinical KPI &amp; PDTA compliance</li>
+          <li>Claims reconciliation &amp; billing anomaly</li>
+          <li>Regulatory reporting automatizzato</li>
+        </ul>
+      </div>
+      <div class="sector">
+        <div class="s-head"><span class="ico">🏦</span><h3>Finance</h3></div>
+        <div class="sources">
+          <span class="src-tag">Core Banking</span><span class="src-tag">Risk</span><span class="src-tag">AML</span><span class="src-tag">KYC</span><span class="src-tag">Loan</span>
+        </div>
+        <ul>
+          <li>Fraud detection su dati KYC × transazionale</li>
+          <li>AML pattern recognition con audit trail AI</li>
+          <li>Regulatory reporting (EBA, Banca d'Italia)</li>
+          <li>Loan performance &amp; risk cross-portfolio</li>
+        </ul>
+      </div>
+    </div>
+    <div class="slide-num">10 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 11 · PERCHÉ NOI
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s11">
+    <div class="slide-header">
+      <div class="tag tag-teal">🏆 Differenziatori</div>
+      <h2>Perché <span class="accent">SemanticIntelligence</span></h2>
+    </div>
+
+    <div class="vs-table">
+      <div class="vs-row">
+        <div class="vs-cell header">Capacità</div>
+        <div class="vs-cell header us">SemanticIntelligence</div>
+        <div class="vs-cell header">BI Tradizionale</div>
+        <div class="vs-cell header">GPT Generico</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">Query linguaggio naturale</div>
+        <div class="vs-cell us"><span class="chk">✓</span> Neuro-simbolico nativo</div>
+        <div class="vs-cell"><span class="cross">✗</span> Richiede SQL</div>
+        <div class="vs-cell"><span class="part">◐</span> Genera SQL arbitrario</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">Cross-source join automatici</div>
+        <div class="vs-cell us"><span class="chk">✓</span> Via Knowledge Graph</div>
+        <div class="vs-cell"><span class="cross">✗</span> Manuali, costosi</div>
+        <div class="vs-cell"><span class="cross">✗</span> Nessuna ontologia</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">Audit trail AI completo</div>
+        <div class="vs-cell us"><span class="chk">✓</span> EU AI Act ready</div>
+        <div class="vs-cell"><span class="cross">✗</span> Non applicabile</div>
+        <div class="vs-cell"><span class="cross">✗</span> Nessuna tracciabilità</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">Agenti autonomi su dati</div>
+        <div class="vs-cell us"><span class="chk">✓</span> Monitor/Alert/Reconciler</div>
+        <div class="vs-cell"><span class="cross">✗</span> Solo dashboard statiche</div>
+        <div class="vs-cell"><span class="part">◐</span> Senza governance</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">SQL deterministico (no hallucination)</div>
+        <div class="vs-cell us"><span class="chk">✓</span> Template firmati</div>
+        <div class="vs-cell"><span class="chk">✓</span> SQL diretto</div>
+        <div class="vs-cell"><span class="cross">✗</span> Output non verificabile</div>
+      </div>
+      <div class="vs-row">
+        <div class="vs-cell">Zero vendor lock-in</div>
+        <div class="vs-cell us"><span class="chk">✓</span> Qualsiasi DB, API-first</div>
+        <div class="vs-cell"><span class="cross">✗</span> Spesso proprietario</div>
+        <div class="vs-cell"><span class="part">◐</span> Dipende dall'API</div>
+      </div>
+    </div>
+
+    <div class="bottom-row">
+      <div class="bottom-pill"><strong>1 giorno</strong>Demo live sui tuoi use case</div>
+      <div class="bottom-pill"><strong>2 settimane</strong>POC su dati cliente reali</div>
+      <div class="bottom-pill"><strong>60 giorni</strong>In produzione con agenti attivi</div>
+    </div>
+    <div class="slide-num">11 / 12</div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════
+       SLIDE 12 · CTA
+  ══════════════════════════════════════════════════════ -->
+  <section class="slide" id="s12">
+    <div class="slide-header">
+      <div class="tag tag-teal">🚀 Prossimi Passi</div>
+      <h2>Tre modi per <span class="accent">partire subito</span></h2>
+    </div>
+
+    <div class="cta-grid">
+      <div class="cta-card">
+        <div class="tier">Demo Live</div>
+        <h3>Vedi il prodotto</h3>
+        <div class="time">⏱ 45 minuti</div>
+        <p>Sessione personalizzata sul tuo settore. Mostriamo AdventureWorks o costruiamo uno scenario ad hoc.</p>
+        <ul>
+          <li>Manufacturing / Retail / Healthcare / Finance</li>
+          <li>Domande reali del tuo business</li>
+          <li>Architettura tecnica nel dettaglio</li>
+        </ul>
+      </div>
+      <div class="cta-card">
+        <div class="tier">POC</div>
+        <h3>Prova sui tuoi dati</h3>
+        <div class="time">⏱ 2 settimane</div>
+        <p>Connettiamo una fonte reale, costruiamo l'ontologia, eseguiamo 10 query di business. Risultati misurabili.</p>
+        <ul>
+          <li>1 fonte dati cliente (DB o API)</li>
+          <li>Ontologia base del dominio</li>
+          <li>Report di valore con lineage</li>
+        </ul>
+      </div>
+      <div class="cta-card">
+        <div class="tier">Pilot</div>
+        <h3>A valore in produzione</h3>
+        <div class="time">⏱ 60 giorni</div>
+        <p>Un dominio chiave completamente operativo: semantic layer, agenti attivi, governance configurata, KPI misurati.</p>
+        <ul>
+          <li>Agenti autonomi configurati</li>
+          <li>RBAC &amp; audit trail live</li>
+          <li>ROI documentato a fine pilot</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="contact-bar">
+      <span>Cosa serve per il POC: <strong>accesso a una fonte dati</strong> · <strong>2–3 domande di business</strong> · <strong>referente IT</strong></span>
+      <span style="color:var(--teal);font-weight:600">demo@semanticintelligence.ai</span>
+    </div>
+    <div class="slide-num">12 / 12</div>
+  </section>
+
+</div><!-- #deck -->
+
+<!-- NAV CONTROLS -->
+<div id="nav">
+  <span id="counter">1 / 12</span>
+  <button class="nav-btn" id="prev" title="Precedente (←)">‹</button>
+  <button class="nav-btn" id="next" title="Successivo (→)">›</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let cur = 0;
+
+  function goTo(n) {
+    if (n < 0 || n >= total) return;
+    slides[cur].classList.remove('active');
+    slides[cur].classList.add('exit');
+    setTimeout(() => slides[cur].classList.remove('exit'), 400);
+    cur = n;
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = `${cur + 1} / ${total}`;
+    document.getElementById('progress-bar').style.width = `${((cur + 1) / total) * 100}%`;
+  }
+
+  document.getElementById('next').addEventListener('click', () => goTo(cur + 1));
+  document.getElementById('prev').addEventListener('click', () => goTo(cur - 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); goTo(cur + 1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                    { e.preventDefault(); goTo(cur - 1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End')  goTo(total - 1);
+  });
+
+  // touch swipe
+  let tx = 0;
+  document.addEventListener('touchstart', e => tx = e.touches[0].clientX, {passive:true});
+  document.addEventListener('touchend',   e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 50) dx < 0 ? goTo(cur + 1) : goTo(cur - 1);
+  }, {passive:true});
+
+  // init progress bar
+  document.getElementById('progress-bar').style.width = `${(1/total)*100}%`;
+</script>
+</body>
+</html>
