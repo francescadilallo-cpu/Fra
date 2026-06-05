@@ -194,37 +194,47 @@ def test_two_threads_see_independent_docs():
 # ── limit bounds ──────────────────────────────────────────────────────────────
 
 
-def test_limit_clamp_applied_in_top_salespersons(monkeypatch):
-    """User-supplied limit=9999 is clamped to ≤50 before SQL execution."""
+def test_limit_clamp_applied_in_template_query(monkeypatch):
+    """Template limit substitution clamps user-supplied limits to 1-100."""
     from app.semantic.layer import Intent
 
     layer = _make_minimal_layer()
+    # Set up a template with a {limit} token
+    layer._templates = [
+        {
+            "id": 1,
+            "intent_type": "tpl_1",
+            "name": "top_sp_template",
+            "sql_query": "SELECT salesperson_ref, SUM(total_due) FROM sales_order_header GROUP BY salesperson_ref LIMIT {limit}",
+            "keywords": ["top venditori"],
+            "is_active": True,
+            "sources": ["erp"],
+        }
+    ]
+    executed_sql: list[str] = []
 
-    executed_limits = []
-
-    def capture_execute(sql, *args, **kwargs):
-        # Extract the LIMIT value from the SQL string
-        import re
-
-        m = re.search(r"LIMIT\s+(\d+)", sql, re.IGNORECASE)
-        if m:
-            executed_limits.append(int(m.group(1)))
+    def capture_execute(sql, params=()):
+        executed_sql.append(sql)
         return []
 
-    layer._erp.execute_query = capture_execute
-    layer._hr_pim.execute_query = MagicMock(return_value=[])
+    layer._mgr = MagicMock()
+    layer._mgr.execute = capture_execute
 
     intent = Intent(
-        intent_type="top_salespersons_by_revenue",
-        limit=9999,
-        raw_question="top salespeople",
+        intent_type="tpl_1",
+        filters={"limit": 9999},
+        raw_question="top venditori",
     )
 
-    layer._q_top_salespersons_by_revenue(intent)
+    layer._execute_template_query(intent)
 
-    assert all(lim <= 50 for lim in executed_limits), (
-        f"Limit not clamped: {executed_limits}"
-    )
+    assert executed_sql, "No SQL executed"
+    # The clamped LIMIT (max 100) should appear in the SQL
+    import re
+    for sql in executed_sql:
+        m = re.search(r"LIMIT\s+(\d+)", sql, re.IGNORECASE)
+        if m:
+            assert int(m.group(1)) <= 100, f"Limit not clamped: {m.group(1)}"
 
 
 # ── auth on semantic CRUD endpoints ──────────────────────────────────────────

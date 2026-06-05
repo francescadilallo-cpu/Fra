@@ -3,7 +3,8 @@ import { GitBranch, MessageSquare, ArrowRight, CheckCircle2, Activity, Brain, Pl
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { useAgentStore, countFindings } from '../data/agentStore'
-import { semanticStatus, type SemanticStatus } from '../api/semantic'
+import { semanticStatus, getLiveConfig, semanticSources, type SemanticStatus, type LiveConfig } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
 
 interface Props { onNavigate: (tab: NavTab) => void }
@@ -62,9 +63,17 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const agentRuns = useAgentStore(sectorId)
   const findings = countFindings(agentRuns)
   const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  const [tableCounts, setTableCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
     semanticStatus().then(setSemStatus).catch(() => {})
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+    semanticSources().then(srcs => {
+      const counts: Record<string, number> = {}
+      srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
+      setTableCounts(counts)
+    }).catch(() => {})
   }, [])
 
   const entityCount = semStatus?.loaded ? semStatus.entities.length : ontology.nodes.length
@@ -104,9 +113,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
               <span className="w-2 h-2 bg-teal-400 rounded-full" />
               <span className="text-xs text-slate-300">Knowledge Graph</span>
               <span className="text-xs font-semibold text-white ml-1">
-                {semStatus?.loaded
+                {kgNodes > 0
                   ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`
-                  : '193,062 nodes · 313,193 edges'}
+                  : 'not yet built'}
               </span>
             </div>
           )}
@@ -114,7 +123,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <span className="w-2 h-2 bg-teal-400 rounded-full" />
             <span className="text-xs text-slate-300">Sources</span>
             <span className="text-xs font-semibold text-white ml-1">
-              {sector.connectors.slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {sector.connectors.length} connected
+              {(liveConfig?.connectors ?? sector.connectors).slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {(liveConfig?.connectors ?? sector.connectors).length} connected
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -154,16 +163,16 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo scenario — AdventureWorks Cycles</p>
               <p className="text-sm text-slate-600 mb-3 leading-relaxed">
-                A bicycle manufacturer with <strong>real data distributed across 4 systems</strong>: ERP (31,465 orders),
-                CRM (20,201 accounts with 372 duplicates), HR in CSV with Italian schema (290 employees), PIM JSON (504 products).
+                A bicycle manufacturer with <strong>real data distributed across 4 systems</strong>: ERP (orders),
+                CRM (accounts with duplicates), HR in CSV with Italian schema (employees), PIM JSON (products).
                 The systems don't share a common language: different keys, different field names, semantic ambiguities (e.g. "fatturato").
               </p>
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { label: 'ERP — OrionSales', value: '31,465 orders',   sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
-                  { label: 'CRM — ClientHub',  value: '19,829 clients',  sub: 'SQLite (372 dedup)',   color: 'text-teal-600 bg-teal-50 border-teal-200' },
-                  { label: 'HR — Employees',   value: '290 employees',   sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
-                  { label: 'PIM — Catalog',    value: '504 products',    sub: 'JSON',                 color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                  { label: 'ERP — OrionSales', value: `${(tableCounts.sales_order_header ?? (IS_DEMO_MODE ? 31465 : 0)).toLocaleString()} orders`,  sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                  { label: 'CRM — ClientHub',  value: `${((tableCounts.account ?? (IS_DEMO_MODE ? 20201 : 0)) - (semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0))).toLocaleString()} clients`, sub: `SQLite (${semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)} dedup)`, color: 'text-teal-600 bg-teal-50 border-teal-200' },
+                  { label: 'HR — Employees',   value: `${(tableCounts.dipendenti_hr ?? (IS_DEMO_MODE ? 290 : 0)).toLocaleString()} employees`, sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
+                  { label: 'PIM — Catalog',    value: `${(tableCounts.product_catalog_pim ?? (IS_DEMO_MODE ? 504 : 0)).toLocaleString()} products`, sub: 'JSON',              color: 'text-amber-600 bg-amber-50 border-amber-200' },
                 ].map(s => (
                   <div key={s.label} className={`border rounded-lg px-3 py-2.5 ${s.color}`}>
                     <p className="text-[11px] font-semibold">{s.label}</p>
@@ -178,7 +187,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Active sector — {sector.name}</p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(sector.connectors.length),  sub: sector.domain },
+                  { label: 'Data Sources',    value: String((liveConfig?.connectors ?? sector.connectors).length),  sub: sector.domain },
                   { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
                   { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
                 ].map(s => (
@@ -262,16 +271,16 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
-              <p className="text-3xl font-extrabold text-red-500 mb-2">{sector.connectors.length}</p>
+              <p className="text-3xl font-extrabold text-red-500 mb-2">{(liveConfig?.connectors ?? sector.connectors).length}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
-              <p className="text-xs text-slate-500">{sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+              <p className="text-xs text-slate-500">{liveConfig?.domain ?? sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
                 <>
-                  <p className="text-3xl font-extrabold text-amber-500 mb-2">372</p>
+                  <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)}</p>
                   <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
-                  <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated by 1.9%.</p>
+                  <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated.</p>
                 </>
               ) : (
                 <>
@@ -312,7 +321,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               {
                 icon: Network, color: 'border-l-teal-500', bg: 'bg-teal-50',
                 title: 'Cross-source Knowledge Graph',
-                desc: 'The 3 semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. 193k nodes, 313k edges, reliable joins.',
+                desc: `The semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. ${kgNodes > 0 ? `${kgNodes.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges` : 'Build the layer to generate the graph'}, reliable joins.`,
               },
               {
                 icon: BookOpen, color: 'border-l-violet-500', bg: 'bg-violet-50',
@@ -322,7 +331,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               {
                 icon: MessageSquare, color: 'border-l-blue-500', bg: 'bg-blue-50',
                 title: 'Natural Language Query AI',
-                desc: '"Who is the top salesperson 2014?" → Linda Mitchell, $4.25M YTD. ERP×HR join resolved automatically — matricolaDip ↔ salesPersonId bridge.',
+                desc: 'Ask any question in natural language — the AI engine translates to SQL, resolves cross-source joins automatically, and disambiguates ambiguous terms.',
               },
               {
                 icon: BotMessageSquare, color: 'border-l-amber-500', bg: 'bg-amber-50',
@@ -350,7 +359,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {[
-              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${sector.connectors.length} connected systems`,
+              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${(liveConfig?.connectors ?? sector.connectors).length} connected systems`,
               ...(isAW ? [`Knowledge Graph with ${kgNodes > 0 ? kgNodes.toLocaleString('en-US') : '193k'} nodes and ${edgeCount > 0 ? edgeCount.toLocaleString('en-US') : '313k'} edges`] : []),
               'Natural language Query AI — ask questions in plain English',
               'Download CSV for each entity from the Data Explorer',

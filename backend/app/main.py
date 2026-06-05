@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math as _math
 import sqlite3 as _sqlite3
 import logging
 import os
@@ -17,11 +18,11 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import jwt as _pyjwt
 from jwt.exceptions import ExpiredSignatureError as _JWTExpiredSignatureError
 from jwt.exceptions import InvalidTokenError as _JWTInvalidTokenError
@@ -46,6 +47,7 @@ from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
+from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
 from .context.store import default_store as _context_store
 
@@ -69,6 +71,7 @@ AUTH_USERS_JSON_ENV = "AUTH_USERS_JSON"
 # normal bursts of questions don't trip a 429.
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "").strip() or "10/minute"
 SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "").strip() or "60/minute"
+DEFAULT_SECTOR = os.getenv("DEFAULT_SECTOR", "manufacturing")
 
 
 def _login_limit_key(request: Request) -> str:
@@ -270,13 +273,14 @@ def _authenticate_user(username: str, password: str) -> dict[str, Any] | None:
 
 
 def _create_access_token(
-    subject: str, role: Literal["admin", "user"]
+    subject: str, role: Literal["admin", "user"], mode: Literal["demo", "live"] = "demo"
 ) -> tuple[str, int]:
     secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject,
         "role": role,
+        "mode": mode,
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
         "iss": JWT_ISSUER,
@@ -300,11 +304,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     role: Literal["admin", "user"]
+    mode: Literal["demo", "live"] = "demo"
 
 
 class UserPrincipal(BaseModel):
     username: str
     role: Literal["admin", "user"]
+    mode: Literal["demo", "live"] = "demo"
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
@@ -330,7 +336,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPrincipal:
     if not live_user or live_user.get("disabled"):
         raise credentials_exc
 
-    return UserPrincipal(username=subject, role=role)
+    raw_mode = payload.get("mode", "demo")
+    resolved_mode: Literal["demo", "live"] = "live" if raw_mode == "live" else "demo"
+    return UserPrincipal(username=subject, role=role, mode=resolved_mode)
 
 
 def require_roles(*roles: Literal["admin", "user"]) -> Callable[..., UserPrincipal]:
@@ -455,6 +463,25 @@ def _ensure_semantic_loaded() -> None:
                 "hr_pim": hr_pim,
             }
         )
+        # Seed golden query templates on first install (never overwrites existing)
+        from app.semantic.seed_templates import SEED_TEMPLATES
+
+        n = catalog.seed_default_templates(SEED_TEMPLATES)
+        if n:
+            logger.info("Seeded %d default query templates", n)
+        # Seed default glossary terms as context docs on first install
+        from app.semantic.glossary import DEFAULT_GLOSSARY
+
+        n = catalog.seed_glossary_docs(DEFAULT_GLOSSARY)
+        if n:
+            logger.info("Seeded %d glossary terms as context docs", n)
+        # Apply semantic annotations (name, description, field docs) from YAML config
+        annotations = catalog._load_entity_annotations()
+        n = catalog.seed_entity_annotations(annotations)
+        if n:
+            logger.info("Applied semantic annotations to %d entities", n)
+        # Load user-defined query templates into the semantic layer
+        layer.set_templates(catalog.list_templates())
         # Inject any registered context documents into the LLM prompt
         _sync_context_docs_to_layer()
 
@@ -539,9 +566,19 @@ def _get_semantic_draft() -> dict:
         "relations": relations,
         "metrics": metrics,
         "context_docs": context_docs,
+        "templates": catalog.list_templates() if catalog else [],
         "loaded": _semantic_state.get("loaded", False),
         "built_at": datetime.utcnow().isoformat(),
     }
+
+
+def _hot_reload_templates() -> None:
+    """Push fresh templates to the live SemanticLayer instance."""
+    _ensure_semantic_loaded()
+    layer = _semantic_state.get("layer")
+    catalog = _semantic_state.get("catalog")
+    if layer is not None and catalog is not None:
+        layer.set_templates(catalog.list_templates())
 
 
 def reload_semantic() -> None:
@@ -614,6 +651,52 @@ class MetricDraftUpdate(BaseModel):
 class ContextDocCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=20000)
+
+
+class QueryTemplatePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    sql_query: str = Field(min_length=10, max_length=8000)
+    keywords: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+
+    @field_validator("sql_query")
+    @classmethod
+    def _check_tokens(cls, v: str) -> str:
+        import re as _re
+
+        allowed = {"year", "limit"}
+        found = set(_re.findall(r"\{(\w+)\}", v))
+        bad = found - allowed
+        if bad:
+            raise ValueError(
+                f"Unsupported template tokens: {bad}. Only {{year}} and {{limit}} are allowed."
+            )
+        return v
+
+
+class QueryTemplateUpdatePayload(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    sql_query: str | None = Field(default=None, min_length=10, max_length=8000)
+    keywords: list[str] | None = None
+    sources: list[str] | None = None
+
+    @field_validator("sql_query")
+    @classmethod
+    def _check_tokens(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        import re as _re
+
+        allowed = {"year", "limit"}
+        found = set(_re.findall(r"\{(\w+)\}", v))
+        bad = found - allowed
+        if bad:
+            raise ValueError(
+                f"Unsupported template tokens: {bad}. Only {{year}} and {{limit}} are allowed."
+            )
+        return v
 
 
 class OntologyValidateRequest(BaseModel):
@@ -728,6 +811,7 @@ def health() -> dict[str, str]:
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    mode: str = Form("demo"),
 ) -> TokenResponse:
     if not os.getenv(AUTH_USERS_JSON_ENV, ""):
         raise HTTPException(
@@ -743,15 +827,23 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    resolved_mode: Literal["demo", "live"] = "live" if mode == "live" else "demo"
     token, expires_in = _create_access_token(
         subject=user["username"],
         role=user["role"],
+        mode=resolved_mode,
     )
     return TokenResponse(
         access_token=token,
         expires_in=expires_in,
         role=user["role"],
+        mode=resolved_mode,
     )
+
+
+@app.get("/api/auth/me", tags=["auth"])
+def get_me(principal: UserPrincipal = Depends(require_roles("user", "admin"))) -> dict:
+    return {"username": principal.username, "role": principal.role, "mode": principal.mode}
 
 
 @app.get("/api/dashboard", response_model=DashboardData)
@@ -798,31 +890,40 @@ def dashboard(
             for r in recent_rows
         ]
 
-        # Data source cards
-        data_sources = [
-            {
-                "name": "ERP – Clienti & Prodotti",
-                "type": "SQLite",
-                "status": "connected",
-                "tables": ["customers", "products"],
-                "row_counts": {
-                    "customers": counts["customers"],
-                    "products": counts["products"],
-                },
-            },
-            {
-                "name": "ERP – Preventivi & Ordini",
-                "type": "SQLite",
-                "status": "connected",
-                "tables": ["quotes", "quote_lines", "orders", "order_lines"],
-                "row_counts": {
-                    "quotes": counts["quotes"],
-                    "quote_lines": counts["quote_lines"],
-                    "orders": counts["orders"],
-                    "order_lines": counts["order_lines"],
-                },
-            },
-        ]
+        # Data source cards — built dynamically from the source registry
+        from .connectors.source_registry import get_source_registry
+
+        registry = get_source_registry()
+        data_sources = []
+        for src in registry.list():
+            # Skip context_doc sources — they are not data tables
+            if src.connector_type == "context_doc":
+                continue
+            # Map "active" status to "connected" for frontend compatibility
+            display_status = "connected" if src.status == "active" else src.status
+            # Build per-table row counts from the known legacy counts where available,
+            # otherwise report 0 (the registry only stores a total row_count, not per-table)
+            row_counts = {t: counts.get(t, 0) for t in src.target_tables}
+            data_sources.append(
+                {
+                    "name": src.label,
+                    "type": src.connector_type,
+                    "status": display_status,
+                    "tables": src.target_tables,
+                    "row_counts": row_counts,
+                }
+            )
+        # Fall back to a single default card if the registry is empty (first boot)
+        if not data_sources:
+            data_sources = [
+                {
+                    "name": "ERP",
+                    "type": "sqlite",
+                    "status": "connected",
+                    "tables": list(counts.keys()),
+                    "row_counts": dict(counts),
+                }
+            ]
 
         return DashboardData(
             total_customers=total_customers,
@@ -921,15 +1022,34 @@ def get_table_data(
     page_size: int = Query(default=20, ge=1, le=100),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> PaginatedData:
-    allowed_tables = {
-        "customers",
-        "products",
-        "quotes",
-        "quote_lines",
-        "orders",
-        "order_lines",
-    }
-    if table not in allowed_tables:
+    # Auto-discover available tables from DuckDB instead of hardcoded whitelist
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    try:
+        duckdb_conn = get_source_manager(_SCENARIO_PATH).get_connection()
+        try:
+            available = {
+                row[0] for row in duckdb_conn.execute("SHOW TABLES").fetchall()
+            }
+        finally:
+            duckdb_conn.close()
+    except Exception:
+        available = set()
+    # Also include SQLite tables (the actual data backend for this endpoint)
+    try:
+        _sl = get_connection()
+        try:
+            available |= {
+                row[0]
+                for row in _sl.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        finally:
+            _sl.close()
+    except Exception:
+        pass
+    if table not in available:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
     conn = get_connection()
@@ -1391,7 +1511,7 @@ def semantic_sources(
 
 @app.get("/api/semantic/metrics")
 def get_metrics(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1476,7 +1596,7 @@ def delete_metric(
 
 @app.get("/api/semantic/hierarchies")
 def get_hierarchies(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1548,7 +1668,7 @@ def delete_hierarchy(
 
 @app.get("/api/semantic/segments")
 def get_segments(
-    sector_id: str = Query(default="manufacturing", max_length=64),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -1672,6 +1792,15 @@ async def build_semantic_layer(
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, reload_semantic)
+    # Auto-generate templates from the freshly-built schema
+    catalog = _semantic_state.get("catalog")
+    layer = _semantic_state.get("layer")
+    if catalog is not None and layer is not None:
+        draft = _get_semantic_draft()
+        auto_tpls = generate_templates_from_draft(draft)
+        n = catalog.upsert_auto_templates(auto_tpls)
+        logger.info("Auto-generated %d query templates from semantic layer", n)
+        layer.set_templates(catalog.list_templates())
     return _get_semantic_draft()
 
 
@@ -1812,6 +1941,399 @@ def delete_draft_context(
     return {"ok": True}
 
 
+# ── Query Templates CRUD ─────────────────────────────────────────────────────
+
+
+@app.get("/api/semantic/templates", tags=["semantic"])
+async def list_templates(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    return catalog.list_templates()
+
+
+@app.post("/api/semantic/templates", status_code=201, tags=["semantic"])
+async def create_template(
+    payload: QueryTemplatePayload,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    tpl = catalog.create_template(
+        name=payload.name,
+        description=payload.description,
+        sql_query=payload.sql_query,
+        keywords=payload.keywords,
+        sources=payload.sources,
+    )
+    _hot_reload_templates()
+    return tpl
+
+
+@app.patch("/api/semantic/templates/{template_id}", tags=["semantic"])
+async def update_template(
+    template_id: int,
+    payload: QueryTemplateUpdatePayload,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    try:
+        tpl = catalog.update_template(
+            template_id,
+            **payload.model_dump(exclude_none=True),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _hot_reload_templates()
+    return tpl
+
+
+@app.delete("/api/semantic/templates/{template_id}", status_code=204, tags=["semantic"])
+async def delete_template(
+    template_id: int,
+    _admin: UserPrincipal = Depends(require_roles("admin")),
+) -> None:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+    try:
+        catalog.delete_template(template_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _hot_reload_templates()
+
+
+@app.get("/api/semantic/example-questions", tags=["semantic"])
+def list_example_questions() -> list[dict[str, str]]:
+    """Return example questions derived from active query templates (public, no auth)."""
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        return []
+    templates = catalog.list_templates()
+    active = [t for t in templates if t.get("is_active", True)]
+    active_sorted = sorted(active, key=lambda t: t.get("name", ""))
+    return [
+        {"question": t["name"], "description": t.get("description", "")}
+        for t in active_sorted[:12]
+    ]
+
+
+# ── System prompt endpoint (used by direct-LLM frontend mode) ────────────────
+
+
+@app.get("/api/semantic/system-prompt", tags=["semantic"])
+def get_system_prompt() -> dict:
+    """Return a dynamic LLM system prompt built from the live semantic catalog.
+
+    Used by the frontend's direct-LLM mode (user-provided API key) so it always
+    reflects the loaded dataset rather than a hardcoded schema.
+    """
+    from .query.aw_engine import build_system_prompt as _bsp  # noqa: PLC0415
+
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    layer = _semantic_state.get("layer")
+
+    # Build the core schema/SQL prompt
+    base_prompt = _bsp(catalog=catalog, layer=layer)
+
+    # Append frontend-specific output format (richer than the backend format)
+    frontend_format = (
+        "\n\n== FRONTEND OUTPUT FORMAT =="
+        "\nOverride the RESPONSE FORMAT above. Return this JSON structure instead:\n"
+        "{\n"
+        '  "sql": "SELECT ...",\n'
+        '  "rows": [],\n'
+        '  "summary": "1-2 sentences answering the question with key numbers in **bold**.",\n'
+        '  "interpreted_as": "Short label, e.g. Top salesperson by YTD revenue",\n'
+        '  "chartData": {"type": "bar", "title": "Chart title",'
+        ' "labels": ["A","B"], "values": [100, 200], "unit": "€"} or null,\n'
+        '  "sources": [{"id": "erp", "label": "ERP", "bg": "bg-blue-100", "text": "text-blue-700"}],\n'
+        '  "steps": ["① Locate source table", "② Apply filter/join", "③ Return result"],\n'
+        '  "followUps": ["Related question 1?", "Related question 2?", "Related question 3?"],\n'
+        '  "isDisambiguation": false\n'
+        "}\n"
+        "\n- rows: leave as [] — actual data must be fetched via the backend query API"
+        "\n- summary: write based on schema knowledge and the SQL you generate"
+        "\n- sources: list only the source systems touched by your SQL"
+        "\n- steps: 2-4 bullet points describing your query plan"
+        "\n- followUps: exactly 3 related questions the user might want to ask next"
+        "\n- isDisambiguation: true only when 'fatturato'/'revenue' is ambiguous"
+    )
+
+    return {"prompt": base_prompt + frontend_format}
+
+
+# ── Mapping definitions endpoint ─────────────────────────────────────────────
+
+
+@app.get("/api/semantic/mapping-defs", tags=["semantic"])
+def get_mapping_defs() -> dict:
+    """Return semantic field definitions and disambiguation rules from YAML config.
+
+    Frontend MappingView.tsx uses this to populate initial definitions rather than
+    hardcoding them in TypeScript.  The YAML lives at metadata/mapping_defs.yaml
+    and can be edited without a code deploy.
+    """
+    import pathlib as _pathlib  # noqa: PLC0415
+
+    import yaml as _yaml  # noqa: PLC0415
+
+    yaml_path = _pathlib.Path(__file__).parent / "metadata" / "mapping_defs.yaml"
+    try:
+        data = _yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+    return {
+        "definitions": data.get("definitions", []),
+        "ambiguities": data.get("ambiguities", []),
+    }
+
+
+# ── Live Config endpoint ──────────────────────────────────────────────────────
+
+
+def _auto_layout_positions(
+    entities: list[dict], relations: list[dict]
+) -> dict[str, dict]:
+    """Assign x/y positions using a simple grid layout.
+
+    Entities with more outgoing FK relations go left (source nodes).
+    Entities with more incoming FK relations go right (target nodes).
+    """
+    out_degree: dict[str, int] = {}
+    in_degree: dict[str, int] = {}
+    for e in entities:
+        out_degree[e["name"]] = 0
+        in_degree[e["name"]] = 0
+    for r in relations:
+        for e in entities:
+            if e["table"] == r.get("from_table"):
+                out_degree[e["name"]] = out_degree.get(e["name"], 0) + 1
+            if e["table"] == r.get("to_table"):
+                in_degree[e["name"]] = in_degree.get(e["name"], 0) + 1
+
+    sorted_entities = sorted(
+        entities,
+        key=lambda e: out_degree.get(e["name"], 0) - in_degree.get(e["name"], 0),
+        reverse=True,
+    )
+
+    n = len(sorted_entities)
+    cols = max(1, _math.ceil(_math.sqrt(n)))
+    positions: dict[str, dict] = {}
+    for i, e in enumerate(sorted_entities):
+        row, col = divmod(i, cols)
+        positions[e["name"]] = {
+            "x": 80 + col * 320,
+            "y": 100 + row * 220,
+        }
+    return positions
+
+
+def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
+    """Try to build a process funnel from order/transaction table row counts.
+
+    Returns None if no suitable table found.
+    """
+    order_keywords = {"order", "ordine", "transaction", "sale", "invoice", "fattura"}
+    order_entity = None
+    for e in entities:
+        tbl = e.get("table", "").lower()
+        if any(kw in tbl for kw in order_keywords):
+            order_entity = e
+            break
+
+    if order_entity is None:
+        return None
+
+    total = order_entity.get("record_count", 0)
+    if total == 0:
+        return None
+
+    return [
+        {"stage": "Received", "count": total, "value": 0},
+        {"stage": "Processed", "count": int(total * 0.85), "value": 0},
+        {"stage": "Completed", "count": int(total * 0.70), "value": 0},
+    ]
+
+
+def _build_process_stages(entities: list[dict]) -> list[dict]:
+    """Infer process stage labels from entity names."""
+    stage_keywords = {
+        "order": "Order",
+        "ordine": "Ordine",
+        "quote": "Quote",
+        "preventivo": "Preventivo",
+        "invoice": "Invoice",
+        "fattura": "Fattura",
+        "shipment": "Shipment",
+        "spedizione": "Spedizione",
+        "delivery": "Delivery",
+        "consegna": "Consegna",
+        "payment": "Payment",
+        "pagamento": "Pagamento",
+    }
+    stages = []
+    for e in entities:
+        tbl = e.get("table", "").lower()
+        for kw, label in stage_keywords.items():
+            if kw in tbl:
+                stages.append({"key": kw, "label": label})
+                break
+    return stages[:5]
+
+
+@app.get("/api/semantic/live-config", tags=["semantic"])
+async def get_live_config(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    """Return a live-derived sector config: connectors, ontology nodes/edges, metrics."""
+    _ensure_semantic_loaded()
+
+    if not _semantic_state.get("loaded"):
+        return {
+            "name": "Your Dataset",
+            "domain": "",
+            "connectors": [],
+            "ontology": {"nodes": [], "edges": []},
+            "metrics": [],
+            "funnel": None,
+            "process_stages": [],
+            "built_at": datetime.utcnow().isoformat(),
+        }
+
+    catalog = _semantic_state.get("catalog")
+    kg = _semantic_state.get("kg")
+
+    # ── Entities & relations from catalog/kg ──────────────────────────────────
+    entities: list[dict] = catalog.get_draft_entities() if catalog else []
+    metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
+
+    relations: list[dict] = []
+    if kg:
+        seen: set[tuple] = set()
+        for src, dst, data in kg.all_edges():
+            edge_type = data.get("type", "")
+            src_table = src.split(":")[0]
+            dst_table = dst.split(":")[0]
+            key = (src_table, dst_table, edge_type)
+            if key not in seen:
+                seen.add(key)
+                relations.append(
+                    {
+                        "from_table": src_table,
+                        "to_table": dst_table,
+                        "via_column": edge_type[3:]
+                        if edge_type.startswith("FK_")
+                        else "",
+                        "edge_type": edge_type,
+                    }
+                )
+
+    # ── Connectors & domain from source registry ──────────────────────────────
+    from .connectors.source_registry import get_source_registry
+
+    registry = get_source_registry()
+    sources = [c for c in registry.list() if c.connector_type not in ("context_doc",)]
+    connector_names = [c.label for c in sources] if sources else []
+
+    # Build domain string from connector types
+    type_labels = []
+    seen_types: set[str] = set()
+    for c in sources:
+        ct = c.connector_type
+        if ct not in seen_types:
+            seen_types.add(ct)
+            type_labels.append(ct.replace("_", " ").title())
+    domain = " × ".join(type_labels) if type_labels else ""
+
+    # Dataset name: first source label or fallback
+    name = sources[0].label if sources else "Your Dataset"
+
+    # ── Auto-layout & build graph nodes ──────────────────────────────────────
+    positions = _auto_layout_positions(entities, relations)
+
+    # Build a lookup: table → entity name
+    table_to_name: dict[str, str] = {}
+    for e in entities:
+        table_to_name[e["table"]] = e["name"]
+
+    nodes = []
+    for e in entities:
+        nodes.append(
+            {
+                "id": e["name"],
+                "type": "ontologyNode",
+                "position": positions.get(e["name"], {"x": 80, "y": 100}),
+                "data": {
+                    "label": e["name"],
+                    "uri": f"aw:{e['name']}",
+                    "db_table": e["table"],
+                    "row_count": e.get("record_count", 0),
+                    "properties": [
+                        {"name": col, "type": "string"}
+                        for col in e.get("columns", [])[:15]
+                    ],
+                },
+            }
+        )
+
+    # ── Build graph edges ─────────────────────────────────────────────────────
+    edges = []
+    seen_edges: set[tuple] = set()
+    for r in relations:
+        src_name = table_to_name.get(r["from_table"])
+        dst_name = table_to_name.get(r["to_table"])
+        if src_name is None or dst_name is None:
+            continue
+        edge_key = (src_name, dst_name)
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        edges.append(
+            {
+                "id": f"{r['from_table']}-{r['to_table']}",
+                "source": src_name,
+                "target": dst_name,
+                "type": "smoothstep",
+                "animated": False,
+                "label": r.get("via_column", ""),
+            }
+        )
+
+    metrics = [
+        {
+            "name": m["name"],
+            "label": m.get("label") or m["name"],
+            "formula": m.get("formula", ""),
+            "unit": m.get("unit", ""),
+        }
+        for m in metrics_raw
+    ]
+
+    return {
+        "name": name,
+        "domain": domain,
+        "connectors": connector_names,
+        "ontology": {"nodes": nodes, "edges": edges},
+        "metrics": metrics,
+        "funnel": _build_live_funnel(entities),
+        "process_stages": _build_process_stages(entities),
+        "built_at": datetime.utcnow().isoformat(),
+    }
+
+
 # ── Custom Agents persistence ─────────────────────────────────────────────────
 #
 # A lightweight SQLite store (separate from the main DuckDB pipeline) that
@@ -1881,7 +2403,7 @@ def _row_to_agent(row: _sqlite3.Row) -> dict:
 
 @app.get("/api/agents/custom", tags=["agents"])
 def list_custom_agents(
-    sector_id: str = Query(default="manufacturing"),
+    sector_id: str = Query(default=DEFAULT_SECTOR),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict]:
     conn = _agents_db()

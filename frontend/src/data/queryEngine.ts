@@ -1,5 +1,6 @@
 import type { OntologyNode } from '../types'
 import { generateMockData } from './mockDataGenerator'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1862,21 +1863,23 @@ function tryFinanceQuery(question: string): EngineResult | null {
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 export function executeQuery(question: string, nodes: OntologyNode[], sectorId?: string): EngineResult {
-  if (sectorId === 'manufacturing') {
-    const aw = tryAWQuery(question)
-    if (aw) return aw
-  }
-  if (sectorId === 'retail') {
-    const r = tryRetailQuery(question)
-    if (r) return r
-  }
-  if (sectorId === 'healthcare') {
-    const h = tryHealthcareQuery(question)
-    if (h) return h
-  }
-  if (sectorId === 'finance') {
-    const f = tryFinanceQuery(question)
-    if (f) return f
+  if (IS_DEMO_MODE) {
+    if (sectorId === 'manufacturing') {
+      const aw = tryAWQuery(question)
+      if (aw) return aw
+    }
+    if (sectorId === 'retail') {
+      const r = tryRetailQuery(question)
+      if (r) return r
+    }
+    if (sectorId === 'healthcare') {
+      const h = tryHealthcareQuery(question)
+      if (h) return h
+    }
+    if (sectorId === 'finance') {
+      const f = tryFinanceQuery(question)
+      if (f) return f
+    }
   }
 
   const node = findNode(question, nodes)!

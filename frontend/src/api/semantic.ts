@@ -346,11 +346,34 @@ export interface ContextDoc {
   created_at: string
 }
 
+export interface QueryTemplate {
+  id: number
+  name: string
+  description: string
+  sql_query: string
+  keywords: string[]
+  sources: string[]
+  intent_type: string
+  is_active: boolean
+  auto_generated: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface QueryTemplateCreate {
+  name: string
+  description: string
+  sql_query: string
+  keywords: string[]
+  sources: string[]
+}
+
 export interface SemanticDraft {
   entities: DraftEntity[]
   relations: DraftRelation[]
   metrics: DraftMetric[]
   context_docs: ContextDoc[]
+  templates: QueryTemplate[]
   loaded: boolean
   built_at: string
 }
@@ -382,6 +405,74 @@ export const addContextDoc = (title: string, content: string): Promise<ContextDo
 
 export const deleteContextDoc = (id: string): Promise<void> =>
   http.delete(`/api/semantic/draft/context/${encodeURIComponent(id)}`).then(() => undefined)
+
+// ── Query Templates ───────────────────────────────────────────────────────────
+
+export const listQueryTemplates = (): Promise<QueryTemplate[]> =>
+  http.get<QueryTemplate[]>('/api/semantic/templates').then(r => r.data)
+
+export const createQueryTemplate = (t: QueryTemplateCreate): Promise<QueryTemplate> =>
+  http.post<QueryTemplate>('/api/semantic/templates', t).then(r => r.data)
+
+export const updateQueryTemplate = (
+  id: number,
+  t: Partial<QueryTemplateCreate>,
+): Promise<QueryTemplate> =>
+  http.patch<QueryTemplate>(`/api/semantic/templates/${id}`, t).then(r => r.data)
+
+export const deleteQueryTemplate = (id: number): Promise<void> =>
+  http.delete(`/api/semantic/templates/${id}`).then(() => undefined)
+
+// ── Live Config ───────────────────────────────────────────────────────────────
+
+export interface LiveOntologyNode {
+  id: string
+  type: string
+  position: { x: number; y: number }
+  data: {
+    label: string
+    uri: string
+    db_table: string
+    row_count: number
+    properties: { name: string; type: string }[]
+  }
+}
+
+export interface LiveOntologyEdge {
+  id: string
+  source: string
+  target: string
+  type: string
+  animated: boolean
+  label: string
+}
+
+export interface LiveConfig {
+  name: string
+  domain: string
+  connectors: string[]
+  ontology: {
+    nodes: LiveOntologyNode[]
+    edges: LiveOntologyEdge[]
+  }
+  metrics: { name: string; label: string; formula: string; unit: string }[]
+  funnel: { stage: string; count: number; value: number }[] | null
+  process_stages: { key: string; label: string }[]
+  built_at: string
+}
+
+export const getLiveConfig = (): Promise<LiveConfig> =>
+  http.get<LiveConfig>('/api/semantic/live-config').then(r => r.data)
+
+// ── Example Questions ─────────────────────────────────────────────────────────
+
+export interface ExampleQuestion {
+  question: string
+  description: string
+}
+
+export const listExampleQuestions = (): Promise<ExampleQuestion[]> =>
+  http.get<ExampleQuestion[]>('/api/semantic/example-questions').then(r => r.data)
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 

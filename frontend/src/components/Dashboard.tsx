@@ -8,7 +8,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
-import { semanticStatus, type SemanticStatus } from '../api/semantic'
+import { semanticStatus, getLiveConfig, getDraft, type SemanticStatus, type LiveConfig, type SemanticDraft } from '../api/semantic'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
 
@@ -150,97 +150,7 @@ const STATUS_COLORS: Record<string, string> = {
   Updated:         'bg-sky-50 text-sky-700 border border-sky-200',
 }
 
-const RECORDS: Record<SectorId, RecordItem[]> = {
-  manufacturing: [
-    { id: 75123, name: 'Bike World',                    value: 87145,  status: 'Shipped',   sub: 'Order #75123 · Southwest' },
-    { id: 75089, name: 'Action Bicycle Specialists',    value: 53209,  status: 'Delivered', sub: 'Order #75089 · Northwest' },
-    { id: 75044, name: 'Riding Cycles',                 value: 46312,  status: 'Delivered', sub: 'Order #75044 · Central' },
-    { id: 74998, name: 'Valley Bicycle Specialists',    value: 32890,  status: 'Shipped',   sub: 'Order #74998 · Canada' },
-    { id: 74956, name: 'Eastside Department Store',     value: 28750,  status: 'Delivered', sub: 'Order #74956 · Northeast' },
-  ],
-  retail: [
-    { id: 4820, name: 'Marco Rossi',           value: 184,     status: 'Paid',         sub: 'Order #4820' },
-    { id: 4819, name: 'Giulia Ferrari',        value: 326,     status: 'Shipped',      sub: 'Order #4819' },
-    { id: 4817, name: 'Luca Bianchi',          value: 95,      status: 'Processing',   sub: 'Order #4817' },
-    { id: 4815, name: 'Sofia Conti',           value: 412,     status: 'Delivered',    sub: 'Order #4815' },
-    { id: 4814, name: 'Andrea Marino',         value: 78,      status: 'Paid',         sub: 'Order #4814' },
-  ],
-  healthcare: [
-    { id: 8041, name: 'Rossi Mario (M/72)',    status: 'Discharged',  sub: 'Encounter #8041 · Cardiology' },
-    { id: 8040, name: 'Ferrari Anna (F/58)',   status: 'Admitted',    sub: 'Encounter #8040 · Endocrinology' },
-    { id: 8038, name: 'Conti Luca (M/45)',     status: 'Follow-up',   sub: 'Encounter #8038 · Neurology' },
-    { id: 8036, name: 'Bianchi Sara (F/34)',   status: 'Discharged',  sub: 'Encounter #8036 · Oncology' },
-    { id: 8034, name: 'Esposito Carlo (M/61)', status: 'Admitted',    sub: 'Encounter #8034 · Cardiology' },
-  ],
-  finance: [
-    { id: 2941, name: 'Rossi & Figli Srl',    value: 350000,  status: 'Approved',    sub: 'Loan #2941' },
-    { id: 2939, name: 'Tech Startup SB Srl',  value: 500000,  status: 'Pending KYC', sub: 'Loan #2939' },
-    { id: 2937, name: 'Ferrari Holding SA',   value: 1200000, status: 'Under Review',sub: 'Loan #2937' },
-    { id: 2935, name: 'Bianchi Costruzioni',  value: 280000,  status: 'Approved',    sub: 'Loan #2935' },
-    { id: 2933, name: 'Conti Real Estate Srl',value: 750000,  status: 'Disbursed',   sub: 'Loan #2933' },
-  ],
-}
-
-const ACTIVITIES: Record<SectorId, ActivityItem[]> = {
-  manufacturing: [
-    { id: 1, dot: 'bg-teal-500',   message: 'Top salesperson 2014: Linda Mitchell (#276) — $4.25M YTD, Southwest', time: 'Dec 2014', status: 'Confirmed' },
-    { id: 2, dot: 'bg-amber-400',  message: 'Agent: 372 duplicate CRM accounts detected (accountId < 0)',   time: '2h ago',   status: 'Warning'   },
-    { id: 3, dot: 'bg-blue-500',   message: 'Order #75123 shipped — Bike World — $87,145',                 time: '4h ago',   status: 'Shipped'   },
-    { id: 4, dot: 'bg-purple-500', message: 'Cross-source join resolved: customer_ref → CRM accountId',    time: '6h ago',   status: 'Active'    },
-    { id: 5, dot: 'bg-red-500',    message: '"fatturato" ambiguity: subtotal $20.1M vs total_due $22.4M',  time: '1d ago',   status: 'Warning'   },
-  ],
-  retail: [
-    { id: 1, dot: 'bg-teal-500',   message: 'Order #4820 paid — Marco Rossi — €184',               time: '1m ago',  status: 'Paid' },
-    { id: 2, dot: 'bg-blue-500',   message: 'Cart recovery sent to 23 abandoned sessions',          time: '12m ago', status: 'Sent' },
-    { id: 3, dot: 'bg-purple-500', message: 'Order #4819 shipped — tracking active',                time: '34m ago', status: 'Shipped' },
-    { id: 4, dot: 'bg-amber-400',  message: 'Inventory alert: 12 SKUs below reorder threshold',    time: '1h ago',  status: 'Warning' },
-    { id: 5, dot: 'bg-teal-500',   message: 'Promo ESTATE25 applied on 47 orders today',           time: '2h ago',  status: 'Active' },
-  ],
-  healthcare: [
-    { id: 1, dot: 'bg-slate-400',  message: 'Patient Rossi Mario discharged — follow-up in 14d',   time: '4m ago',  status: 'Discharged' },
-    { id: 2, dot: 'bg-purple-500', message: 'New prescription issued by Dr. Ferrari (Cardiology)',  time: '18m ago', status: 'Issued' },
-    { id: 3, dot: 'bg-amber-400',  message: 'Agent found 34 care gaps — patients without follow-up',time: '42m ago', status: 'Warning' },
-    { id: 4, dot: 'bg-amber-500',  message: 'Encounter #8040 opened — Ferrari Anna (Endocrinology)',time: '1h ago',  status: 'Admitted' },
-    { id: 5, dot: 'bg-red-500',    message: '7 conflicting diagnoses flagged for clinical review',  time: '2h ago',  status: 'Critical' },
-  ],
-  finance: [
-    { id: 1, dot: 'bg-emerald-500',message: 'Loan #2941 approved — Rossi & Figli Srl — €350k',    time: '3m ago',  status: 'Approved' },
-    { id: 2, dot: 'bg-amber-400',  message: 'KYC pending: 6 applicants require document review',   time: '21m ago', status: 'Pending KYC' },
-    { id: 3, dot: 'bg-blue-500',   message: 'Loan #2939 under risk assessment — score: 72/100',    time: '45m ago', status: 'Under Review' },
-    { id: 4, dot: 'bg-sky-500',    message: 'Agent updated 892 risk scores from credit bureau',    time: '1h ago',  status: 'Updated' },
-    { id: 5, dot: 'bg-teal-500',   message: 'Loan #2933 disbursed — €750k to Conti Real Estate',  time: '3h ago',  status: 'Disbursed' },
-  ],
-}
-
-const TREND_CONFIG: Record<SectorId, { label: string; unit: string; base: number; jitter: number; seed: number }> = {
-  manufacturing: { label: 'Orders per Month',   unit: 'count',  base: 2622, jitter: 350,    seed: 42   },
-  retail:        { label: 'Orders Paid',         unit: 'count',  base: 320,  jitter: 60,     seed: 77   },
-  healthcare:    { label: 'Encounters',          unit: 'count',  base: 280,  jitter: 40,     seed: 13   },
-  finance:       { label: 'Loan Disbursements',  unit: '€k',     base: 4200, jitter: 800,    seed: 99   },
-}
-
-const DATA_SOURCES: Record<SectorId, { name: string; type: string; tables: number; rows: string }[]> = {
-  manufacturing: [
-    { name: 'ERP — OrionSales', type: 'PostgreSQL / DuckDB', tables: 5, rows: '153,225' },
-    { name: 'CRM — ClientHub',  type: 'SQLite',              tables: 6, rows: '59,193'  },
-    { name: 'HR + PIM — Files', type: 'CSV + JSON',          tables: 2, rows: '794'     },
-  ],
-  retail: [
-    { name: 'Shopify',       type: 'eCommerce',tables: 4, rows: '20,388' },
-    { name: 'Snowflake',     type: 'DWH',      tables: 6, rows: '47,204' },
-    { name: 'PostgreSQL',    type: 'Database', tables: 5, rows: '12,104' },
-  ],
-  healthcare: [
-    { name: 'Epic EHR',      type: 'EHR',      tables: 5, rows: '14,648' },
-    { name: 'HL7 FHIR',      type: 'Standard', tables: 3, rows: '9,302'  },
-    { name: 'PostgreSQL',    type: 'Database', tables: 4, rows: '8,812'  },
-  ],
-  finance: [
-    { name: 'Temenos T24',   type: 'Banking',  tables: 4, rows: '23,221' },
-    { name: 'Credit Bureau', type: 'API',      tables: 1, rows: '892'    },
-    { name: 'PostgreSQL',    type: 'Database', tables: 6, rows: '18,401' },
-  ],
-}
+// Hardcoded sector data removed — replaced by live semantic layer data in the component
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
 
@@ -411,7 +321,14 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const ontology = useExtendedOntology(sectorId)
   const agentRuns = useAgentStore(sectorId)
 
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  const [draft, setDraft] = useState<SemanticDraft | null>(null)
   const [reporting, setReporting] = useState(false)
+
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+    getDraft().then(setDraft).catch(() => {})
+  }, [])
 
   const [pipelineLastRun, setPipelineLastRun] = useState<Date | null>(() => {
     const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
@@ -450,22 +367,37 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setReporting(false)
   }
 
-  const funnel = sector.funnel
-  const totalQuotes = funnel[0]?.count ?? 0
-  const totalOrders = funnel[Math.min(3, funnel.length - 1)]?.count ?? 0
+  const funnel = liveConfig?.funnel ?? sector.funnel
+  const totalQuotes = liveConfig?.funnel?.[0]?.count ?? sector.funnel[0]?.count ?? 0
+  const totalOrders = liveConfig?.funnel?.[2]?.count ?? sector.funnel[Math.min(3, sector.funnel.length - 1)]?.count ?? 0
   const conversion = totalQuotes > 0 ? Math.round((totalOrders / totalQuotes) * 100) : 0
   const openValue = funnel.reduce((s, f) => s + f.value, 0)
   const hasMonetary = funnel.some(f => f.value > 0)
 
-  const tc = TREND_CONFIG[sectorId]
+  // Trend chart config derived from live metric or generic fallback
+  const trendMetric = draft?.metrics[0]
+  const tc = {
+    label: trendMetric?.label || 'Activity',
+    unit: trendMetric?.unit || 'count',
+    base: 100,
+    jitter: 20,
+    seed: 42,
+  }
   const trendSeries = seededSeries(tc.seed, 12, tc.base, tc.jitter)
   const prevVal = trendSeries[trendSeries.length - 2]
   const currVal = trendSeries[trendSeries.length - 1]
   const trendPct = Math.round(((currVal - prevVal) / Math.max(1, prevVal)) * 100)
 
+  const kpiLabels = {
+    quotes: liveConfig?.metrics.find(m => m.name === 'revenue')?.label ?? sector.kpiLabels.quotes,
+    orders: sector.kpiLabels.orders,
+    conversion: sector.kpiLabels.conversion,
+    openValue: sector.kpiLabels.openValue,
+  }
+
   const kpis = [
     {
-      label: sector.kpiLabels.quotes,
+      label: kpiLabels.quotes,
       value: `${totalQuotes}`,
       icon: FileText,
       color: 'text-blue-600', bg: 'bg-blue-50',
@@ -474,7 +406,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +12,
     },
     {
-      label: sector.kpiLabels.orders,
+      label: kpiLabels.orders,
       value: `${totalOrders}`,
       icon: ShoppingCart,
       color: 'text-purple-600', bg: 'bg-purple-50',
@@ -483,7 +415,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +8,
     },
     {
-      label: sector.kpiLabels.conversion,
+      label: kpiLabels.conversion,
       value: `${conversion}%`,
       icon: TrendingUp,
       color: 'text-teal-600', bg: 'bg-teal-50',
@@ -492,7 +424,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: +3,
     },
     {
-      label: sector.kpiLabels.openValue,
+      label: kpiLabels.openValue,
       value: hasMonetary ? fmt(openValue) : `${totalQuotes}`,
       icon: Users,
       color: 'text-amber-600', bg: 'bg-amber-50',
@@ -502,9 +434,56 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     },
   ]
 
-  const sources = DATA_SOURCES[sectorId]
-  const records = RECORDS[sectorId]
-  const activities = ACTIVITIES[sectorId]
+  // Data sources from live config connectors
+  const sources = liveConfig?.connectors.map(name => ({
+    name,
+    type: 'Database',
+    tables: 0,
+    rows: '—',
+  })) ?? []
+
+  // Recent records from draft entities
+  const records: RecordItem[] = draft?.entities.slice(0, 5).map((e, i) => ({
+    id: i + 1,
+    name: e.name,
+    value: e.record_count > 0 ? e.record_count : undefined,
+    status: 'Active',
+    sub: e.table,
+  })) ?? []
+
+  // Activity feed from semantic layer state
+  const activityItems: ActivityItem[] = [
+    draft?.built_at ? {
+      id: 1,
+      dot: 'bg-green-500',
+      message: `Semantic layer built — ${draft.entities.length} entities, ${draft.metrics.length} metrics`,
+      time: new Date(draft.built_at).toLocaleDateString(),
+      status: 'Active',
+    } : null,
+    draft && draft.templates.length > 0 ? {
+      id: 2,
+      dot: 'bg-blue-500',
+      message: `${draft.templates.length} query template${draft.templates.length !== 1 ? 's' : ''} active`,
+      time: 'active',
+      status: 'Active',
+    } : null,
+    draft && draft.relations.length > 0 ? {
+      id: 3,
+      dot: 'bg-purple-500',
+      message: `${draft.relations.length} entity relationship${draft.relations.length !== 1 ? 's' : ''} mapped`,
+      time: 'active',
+      status: 'Active',
+    } : null,
+    liveConfig && liveConfig.connectors.length > 0 ? {
+      id: 4,
+      dot: 'bg-teal-500',
+      message: `${liveConfig.connectors.length} data source${liveConfig.connectors.length !== 1 ? 's' : ''} connected: ${liveConfig.connectors.join(', ')}`,
+      time: 'connected',
+      status: 'Active',
+    } : null,
+  ].filter((a): a is ActivityItem => a !== null)
+  const activities = activityItems.length > 0 ? activityItems : []
+
   const maxCount = funnel[0]?.count ?? 1
 
   const companyName = typeof window !== 'undefined' ? localStorage.getItem('si-company-name') : null
@@ -516,46 +495,8 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setShowWelcome(false)
   }
 
-  const isAW = sectorId === 'manufacturing'
-
   return (
     <div className="p-8 space-y-6">
-      {/* AW real-data stats strip */}
-      {isAW && (
-        <div className="bg-slate-900 rounded-2xl px-6 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">Live Data</span>
-            <span className="text-[10px] text-slate-500">Click a card to query</span>
-          </div>
-          <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
-            {[
-              { label: 'Net Revenue 2014',    value: '$20.1M',      sub: 'subtotal_amount · excl. tax+freight', color: 'text-teal-400',   query: 'What is our total revenue — subtotal vs total due?' },
-              { label: 'Gross Revenue 2014',  value: '$22.4M',      sub: 'total_due · incl. tax+freight',       color: 'text-teal-300',   query: 'What is our total revenue — subtotal vs total due?' },
-              { label: 'Total Orders (ERP)',  value: '31,465',      sub: 'OrionSales PostgreSQL',               color: 'text-blue-400',   query: 'Show recent orders from ERP' },
-              { label: 'Unique Customers',    value: '19,829',      sub: 'CRM after 372 dedup removed',         color: 'text-violet-400', query: 'How many unique customers after CRM deduplication?' },
-              { label: 'Top Salesperson',     value: 'L. Mitchell', sub: '$4.25M YTD · ERP×HR join',           color: 'text-amber-400',  query: 'Who is the top salesperson by revenue in 2014?' },
-            ].map(s => (
-              <button
-                key={s.label}
-                onClick={() => {
-                  sessionStorage.setItem('query-prefill', s.query)
-                  onNavigate?.('query')
-                }}
-                className="border border-slate-700 hover:border-slate-500 rounded-xl px-4 py-3 text-left transition-all hover:bg-slate-800 group"
-              >
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[11px] text-slate-300 font-medium mt-0.5">{s.label}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{s.sub}</p>
-                <p className="text-[10px] text-slate-600 group-hover:text-slate-400 mt-1 transition-colors">Query →</p>
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-[11px] text-slate-500">
-            ⚠️ <span className="text-amber-400 font-medium">"fatturato" disambiguation</span> — Net $20.1M (commercial) vs Gross $22.4M (billed) differ by $2.3M (tax + freight). The semantic layer resolves this at query time.
-          </p>
-        </div>
-      )}
-
       {showWelcome && companyName && (
         <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
           <div className="w-11 h-11 rounded-xl bg-teal-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-200">

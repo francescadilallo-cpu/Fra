@@ -7,28 +7,28 @@ interface Props {
   onSkip: () => void
 }
 
-const SECTOR_CARDS = [
-  { id: 'manufacturing' as SectorId, emoji: '🏭', label: 'Manufacturing', desc: 'Production, quality, supply chain' },
-  { id: 'retail' as SectorId, emoji: '🛍', label: 'Retail', desc: 'Sales, inventory, customers' },
-  { id: 'healthcare' as SectorId, emoji: '🏥', label: 'Healthcare', desc: 'Patients, prescriptions, care pathways' },
-  { id: 'finance' as SectorId, emoji: '🏦', label: 'Finance', desc: 'Credit, AML, risk' },
-]
+const SECTOR_CARDS = Object.values(SECTORS).map(s => ({
+  id: s.id,
+  emoji: s.icon,
+  label: s.name,
+  desc: s.domain,
+}))
 
-const CONNECTORS: Record<SectorId, string[]> = {
+const CONNECTORS: Record<string, string[]> = {
   manufacturing: ['TeamSystem', 'Zucchetti', 'SAP Business One', 'PostgreSQL', 'BRT', 'GLS', 'Google Sheets', 'Fatture in Cloud'],
   retail: ['Shopify', 'WooCommerce', 'Stripe', 'Satispay', 'Salesforce', 'HubSpot', 'Google Sheets', 'Airtable'],
   healthcare: ['PostgreSQL', 'MySQL', 'Google Sheets', 'Fatture in Cloud', 'TeamSystem', 'Airtable', 'Stripe', 'Zucchetti'],
   finance: ['TeamSystem', 'Zucchetti', 'PostgreSQL', 'MySQL', 'Stripe', 'Nexi', 'Salesforce', 'Fatture in Cloud'],
 }
 
-const AGENTS: Record<SectorId, { name: string; desc: string; emoji: string }> = {
+const AGENTS: Record<string, { name: string; desc: string; emoji: string }> = {
   manufacturing: { name: 'Quote Review Agent', desc: 'Analyzes open quotes for price deviations and expiry risk', emoji: '📋' },
   retail: { name: 'Cart Recovery Agent', desc: 'Recovers abandoned carts with personalized re-engagement messages', emoji: '🛒' },
   healthcare: { name: 'Follow-up Scheduler', desc: 'Schedules post-discharge follow-ups and prioritizes urgent cases', emoji: '📅' },
   finance: { name: 'KYC Completion Agent', desc: 'Monitors incomplete KYC submissions and sends automated follow-ups', emoji: '🔍' },
 }
 
-const SECTOR_NAMES: Record<SectorId, string> = {
+const SECTOR_NAMES: Record<string, string> = {
   manufacturing: 'Manufacturing',
   retail: 'Retail',
   healthcare: 'Healthcare',

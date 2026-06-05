@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
+import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -26,52 +28,76 @@ const IDLE_STATUSES: Record<StepId, StepStatus> = { connect:'idle', extract:'idl
 
 type StepLog = { text: string; type: 'info' | 'ok' | 'warn' }
 
-const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
-  manufacturing: {
+function buildManufacturingLogs(
+  counts: Record<string, number>,
+  dedupCount: number,
+  kgNodes: number,
+  kgEdges: number,
+): Record<StepId, StepLog[]> {
+  const orders  = counts.sales_order_header   ?? (IS_DEMO_MODE ? 31465  : 0)
+  const lines   = counts.sales_order_line     ?? (IS_DEMO_MODE ? 121317 : 0)
+  const accts   = counts.account              ?? (IS_DEMO_MODE ? 20201  : 0)
+  const hr      = counts.dipendenti_hr        ?? (IS_DEMO_MODE ? 290    : 0)
+  const pim     = counts.product_catalog_pim  ?? (IS_DEMO_MODE ? 504    : 0)
+  const sp      = counts.salesperson          ?? (IS_DEMO_MODE ? 17     : 0)
+  const terr    = counts.territory            ?? (IS_DEMO_MODE ? 10     : 0)
+  const offer   = counts.offer                ?? (IS_DEMO_MODE ? 16     : 0)
+  const dedup   = dedupCount || (IS_DEMO_MODE ? 372 : 0)
+  const customers = accts - dedup
+  const erpSmall  = sp + terr + offer
+  const crmOther  = (counts.contact ?? 19302) + (counts.address ?? 19614) + (counts.state_province ?? 70)
+  const total     = orders + lines + erpSmall + accts + crmOther + hr + pim
+  const nodes     = kgNodes || (IS_DEMO_MODE ? 193062 : 0)
+  const edges     = kgEdges || (IS_DEMO_MODE ? 313193 : 0)
+
+  return {
     connect: [
       { text: 'Initializing connection pool...', type: 'info' },
       { text: '✓ ERP OrionSales — PostgreSQL/DuckDB :5432 — 18ms', type: 'ok' },
       { text: '✓ CRM ClientHub — SQLite file loaded — 42ms', type: 'ok' },
-      { text: '✓ HR dipendenti_hr.csv — 290 rows parsed', type: 'ok' },
-      { text: '✓ PIM product_catalog_pim.json — 504 products parsed', type: 'ok' },
+      { text: `✓ HR dipendenti_hr.csv — ${hr} rows parsed`, type: 'ok' },
+      { text: `✓ PIM product_catalog_pim.json — ${pim} products parsed`, type: 'ok' },
       { text: '4 sources ready', type: 'ok' },
     ],
     extract: [
-      { text: 'Starting extraction job EXT-20141231-001', type: 'info' },
-      { text: '→ ERP sales_order_header: 31,465 rows', type: 'info' },
-      { text: '→ ERP sales_order_line: 121,317 rows', type: 'info' },
-      { text: '→ ERP salesperson / territory / offer: 43 rows', type: 'info' },
-      { text: '→ CRM account: 20,201 rows (372 flagged for dedup)', type: 'warn' },
-      { text: '→ CRM contact / address: 38,916 rows', type: 'info' },
-      { text: '→ HR + PIM: 794 rows', type: 'info' },
-      { text: '✓ 212,736 rows extracted in 3.2s', type: 'ok' },
+      { text: 'Starting extraction job...', type: 'info' },
+      { text: `→ ERP sales_order_header: ${orders.toLocaleString()} rows`, type: 'info' },
+      { text: `→ ERP sales_order_line: ${lines.toLocaleString()} rows`, type: 'info' },
+      { text: `→ ERP salesperson / territory / offer: ${erpSmall} rows`, type: 'info' },
+      { text: `→ CRM account: ${accts.toLocaleString()} rows (${dedup} flagged for dedup)`, type: 'warn' },
+      { text: `→ CRM contact / address: ${crmOther.toLocaleString()} rows`, type: 'info' },
+      { text: `→ HR + PIM: ${hr + pim} rows`, type: 'info' },
+      { text: `✓ ${total.toLocaleString()} rows extracted in 3.2s`, type: 'ok' },
     ],
     map: [
-      { text: 'Loading semantic mappings v1.0...', type: 'info' },
+      { text: 'Loading semantic mappings...', type: 'info' },
       { text: 'Resolving cross-source bridges...', type: 'info' },
-      { text: '⚡ customer_ref → CRM.accountId — 19,829 matched (372 deduped)', type: 'ok' },
-      { text: '⚡ salesperson_ref → HR.MatricolaDip — 17 matched', type: 'ok' },
-      { text: '⚡ product_ref → PIM.internal_id — 504 matched', type: 'ok' },
-      { text: '⚠ "fatturato" ambiguity detected — subtotal $20.1M vs total_due $22.4M', type: 'warn' },
-      { text: '✓ 212,736 rows mapped — 3 bridges resolved', type: 'ok' },
+      { text: `⚡ customer_ref → CRM.accountId — ${customers.toLocaleString()} matched (${dedup} deduped)`, type: 'ok' },
+      { text: `⚡ salesperson_ref → HR.MatricolaDip — ${sp} matched`, type: 'ok' },
+      { text: `⚡ product_ref → PIM.internal_id — ${pim} matched`, type: 'ok' },
+      { text: '⚠ "fatturato" ambiguity detected — subtotal vs total_due', type: 'warn' },
+      { text: `✓ ${total.toLocaleString()} rows mapped — 3 bridges resolved`, type: 'ok' },
     ],
     enrich: [
-      { text: 'Running AI enrichment (claude-haiku-4)...', type: 'info' },
-      { text: '→ CRM dedup: removing 372 accounts with accountId < 0', type: 'info' },
-      { text: '✓ 19,829 unique customers retained', type: 'ok' },
+      { text: 'Running AI enrichment...', type: 'info' },
+      { text: `→ CRM dedup: removing ${dedup} accounts with accountId < 0`, type: 'info' },
+      { text: `✓ ${customers.toLocaleString()} unique customers retained`, type: 'ok' },
       { text: '→ Building Knowledge Graph nodes and edges...', type: 'info' },
-      { text: '✓ 193,062 KG nodes created', type: 'ok' },
-      { text: '✓ 313,193 relationships indexed', type: 'ok' },
-      { text: '→ Top rep 2014: Linda Mitchell #276 ($4.25M YTD, Southwest)', type: 'info' },
+      { text: `✓ ${nodes.toLocaleString()} KG nodes created`, type: 'ok' },
+      { text: `✓ ${edges.toLocaleString()} relationships indexed`, type: 'ok' },
     ],
     index: [
       { text: 'Writing to semantic layer index...', type: 'info' },
-      { text: '✓ 8 ontology entities registered', type: 'ok' },
-      { text: '✓ 47 semantic field definitions indexed', type: 'ok' },
+      { text: '✓ Ontology entities registered', type: 'ok' },
+      { text: '✓ Semantic field definitions indexed', type: 'ok' },
       { text: '✓ Query engine ready — fatturato disambiguation active', type: 'ok' },
       { text: '✓ Semantic layer ready', type: 'ok' },
     ],
-  },
+  }
+}
+
+const SECTOR_LOGS: Record<SectorId, Record<StepId, StepLog[]>> = {
+  manufacturing: buildManufacturingLogs({}, 0, 0, 0),
   retail: {
     connect: [
       { text: 'Initializing connection pool...', type: 'info' },
@@ -256,15 +282,15 @@ const STAGE_COLORS: Record<string, string> = {
 
 const AVG_DAYS = ['0.5 d', '2.1 d', '5.8 d', '3.2 d']
 
-// Real AW orders — keyed by sector so other sectors keep generic data
+// Active cases per sector — manufacturing uses real AW orders in demo mode
 const ACTIVE_CASES_BY_SECTOR: Record<SectorId, { id: number; name: string; value: number; stage: string; daysInStage: number; territory?: string }[]> = {
-  manufacturing: [
+  manufacturing: IS_DEMO_MODE ? [
     { id: 75123, name: 'Bike World Inc.',               value: 87145,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Southwest'  },
     { id: 75124, name: 'Action Bicycle Specialists',    value: 53209,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Northwest'  },
     { id: 75120, name: 'Eastside Department Store',     value: 2049,   stage: 'Processing', daysInStage: 1,  territory: 'Canada'     },
     { id: 75119, name: 'Valley Bicycle Specialists',    value: 2039,   stage: 'Processing', daysInStage: 1,  territory: 'Australia'  },
     { id: 75122, name: 'Riding Cycles',                 value: 1898,   stage: 'Shipped',    daysInStage: 5,  territory: 'Germany'    },
-  ],
+  ] : [],
   retail: [
     { id: 4820, name: 'Marco Rossi',     value: 184,    stage: 'Stage 2', daysInStage: 2  },
     { id: 4819, name: 'Giulia Ferrari',  value: 326,    stage: 'Stage 2', daysInStage: 1  },
@@ -303,6 +329,30 @@ function fmt(v: number) {
 
 export default function ProcessView() {
   const { sectorId, sector } = useSector()
+
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  const [liveSectorLogs, setLiveSectorLogs] = useState<Record<StepId, StepLog[]> | null>(null)
+
+  useEffect(() => {
+    getLiveConfig().then(setLiveConfig).catch(() => {})
+    if (sectorId === 'manufacturing') {
+      Promise.all([
+        semanticSources().catch(() => []),
+        semanticStatus().catch(() => null),
+      ]).then(([srcs, status]) => {
+        const counts: Record<string, number> = {}
+        srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
+        if (Object.keys(counts).length > 0) {
+          setLiveSectorLogs(buildManufacturingLogs(
+            counts,
+            status?.dedup_count ?? 0,
+            status?.kg_nodes ?? 0,
+            status?.kg_edges ?? 0,
+          ))
+        }
+      })
+    }
+  }, [sectorId])
 
   // Pipeline state
   const [runState, setRunState] = useState<RunState>('idle')
@@ -363,7 +413,7 @@ export default function ProcessView() {
       setElapsed(Date.now() - startTimeRef.current)
     }, 80)
 
-    const sectorLogs = SECTOR_LOGS[sectorId]
+    const sectorLogs = (sectorId === 'manufacturing' && liveSectorLogs) ? liveSectorLogs : (SECTOR_LOGS[sectorId] ?? SECTOR_LOGS.manufacturing)
     let offset = 0
 
     for (const step of PIPELINE_STEPS) {
@@ -407,8 +457,16 @@ export default function ProcessView() {
 
   const progressPct = Math.min(100, Math.round((elapsed / TOTAL_MS) * 100))
   const activeStepIdx = PIPELINE_STEPS.findIndex(s => statuses[s.id] === 'running')
-  const summary = SECTOR_SUMMARY[sectorId]
-  const funnel = sector.funnel
+  const baseSummary = SECTOR_SUMMARY[sectorId] ?? SECTOR_SUMMARY.manufacturing
+  const summary = sectorId === 'manufacturing' && liveSectorLogs
+    ? {
+        ...baseSummary,
+        rows: liveSectorLogs.extract.find(l => l.text.startsWith('✓') && l.text.includes('rows extracted'))?.text.match(/[\d,]+/)?.[0] ?? baseSummary.rows,
+        enrichments: String(liveConfig?.ontology?.nodes?.length ?? baseSummary.entities),
+      }
+    : baseSummary
+  const funnel = liveConfig?.funnel ?? sector.funnel
+  const processStages = (liveConfig?.process_stages?.length ? liveConfig.process_stages : sector.processStages)
   const maxCount = funnel[0]?.count ?? 1
 
   return (
@@ -509,7 +567,7 @@ export default function ProcessView() {
         {runState === 'done' && (
           <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
             {[
-              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${sector.connectors.length} sources connected` },
+              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${(liveConfig?.connectors ?? sector.connectors).length} sources connected` },
               { label: 'Entities Mapped',  value: String(summary.entities),        sub: `${summary.entities} ontology classes` },
               { label: 'KG Nodes Created', value: summary.enrichments,             sub: 'instances in Knowledge Graph' },
               { label: 'KG Edges Indexed', value: summary.triples,                 sub: '3 cross-source bridges' },
@@ -528,7 +586,7 @@ export default function ProcessView() {
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
-          {sector.processStages.map((stage, i) => {
+          {processStages.map((stage, i) => {
             const style = STAGE_STYLES[i % STAGE_STYLES.length]
             const Icon = style.icon
             const funnelItem = funnel[Math.min(i, funnel.length - 1)]
@@ -550,7 +608,7 @@ export default function ProcessView() {
                     <span>{AVG_DAYS[i % AVG_DAYS.length]}</span>
                   </div>
                 </div>
-                {i < sector.processStages.length - 1 && (
+                {i < processStages.length - 1 && (
                   <div className="mt-10 text-slate-300 text-xl font-light flex-shrink-0">→</div>
                 )}
               </div>

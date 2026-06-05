@@ -5,7 +5,7 @@ import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
   PROVIDERS, type LLMProvider,
 } from '../data/llmQueryEngine'
-import { ask, adaptAskResult, checkBackend, backendErrorMessage } from '../api/semantic'
+import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQuestions, type ExampleQuestion } from '../api/semantic'
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -71,59 +71,6 @@ function toggleFavorite(sectorId: string, query: string, current: string[]): str
     deleteSavedQueryRemote(stableQueryId(sectorId, query)).catch(() => {})
   }
   return next
-}
-
-// ── Sector-aware suggested questions ─────────────────────────────────────────
-
-const SECTOR_QUESTIONS: Record<string, string[]> = {
-  manufacturing: [
-    'Who is the top salesperson by revenue in 2014?',
-    'What is our total revenue — subtotal vs total due?',
-    'What is the online vs in-store channel split?',
-    'Show gross margin by product category',
-    'Which products generated the most revenue?',
-    'Show headcount and salary by department',
-    'How many unique customers after CRM deduplication?',
-    'Show orders by territory ranked by sales YTD',
-    'Show quarterly revenue breakdown',
-    'What is our YoY revenue comparison — 2011 vs 2014?',
-  ],
-  retail: [
-    'Show the top products by revenue',
-    'Which promotions are currently active?',
-    'What is the total amount of paid orders?',
-    'Show gold loyalty customers',
-    'Show low stock inventory alerts',
-    'What is the average order value by channel?',
-    'Which categories have the highest return rate?',
-    'Show customer acquisition trend by month',
-    'What is the cart abandonment rate?',
-    'Show revenue breakdown by store location',
-  ],
-  healthcare: [
-    'Show active patients by condition',
-    'How many encounters per doctor this month?',
-    'Which treatments have no outcome recorded?',
-    'Show prescriptions by doctor',
-    'What is the average length of stay by ward?',
-    'Show readmission rate for the last 90 days',
-    'Which patients have upcoming appointments?',
-    'Show medication adherence rate by condition',
-    'How many patients are waiting for a specialist?',
-    'Show staff-to-patient ratio by department',
-  ],
-  finance: [
-    'Show loan portfolio by status',
-    'What is the risk score distribution?',
-    'Which payments are overdue?',
-    'Show pending KYC applications',
-    'What is the default rate by loan category?',
-    'Show total assets under management',
-    'Which clients have the highest credit exposure?',
-    'Show monthly new loan originations',
-    'What is the average approval time for applications?',
-    'Show fraud alerts opened in the last 30 days',
-  ],
 }
 
 // ── Chart value formatter ─────────────────────────────────────────────────────
@@ -815,7 +762,6 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
 export default function QueryInterface() {
   const { sectorId, sector } = useSector()
   const ontology = useExtendedOntology(sectorId)
-  const suggestedQuestions = SECTOR_QUESTIONS[sectorId] ?? SECTOR_QUESTIONS.manufacturing
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -826,6 +772,7 @@ export default function QueryInterface() {
   const [creds, setCreds] = useState(getStoredCredentials)
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [useBackend, setUseBackend] = useState(true)
+  const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([])
   const queryCount = messages.filter(m => m.role === 'user').length
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -840,6 +787,12 @@ export default function QueryInterface() {
   }, [])
 
   useEffect(() => { checkBackendOnce() }, [checkBackendOnce])
+
+  useEffect(() => {
+    listExampleQuestions()
+      .then(setExampleQuestions)
+      .catch(() => {}) // silent fail — examples are optional
+  }, [])
 
   // Refresh creds from localStorage when panel closes
   function handleApiPanelClose() {
@@ -1107,23 +1060,25 @@ export default function QueryInterface() {
               </div>
             )}
 
-            {/* Suggested questions */}
-            <div className="space-y-2 w-full max-w-lg">
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Lightbulb className="w-3.5 h-3.5" />
-                <span>Suggested questions for {sector.name}</span>
+            {/* Suggested questions from templates DB */}
+            {exampleQuestions.length > 0 && (
+              <div className="space-y-2 w-full max-w-lg">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  <span>Suggested questions</span>
+                </div>
+                {exampleQuestions.map((eq) => (
+                  <button
+                    key={eq.question}
+                    onClick={() => sendMessage(eq.question)}
+                    disabled={loading}
+                    className="w-full text-left bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-300 rounded-xl px-4 py-3 text-sm text-slate-600 hover:text-slate-900 transition-all"
+                  >
+                    {eq.question}
+                  </button>
+                ))}
               </div>
-              {suggestedQuestions.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => sendMessage(q)}
-                  disabled={loading}
-                  className="w-full text-left bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-300 rounded-xl px-4 py-3 text-sm text-slate-600 hover:text-slate-900 transition-all"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+            )}
           </div>
         )}
 
@@ -1158,16 +1113,16 @@ export default function QueryInterface() {
       {/* Input */}
       <div className="px-8 py-4 border-t border-slate-200 flex-shrink-0 bg-white">
         {/* Suggested chips when messages exist */}
-        {messages.length > 0 && (
+        {messages.length > 0 && exampleQuestions.length > 0 && (
           <div className="flex gap-2 mb-3 flex-wrap">
-            {suggestedQuestions.map((q) => (
+            {exampleQuestions.map((eq) => (
               <button
-                key={q}
-                onClick={() => sendMessage(q)}
+                key={eq.question}
+                onClick={() => sendMessage(eq.question)}
                 disabled={loading}
                 className="text-xs bg-slate-50 hover:bg-white border border-slate-200 hover:border-teal-300 rounded-full px-3 py-1 text-slate-500 hover:text-slate-800 transition-all disabled:opacity-50"
               >
-                {q}
+                {eq.question}
               </button>
             ))}
           </div>
