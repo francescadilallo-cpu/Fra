@@ -3,6 +3,7 @@ import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, 
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -33,21 +34,21 @@ function buildManufacturingLogs(
   kgNodes: number,
   kgEdges: number,
 ): Record<StepId, StepLog[]> {
-  const orders  = counts.sales_order_header   ?? 31465
-  const lines   = counts.sales_order_line     ?? 121317
-  const accts   = counts.account              ?? 20201
-  const hr      = counts.dipendenti_hr        ?? 290
-  const pim     = counts.product_catalog_pim  ?? 504
-  const sp      = counts.salesperson          ?? 17
-  const terr    = counts.territory            ?? 10
-  const offer   = counts.offer                ?? 16
-  const dedup   = dedupCount || 372
+  const orders  = counts.sales_order_header   ?? (IS_DEMO_MODE ? 31465  : 0)
+  const lines   = counts.sales_order_line     ?? (IS_DEMO_MODE ? 121317 : 0)
+  const accts   = counts.account              ?? (IS_DEMO_MODE ? 20201  : 0)
+  const hr      = counts.dipendenti_hr        ?? (IS_DEMO_MODE ? 290    : 0)
+  const pim     = counts.product_catalog_pim  ?? (IS_DEMO_MODE ? 504    : 0)
+  const sp      = counts.salesperson          ?? (IS_DEMO_MODE ? 17     : 0)
+  const terr    = counts.territory            ?? (IS_DEMO_MODE ? 10     : 0)
+  const offer   = counts.offer                ?? (IS_DEMO_MODE ? 16     : 0)
+  const dedup   = dedupCount || (IS_DEMO_MODE ? 372 : 0)
   const customers = accts - dedup
   const erpSmall  = sp + terr + offer
   const crmOther  = (counts.contact ?? 19302) + (counts.address ?? 19614) + (counts.state_province ?? 70)
   const total     = orders + lines + erpSmall + accts + crmOther + hr + pim
-  const nodes     = kgNodes || 193062
-  const edges     = kgEdges || 313193
+  const nodes     = kgNodes || (IS_DEMO_MODE ? 193062 : 0)
+  const edges     = kgEdges || (IS_DEMO_MODE ? 313193 : 0)
 
   return {
     connect: [
@@ -281,15 +282,15 @@ const STAGE_COLORS: Record<string, string> = {
 
 const AVG_DAYS = ['0.5 d', '2.1 d', '5.8 d', '3.2 d']
 
-// Real AW orders — keyed by sector so other sectors keep generic data
+// Active cases per sector — manufacturing uses real AW orders in demo mode
 const ACTIVE_CASES_BY_SECTOR: Record<SectorId, { id: number; name: string; value: number; stage: string; daysInStage: number; territory?: string }[]> = {
-  manufacturing: [
+  manufacturing: IS_DEMO_MODE ? [
     { id: 75123, name: 'Bike World Inc.',               value: 87145,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Southwest'  },
     { id: 75124, name: 'Action Bicycle Specialists',    value: 53209,  stage: 'Confirmed',  daysInStage: 3,  territory: 'Northwest'  },
     { id: 75120, name: 'Eastside Department Store',     value: 2049,   stage: 'Processing', daysInStage: 1,  territory: 'Canada'     },
     { id: 75119, name: 'Valley Bicycle Specialists',    value: 2039,   stage: 'Processing', daysInStage: 1,  territory: 'Australia'  },
     { id: 75122, name: 'Riding Cycles',                 value: 1898,   stage: 'Shipped',    daysInStage: 5,  territory: 'Germany'    },
-  ],
+  ] : [],
   retail: [
     { id: 4820, name: 'Marco Rossi',     value: 184,    stage: 'Stage 2', daysInStage: 2  },
     { id: 4819, name: 'Giulia Ferrari',  value: 326,    stage: 'Stage 2', daysInStage: 1  },

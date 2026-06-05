@@ -9,6 +9,7 @@ import { useSector } from '../contexts/SectorContext'
 import { SECTORS } from '../data/sectors'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
@@ -19,23 +20,23 @@ import { toast } from './Toast'
 // ── Toast system ─────────────────────────────────────────────────────────────
 
 // ── Action results map ────────────────────────────────────────────────────────
-const ACTION_RESULTS: Record<string, string> = {
-  // AW — Sales Performance Agent
+const AW_ACTION_RESULTS: Record<string, string> = {
   'Send performance report':          'YTD report sent to Linda Mitchell, Rachel Reiter + 12 reps — ERP × HR data combined',
   'Flag underperforming reps':        '3 reps below Q4 target flagged — Alberts ($1.45M), Mensa-Bonsu ($1.83M), Ito ($559K)',
   'Rebalance territory assignments':  'Territory rebalance proposal sent to Sales Manager — Southwest quota raised +15%',
-  // AW — CRM Dedup Agent
   'Remove 372 duplicate accounts':    '372 accounts with accountId < 0 removed from ClientHub — Knowledge Graph updated',
   'Re-run bridge matching':           'ERP↔CRM bridge re-run: 18,484 / 19,829 accounts matched via customer_ref ↔ accountId',
   'Export dedup report':              'Dedup report: 20,201 raw → 19,829 clean · 372 removed · 1,345 CRM-only prospects',
-  // AW — Revenue Disambiguation Agent
   'Set subtotal as default metric':   'Semantic layer updated: "revenue" → subtotal_amount ($20.1M) by default',
   'Create revenue alias in ontology': 'Aliases created: "commercial revenue" → subtotal_amount · "billed revenue" → total_due',
   'Alert analysts of ambiguity':      '4 dashboard owners notified — "fatturato" disambiguation documented in semantic layer',
-  // AW — Cross-source Bridge Validator
   'Repair orphan product links':      '47 SalesOrderLine rows with no PIM match flagged — product_ref ↔ internal_id gap report sent',
   'Re-sync HR↔ERP salesperson map':   'matricolaDip ↔ salesPersonId bridge re-validated: 14/14 sales reps matched',
   'Publish bridge health report':     'Bridge health report published — 3 bridges validated, 99.7% match rate overall',
+}
+
+const ACTION_RESULTS: Record<string, string> = {
+  ...(IS_DEMO_MODE ? AW_ACTION_RESULTS : {}),
   // Retail — Cart Recovery
   'Send email campaign':         '187 recovery emails queued — estimated delivery in 2 min',
   'Push SMS for Gold tier':      '34 SMS sent to Gold-tier customers — avg response rate 24%',
@@ -192,8 +193,110 @@ function customToAgentDef(c: CustomAgentDef): AgentDef {
 }
 
 // ── Agent definitions per sector ─────────────────────────────────────────────
+
+const MANUFACTURING_AGENTS_LIVE: AgentDef[] = [
+  {
+    id: 'sales-performance',
+    name: 'Sales Performance Agent',
+    description: 'Analyzes YTD sales across all reps using ERP × HR cross-source data, flags quota gaps and territory imbalances.',
+    icon: TrendingUp,
+    accessedEntities: ['Salesperson', 'Employee', 'SalesOrder', 'Territory'],
+    durationMs: 3600,
+    logSteps: [
+      'READ erp:SalesPerson → loading sales reps...',
+      'READ hr:employees → loading employee data...',
+      'JOIN via bridge key — matching reps to employees...',
+      'READ erp:SalesOrder → loading orders, computing YTD per rep...',
+      'READ erp:SalesTerritory → loading territories...',
+      'Detecting quota gaps and outliers...',
+      'WRITE performance report → semantic layer',
+    ],
+    metrics: [
+      { label: 'Reps analyzed',  value: '—' },
+      { label: 'Top performer',  value: '—', delta: 'run to populate', up: true },
+      { label: 'Highest bonus',  value: '—', delta: 'run to populate', up: true },
+      { label: 'Below quota',    value: '—', delta: 'run to populate', up: false },
+    ],
+    findings: [],
+    actions: ['Send performance report', 'Flag underperforming reps', 'Rebalance territory assignments'],
+  },
+  {
+    id: 'crm-dedup',
+    name: 'CRM Data Quality Agent',
+    description: 'Detects and removes duplicate accounts in the CRM, then re-validates the ERP↔CRM identity bridge.',
+    icon: ShieldCheck,
+    accessedEntities: ['Customer', 'SalesOrder'],
+    durationMs: 2800,
+    logSteps: [
+      'READ crm:accounts → loading all accounts...',
+      'Scanning for duplicate account patterns...',
+      'READ erp:SalesOrder → loading orders, extracting customer refs...',
+      'Running ERP↔CRM bridge: customer_ref ↔ accountId...',
+      'Cross-referencing clean accounts against ERP...',
+      'WRITE dedup results + bridge map → semantic layer',
+    ],
+    metrics: [
+      { label: 'CRM accounts',      value: '—' },
+      { label: 'Duplicates',        value: '—', delta: 'run to detect',  up: false },
+      { label: 'Clean accounts',    value: '—', delta: 'run to compute', up: true  },
+      { label: 'Bridge match rate', value: '—', delta: 'run to compute', up: true  },
+    ],
+    findings: [],
+    actions: ['Remove duplicate accounts', 'Re-run bridge matching', 'Export dedup report'],
+  },
+  {
+    id: 'revenue-disambiguator',
+    name: 'Revenue Disambiguation Agent',
+    description: 'Detects revenue field ambiguities (net vs gross) and enforces the correct semantic alias at query time.',
+    icon: BarChart3,
+    accessedEntities: ['SalesOrder'],
+    durationMs: 2200,
+    logSteps: [
+      'READ erp:SalesOrder → revenue columns loading...',
+      'Computing SUM of all revenue fields...',
+      'Delta analysis: gross − net = tax + freight...',
+      'Scanning ontology for revenue/fatturato definitions...',
+      'Ambiguity analysis: checking for conflicting interpretations...',
+      'WRITE disambiguation rules → semantic layer',
+    ],
+    metrics: [
+      { label: 'Net revenue',         value: '—', delta: 'run to compute', up: false },
+      { label: 'Gross revenue',       value: '—', delta: 'run to compute', up: false },
+      { label: 'Delta (tax+freight)', value: '—', delta: 'run to compute', up: false },
+      { label: 'Aliases created',     value: '0', delta: 'run to create',  up: true  },
+    ],
+    findings: [],
+    actions: ['Set subtotal as default metric', 'Create revenue alias in ontology', 'Alert analysts of ambiguity'],
+  },
+  {
+    id: 'bridge-validator',
+    name: 'Cross-source Bridge Validator',
+    description: 'Validates all identity bridges across sources and reports match rates, orphan records, and schema mismatches.',
+    icon: Activity,
+    accessedEntities: ['SalesOrder', 'Customer', 'Salesperson', 'Employee', 'Product'],
+    durationMs: 4100,
+    logSteps: [
+      'READ erp:SalesOrder → extracting bridge keys...',
+      'READ crm:accounts → bridge 1: customer reference',
+      'READ hr:employees → bridge 2: salesperson reference',
+      'READ pim:products → bridge 3: product reference',
+      'Computing match rates for all bridges...',
+      'Scanning for orphan records and type mismatches...',
+      'WRITE bridge health report → semantic layer',
+    ],
+    metrics: [
+      { label: 'Bridges validated',   value: '—' },
+      { label: 'ERP↔CRM match rate', value: '—', delta: 'run to compute', up: true  },
+      { label: 'ERP↔HR match rate',  value: '—', delta: 'run to compute', up: true  },
+      { label: 'Orphan records',      value: '—', delta: 'run to detect',  up: false },
+    ],
+    findings: [],
+    actions: ['Repair orphan product links', 'Re-sync HR↔ERP salesperson map', 'Publish bridge health report'],
+  },
+]
+
 const AGENTS: Record<SectorId, AgentDef[]> = {
-  manufacturing: [
+  manufacturing: IS_DEMO_MODE ? [
     {
       id: 'sales-performance',
       name: 'Sales Performance Agent',
@@ -314,7 +417,7 @@ const AGENTS: Record<SectorId, AgentDef[]> = {
       ],
       actions: ['Repair orphan product links', 'Re-sync HR↔ERP salesperson map', 'Publish bridge health report'],
     },
-  ],
+  ] : MANUFACTURING_AGENTS_LIVE,
 
   retail: [
     {

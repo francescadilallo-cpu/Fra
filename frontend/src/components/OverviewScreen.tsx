@@ -4,6 +4,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { semanticStatus, getLiveConfig, semanticSources, type SemanticStatus, type LiveConfig } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
 
 interface Props { onNavigate: (tab: NavTab) => void }
@@ -168,10 +169,10 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </p>
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { label: 'ERP — OrionSales', value: `${(tableCounts.sales_order_header ?? 31465).toLocaleString()} orders`,  sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
-                  { label: 'CRM — ClientHub',  value: `${((tableCounts.account ?? 20201) - (semStatus?.dedup_count ?? 372)).toLocaleString()} clients`, sub: `SQLite (${semStatus?.dedup_count ?? 372} dedup)`, color: 'text-teal-600 bg-teal-50 border-teal-200' },
-                  { label: 'HR — Employees',   value: `${(tableCounts.dipendenti_hr ?? 290).toLocaleString()} employees`, sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
-                  { label: 'PIM — Catalog',    value: `${(tableCounts.product_catalog_pim ?? 504).toLocaleString()} products`, sub: 'JSON',              color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                  { label: 'ERP — OrionSales', value: `${(tableCounts.sales_order_header ?? (IS_DEMO_MODE ? 31465 : 0)).toLocaleString()} orders`,  sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                  { label: 'CRM — ClientHub',  value: `${((tableCounts.account ?? (IS_DEMO_MODE ? 20201 : 0)) - (semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0))).toLocaleString()} clients`, sub: `SQLite (${semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)} dedup)`, color: 'text-teal-600 bg-teal-50 border-teal-200' },
+                  { label: 'HR — Employees',   value: `${(tableCounts.dipendenti_hr ?? (IS_DEMO_MODE ? 290 : 0)).toLocaleString()} employees`, sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
+                  { label: 'PIM — Catalog',    value: `${(tableCounts.product_catalog_pim ?? (IS_DEMO_MODE ? 504 : 0)).toLocaleString()} products`, sub: 'JSON',              color: 'text-amber-600 bg-amber-50 border-amber-200' },
                 ].map(s => (
                   <div key={s.label} className={`border rounded-lg px-3 py-2.5 ${s.color}`}>
                     <p className="text-[11px] font-semibold">{s.label}</p>
@@ -277,7 +278,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
                 <>
-                  <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? 372}</p>
+                  <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)}</p>
                   <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
                   <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated.</p>
                 </>

@@ -15,6 +15,7 @@ import {
   type BackendSource, type ParamField,
 } from '../api/sources'
 import { buildSemanticLayer, semanticSources } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -52,29 +53,31 @@ const AW_SOURCES: AWSourceDef[] = [
   {
     label: 'ERP — OrionSales', type: 'PostgreSQL / DuckDB',
     tables: [
-      { name: 'sales_order_header', rows: 31465 },
-      { name: 'sales_order_line',   rows: 121317 },
-      { name: 'salesperson',        rows: 17 },
-      { name: 'territory',          rows: 10 },
-      { name: 'offer',              rows: 16 },
+      { name: 'sales_order_header', rows: IS_DEMO_MODE ? 31465  : 0 },
+      { name: 'sales_order_line',   rows: IS_DEMO_MODE ? 121317 : 0 },
+      { name: 'salesperson',        rows: IS_DEMO_MODE ? 17     : 0 },
+      { name: 'territory',          rows: IS_DEMO_MODE ? 10     : 0 },
+      { name: 'offer',              rows: IS_DEMO_MODE ? 16     : 0 },
     ],
-    totalRows: 152825, lastSync: '2014-12-31',
+    totalRows: IS_DEMO_MODE ? 152825 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
     downloadEntity: 'SalesOrder', downloadFilename: 'aw_sales_order_sample.csv',
   },
   {
     label: 'CRM — ClientHub', type: 'SQLite',
     tables: [
-      { name: 'account', rows: 20201 }, { name: 'contact', rows: 19302 },
-      { name: 'address', rows: 19614 }, { name: 'state_province', rows: 70 },
+      { name: 'account',        rows: IS_DEMO_MODE ? 20201 : 0 },
+      { name: 'contact',        rows: IS_DEMO_MODE ? 19302 : 0 },
+      { name: 'address',        rows: IS_DEMO_MODE ? 19614 : 0 },
+      { name: 'state_province', rows: IS_DEMO_MODE ? 70    : 0 },
     ],
-    totalRows: 59193, lastSync: '2014-12-31',
-    warning: '372 duplicate accounts removed (accountId<0)',
+    totalRows: IS_DEMO_MODE ? 59193 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
+    warning: IS_DEMO_MODE ? '372 duplicate accounts removed (accountId<0)' : undefined,
     downloadEntity: 'Customer', downloadFilename: 'aw_customer_sample.csv',
   },
   {
     label: 'HR + PIM — Files', type: 'CSV + JSON',
-    tables: [{ name: 'dipendenti_hr', rows: 290 }, { name: 'product_catalog_pim', rows: 504 }],
-    totalRows: 794, lastSync: '2014-12-31',
+    tables: [{ name: 'dipendenti_hr', rows: IS_DEMO_MODE ? 290 : 0 }, { name: 'product_catalog_pim', rows: IS_DEMO_MODE ? 504 : 0 }],
+    totalRows: IS_DEMO_MODE ? 794 : 0, lastSync: IS_DEMO_MODE ? '2014-12-31' : '—',
     note: 'Italian schema · HR CSV + PIM JSON',
     downloadEntity: 'Employee', downloadFilename: 'aw_employee_sample.csv',
   },
