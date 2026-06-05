@@ -843,7 +843,11 @@ def login_for_access_token(
 
 @app.get("/api/auth/me", tags=["auth"])
 def get_me(principal: UserPrincipal = Depends(require_roles("user", "admin"))) -> dict:
-    return {"username": principal.username, "role": principal.role, "mode": principal.mode}
+    return {
+        "username": principal.username,
+        "role": principal.role,
+        "mode": principal.mode,
+    }
 
 
 @app.get("/api/dashboard", response_model=DashboardData)

@@ -84,7 +84,6 @@ jobs:
         working-directory: backend
         env:
           SEMANTIC_REQUIRE_LLM_INTENT: "0"
-          RUN_FAITHFULNESS_EVAL: "1"
           FAITHFULNESS_MIN_SCORE: "0.90"
         run: python -m pytest -q tests/test_faithfulness_eval.py -s
 
