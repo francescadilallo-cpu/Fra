@@ -202,7 +202,9 @@ def test_approve_executes_writeback(
         headers=admin_headers,
     )
     assert approve_resp.status_code == 200, approve_resp.text
-    assert approve_resp.json()["status"] == "EXECUTED"
+    body = approve_resp.json()
+    assert body["status"] in ("SYNCED", "SYNC_FAILED")
+    assert body["resync_result"] is not None
 
     # Restore original DB state for repeatable tests.
     _set_order_delivery_date(db_path, order_id, original_delivery_date)
@@ -362,7 +364,7 @@ def test_second_approve_after_executed_returns_409(
         headers=admin_headers,
     )
     assert first_approve.status_code == 200, first_approve.text
-    assert first_approve.json()["status"] == "EXECUTED"
+    assert first_approve.json()["status"] in ("SYNCED", "SYNC_FAILED")
 
     second_approve = client.post(
         f"/api/agent/approve/{action_id}",
@@ -416,9 +418,90 @@ def test_concurrent_double_approval_is_lock_safe(
     t1.join()
     t2.join()
 
-    assert statuses.count("EXECUTED") == 1
+    assert statuses.count("SYNCED") + statuses.count("SYNC_FAILED") == 1
     assert len(errors) == 1
     assert isinstance(errors[0], AgentExecutionError)
     assert "cannot be approved" in str(errors[0])
 
     _set_order_delivery_date(db_path, order_id, original_delivery_date)
+
+
+def test_approve_resync_result_populated(
+    client: TestClient,
+    admin_headers: dict[str, str],
+    db_path: Path,
+) -> None:
+    order_id, order_date, original_delivery_date = _get_first_order(db_path)
+    new_date = (order_date + timedelta(days=8)).isoformat()
+
+    create_resp = client.post(
+        "/api/agent/execute",
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {new_date}"
+        },
+        headers=admin_headers,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    action_id = create_resp.json()["action_id"]
+
+    approve_resp = client.post(
+        f"/api/agent/approve/{action_id}",
+        json={"approve": True},
+        headers=admin_headers,
+    )
+    assert approve_resp.status_code == 200, approve_resp.text
+    body = approve_resp.json()
+    assert body["status"] in ("SYNCED", "SYNC_FAILED")
+    resync = body["resync_result"]
+    assert resync is not None
+    assert "nodes_patched" in resync
+    assert "cache_keys_invalidated" in resync
+    assert "duration_ms" in resync
+    assert "errors" in resync
+
+    audit_resp = client.get("/api/agent/audit?limit=100", headers=admin_headers)
+    assert audit_resp.status_code == 200
+    phases = {
+        r["phase"]
+        for r in audit_resp.json()["records"]
+        if r.get("action_id") == action_id
+    }
+    assert "EXECUTED" in phases
+    assert "RESYNCED" in phases
+
+    _set_order_delivery_date(db_path, order_id, original_delivery_date)
+
+
+def test_get_action_status_endpoint(
+    client: TestClient,
+    admin_headers: dict[str, str],
+    db_path: Path,
+) -> None:
+    order_id, order_date, _ = _get_first_order(db_path)
+    proposed_date = (order_date + timedelta(days=6)).isoformat()
+
+    create_resp = client.post(
+        "/api/agent/execute",
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"
+        },
+        headers=admin_headers,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    action_id = create_resp.json()["action_id"]
+
+    status_resp = client.get(f"/api/agent/status/{action_id}", headers=admin_headers)
+    assert status_resp.status_code == 200, status_resp.text
+    body = status_resp.json()
+    assert body["action_id"] == action_id
+    assert body["status"] == "PENDING_HUMAN_APPROVAL"
+    assert body["resync_result"] is None
+
+
+def test_get_action_status_unknown_returns_404(
+    client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    resp = client.get("/api/agent/status/no-such-id", headers=admin_headers)
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["error"] == "AGENT_ACTION_NOT_FOUND"

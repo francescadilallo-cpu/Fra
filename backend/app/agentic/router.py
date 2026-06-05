@@ -36,6 +36,7 @@ class AgentActionResponse(BaseModel):
     created_at: str
     updated_at: str
     proposed_action: dict[str, Any]
+    resync_result: dict[str, Any] | None = None
 
 
 class AgentAuditListResponse(BaseModel):
@@ -54,6 +55,9 @@ def _to_response(action: PendingAgentAction) -> AgentActionResponse:
         created_at=action.created_at,
         updated_at=action.updated_at,
         proposed_action=action.proposed_action.model_dump(mode="json"),
+        resync_result=action.resync_result.model_dump(mode="json")
+        if action.resync_result
+        else None,
     )
 
 
@@ -109,6 +113,23 @@ def build_agent_router(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"error": "AGENT_ACTION_EXECUTION_FAILED", "message": str(exc)},
             ) from exc
+
+    @router.get("/status/{action_id}", response_model=AgentActionResponse)
+    def get_action_status(
+        action_id: str,
+        _: Any = Depends(admin_dependency),
+    ) -> AgentActionResponse:
+        with layer._lock:
+            action = layer._pending_actions.get(action_id)
+        if not action:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "AGENT_ACTION_NOT_FOUND",
+                    "message": f"Action '{action_id}' not found",
+                },
+            )
+        return _to_response(action)
 
     @router.get("/audit", response_model=AgentAuditListResponse)
     def list_audit(
