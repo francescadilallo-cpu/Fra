@@ -536,15 +536,15 @@ export default function ConfigurationView() {
                 <p className="text-xs text-slate-500 mt-0.5 leading-snug">{s.domain}</p>
                 <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5">
                   <div className="text-center">
-                    <p className="text-sm font-bold text-slate-700">{stats.classes}</p>
+                    <p className="text-sm font-bold text-slate-700">{stats?.classes}</p>
                     <p className="text-[9px] text-slate-400 uppercase tracking-wide">classes</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-bold text-slate-700">{stats.mappings}</p>
+                    <p className="text-sm font-bold text-slate-700">{stats?.mappings}</p>
                     <p className="text-[9px] text-slate-400 uppercase tracking-wide">mappings</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-bold text-slate-700">{stats.conns}</p>
+                    <p className="text-sm font-bold text-slate-700">{stats?.conns}</p>
                     <p className="text-[9px] text-slate-400 uppercase tracking-wide">conn.</p>
                   </div>
                 </div>
