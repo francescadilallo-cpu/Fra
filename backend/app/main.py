@@ -42,7 +42,7 @@ from .models import (
     RecentOrder,
     SegmentCreate,
 )
-from .agentic.executive import ExecutiveAgenticLayer
+from .agentic.executive import ActionEffect, ExecutiveAgenticLayer
 from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
@@ -787,9 +787,36 @@ def _get_agentic_ontology() -> Any:
     return _semantic_state.get("ontology")
 
 
+def _agentic_kg_patcher(effect: ActionEffect) -> int:
+    import networkx as nx
+
+    kg = _semantic_state.get("kg")
+    if kg is None or not effect.affected_node_ids or not effect.changed_fields:
+        return 0
+    patched = 0
+    for node_id in effect.affected_node_ids:
+        if node_id in kg._g:
+            nx.set_node_attributes(kg._g, {node_id: effect.changed_fields})
+            patched += 1
+    return patched
+
+
+def _agentic_cache_invalidator() -> int:
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
+    return 1
+
+
 _agentic_layer = ExecutiveAgenticLayer(
     get_ontology=_get_agentic_ontology,
     get_db_connection=get_connection,
+    kg_patcher=_agentic_kg_patcher,
+    cache_invalidator=_agentic_cache_invalidator,
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 app.include_router(

@@ -29,8 +29,26 @@ AgentStatus = Literal[
     "VALIDATION_FAILED",
     "REJECTED",
     "EXECUTED",
+    "SYNCED",
+    "SYNC_FAILED",
     "FAILED",
 ]
+
+
+class ActionEffect(BaseModel):
+    action_type: str
+    affected_tables: list[str] = Field(default_factory=list)
+    affected_node_ids: list[str] = Field(default_factory=list)
+    changed_fields: dict[str, Any] = Field(default_factory=dict)
+    entity_types: list[str] = Field(default_factory=list)
+
+
+class ResyncResult(BaseModel):
+    nodes_patched: int = 0
+    cache_keys_invalidated: int = 0
+    duration_ms: float = 0.0
+    errors: list[str] = Field(default_factory=list)
+    completed_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class ProposedWriteAction(BaseModel):
@@ -50,6 +68,7 @@ class AgentAuditRecord(BaseModel):
         "APPROVED",
         "REJECTED",
         "EXECUTED",
+        "RESYNCED",
         "FAILED",
     ]
     actor: str
@@ -67,6 +86,7 @@ class PendingAgentAction(BaseModel):
     proposed_action: ProposedWriteAction
     validation_checks: list[str] = Field(default_factory=list)
     manager_note: str | None = None
+    resync_result: ResyncResult | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
@@ -84,9 +104,13 @@ class ExecutiveAgenticLayer:
         self,
         get_ontology: Callable[[], Any],
         get_db_connection: Callable[[], Any],
+        kg_patcher: Callable[["ActionEffect"], int] | None = None,
+        cache_invalidator: Callable[[], int] | None = None,
     ) -> None:
         self._get_ontology = get_ontology
         self._get_db_connection = get_db_connection
+        self._kg_patcher = kg_patcher
+        self._cache_invalidator = cache_invalidator
         self._lock = threading.RLock()
         self._pending_actions: dict[str, PendingAgentAction] = {}
         self._audit_log: list[AgentAuditRecord] = []
@@ -202,6 +226,25 @@ class ExecutiveAgenticLayer:
                     actor_role=actor_role,
                     details={"action": action.proposed_action.model_dump(mode="json")},
                 )
+
+                effect = self._compute_action_effect(action.proposed_action)
+                resync = self._propagate_changes(effect)
+                action.resync_result = resync
+                action.status = "SYNC_FAILED" if resync.errors else "SYNCED"
+                action.updated_at = datetime.now(UTC).isoformat()
+                self._pending_actions[action_id] = action
+                self._audit(
+                    phase="RESYNCED",
+                    action_id=action_id,
+                    actor=actor,
+                    actor_role=actor_role,
+                    details={
+                        "nodes_patched": resync.nodes_patched,
+                        "cache_keys_invalidated": resync.cache_keys_invalidated,
+                        "duration_ms": resync.duration_ms,
+                        "errors": resync.errors,
+                    },
+                )
                 return action
             except Exception as exc:
                 action.status = "FAILED"
@@ -300,6 +343,45 @@ class ExecutiveAgenticLayer:
 
         return ValidationOutcome(passed=True, checks=checks)
 
+    def _compute_action_effect(self, action: ProposedWriteAction) -> "ActionEffect":
+        if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
+            return ActionEffect(
+                action_type=action.action_type,
+                affected_tables=["orders"],
+                affected_node_ids=[f"order:{action.order_id}"],
+                changed_fields={"delivery_date": action.new_delivery_date.isoformat()},
+                entity_types=["SalesOrder"],
+            )
+        return ActionEffect(action_type=action.action_type)
+
+    def _propagate_changes(self, effect: "ActionEffect") -> "ResyncResult":
+        import time
+
+        t0 = time.monotonic()
+        nodes_patched = 0
+        cache_invalidated = 0
+        errors: list[str] = []
+
+        if self._kg_patcher is not None:
+            try:
+                nodes_patched = self._kg_patcher(effect)
+            except Exception as exc:
+                errors.append(f"kg_patch_error: {exc}")
+
+        if self._cache_invalidator is not None:
+            try:
+                cache_invalidated = self._cache_invalidator()
+            except Exception as exc:
+                errors.append(f"cache_invalidation_error: {exc}")
+
+        duration_ms = (time.monotonic() - t0) * 1000
+        return ResyncResult(
+            nodes_patched=nodes_patched,
+            cache_keys_invalidated=cache_invalidated,
+            duration_ms=round(duration_ms, 2),
+            errors=errors,
+        )
+
     def _execute_writeback(self, action: ProposedWriteAction) -> None:
         if action.action_type != "UPDATE_ORDER_DELIVERY_DATE":
             raise AgentExecutionError(f"Unsupported action_type: {action.action_type}")
@@ -326,6 +408,7 @@ class ExecutiveAgenticLayer:
             "APPROVED",
             "REJECTED",
             "EXECUTED",
+            "RESYNCED",
             "FAILED",
         ],
         actor: str,
