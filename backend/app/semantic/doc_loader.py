@@ -28,12 +28,13 @@ class DocLoader:
             disambiguation_rules=self.load_rules(),
         )
 
-    def _read(self, filename: str) -> dict | list | None:
+    def _read(self, filename: str) -> dict | None:
         p = self._path / filename
         if not p.exists():
             return None
         try:
-            return yaml.safe_load(p.read_text(encoding="utf-8"))
+            raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+            return raw if isinstance(raw, dict) else None
         except Exception as exc:
             logger.warning("DocLoader: failed to parse %s: %s", filename, exc)
             return None
