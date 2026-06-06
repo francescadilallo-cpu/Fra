@@ -753,13 +753,17 @@ class DuckDBSourceManager:
             if len(inline.encode("utf-8")) > _MAX_INLINE_BYTES:
                 raise ValueError(f"Inline CSV exceeds 5 MB limit ({len(inline)} chars)")
             df = pd.read_csv(io.StringIO(inline), sep=",", low_memory=False)
-            conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+            safe_table = table.replace('"', '""')
+            conn.execute(
+                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df'
+            )
             n = len(df)
         else:
             path = _safe_data_path(cfg.params.get("path", ""))
             if not path.exists():
                 raise FileNotFoundError(f"CSV not found: {path}")
             table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
+            safe_table = table.replace('"', '""')
             delimiter = cfg.params.get("delimiter", ",")
             safe_path = str(path).replace("'", "''")
             safe_delim = delimiter.replace("'", "''")
@@ -767,11 +771,11 @@ class DuckDBSourceManager:
             # (parallel, out-of-core) instead of materialising the whole file in
             # a pandas DataFrame in Python memory.
             conn.execute(
-                f'CREATE TABLE IF NOT EXISTS "{table}" AS '
+                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
                 f"SELECT * FROM read_csv_auto('{safe_path}', "
                 f"delim='{safe_delim}', header=true)"
             )
-            _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+            _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
             n = _row[0] if _row is not None else 0
         self._row_counts[f"{cfg.id}.{table}"] = n
         logger.info("CSV  %-25s %7d rows", table, n)
@@ -788,6 +792,7 @@ class DuckDBSourceManager:
             cfg.params.get("table_name")
             or path.stem.replace("-", "_").replace(" ", "_").lower()
         )
+        safe_table = table.replace('"', '""')
         records_key = cfg.params.get("records_key")
         if not records_key:
             # Top-level array (or ndjson): let DuckDB stream it natively instead
@@ -795,10 +800,10 @@ class DuckDBSourceManager:
             safe_path = str(path).replace("'", "''")
             try:
                 conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{table}" AS '
+                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
                     f"SELECT * FROM read_json_auto('{safe_path}')"
                 )
-                _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
                 logger.info("JSON %-25s %7d rows", table, n)
@@ -823,7 +828,7 @@ class DuckDBSourceManager:
                 "JSON must be a top-level array or contain a list under 'records_key'"
             )
         df = pd.DataFrame(records)
-        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
         logger.info("JSON %-25s %7d rows", table, len(df))
         if table not in cfg.target_tables:
@@ -838,8 +843,9 @@ class DuckDBSourceManager:
             cfg.params.get("table_name")
             or path.stem.replace("-", "_").replace(" ", "_").lower()
         )
+        safe_table = table.replace('"', '""')
         df = pd.read_excel(str(path), sheet_name=sheet)
-        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
         logger.info("XLS  %-25s %7d rows", table, len(df))
         if table not in cfg.target_tables:
@@ -897,17 +903,19 @@ class DuckDBSourceManager:
 
             limit = _pg_ingest_limit()
             pg_conn = psycopg2.connect(dsn, connect_timeout=10)
+            safe_schema = schema.replace('"', '""')
             try:
                 cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 for table in tables:
+                    safe_table = table.replace('"', '""')
                     if limit > 0:
                         # Fetch one extra row so we can detect (and warn about)
                         # silent truncation rather than capping invisibly.
                         cur.execute(
-                            f'SELECT * FROM "{schema}"."{table}" LIMIT {limit + 1}'
+                            f'SELECT * FROM "{safe_schema}"."{safe_table}" LIMIT {limit + 1}'
                         )
                     else:
-                        cur.execute(f'SELECT * FROM "{schema}"."{table}"')
+                        cur.execute(f'SELECT * FROM "{safe_schema}"."{safe_table}"')
                     rows = cur.fetchall()
                     truncated = limit > 0 and len(rows) > limit
                     if truncated:
@@ -921,7 +929,7 @@ class DuckDBSourceManager:
                         )
                     df = pd.DataFrame([dict(r) for r in rows])
                     conn.execute(
-                        f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df'
                     )
                     self._row_counts[f"{cfg.id}.{table}"] = len(df)
                     logger.info("PG   %-25s %7d rows", table, len(df))
@@ -931,11 +939,13 @@ class DuckDBSourceManager:
                 pg_conn.close()
         except ImportError:
             # Fallback: try DuckDB postgres_scanner
+            safe_schema = schema.replace('"', '""')
             conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
             conn.execute(f"ATTACH '{dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
             for table in tables:
+                safe_table = table.replace('"', '""')
                 conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM _pg_src."{schema}"."{table}"'
+                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
                 )
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
                 n = _row[0] if _row is not None else 0
@@ -954,12 +964,13 @@ class DuckDBSourceManager:
             cfg.params.get("table_name")
             or path.stem.replace("-", "_").replace(" ", "_").lower()
         )
+        safe_table = table.replace('"', '""')
         safe_path = str(path).replace("'", "''")
         conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{table}" AS '
+            f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
             f"SELECT * FROM read_parquet('{safe_path}')"
         )
-        _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+        _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
         n = _row[0] if _row is not None else 0
         self._row_counts[f"{cfg.id}.{table}"] = n
         logger.info("PQT  %-25s %7d rows", table, n)
