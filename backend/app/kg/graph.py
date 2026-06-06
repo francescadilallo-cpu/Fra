@@ -45,6 +45,30 @@ def _edge_limit() -> int:
     return val if val >= 0 else 100000
 
 
+def _node_limit() -> int:
+    """Per-entity node cap when building the KG from the ontology.
+
+    Bounds memory — each row becomes an in-memory networkx node carrying its
+    attributes. Defaults to 200k. Set FRA_KG_NODE_LIMIT=0 for unlimited, or a
+    custom value. Invalid or negative values fall back to the default.
+    """
+    raw = os.getenv("FRA_KG_NODE_LIMIT", "200000").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 200000
+    return val if val >= 0 else 200000
+
+
+_SENTINEL = object()
+
+
+def _chain_first(first, rest):
+    """Re-attach an eagerly-pulled first item to the front of a generator."""
+    yield first
+    yield from rest
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -128,6 +152,29 @@ class KnowledgeGraph:
             self._dedup_count,
         )
 
+    @staticmethod
+    def _iter_rows(mgr, sql: str):
+        """Yield rows for *sql*, preferring the manager's streaming fetch.
+
+        Returns an iterator, or None if the query failed. Falls back to
+        execute_all() for managers/adapters that don't implement execute_iter
+        (e.g. test doubles), preserving backward compatibility.
+        """
+        execute_iter = getattr(mgr, "execute_iter", None)
+        try:
+            if callable(execute_iter):
+                gen = execute_iter(sql)
+                # Pull the first row eagerly so a query error surfaces here
+                # (and we can report it) rather than mid-iteration.
+                first = next(gen, _SENTINEL)
+                if first is _SENTINEL:
+                    return iter(())
+                return _chain_first(first, gen)
+            return iter(mgr.execute_all(sql))
+        except Exception as exc:
+            logger.warning("KG row fetch failed for %s: %s", sql, exc)
+            return None
+
     def build_from_ontology(self, mgr, ontology) -> None:
         """Build the knowledge graph from ontology source definitions + DuckDB tables.
 
@@ -185,20 +232,26 @@ class KnowledgeGraph:
             entity_pk_map[entity_name] = key_field
 
             safe = table.replace('"', '""')
-            try:
-                rows = mgr.execute_all(f'SELECT * FROM "{safe}"')
-            except Exception as exc:
+            node_limit = _node_limit()
+            # Stream rows in batches (when the manager supports it) so a large
+            # table is never fully materialised into one Python list, and we can
+            # stop at the cap without fetching the rest.
+            rows_iter = self._iter_rows(mgr, f'SELECT * FROM "{safe}"')
+            if rows_iter is None:
                 logger.warning(
-                    "build_from_ontology: load failed for entity '%s' (table '%s'): %s",
+                    "build_from_ontology: load failed for entity '%s' (table '%s')",
                     entity_name,
                     table,
-                    exc,
                 )
                 continue
 
             source_id = primary_src.get("source", "unknown")
             loaded = 0
-            for row in rows:
+            truncated = False
+            for row in rows_iter:
+                if node_limit > 0 and loaded >= node_limit:
+                    truncated = True
+                    break
                 pk_val = row.get(key_field)
                 if pk_val is None:
                     continue
@@ -213,6 +266,14 @@ class KnowledgeGraph:
                     ],
                 )
                 loaded += 1
+            if truncated:
+                logger.warning(
+                    "build_from_ontology: entity '%s' hit the %d-node cap — the "
+                    "knowledge graph may be incomplete. Raise FRA_KG_NODE_LIMIT "
+                    "(or set 0 for unlimited) to load all nodes.",
+                    entity_name,
+                    node_limit,
+                )
             logger.debug(
                 "build_from_ontology: %d nodes loaded for '%s'", loaded, entity_name
             )

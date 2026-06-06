@@ -85,6 +85,36 @@ class TestNostoreMode:
         mgr.rebuild()
         assert mgr.execute("SELECT COUNT(*) AS n FROM t")[0]["n"] == 3
 
+    def test_execute_iter_streams_all_rows(self, nostore_env):
+        scenario, registry, db_path, tmp = nostore_env
+        csv = tmp / "a.csv"
+        lines = ["id,name"] + [f"{i},n{i}" for i in range(50)]
+        csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "t"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        rows = list(
+            mgr.execute_iter("SELECT id, name FROM t ORDER BY id", batch_size=7)
+        )
+        assert len(rows) == 50
+        assert rows[0] == {"id": 0, "name": "n0"}
+        assert rows[-1]["name"] == "n49"
+
+    def test_execute_iter_can_stop_early(self, nostore_env):
+        scenario, registry, db_path, tmp = nostore_env
+        csv = tmp / "a.csv"
+        lines = ["id"] + [str(i) for i in range(100)]
+        csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "t"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        seen = []
+        for row in mgr.execute_iter("SELECT id FROM t ORDER BY id"):
+            seen.append(row["id"])
+            if len(seen) >= 5:
+                break  # generator's finally must close the connection cleanly
+        assert seen == [0, 1, 2, 3, 4]
+        # Manager still usable afterwards.
+        assert mgr.execute("SELECT COUNT(*) AS n FROM t")[0]["n"] == 100
+
     def test_cursor_independent_of_manager_close(self, nostore_env):
         # A cursor handed out by get_connection can be used then closed without
         # affecting subsequent queries.

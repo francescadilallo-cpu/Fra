@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.kg.graph import (
     KnowledgeGraph,
     _edge_limit,
+    _node_limit,
     _norm_email,
     _norm_name,
     _normalize_table_name,
@@ -325,3 +326,106 @@ class TestEdgeLimit:
     def test_whitespace_stripped(self, monkeypatch):
         monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "  42  ")
         assert _edge_limit() == 42
+
+
+# ── _node_limit ────────────────────────────────────────────────────────────────
+
+
+class TestNodeLimit:
+    def test_default_is_200k(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_NODE_LIMIT", raising=False)
+        assert _node_limit() == 200000
+
+    def test_custom_value(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NODE_LIMIT", "500")
+        assert _node_limit() == 500
+
+    def test_zero_means_unlimited(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NODE_LIMIT", "0")
+        assert _node_limit() == 0
+
+    def test_invalid_falls_back(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NODE_LIMIT", "many")
+        assert _node_limit() == 200000
+
+
+# ── build_from_ontology node loading (streaming + cap) ──────────────────────────
+
+
+class _FakeOntology:
+    def __init__(self, entities_cfg: dict) -> None:
+        self._entities_cfg = entities_cfg
+
+
+class _FakeMgr:
+    """Minimal manager double: schema discovery + streaming row fetch."""
+
+    def __init__(self, table: str, rows: list[dict]) -> None:
+        self._table = table
+        self._rows = rows
+        self.used_iter = False
+        self.used_all = False
+
+    def get_schema_info(self) -> dict:
+        return {self._table: {"columns": [], "row_count": len(self._rows)}}
+
+    def execute_iter(self, sql: str, params=(), batch_size: int = 10000):
+        self.used_iter = True
+        yield from self._rows
+
+
+class _FakeMgrNoIter:
+    """Manager double without execute_iter — exercises the execute_all fallback."""
+
+    def __init__(self, table: str, rows: list[dict]) -> None:
+        self._table = table
+        self._rows = rows
+
+    def get_schema_info(self) -> dict:
+        return {self._table: {"columns": [], "row_count": len(self._rows)}}
+
+    def execute_all(self, sql: str, params=()):
+        return list(self._rows)
+
+
+_CFG = {
+    "Customer": {
+        "sources": [{"table": "customers", "key_field": "id", "source": "crm"}],
+        "attributes": {},
+    }
+}
+
+
+class TestBuildFromOntologyNodes:
+    def test_loads_all_nodes_below_cap(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_NODE_LIMIT", raising=False)
+        rows = [{"id": i, "name": f"c{i}"} for i in range(5)]
+        mgr = _FakeMgr("customers", rows)
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_CFG))
+        assert kg.node_count == 5
+        assert mgr.used_iter is True  # streamed, not bulk-loaded
+
+    def test_node_cap_truncates(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NODE_LIMIT", "3")
+        rows = [{"id": i, "name": f"c{i}"} for i in range(10)]
+        mgr = _FakeMgr("customers", rows)
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_CFG))
+        assert kg.node_count == 3
+
+    def test_unlimited_loads_all(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NODE_LIMIT", "0")
+        rows = [{"id": i} for i in range(25)]
+        mgr = _FakeMgr("customers", rows)
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_CFG))
+        assert kg.node_count == 25
+
+    def test_fallback_to_execute_all(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_NODE_LIMIT", raising=False)
+        rows = [{"id": i} for i in range(4)]
+        mgr = _FakeMgrNoIter("customers", rows)
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_CFG))
+        assert kg.node_count == 4

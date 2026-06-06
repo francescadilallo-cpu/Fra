@@ -34,6 +34,7 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -207,6 +208,32 @@ class DuckDBSourceManager:
             else:
                 df = conn.execute(sql).df()
             return df.where(df.notna(), other=None).to_dict(orient="records")
+        finally:
+            conn.close()
+
+    def execute_iter(
+        self,
+        sql: str,
+        params: tuple[Any, ...] = (),
+        batch_size: int = 10000,
+    ) -> "Iterator[dict[str, Any]]":
+        """Yield result rows in batches without materialising the whole set.
+
+        Lets bulk consumers (e.g. the KG builder) process or cap a large table
+        without first loading every row into one Python list. The connection
+        stays open for the lifetime of the generator and is closed when it is
+        exhausted or garbage-collected (e.g. when the consumer stops early).
+        """
+        conn = self.get_connection()
+        try:
+            cur = conn.execute(sql, params) if params else conn.execute(sql)
+            columns = [d[0] for d in cur.description]
+            while True:
+                batch = cur.fetchmany(batch_size)
+                if not batch:
+                    break
+                for row in batch:
+                    yield dict(zip(columns, row))
         finally:
             conn.close()
 
