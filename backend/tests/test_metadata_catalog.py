@@ -422,6 +422,78 @@ class TestPrunePhantomEntities:
         assert removed == 0
 
 
+# ── Schema-context caching ────────────────────────────────────────────────────
+
+
+def _seed_entity(cat, name: str, table: str) -> None:
+    with cat._Session() as s:
+        cat._upsert_entity(
+            s,
+            name=name,
+            description="",
+            primary_key="id",
+            sources=[{"source": "duckdb_unified", "table": table}],
+            record_count=10,
+            freshness="",
+            quality_flags={},
+            kg_node_count=0,
+        )
+        cat._upsert_attribute(
+            s,
+            entity=name,
+            attribute="id",
+            data_type="integer",
+            nullability_rate=0.0,
+            business_definition="",
+            source_path="",
+            sample_values=[],
+            lineage_edges=[],
+        )
+        s.commit()
+
+
+class TestSchemaContextCache:
+    def test_schema_context_includes_table(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        ctx = cat.get_schema_context()
+        assert "orders" in ctx
+
+    def test_result_is_memoised(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        first = cat.get_schema_context()
+        # Second call returns the exact same cached object (identity check).
+        second = cat.get_schema_context()
+        assert first is second
+
+    def test_cache_keyed_by_max_tables(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        a = cat.get_schema_context(max_tables=5)
+        b = cat.get_schema_context(max_tables=10)
+        # Different max_tables → independent cache entries.
+        assert 5 in cat._schema_ctx_cache
+        assert 10 in cat._schema_ctx_cache
+        assert a is cat._schema_ctx_cache[5]
+        assert b is cat._schema_ctx_cache[10]
+
+    def test_prune_invalidates_cache(self, cat):
+        _seed_entity(cat, "Ghost", "ghost_table")
+        _seed_entity(cat, "Real", "real_table")
+        before = cat.get_schema_context()
+        assert "ghost_table" in before
+        cat.prune_phantom_entities(frozenset({"real_table"}))
+        after = cat.get_schema_context()
+        # Cache was invalidated, so the pruned table no longer appears.
+        assert "ghost_table" not in after
+        assert "real_table" in after
+
+    def test_invalidate_clears_cache(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        cat.get_schema_context()
+        assert cat._schema_ctx_cache  # populated
+        cat._invalidate_schema_context_cache()
+        assert cat._schema_ctx_cache == {}
+
+
 # ── Query templates ───────────────────────────────────────────────────────────
 
 

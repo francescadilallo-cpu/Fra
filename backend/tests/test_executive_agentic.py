@@ -350,6 +350,26 @@ class TestAuditLog:
         log = layer.get_audit_log(limit=1)
         assert len(log) <= 1
 
+    def test_audit_log_is_bounded_ring_buffer(self):
+        # The in-memory audit log must not grow without bound — it is a deque
+        # capped at _MAX_AUDIT_RECORDS. Pushing more than the cap evicts the
+        # oldest records instead of leaking memory.
+        from app.agentic import executive as exec_mod
+
+        layer = _make_layer()
+        cap = exec_mod._MAX_AUDIT_RECORDS
+        for i in range(cap + 50):
+            layer._audit(
+                phase="PROPOSED",
+                actor="u",
+                actor_role="a",
+                details={"i": i},
+            )
+        assert len(layer._audit_log) == cap
+        # Oldest entries were evicted; newest is preserved.
+        newest = layer.get_audit_log(limit=1)[0]
+        assert newest.details["i"] == cap + 49
+
 
 class TestListActions:
     def test_list_actions_empty_initially(self):

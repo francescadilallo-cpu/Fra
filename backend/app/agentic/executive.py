@@ -4,12 +4,19 @@ import json
 import logging
 import threading
 import uuid
+from collections import deque
 from datetime import UTC, date, datetime
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on the in-memory audit ring buffer. The durable audit trail is
+# emitted to the application logs (AGENT_AUDIT json lines); this in-process copy
+# only backs the get_audit_log() read API, so a bounded ring buffer is enough
+# and prevents unbounded memory growth on long-running instances.
+_MAX_AUDIT_RECORDS = 2000
 
 
 class AgentSemanticValidationError(Exception):
@@ -131,7 +138,7 @@ class ExecutiveAgenticLayer:
         self._cache_invalidator = cache_invalidator
         self._lock = threading.RLock()
         self._pending_actions: dict[str, PendingAgentAction] = {}
-        self._audit_log: list[AgentAuditRecord] = []
+        self._audit_log: deque[AgentAuditRecord] = deque(maxlen=_MAX_AUDIT_RECORDS)
 
     def submit_command(
         self, command: str, actor: str, actor_role: str
@@ -279,7 +286,8 @@ class ExecutiveAgenticLayer:
 
     def get_audit_log(self, limit: int = 200) -> list[AgentAuditRecord]:
         with self._lock:
-            return list(self._audit_log[-limit:])
+            records = list(self._audit_log)
+        return records[-limit:]
 
     def list_actions(
         self,

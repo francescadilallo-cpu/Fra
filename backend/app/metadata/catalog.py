@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime
 
 from sqlalchemy import Float, Integer, String, Text, create_engine, delete, select
@@ -279,6 +280,18 @@ class MetadataCatalog:
         self._migrate_schema()
         self._Session = sessionmaker(bind=self._engine)
         self._populated = False
+        # Cache for get_schema_context() — the schema description fed to the LLM
+        # on every dynamic-SQL request. Recomputing it scans every entity and
+        # attribute row plus JSON-parses sources on each call, so we memoise it
+        # and invalidate only when the schema actually changes (populate /
+        # populate_from_manager / prune_phantom_entities).
+        self._schema_ctx_cache: dict[int, str] = {}
+        self._schema_ctx_lock = threading.Lock()
+
+    def _invalidate_schema_context_cache(self) -> None:
+        """Drop the memoised schema-context strings after a schema mutation."""
+        with self._schema_ctx_lock:
+            self._schema_ctx_cache.clear()
 
     def _migrate_schema(self) -> None:
         """Add new columns to existing SQLite tables without breaking existing data."""
@@ -330,6 +343,7 @@ class MetadataCatalog:
             self._populate_hr_pim(session, connectors, ontology, kg, now, mgr)
             session.commit()
 
+        self._invalidate_schema_context_cache()
         self._populated = True
         logger.info("Metadata catalog populated.")
 
@@ -392,6 +406,7 @@ class MetadataCatalog:
                         lineage_edges=[],
                     )
             session.commit()
+        self._invalidate_schema_context_cache()
         logger.info(
             "populate_from_manager: upserted %d tables into catalog", len(schema)
         )
@@ -401,7 +416,23 @@ class MetadataCatalog:
 
         Used in the LLM SQL-generation prompt so the model knows exactly which
         tables and columns are available in the DuckDB snapshot.
+
+        The result is memoised per ``max_tables`` and invalidated whenever the
+        schema changes, so the hot query path does not rescan every entity and
+        attribute row on each request.
         """
+        with self._schema_ctx_lock:
+            cached = self._schema_ctx_cache.get(max_tables)
+        if cached is not None:
+            return cached
+
+        result = self._compute_schema_context(max_tables)
+
+        with self._schema_ctx_lock:
+            self._schema_ctx_cache[max_tables] = result
+        return result
+
+    def _compute_schema_context(self, max_tables: int) -> str:
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
             attr_rows = session.execute(select(AttributeMetaRow)).scalars().all()
@@ -565,6 +596,7 @@ class MetadataCatalog:
                 )
             session.commit()
         if removed:
+            self._invalidate_schema_context_cache()
             logger.info(
                 "prune_phantom_entities: removed %d phantom entity records", removed
             )
