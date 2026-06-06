@@ -1489,6 +1489,24 @@ def add_source(
 
     mgr = get_source_manager(_SCENARIO_PATH)
     source_id = req.params.get("id") or f"{req.connector_type}-{uuid.uuid4().hex[:8]}"
+    if mgr.registry.get(source_id) is not None:
+        # registry.upsert() is INSERT OR REPLACE — letting a client-supplied
+        # "id" collide with an existing source would silently overwrite it
+        # (label, connector config, target tables, *and* its is_default flag,
+        # since SourceConfig.is_default defaults to False here). For one of
+        # the four protected seed sources ("erp"/"crm"/"hr"/"pim") that not
+        # only destroys the working connector config but also strips the
+        # "cannot remove default source" guard, leaving it deletable — and
+        # _seed_defaults() only reseeds an *empty* registry, so it would never
+        # come back. Registration must create new sources, not clobber ones
+        # that already exist.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Source '{source_id}' already exists; choose a different id "
+                "or remove the existing source first"
+            ),
+        )
     cfg = SourceConfig(
         id=source_id,
         connector_type=req.connector_type,

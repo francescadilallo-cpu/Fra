@@ -610,3 +610,83 @@ def test_ask_oversized_context_422(client, user_headers):
         headers=user_headers,
     )
     assert resp.status_code == 422
+
+
+# ── POST /api/sources — id collision guard ────────────────────────────────────
+#
+# add_source() lets the caller pick an arbitrary "id" via params["id"].
+# SourceRegistry.upsert() is INSERT OR REPLACE — a colliding id would
+# silently overwrite an existing source's connector config *and* its
+# is_default flag (SourceConfig.is_default defaults to False on the new
+# config), stripping "cannot remove default source" protection from one of
+# the four baked-in seed sources (erp/crm/hr/pim) and leaving it deletable —
+# permanently, since _seed_defaults() only reseeds an *empty* registry.
+# Registration must refuse to clobber an id that already exists.
+
+
+def test_add_source_with_colliding_id_is_rejected(client, admin_headers):
+    import uuid
+
+    # Unique per run — the registry is a persistent, file-backed singleton
+    # shared across test runs, so a fixed id could collide with leftover
+    # state from a previous (e.g. failed) run.
+    source_id = f"collision-probe-{uuid.uuid4().hex[:12]}"
+    try:
+        first = client.post(
+            "/api/sources",
+            json={
+                "connector_type": "shopify",
+                "label": "Original label",
+                "params": {"id": source_id},
+            },
+            headers=admin_headers,
+        )
+        assert first.status_code == 201, first.text
+
+        second = client.post(
+            "/api/sources",
+            json={
+                "connector_type": "shopify",
+                "label": "Hijacked label",
+                "params": {"id": source_id, "shop": "evil.example.com"},
+            },
+            headers=admin_headers,
+        )
+        assert second.status_code == 409, second.text
+
+        # The original source must be untouched — no silent overwrite.
+        listing = client.get("/api/sources", headers=admin_headers)
+        assert listing.status_code == 200, listing.text
+        match = next(s for s in listing.json() if s["id"] == source_id)
+        assert match["label"] == "Original label"
+        assert match["connector_type"] == "shopify"
+    finally:
+        client.delete(f"/api/sources/{source_id}", headers=admin_headers)
+
+
+def test_add_source_cannot_hijack_a_protected_default_source(client, admin_headers):
+    """The guard must cover the four baked-in default sources — the
+    highest-value target, since overwriting one strips its is_default flag
+    and makes an otherwise-protected source permanently deletable."""
+    listing = client.get("/api/sources", headers=admin_headers)
+    assert listing.status_code == 200, listing.text
+    defaults = [s for s in listing.json() if s["is_default"]]
+    if not defaults:
+        pytest.skip("no protected default sources seeded in this environment")
+    target = defaults[0]
+
+    resp = client.post(
+        "/api/sources",
+        json={
+            "connector_type": "shopify",
+            "label": "Hijacked",
+            "params": {"id": target["id"]},
+        },
+        headers=admin_headers,
+    )
+    assert resp.status_code == 409, resp.text
+
+    listing_after = client.get("/api/sources", headers=admin_headers)
+    match = next(s for s in listing_after.json() if s["id"] == target["id"])
+    assert match["is_default"] is True
+    assert match["connector_type"] == target["connector_type"]
