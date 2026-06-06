@@ -789,6 +789,9 @@ class SemanticAskRequest(BaseModel):
             raise ValueError("Either 'question' or 'query' must be provided")
         if len(self.context) > 32:
             raise ValueError("context dict must not exceed 32 keys")
+        total_value_bytes = sum(len(str(v)) for v in self.context.values())
+        if total_value_bytes > 4096:
+            raise ValueError("context values must not exceed 4096 total characters")
         return self
 
     def normalized_question(self) -> str:
@@ -931,7 +934,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # type: ignore[arg-type]
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 _explicit_origins = _parse_allowed_origins()
@@ -1259,12 +1262,18 @@ def get_table_data(
     if table not in available:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
+    # Double-quote the identifier and escape any embedded double-quotes so that
+    # table names with spaces, hyphens, or other special characters don't break
+    # the SQL statement. The whitelist check above ensures the name is a real,
+    # server-controlled identifier; the quoting here is belt-and-suspenders
+    # defence against unusual (but valid) identifier characters.
+    table_id = '"' + table.replace('"', '""') + '"'
     conn = get_connection()
     try:
-        total = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        total = conn.execute(f"SELECT COUNT(*) FROM {table_id}").fetchone()[0]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            f"SELECT * FROM {table} LIMIT ? OFFSET ?", (page_size, offset)
+            f"SELECT * FROM {table_id} LIMIT ? OFFSET ?", (page_size, offset)
         ).fetchall()
         data = [dict(row) for row in rows]
         return PaginatedData(

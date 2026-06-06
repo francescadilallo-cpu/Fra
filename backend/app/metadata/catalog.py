@@ -421,12 +421,9 @@ class MetadataCatalog:
         """
         with self._schema_ctx_lock:
             cached = self._schema_ctx_cache.get(max_tables)
-        if cached is not None:
-            return cached
-
-        result = self._compute_schema_context(max_tables)
-
-        with self._schema_ctx_lock:
+            if cached is not None:
+                return cached
+            result = self._compute_schema_context(max_tables)
             self._schema_ctx_cache[max_tables] = result
         return result
 

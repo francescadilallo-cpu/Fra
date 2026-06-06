@@ -159,7 +159,7 @@ class AgentStateStore:
                 if row is None:
                     return None
                 action = PendingAgentAction.model_validate_json(row["payload_json"])
-                action.status = claimed_status  # type: ignore[assignment]
+                action.status = claimed_status
                 action.updated_at = updated_at
                 cursor = conn.execute(
                     """
