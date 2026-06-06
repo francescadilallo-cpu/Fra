@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 
 class MappingUpdateRequest(BaseModel):
-    table: str
-    field: str
-    ontology_path: str
+    table: str = Field(min_length=1, max_length=256)
+    field: str = Field(min_length=1, max_length=256)
+    ontology_path: str = Field(min_length=1, max_length=512)
 
 
 # ── Dashboard ──────────────────────────────────────────────────────────────────

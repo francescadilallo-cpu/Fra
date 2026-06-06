@@ -1763,7 +1763,7 @@ def get_metrics(
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_metrics WHERE sector_id = ? ORDER BY is_builtin DESC, name",
+            "SELECT * FROM sl_metrics WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []
@@ -1848,7 +1848,7 @@ def get_hierarchies(
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_hierarchies WHERE sector_id = ? ORDER BY is_builtin DESC, name",
+            "SELECT * FROM sl_hierarchies WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []
@@ -1920,7 +1920,7 @@ def get_segments(
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_segments WHERE sector_id = ? ORDER BY is_builtin DESC, name",
+            "SELECT * FROM sl_segments WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []

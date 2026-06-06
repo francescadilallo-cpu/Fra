@@ -506,10 +506,10 @@ class MetadataCatalog:
             rows = session.execute(select(MetricMetaRow)).scalars().all()
             return [MetricMeta(r) for r in rows]
 
-    def list_context_docs(self) -> list[dict]:
-        """Return all context documents as dicts with 'id', 'title', and 'content'."""
+    def list_context_docs(self, limit: int = 500) -> list[dict]:
+        """Return context documents as dicts with 'id', 'title', and 'content'."""
         with self._Session() as session:
-            rows = session.execute(select(ContextDocRow)).scalars().all()
+            rows = session.execute(select(ContextDocRow).limit(limit)).scalars().all()
             return [{"id": r.id, "title": r.title, "content": r.content} for r in rows]
 
     def seed_glossary_docs(self, terms: dict[str, str]) -> int:
@@ -711,12 +711,12 @@ class MetadataCatalog:
             "updated_at": row.updated_at or "",
         }
 
-    def list_templates(self, active_only: bool = True) -> list[dict]:
+    def list_templates(self, active_only: bool = True, limit: int = 500) -> list[dict]:
         with self._Session() as s:
             q = s.query(QueryTemplateRow)
             if active_only:
                 q = q.filter(QueryTemplateRow.is_active == 1)
-            rows = q.order_by(QueryTemplateRow.id).all()
+            rows = q.order_by(QueryTemplateRow.id).limit(limit).all()
             return [self._template_to_dict(r) for r in rows]
 
     def create_template(

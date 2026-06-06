@@ -265,3 +265,19 @@ class TestMappingModels:
         )
         assert r.table == "customers"
         assert r.ontology_path == "Customer.fullName"
+
+    def test_mapping_update_request_table_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            MappingUpdateRequest(table="t" * 257, field="f", ontology_path="o")
+
+    def test_mapping_update_request_field_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            MappingUpdateRequest(table="t", field="f" * 257, ontology_path="o")
+
+    def test_mapping_update_request_ontology_path_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            MappingUpdateRequest(table="t", field="f", ontology_path="o" * 513)
+
+    def test_mapping_update_request_empty_fields_rejected(self):
+        with pytest.raises(ValueError):
+            MappingUpdateRequest(table="", field="f", ontology_path="o")
