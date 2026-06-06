@@ -251,6 +251,21 @@ class ExecutiveAgenticLayer:
             )
 
             try:
+                # _validate_semantics ran at *submission* time, but approval is
+                # an asynchronous, human-gated step that can happen long after
+                # — the order may have moved on (via this or another action, or
+                # a direct write) by the time a manager acts on a now-stale
+                # proposal. Blindly replaying it could silently regress a
+                # terminal state (e.g. "delivered" -> "shipped") or resurrect a
+                # deleted order. Re-check against *current* state right before
+                # writing anything, closing the gap to milliseconds.
+                revalidation = self._validate_semantics(action.proposed_action)
+                if not revalidation.passed:
+                    raise AgentSemanticValidationError(
+                        "Rivalidazione fallita: lo stato e' cambiato dalla "
+                        f"proposta originale — {revalidation.reason}"
+                    )
+
                 self._execute_writeback(action.proposed_action)
                 action.status = "EXECUTED"
                 action.updated_at = datetime.now(UTC).isoformat()

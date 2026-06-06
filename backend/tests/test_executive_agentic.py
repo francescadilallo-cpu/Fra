@@ -319,6 +319,117 @@ class TestApproveAction:
             )
 
 
+class TestApprovalRevalidatesAgainstCurrentState:
+    """_validate_semantics runs at *submission* time, but approval is an
+    asynchronous, human-gated step that can happen long after — the order may
+    have moved on (via this or another action, or a direct write) by the time
+    a manager acts on a now-stale proposal. approve_action must re-check
+    against current state before writing anything, instead of blindly
+    replaying a decision based on data that no longer holds."""
+
+    def test_approve_rejects_proposal_invalidated_by_status_change_since_submission(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orders = [
+            {
+                "id": 40,
+                "date": "2024-01-01",
+                "delivery_date": "2024-02-01",
+                "status": "processing",
+            }
+        ]
+        layer = _make_layer_with_db(orders)
+
+        action = layer.submit_command(
+            "Segna l'ordine 40 come spedito", actor="u", actor_role="a"
+        )
+        assert action.status == "PENDING_HUMAN_APPROVAL"
+
+        # Out-of-band change between proposal and approval — e.g. another
+        # approved action (or a direct write) already moved the order to a
+        # terminal state. "delivered" -> "shipped" is not a valid transition.
+        orders[0]["status"] = "delivered"
+
+        writeback = MagicMock()
+        monkeypatch.setattr(layer, "_execute_writeback", writeback)
+
+        with pytest.raises(AgentExecutionError, match="[Tt]ransizione"):
+            layer.approve_action(
+                action.action_id,
+                actor="mgr",
+                actor_role="admin",
+                approve=True,
+                manager_note=None,
+            )
+
+        writeback.assert_not_called()
+        stored = layer.get_action(action.action_id)
+        assert stored is not None
+        assert stored.status == "FAILED"
+
+    def test_approve_rejects_proposal_for_order_removed_since_submission(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orders = [
+            {
+                "id": 41,
+                "date": "2024-01-01",
+                "delivery_date": "2024-02-01",
+                "status": "processing",
+            }
+        ]
+        layer = _make_layer_with_db(orders)
+
+        action = layer.submit_command("Cancella l'ordine 41", actor="u", actor_role="a")
+
+        # The order is gone by approval time (e.g. purged or merged elsewhere).
+        orders.clear()
+
+        writeback = MagicMock()
+        monkeypatch.setattr(layer, "_execute_writeback", writeback)
+
+        with pytest.raises(AgentExecutionError, match="non trovato"):
+            layer.approve_action(
+                action.action_id,
+                actor="mgr",
+                actor_role="admin",
+                approve=True,
+                manager_note=None,
+            )
+
+        writeback.assert_not_called()
+        stored = layer.get_action(action.action_id)
+        assert stored is not None
+        assert stored.status == "FAILED"
+
+    def test_approve_executes_when_state_unchanged_since_submission(self) -> None:
+        """Sanity check: re-validation must not be overly strict — a proposal
+        whose underlying state hasn't moved should still execute normally."""
+        orders = [
+            {
+                "id": 42,
+                "date": "2024-01-01",
+                "delivery_date": "2024-02-01",
+                "status": "processing",
+            }
+        ]
+        layer = _make_layer_with_db(orders)
+
+        action = layer.submit_command(
+            "Segna l'ordine 42 come spedito", actor="u", actor_role="a"
+        )
+
+        result = layer.approve_action(
+            action.action_id,
+            actor="mgr",
+            actor_role="admin",
+            approve=True,
+            manager_note=None,
+        )
+
+        assert result.status == "SYNCED"
+
+
 class TestAuditLog:
     def test_submit_creates_audit_entries(self):
         layer = _make_layer_with_db(
