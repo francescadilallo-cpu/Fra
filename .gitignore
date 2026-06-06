@@ -12,6 +12,9 @@ htmlcov/
 
 # Backend data — runtime-generated SQLite databases
 backend/data/context.db
+backend/data/agent_state.db
+backend/data/agent_state.db-wal
+backend/data/agent_state.db-shm
 backend/custom_agents.db
 backend/saved_queries.db
 

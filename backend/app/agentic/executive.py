@@ -4,18 +4,20 @@ import json
 import logging
 import threading
 import uuid
-from collections import deque
 from datetime import UTC, date, datetime
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
-# Upper bound on the in-memory audit ring buffer. The durable audit trail is
-# emitted to the application logs (AGENT_AUDIT json lines); this in-process copy
-# only backs the get_audit_log() read API, so a bounded ring buffer is enough
-# and prevents unbounded memory growth on long-running instances.
+# Upper bound on the retained audit ring buffer. The durable audit trail is
+# emitted to the application logs (AGENT_AUDIT json lines); the store-backed
+# copy only serves the get_audit_log() read API, so a bounded ring buffer is
+# enough and prevents unbounded growth on long-running instances.
 _MAX_AUDIT_RECORDS = 2000
 
 
@@ -131,14 +133,24 @@ class ExecutiveAgenticLayer:
         get_db_connection: Callable[[], Any],
         kg_patcher: Callable[["ActionEffect"], int] | None = None,
         cache_invalidator: Callable[[], int] | None = None,
+        state_db_path: "Path | None" = None,
     ) -> None:
+        # Local import avoids a module-level circular import (store imports the
+        # action/audit models from this module).
+        from .store import AgentStateStore
+
         self._get_ontology = get_ontology
         self._get_db_connection = get_db_connection
         self._kg_patcher = kg_patcher
         self._cache_invalidator = cache_invalidator
+        # Guards the approve/reject critical section within a single process.
+        # Cross-process atomicity is best-effort via a status re-check against
+        # the shared store.
         self._lock = threading.RLock()
-        self._pending_actions: dict[str, PendingAgentAction] = {}
-        self._audit_log: deque[AgentAuditRecord] = deque(maxlen=_MAX_AUDIT_RECORDS)
+        # Single source of truth for pending actions + audit. File-backed in
+        # production (survives restart, shared across workers); in-memory and
+        # isolated per instance when no path is given (default / tests).
+        self._store = AgentStateStore(state_db_path, max_audit=_MAX_AUDIT_RECORDS)
 
     def submit_command(
         self, command: str, actor: str, actor_role: str
@@ -179,8 +191,7 @@ class ExecutiveAgenticLayer:
             validation_checks=validation.checks,
         )
 
-        with self._lock:
-            self._pending_actions[action_id] = action
+        self._store.save_action(action)
 
         self._audit(
             phase="VALIDATED",
@@ -207,7 +218,7 @@ class ExecutiveAgenticLayer:
         manager_note: str | None,
     ) -> PendingAgentAction:
         with self._lock:
-            action = self._pending_actions.get(action_id)
+            action = self._store.get_action(action_id)
             if not action:
                 raise AgentActionNotFoundError(f"Action '{action_id}' not found")
 
@@ -221,7 +232,7 @@ class ExecutiveAgenticLayer:
 
             if not approve:
                 action.status = "REJECTED"
-                self._pending_actions[action_id] = action
+                self._store.save_action(action)
                 self._audit(
                     phase="REJECTED",
                     action_id=action_id,
@@ -243,7 +254,7 @@ class ExecutiveAgenticLayer:
                 self._execute_writeback(action.proposed_action)
                 action.status = "EXECUTED"
                 action.updated_at = datetime.now(UTC).isoformat()
-                self._pending_actions[action_id] = action
+                self._store.save_action(action)
                 self._audit(
                     phase="EXECUTED",
                     action_id=action_id,
@@ -257,7 +268,7 @@ class ExecutiveAgenticLayer:
                 action.resync_result = resync
                 action.status = "SYNC_FAILED" if resync.errors else "SYNCED"
                 action.updated_at = datetime.now(UTC).isoformat()
-                self._pending_actions[action_id] = action
+                self._store.save_action(action)
                 self._audit(
                     phase="RESYNCED",
                     action_id=action_id,
@@ -274,7 +285,7 @@ class ExecutiveAgenticLayer:
             except Exception as exc:
                 action.status = "FAILED"
                 action.updated_at = datetime.now(UTC).isoformat()
-                self._pending_actions[action_id] = action
+                self._store.save_action(action)
                 self._audit(
                     phase="FAILED",
                     action_id=action_id,
@@ -284,21 +295,19 @@ class ExecutiveAgenticLayer:
                 )
                 raise AgentExecutionError(str(exc)) from exc
 
+    def get_action(self, action_id: str) -> PendingAgentAction | None:
+        """Return a single action by id, or None if unknown."""
+        return self._store.get_action(action_id)
+
     def get_audit_log(self, limit: int = 200) -> list[AgentAuditRecord]:
-        with self._lock:
-            records = list(self._audit_log)
-        return records[-limit:]
+        return self._store.get_audit(limit)
 
     def list_actions(
         self,
         status_filter: str | None = None,
         limit: int = 50,
     ) -> list[PendingAgentAction]:
-        with self._lock:
-            actions = list(self._pending_actions.values())
-        if status_filter:
-            actions = [a for a in actions if a.status == status_filter]
-        return actions[-limit:]
+        return self._store.list_actions(status_filter=status_filter, limit=limit)
 
     def _parse_command(self, command: str) -> ProposedWriteAction:
         import re
@@ -544,5 +553,4 @@ class ExecutiveAgenticLayer:
             "AGENT_AUDIT %s",
             json.dumps(record.model_dump(mode="json"), ensure_ascii=True),
         )
-        with self._lock:
-            self._audit_log.append(record)
+        self._store.append_audit(record)

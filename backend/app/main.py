@@ -822,6 +822,9 @@ _agentic_layer = ExecutiveAgenticLayer(
     get_db_connection=get_connection,
     kg_patcher=_agentic_kg_patcher,
     cache_invalidator=_agentic_cache_invalidator,
+    # File-backed state so the pending-approval queue and audit trail survive
+    # restarts and are shared across worker processes.
+    state_db_path=Path(__file__).parent.parent / "data" / "agent_state.db",
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 app.include_router(

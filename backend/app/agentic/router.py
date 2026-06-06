@@ -153,8 +153,7 @@ def build_agent_router(
         action_id: str,
         _: Any = Depends(admin_dependency),
     ) -> AgentActionResponse:
-        with layer._lock:
-            action = layer._pending_actions.get(action_id)
+        action = layer.get_action(action_id)
         if not action:
             logger.debug("agent.status not_found action_id=%s", action_id)
             raise HTTPException(

@@ -178,7 +178,9 @@ def _make_test_db(orders: list[dict] | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _make_layer_with_db(orders: list[dict] | None = None) -> ExecutiveAgenticLayer:
+def _make_layer_with_db(
+    orders: list[dict] | None = None, state_db_path=None
+) -> ExecutiveAgenticLayer:
     ontology = _make_mock_ontology()
 
     # Each call to get_db_connection returns a fresh connection (closes after validate)
@@ -188,6 +190,7 @@ def _make_layer_with_db(orders: list[dict] | None = None) -> ExecutiveAgenticLay
     return ExecutiveAgenticLayer(
         get_ontology=lambda: ontology,
         get_db_connection=_get_conn,
+        state_db_path=state_db_path,
     )
 
 
@@ -351,24 +354,22 @@ class TestAuditLog:
         assert len(log) <= 1
 
     def test_audit_log_is_bounded_ring_buffer(self):
-        # The in-memory audit log must not grow without bound — it is a deque
-        # capped at _MAX_AUDIT_RECORDS. Pushing more than the cap evicts the
-        # oldest records instead of leaking memory.
-        from app.agentic import executive as exec_mod
-
+        # The audit log must not grow without bound — the store keeps at most
+        # max_audit records, evicting the oldest instead of leaking.
         layer = _make_layer()
-        cap = exec_mod._MAX_AUDIT_RECORDS
-        for i in range(cap + 50):
+        cap = 10
+        layer._store._max_audit = cap  # shrink for a fast test
+        for i in range(cap + 25):
             layer._audit(
                 phase="PROPOSED",
                 actor="u",
                 actor_role="a",
                 details={"i": i},
             )
-        assert len(layer._audit_log) == cap
+        assert layer._store.audit_count() <= cap
         # Oldest entries were evicted; newest is preserved.
         newest = layer.get_audit_log(limit=1)[0]
-        assert newest.details["i"] == cap + 49
+        assert newest.details["i"] == cap + 24
 
 
 class TestListActions:
@@ -396,3 +397,42 @@ class TestListActions:
         layer.submit_command("Cancella l'ordine 10", actor="u", actor_role="a")
         layer.submit_command("Cancella l'ordine 11", actor="u", actor_role="a")
         assert len(layer.list_actions()) == 2
+
+
+class TestStatePersistence:
+    """A file-backed layer must share its state across instances — the
+    multi-worker / survives-restart guarantee."""
+
+    def test_action_submitted_on_one_layer_visible_on_another(self, tmp_path):
+        orders = [
+            {
+                "id": 10,
+                "date": "2024-01-01",
+                "delivery_date": "2024-02-01",
+                "status": "processing",
+            }
+        ]
+        db = tmp_path / "agent_state.db"
+        # Worker A submits.
+        layer_a = _make_layer_with_db(orders, state_db_path=db)
+        action = layer_a.submit_command(
+            "Cancella l'ordine 10", actor="u", actor_role="a"
+        )
+
+        # Worker B (separate layer, same file) sees it and can approve it.
+        layer_b = _make_layer_with_db(orders, state_db_path=db)
+        seen = layer_b.get_action(action.action_id)
+        assert seen is not None
+        assert seen.status == "PENDING_HUMAN_APPROVAL"
+
+        result = layer_b.approve_action(
+            action.action_id,
+            actor="mgr",
+            actor_role="admin",
+            approve=False,
+            manager_note="handled on B",
+        )
+        assert result.status == "REJECTED"
+
+        # The rejection is visible back on worker A.
+        assert layer_a.get_action(action.action_id).status == "REJECTED"
