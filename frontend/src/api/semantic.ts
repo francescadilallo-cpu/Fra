@@ -132,19 +132,6 @@ export interface AskResult {
   notes: string | null
 }
 
-export interface CoverageResult {
-  sector_id: string
-  score: number
-  breakdown: {
-    sources: number
-    entities: number
-    bridges: number
-    rules: number
-    metrics: number
-    hierarchies: number
-    segments: number
-  }
-}
 
 // ── Health ────────────────────────────────────────────────────────────────────
 
@@ -164,9 +151,6 @@ export const semanticStatus = (): Promise<SemanticStatus> =>
 
 export const semanticSources = (): Promise<BackendSource[]> =>
   http.get<BackendSource[]>('/api/semantic/sources').then(r => r.data)
-
-export const semanticCoverage = (sectorId = 'manufacturing'): Promise<CoverageResult> =>
-  http.get<CoverageResult>('/api/semantic/coverage', { params: { sector_id: sectorId } }).then(r => r.data)
 
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
@@ -475,10 +459,6 @@ export const listExampleQuestions = (): Promise<ExampleQuestion[]> =>
   http.get<ExampleQuestion[]>('/api/semantic/example-questions').then(r => r.data)
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
-
-export function isBackendError(e: unknown): boolean {
-  return e instanceof AxiosError
-}
 
 export function backendErrorMessage(e: unknown): string {
   if (e instanceof AxiosError) {
