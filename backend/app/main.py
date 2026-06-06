@@ -2815,22 +2815,23 @@ def _queries_db() -> _sqlite3.Connection:
 
 
 class SavedQueryPayload(BaseModel):
-    id: str
-    sector_id: str
-    query: str
-    created_at: str
+    id: str = Field(min_length=1, max_length=128)
+    sector_id: str = Field(min_length=1, max_length=128)
+    query: str = Field(min_length=1, max_length=8000)
+    created_at: str = Field(max_length=64)
 
 
 @app.get("/api/queries/saved", tags=["queries"])
 def list_saved_queries(
-    sector_id: str,
+    sector_id: str = Query(min_length=1, max_length=128),
+    limit: int = Query(default=100, ge=1, le=500),
     _user: dict = Depends(get_current_user),
 ):
     conn = _queries_db()
     try:
         rows = conn.execute(
-            "SELECT * FROM saved_queries WHERE sector_id = ? ORDER BY created_at DESC",
-            (sector_id,),
+            "SELECT * FROM saved_queries WHERE sector_id = ? ORDER BY created_at DESC LIMIT ?",
+            (sector_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
