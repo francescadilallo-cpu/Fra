@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.connectors.duckdb_source_manager import _safe_data_path
+from app.connectors.duckdb_source_manager import _pg_ingest_limit, _safe_data_path
 from app.models import (
     AskRequest,
     HierarchyCreate,
@@ -80,6 +80,35 @@ class TestSafeDataPath:
         sub.mkdir()
         result = _safe_data_path(str(sub / ".." / "subdir" / "file.csv"))
         assert result == (sub / "file.csv").resolve()
+
+
+# ── _pg_ingest_limit ────────────────────────────────────────────────────────────
+
+
+class TestPgIngestLimit:
+    def test_default_is_100k(self, monkeypatch):
+        monkeypatch.delenv("FRA_PG_INGEST_LIMIT", raising=False)
+        assert _pg_ingest_limit() == 100000
+
+    def test_custom_value(self, monkeypatch):
+        monkeypatch.setenv("FRA_PG_INGEST_LIMIT", "500000")
+        assert _pg_ingest_limit() == 500000
+
+    def test_zero_means_unlimited(self, monkeypatch):
+        monkeypatch.setenv("FRA_PG_INGEST_LIMIT", "0")
+        assert _pg_ingest_limit() == 0
+
+    def test_invalid_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("FRA_PG_INGEST_LIMIT", "not-a-number")
+        assert _pg_ingest_limit() == 100000
+
+    def test_negative_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("FRA_PG_INGEST_LIMIT", "-5")
+        assert _pg_ingest_limit() == 100000
+
+    def test_whitespace_stripped(self, monkeypatch):
+        monkeypatch.setenv("FRA_PG_INGEST_LIMIT", "  250000  ")
+        assert _pg_ingest_limit() == 250000
 
 
 # ── AskRequest ─────────────────────────────────────────────────────────────────

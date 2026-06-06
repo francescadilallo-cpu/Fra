@@ -57,6 +57,21 @@ _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 _BLOCKED_PATH_ROOTS = ("/etc", "/proc", "/sys", "/dev", "/run", "/boot")
 
 
+def _pg_ingest_limit() -> int:
+    """Per-table row cap for the psycopg2 PostgreSQL ingestion path.
+
+    Defaults to 100k to bound memory (the rows are materialised into a pandas
+    DataFrame). Set FRA_PG_INGEST_LIMIT=0 to disable the cap, or to a custom
+    value. Invalid values fall back to the default.
+    """
+    raw = os.getenv("FRA_PG_INGEST_LIMIT", "100000").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 100000
+    return val if val >= 0 else 100000
+
+
 def _safe_data_path(raw: str) -> Path:
     """Resolve and validate a file path supplied by an admin-configured source.
 
@@ -700,12 +715,30 @@ class DuckDBSourceManager:
             import psycopg2
             import psycopg2.extras
 
+            limit = _pg_ingest_limit()
             pg_conn = psycopg2.connect(dsn, connect_timeout=10)
             try:
                 cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 for table in tables:
-                    cur.execute(f'SELECT * FROM "{schema}"."{table}" LIMIT 100000')
+                    if limit > 0:
+                        # Fetch one extra row so we can detect (and warn about)
+                        # silent truncation rather than capping invisibly.
+                        cur.execute(
+                            f'SELECT * FROM "{schema}"."{table}" LIMIT {limit + 1}'
+                        )
+                    else:
+                        cur.execute(f'SELECT * FROM "{schema}"."{table}"')
                     rows = cur.fetchall()
+                    truncated = limit > 0 and len(rows) > limit
+                    if truncated:
+                        rows = rows[:limit]
+                        logger.warning(
+                            "PG   %-25s TRUNCATED at %d rows — table has more data. "
+                            "Raise FRA_PG_INGEST_LIMIT (or set 0 for unlimited) to "
+                            "ingest the full table.",
+                            table,
+                            limit,
+                        )
                     df = pd.DataFrame([dict(r) for r in rows])
                     conn.execute(
                         f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df'
