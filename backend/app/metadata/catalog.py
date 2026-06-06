@@ -1015,7 +1015,12 @@ class MetadataCatalog:
         """
         if mgr is not None:
             try:
-                rows = mgr.execute("SHOW TABLES")
+                # execute_all(), not execute(): the latter is the
+                # frontend-query path and silently caps results at 100 rows —
+                # a deployment with >100 tables would then see only a partial
+                # listing here, causing _populate_* to skip real entities
+                # whose table name happens to sort past the cutoff.
+                rows = mgr.execute_all("SHOW TABLES")
                 # DuckDB SHOW TABLES returns dicts with a 'name' key
                 tables = {r.get("name", "") for r in rows if r.get("name")}
                 if tables:

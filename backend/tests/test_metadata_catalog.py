@@ -630,3 +630,52 @@ class TestSampleRowsLimitPassthrough:
         mgr.execute.side_effect = RuntimeError("boom")
 
         assert _sample_rows("orders", adapter=None, mgr=mgr) == []
+
+
+# ── _get_available_tables (table-listing — must NOT cap at 100) ───────────────
+
+
+class TestGetAvailableTables:
+    """mgr.execute() silently caps results at 100 rows — using it for
+    SHOW TABLES would make _populate_* skip real entities whenever a
+    deployment has more than 100 tables and the relevant table name sorts
+    past the cutoff. _get_available_tables must use execute_all() instead,
+    which respects no implicit cap."""
+
+    def test_uses_execute_all_not_capped_execute(self, cat):
+        mgr = MagicMock()
+        mgr.execute_all.return_value = [{"name": "orders"}, {"name": "customers"}]
+
+        available = cat._get_available_tables(mgr=mgr)
+
+        assert available == {"orders", "customers"}
+        mgr.execute_all.assert_called_once_with("SHOW TABLES")
+        mgr.execute.assert_not_called()
+
+    def test_returns_more_than_100_tables(self, cat):
+        """Regression: a naïve mgr.execute("SHOW TABLES") would silently
+        truncate to 100 names, hiding any table beyond that from the
+        availability check used to gate entity population."""
+        names = [f"table_{i:03d}" for i in range(150)]
+        mgr = MagicMock()
+        mgr.execute_all.return_value = [{"name": n} for n in names]
+
+        available = cat._get_available_tables(mgr=mgr)
+
+        assert len(available) == 150
+        assert "table_149" in available
+
+    def test_falls_back_to_schema_info_when_show_tables_empty(self, cat):
+        mgr = MagicMock()
+        mgr.execute_all.return_value = []
+        mgr.get_schema_info.return_value = {"orders": {}, "customers": {}}
+
+        available = cat._get_available_tables(mgr=mgr)
+
+        assert available == {"orders", "customers"}
+
+    def test_swallows_mgr_errors_returns_empty_set(self, cat):
+        mgr = MagicMock()
+        mgr.execute_all.side_effect = RuntimeError("boom")
+
+        assert cat._get_available_tables(mgr=mgr) == set()
