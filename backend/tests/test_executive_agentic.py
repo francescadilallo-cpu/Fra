@@ -132,6 +132,13 @@ class TestParseCommand:
         with pytest.raises(AgentSemanticValidationError):
             self._parse("Segna l'ordine 1 come sospeso")
 
+    def test_impossible_calendar_date_raises_validation_error(self):
+        # 2025-13-45 is syntactically well-formed but not a real date.
+        # Must surface as AgentSemanticValidationError (422), not an uncaught
+        # ValueError that would become a 500.
+        with pytest.raises(AgentSemanticValidationError, match="[Dd]ata non valida"):
+            self._parse("Sposta la data di consegna dell'ordine 5 al 2025-13-45")
+
 
 # ── ExecutiveAgenticLayer with mocked DB and ontology ─────────────────────────
 

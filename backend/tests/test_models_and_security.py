@@ -60,6 +60,17 @@ class TestSafeDataPath:
         with pytest.raises(ValueError, match="restricted"):
             _safe_data_path("/tmp/../etc/passwd")
 
+    def test_root_directory_itself_blocked(self):
+        # The blocked root dir itself (no trailing path) must also be rejected.
+        for root in ("/etc", "/proc", "/sys", "/dev", "/run", "/boot"):
+            with pytest.raises(ValueError, match="restricted"):
+                _safe_data_path(root)
+
+    def test_similarly_named_path_not_false_positive(self):
+        # Paths that merely share a prefix substring must NOT be blocked.
+        assert _safe_data_path("/tmp/etcetera.csv")
+        assert _safe_data_path("/tmp/devices.json")
+
     def test_returns_path_object(self, tmp_path):
         result = _safe_data_path(str(tmp_path))
         assert isinstance(result, Path)

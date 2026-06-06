@@ -310,10 +310,16 @@ class ExecutiveAgenticLayer:
 
         m = delivery_re.search(command)
         if m:
+            try:
+                parsed_date = date.fromisoformat(m.group(2))
+            except ValueError as exc:
+                raise AgentSemanticValidationError(
+                    f"Data non valida: '{m.group(2)}' non è una data calendario reale"
+                ) from exc
             return ProposedWriteAction(
                 action_type="UPDATE_ORDER_DELIVERY_DATE",
                 order_id=int(m.group(1)),
-                new_delivery_date=date.fromisoformat(m.group(2)),
+                new_delivery_date=parsed_date,
                 rationale="Write-back governato via Executive Agentic Layer",
             )
 

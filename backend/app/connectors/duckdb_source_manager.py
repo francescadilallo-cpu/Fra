@@ -53,20 +53,21 @@ logger = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
-# Paths under these prefixes are never opened as data sources (defence-in-depth).
-_BLOCKED_PATH_PREFIXES = ("/etc/", "/proc/", "/sys/", "/dev/", "/run/", "/boot/")
+# Paths at or under these roots are never opened as data sources (defence-in-depth).
+_BLOCKED_PATH_ROOTS = ("/etc", "/proc", "/sys", "/dev", "/run", "/boot")
 
 
 def _safe_data_path(raw: str) -> Path:
     """Resolve and validate a file path supplied by an admin-configured source.
 
-    Raises ValueError if the resolved path sits under a blocked system prefix,
-    preventing accidental or malicious reads of sensitive OS files.
+    Raises ValueError if the resolved path sits at or under a blocked system
+    root, preventing accidental or malicious reads of sensitive OS files.
     """
     resolved = Path(raw).resolve()
     resolved_str = str(resolved)
-    for prefix in _BLOCKED_PATH_PREFIXES:
-        if resolved_str.startswith(prefix):
+    for root in _BLOCKED_PATH_ROOTS:
+        # Block the root directory itself and anything beneath it.
+        if resolved_str == root or resolved_str.startswith(root + "/"):
             raise ValueError(
                 f"Data source path '{raw}' resolves to a restricted location"
             )
