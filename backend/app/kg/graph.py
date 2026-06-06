@@ -21,12 +21,28 @@ every node as a list of {source, original_id, table} dicts.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
 import networkx as nx
 
 logger = logging.getLogger(__name__)
+
+
+def _edge_limit() -> int:
+    """Per-relation edge cap when building the KG from the ontology.
+
+    Bounds memory — each edge becomes a networkx entry. Defaults to 100k.
+    Set FRA_KG_EDGE_LIMIT=0 for unlimited, or to a custom value. Invalid or
+    negative values fall back to the default.
+    """
+    raw = os.getenv("FRA_KG_EDGE_LIMIT", "100000").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 100000
+    return val if val >= 0 else 100000
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -231,14 +247,21 @@ class KnowledgeGraph:
                 safe_from = from_table.replace('"', '""')
                 safe_pk = from_pk.replace('"', '""')
                 safe_col = from_col.replace('"', '""')
-                _EDGE_LIMIT = 100_000
+                edge_limit = _edge_limit()
+                base_query = (
+                    f'SELECT "{safe_pk}", "{safe_col}" '
+                    f'FROM "{safe_from}" '
+                    f'WHERE "{safe_col}" IS NOT NULL'
+                )
+                # Fetch one extra row so truncation can be detected and warned
+                # about, rather than silently dropping data.
+                query = (
+                    f"{base_query} LIMIT {edge_limit + 1}"
+                    if edge_limit > 0
+                    else base_query
+                )
                 try:
-                    edge_rows = mgr.execute(
-                        f'SELECT "{safe_pk}", "{safe_col}" '
-                        f'FROM "{safe_from}" '
-                        f'WHERE "{safe_col}" IS NOT NULL '
-                        f"LIMIT {_EDGE_LIMIT}"
-                    )
+                    edge_rows = mgr.execute(query)
                 except Exception as exc:
                     logger.warning(
                         "build_from_ontology: edge query failed %s.%s: %s",
@@ -247,6 +270,10 @@ class KnowledgeGraph:
                         exc,
                     )
                     continue
+
+                truncated = edge_limit > 0 and len(edge_rows) > edge_limit
+                if truncated:
+                    edge_rows = edge_rows[:edge_limit]
 
                 edges_added = 0
                 for row in edge_rows:
@@ -265,14 +292,15 @@ class KnowledgeGraph:
                     self._add_edge(from_node, to_node, edge_type)
                     edges_added += 1
 
-                if edges_added >= _EDGE_LIMIT:
+                if truncated:
                     logger.warning(
                         "build_from_ontology: edge query for %s.%s hit the %d-row "
                         "cap — the knowledge graph may be incomplete. "
-                        "Raise _EDGE_LIMIT or add pagination to load all edges.",
+                        "Raise FRA_KG_EDGE_LIMIT (or set 0 for unlimited) to load "
+                        "all edges.",
                         entity_name,
                         attr_name,
-                        _EDGE_LIMIT,
+                        edge_limit,
                     )
                 logger.debug(
                     "build_from_ontology: %d edges %s-[%s]->%s",

@@ -14,7 +14,13 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.kg.graph import KnowledgeGraph, _norm_email, _norm_name, _normalize_table_name
+from app.kg.graph import (
+    KnowledgeGraph,
+    _edge_limit,
+    _norm_email,
+    _norm_name,
+    _normalize_table_name,
+)
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -290,3 +296,32 @@ class TestBuildFromSchema:
         kg = KnowledgeGraph()
         kg.build_from_schema(mgr)
         assert kg.node_count == 0
+
+
+# ── _edge_limit ────────────────────────────────────────────────────────────────
+
+
+class TestEdgeLimit:
+    def test_default_is_100k(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_EDGE_LIMIT", raising=False)
+        assert _edge_limit() == 100000
+
+    def test_custom_value(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "250000")
+        assert _edge_limit() == 250000
+
+    def test_zero_means_unlimited(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "0")
+        assert _edge_limit() == 0
+
+    def test_invalid_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "lots")
+        assert _edge_limit() == 100000
+
+    def test_negative_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "-10")
+        assert _edge_limit() == 100000
+
+    def test_whitespace_stripped(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "  42  ")
+        assert _edge_limit() == 42
