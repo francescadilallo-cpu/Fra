@@ -79,6 +79,11 @@ def db_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "INSERT INTO orders (id, date, delivery_date, status) VALUES (?, ?, ?, ?)",
             (1, "2026-01-10", "2026-01-20", "processing"),
         )
+        # Order 2: already delivered — used to test terminal-state guard
+        conn.execute(
+            "INSERT INTO orders (id, date, delivery_date, status) VALUES (?, ?, ?, ?)",
+            (2, "2025-12-01", "2025-12-10", "delivered"),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -506,3 +511,139 @@ def test_get_action_status_unknown_returns_404(
     resp = client.get("/api/agent/status/no-such-id", headers=admin_headers)
     assert resp.status_code == 404
     assert resp.json()["detail"]["error"] == "AGENT_ACTION_NOT_FOUND"
+
+
+# ── UPDATE_ORDER_STATUS tests ─────────────────────────────────────────────────
+
+
+def test_update_order_status_mark_as_shipped(
+    client: TestClient,
+    admin_headers: dict[str, str],
+    db_path: Path,
+) -> None:
+    """processing → shipped: valid transition, full flow."""
+    # Ensure order 1 is in processing state
+    _set_order_delivery_date(db_path, 1, "2026-01-20")
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("UPDATE orders SET status = 'processing' WHERE id = 1")
+        conn.commit()
+    finally:
+        conn.close()
+
+    create_resp = client.post(
+        "/api/agent/execute",
+        json={"command": "Segna l'ordine 1 come spedito"},
+        headers=admin_headers,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    body = create_resp.json()
+    assert body["status"] == "PENDING_HUMAN_APPROVAL"
+    assert body["proposed_action"]["action_type"] == "UPDATE_ORDER_STATUS"
+    assert body["proposed_action"]["new_status"] == "shipped"
+
+    action_id = body["action_id"]
+    approve_resp = client.post(
+        f"/api/agent/approve/{action_id}",
+        json={"approve": True},
+        headers=admin_headers,
+    )
+    assert approve_resp.status_code == 200, approve_resp.text
+    assert approve_resp.json()["status"] in ("SYNCED", "SYNC_FAILED")
+
+    # Verify DB state
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT status FROM orders WHERE id = 1").fetchone()
+        assert row is not None and row["status"] == "shipped"
+    finally:
+        conn.close()
+
+    # Restore
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("UPDATE orders SET status = 'processing' WHERE id = 1")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_update_order_status_cancel_command(
+    client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """'Cancella l'ordine' command parses as UPDATE_ORDER_STATUS / cancelled."""
+    create_resp = client.post(
+        "/api/agent/execute",
+        json={"command": "Cancella l'ordine 1"},
+        headers=admin_headers,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    body = create_resp.json()
+    assert body["proposed_action"]["action_type"] == "UPDATE_ORDER_STATUS"
+    assert body["proposed_action"]["new_status"] == "cancelled"
+
+
+def test_update_order_status_terminal_state_blocked(
+    client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Order 2 is already delivered — any further transition must be rejected."""
+    resp = client.post(
+        "/api/agent/execute",
+        json={"command": "Cancella l'ordine 2"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    detail = resp.json().get("detail", {})
+    assert detail.get("error") == "AGENT_VALIDATION_FAILED"
+    assert "Transizione di stato non valida" in detail.get("message", "")
+
+
+def test_update_order_status_invalid_italian_status(
+    client: TestClient,
+    admin_headers: dict[str, str],
+) -> None:
+    """Unknown Italian status word → controlled 422."""
+    resp = client.post(
+        "/api/agent/execute",
+        json={"command": "Segna l'ordine 1 come misterioso"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+    detail = resp.json().get("detail", {})
+    assert detail.get("error") == "AGENT_VALIDATION_FAILED"
+
+
+def test_list_actions_endpoint(
+    client: TestClient,
+    admin_headers: dict[str, str],
+    db_path: Path,
+) -> None:
+    """GET /api/agent/list returns all actions; status filter works."""
+    order_id, order_date, _ = _get_first_order(db_path)
+    proposed_date = (order_date + timedelta(days=4)).isoformat()
+
+    client.post(
+        "/api/agent/execute",
+        json={
+            "command": f"Sposta la data di consegna dell'ordine {order_id} al {proposed_date}"
+        },
+        headers=admin_headers,
+    )
+
+    list_resp = client.get("/api/agent/list", headers=admin_headers)
+    assert list_resp.status_code == 200, list_resp.text
+    actions = list_resp.json()
+    assert isinstance(actions, list)
+    assert len(actions) > 0
+
+    # Filter by status
+    pending_resp = client.get(
+        "/api/agent/list?status=PENDING_HUMAN_APPROVAL",
+        headers=admin_headers,
+    )
+    assert pending_resp.status_code == 200
+    pending = pending_resp.json()
+    assert all(a["status"] == "PENDING_HUMAN_APPROVAL" for a in pending)

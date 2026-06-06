@@ -221,6 +221,17 @@ _SYSTEM_TABLE_MARKERS = {
     "pg_tables",
     "mysql",
     "sys",
+    # DuckDB catalog & introspection tables
+    "duckdb_schemas",
+    "duckdb_tables",
+    "duckdb_columns",
+    "duckdb_views",
+    "duckdb_functions",
+    "duckdb_sequences",
+    "duckdb_constraints",
+    "pragma_table_info",
+    "pragma_database_list",
+    "pragma_index_list",
 }
 
 
@@ -970,8 +981,9 @@ class SemanticLayer:
                 )
 
             for table_ref in _SQL_TABLE_ACCESS_RE.findall(normalized):
-                table_name = table_ref.split(".")[-1].lower()
-                if table_name in _SYSTEM_TABLE_MARKERS:
+                parts = [p.lower() for p in table_ref.split(".")]
+                table_name = parts[-1]
+                if any(p in _SYSTEM_TABLE_MARKERS for p in parts):
                     self._security_block(
                         reason="system_table_access",
                         path=path,
@@ -1256,10 +1268,10 @@ class SemanticLayer:
                 "Generated SQL contains semicolon (multi-statement blocked)"
             )
         for table_ref in _SQL_TABLE_ACCESS_RE.findall(stripped):
-            table_name = table_ref.split(".")[-1].lower()
-            if table_name in _SYSTEM_TABLE_MARKERS:
+            parts = [p.lower() for p in table_ref.split(".")]
+            if any(p in _SYSTEM_TABLE_MARKERS for p in parts):
                 raise SemanticSecurityViolationError(
-                    f"Generated SQL accesses system table: {table_name}"
+                    f"Generated SQL accesses system table: {table_ref}"
                 )
 
     def _execute_llm_sql(self, intent: Intent) -> Result:
