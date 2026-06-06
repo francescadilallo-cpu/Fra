@@ -31,7 +31,14 @@ class TestGetMappings:
 
     def test_contains_expected_tables(self):
         m = get_mappings()
-        for table in ("customers", "products", "quotes", "quote_lines", "orders", "order_lines"):
+        for table in (
+            "customers",
+            "products",
+            "quotes",
+            "quote_lines",
+            "orders",
+            "order_lines",
+        ):
             assert table in m
 
     def test_returns_deep_copy(self):
@@ -43,8 +50,12 @@ class TestGetMappings:
     def test_each_field_has_required_keys(self):
         for table, fields in get_mappings().items():
             for field, meta in fields.items():
-                assert "ontology_class" in meta, f"{table}.{field} missing ontology_class"
-                assert "ontology_property" in meta, f"{table}.{field} missing ontology_property"
+                assert "ontology_class" in meta, (
+                    f"{table}.{field} missing ontology_class"
+                )
+                assert "ontology_property" in meta, (
+                    f"{table}.{field} missing ontology_property"
+                )
                 assert "type" in meta, f"{table}.{field} missing type"
 
 

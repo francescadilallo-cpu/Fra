@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Set env so layer imports don't choke on missing keys
 import os
+
 os.environ.setdefault("SEMANTIC_REQUIRE_LLM_INTENT", "0")
 
 from app.semantic.layer import (
@@ -65,7 +66,9 @@ class TestExtractJsonPayload:
             _extract_json_payload("[1, 2, 3]")
 
     def test_nested_json_preserved(self):
-        text = '{"intent_type": "revenue", "filters": {"year": 2024, "territory": "IT"}}'
+        text = (
+            '{"intent_type": "revenue", "filters": {"year": 2024, "territory": "IT"}}'
+        )
         result = _extract_json_payload(text)
         assert result["filters"]["territory"] == "IT"
 

@@ -14,10 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.semantic.doc_loader import DocLoader
 from app.semantic.doc_schema import (
-    DisambiguationRule,
     EntityDoc,
     GlossaryTerm,
-    MetricDoc,
     SemanticDocs,
 )
 
@@ -98,7 +96,9 @@ class TestLoadEntities:
         assert e.primary_key == "order_id"
 
     def test_entity_defaults(self, docs_dir):
-        write(docs_dir, "entities.yaml", "entities:\n  - name: X\n    display_name: X\n")
+        write(
+            docs_dir, "entities.yaml", "entities:\n  - name: X\n    display_name: X\n"
+        )
         e = DocLoader(docs_dir).load_entities()[0]
         assert e.synonyms == []
         assert e.description == ""

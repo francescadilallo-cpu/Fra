@@ -58,11 +58,15 @@ class TestValidateYamlSchema:
             _validate_yaml_schema(["list", "not", "dict"])  # type: ignore
 
     def test_entities_not_dict_raises(self):
-        with pytest.raises(OntologyValidationError, match="entities must be a dictionary"):
+        with pytest.raises(
+            OntologyValidationError, match="entities must be a dictionary"
+        ):
             _validate_yaml_schema({"entities": ["SalesOrder"]})
 
     def test_entity_config_not_dict_raises(self):
-        with pytest.raises(OntologyValidationError, match="config must be a dictionary"):
+        with pytest.raises(
+            OntologyValidationError, match="config must be a dictionary"
+        ):
             _validate_yaml_schema({"entities": {"SalesOrder": "not a dict"}})
 
     def test_sources_not_list_raises(self):
@@ -82,7 +86,9 @@ class TestValidateYamlSchema:
                 }
             }
         }
-        with pytest.raises(OntologyValidationError, match="must include 'source' and 'table'"):
+        with pytest.raises(
+            OntologyValidationError, match="must include 'source' and 'table'"
+        ):
             _validate_yaml_schema(data)
 
     def test_source_entry_missing_source_raises(self):
@@ -93,7 +99,9 @@ class TestValidateYamlSchema:
                 }
             }
         }
-        with pytest.raises(OntologyValidationError, match="must include 'source' and 'table'"):
+        with pytest.raises(
+            OntologyValidationError, match="must include 'source' and 'table'"
+        ):
             _validate_yaml_schema(data)
 
     def test_relation_invalid_target_raises(self):
@@ -132,7 +140,9 @@ class TestValidateYamlSchema:
 
     def test_metrics_not_dict_raises(self):
         data = {"entities": {}, "metrics": ["revenue"]}
-        with pytest.raises(OntologyValidationError, match="metrics must be a dictionary"):
+        with pytest.raises(
+            OntologyValidationError, match="metrics must be a dictionary"
+        ):
             _validate_yaml_schema(data)
 
     def test_ambiguities_not_list_raises(self):
@@ -217,6 +227,7 @@ class TestOntologyLoad:
 
     def test_entity_unknown_returns_base_class(self, ontology_yaml):
         from app.ontology.ontology import OntologyEntity
+
         o = Ontology.load(ontology_yaml)
         cls = o.entity("Nonexistent")
         assert cls is OntologyEntity
@@ -275,6 +286,7 @@ class TestOntologyLoad:
 def mfg_db(tmp_path) -> sqlite3.Connection:
     """Minimal DB with a few rows for ManufacturingOntology tests."""
     import app.database as db_module
+
     monkeypatch_path = tmp_path / "mfg_test.db"
 
     # Use the real init_db via monkeypatching DB_PATH
@@ -298,6 +310,7 @@ class TestManufacturingOntology:
 
     def test_all_classes_in_graph(self):
         from rdflib import OWL, RDF
+
         onto = ManufacturingOntology()
         for uri in CLASSES.values():
             assert (uri, RDF.type, OWL.Class) in onto.g
@@ -305,6 +318,7 @@ class TestManufacturingOntology:
     def test_object_properties_in_graph(self):
         from rdflib import OWL, RDF
         from app.ontology.manufacturing import MFG
+
         onto = ManufacturingOntology()
         for prop_name in OBJECT_PROPERTIES:
             prop_uri = MFG[prop_name]

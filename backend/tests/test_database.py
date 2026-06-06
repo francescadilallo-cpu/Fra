@@ -62,12 +62,17 @@ class TestInitDb:
         conn = db_module.get_connection()
         tables = {
             row["name"]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         conn.close()
-        for expected in ("customers", "products", "quotes", "quote_lines", "orders", "order_lines"):
+        for expected in (
+            "customers",
+            "products",
+            "quotes",
+            "quote_lines",
+            "orders",
+            "order_lines",
+        ):
             assert expected in tables
 
     def test_creates_semantic_tables(self, tmp_db):
@@ -75,9 +80,7 @@ class TestInitDb:
         conn = db_module.get_connection()
         tables = {
             row["name"]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         conn.close()
         for expected in ("sl_metrics", "sl_hierarchies", "sl_segments"):
@@ -148,9 +151,17 @@ class TestInitDb:
 
     def test_idempotent_metric_count(self, tmp_db):
         db_module.init_db()
-        first = db_module.get_connection().execute("SELECT COUNT(*) FROM sl_metrics").fetchone()[0]
+        first = (
+            db_module.get_connection()
+            .execute("SELECT COUNT(*) FROM sl_metrics")
+            .fetchone()[0]
+        )
         db_module.init_db()
-        second = db_module.get_connection().execute("SELECT COUNT(*) FROM sl_metrics").fetchone()[0]
+        second = (
+            db_module.get_connection()
+            .execute("SELECT COUNT(*) FROM sl_metrics")
+            .fetchone()[0]
+        )
         assert first == second
 
     def test_customers_have_required_fields(self, tmp_db):
@@ -205,7 +216,12 @@ class TestGetTableCounts:
         counts = get_table_counts(conn)
         conn.close()
         assert set(counts.keys()) == {
-            "customers", "products", "quotes", "quote_lines", "orders", "order_lines"
+            "customers",
+            "products",
+            "quotes",
+            "quote_lines",
+            "orders",
+            "order_lines",
         }
 
     def test_customer_count_matches_seed(self, tmp_db):
