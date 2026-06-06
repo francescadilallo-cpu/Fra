@@ -512,6 +512,7 @@ class MetadataCatalog:
                 )
                 s.add(row)
                 count += 1
+            s.commit()
         return count
 
     def row_count(self) -> int:
@@ -717,6 +718,7 @@ class MetadataCatalog:
             s.add(row)
             s.flush()
             result = self._template_to_dict(row)
+            s.commit()
         return result
 
     def update_template(self, template_id: int, **kwargs) -> dict:
@@ -741,6 +743,7 @@ class MetadataCatalog:
             row.updated_at = now
             row.auto_generated = 0
             result = self._template_to_dict(row)
+            s.commit()
         return result
 
     def delete_template(self, template_id: int) -> None:
@@ -753,6 +756,7 @@ class MetadataCatalog:
                 raise KeyError(f"Template {template_id} not found")
             row.is_active = 0
             row.updated_at = now
+            s.commit()
 
     def upsert_auto_templates(self, templates: list[dict]) -> int:
         """Insert or update auto-generated templates.
@@ -794,6 +798,7 @@ class MetadataCatalog:
                     )
                     s.add(row)
                     count += 1
+            s.commit()
         return count
 
     def seed_default_templates(self, templates: list[dict]) -> int:
@@ -826,6 +831,7 @@ class MetadataCatalog:
                 )
                 s.add(row)
                 count += 1
+            s.commit()
         return count
 
     # ── entity annotation seeding ────────────────────────────────────────────

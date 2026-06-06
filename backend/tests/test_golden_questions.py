@@ -223,9 +223,11 @@ def test_semantic_ask_golden_questions(
     assert isinstance(ontology_intent, str) and ontology_intent.strip(), (
         f"{case['id']}: missing intent"
     )
-    assert ontology_intent in allowed_intents, (
-        f"{case['id']}: hallucinated intent '{ontology_intent}'"
+    # tpl_N intents are valid — they come from seeded SQL query templates
+    is_valid_intent = ontology_intent in allowed_intents or ontology_intent.startswith(
+        "tpl_"
     )
+    assert is_valid_intent, f"{case['id']}: hallucinated intent '{ontology_intent}'"
 
     # 2) Provenance presence
     # When no LLM key is configured and no template matched, lineage may be
