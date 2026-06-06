@@ -1472,7 +1472,10 @@ def _sample_rows(table: str, adapter, mgr, limit: int = 200) -> list[dict]:
     sql = f'SELECT * FROM "{table}" LIMIT {limit}'
     if mgr is not None:
         try:
-            return list(mgr.execute(sql) or [])
+            # mgr.execute() itself caps at 100 rows by default — pass the
+            # requested limit through so a 200-row sample isn't silently
+            # truncated to 100 (which would understate column statistics).
+            return list(mgr.execute(sql, limit=limit) or [])
         except Exception:
             return []
     if adapter is not None:

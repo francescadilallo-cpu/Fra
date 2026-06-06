@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -577,3 +578,55 @@ class TestQueryTemplates:
             cat._populate_metrics(s, None)
             s.commit()
         assert cat.row_count() >= 4  # 4 default metrics seeded
+
+
+# ── _sample_rows / _count_rows module helpers ────────────────────────────────
+
+
+class TestSampleRowsLimitPassthrough:
+    """mgr.execute() itself caps results at 100 rows by default — _sample_rows
+    must forward its own *limit* (default 200) so a wider sample isn't
+    silently truncated to half its requested size."""
+
+    def test_sample_rows_passes_limit_through_to_mgr_execute(self):
+        from app.metadata.catalog import _sample_rows
+
+        mgr = MagicMock()
+        mgr.execute.return_value = [{"id": 1}]
+
+        _sample_rows("orders", adapter=None, mgr=mgr, limit=200)
+
+        args, kwargs = mgr.execute.call_args
+        assert kwargs.get("limit") == 200
+
+    def test_sample_rows_default_limit_is_200(self):
+        from app.metadata.catalog import _sample_rows
+
+        mgr = MagicMock()
+        mgr.execute.return_value = []
+
+        _sample_rows("orders", adapter=None, mgr=mgr)
+
+        _, kwargs = mgr.execute.call_args
+        assert kwargs.get("limit") == 200
+
+    def test_sample_rows_falls_back_to_adapter_without_limit_kwarg(self):
+        from app.metadata.catalog import _sample_rows
+
+        adapter = MagicMock()
+        adapter.execute_query.return_value = [{"id": 1}, {"id": 2}]
+
+        rows = _sample_rows("orders", adapter=adapter, mgr=None, limit=50)
+
+        assert rows == [{"id": 1}, {"id": 2}]
+        adapter.execute_query.assert_called_once()
+        _, kwargs = adapter.execute_query.call_args
+        assert "limit" not in kwargs
+
+    def test_sample_rows_swallows_mgr_errors(self):
+        from app.metadata.catalog import _sample_rows
+
+        mgr = MagicMock()
+        mgr.execute.side_effect = RuntimeError("boom")
+
+        assert _sample_rows("orders", adapter=None, mgr=mgr) == []
