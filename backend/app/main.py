@@ -534,7 +534,7 @@ def _get_semantic_draft() -> dict:
     relations: list[dict] = []
     if kg:
         seen: set[tuple] = set()
-        for src, dst, data in kg.all_edges():
+        for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
@@ -2271,7 +2271,7 @@ async def get_live_config(
     relations: list[dict] = []
     if kg:
         seen: set[tuple] = set()
-        for src, dst, data in kg.all_edges():
+        for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]

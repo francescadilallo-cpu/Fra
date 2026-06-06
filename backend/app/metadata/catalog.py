@@ -1214,7 +1214,7 @@ class MetadataCatalog:
 
         # Salesperson
         if not available or "salesperson" in available:
-            kg_count_sp = kg.subgraph("Salesperson").number_of_nodes()
+            kg_count_sp = kg.count_nodes_of_type("Salesperson")
             self._upsert_entity(
                 session,
                 name="Salesperson",
@@ -1239,7 +1239,7 @@ class MetadataCatalog:
 
         # Territory
         if not available or "territory" in available:
-            kg_count_t = kg.subgraph("Territory").number_of_nodes()
+            kg_count_t = kg.count_nodes_of_type("Territory")
             self._upsert_entity(
                 session,
                 name="Territory",
@@ -1279,7 +1279,7 @@ class MetadataCatalog:
         total_count = _count_rows("account", crm, mgr)
         dup_count = _count_rows("account", crm, mgr, where="accountId < 0")
         sample = _sample_rows("account", crm, mgr)
-        kg_count = kg.subgraph("Customer").number_of_nodes()
+        kg_count = kg.count_nodes_of_type("Customer")
         null_email_rate = _null_rate(sample, "emailContatto")
 
         self._upsert_entity(
@@ -1339,7 +1339,7 @@ class MetadataCatalog:
         if not available or "dipendenti_hr" in available:
             emp_count = _count_rows("dipendenti_hr", hr_pim, mgr)
             emp_sample = _sample_rows("dipendenti_hr", hr_pim, mgr)
-            kg_count_e = kg.subgraph("Employee").number_of_nodes()
+            kg_count_e = kg.count_nodes_of_type("Employee")
             null_rate_pay = _null_rate(emp_sample, "RetribuzioneOraria")
             self._upsert_entity(
                 session,
@@ -1383,7 +1383,7 @@ class MetadataCatalog:
         if not available or "product_catalog_pim" in available:
             prod_count = _count_rows("product_catalog_pim", hr_pim, mgr)
             prod_sample = _sample_rows("product_catalog_pim", hr_pim, mgr)
-            kg_count_p = kg.subgraph("Product").number_of_nodes()
+            kg_count_p = kg.count_nodes_of_type("Product")
             self._upsert_entity(
                 session,
                 name="Product",

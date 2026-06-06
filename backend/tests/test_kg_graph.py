@@ -242,6 +242,28 @@ class TestKnowledgeGraphSubgraph:
         edges = self.kg.all_edges()
         assert len(edges) == 1
 
+    def test_count_nodes_of_type(self):
+        assert self.kg.count_nodes_of_type("Customer") == 2
+        assert self.kg.count_nodes_of_type("SalesOrder") == 1
+
+    def test_count_nodes_of_type_unknown_is_zero(self):
+        assert self.kg.count_nodes_of_type("Nope") == 0
+
+    def test_count_matches_subgraph_number_of_nodes(self):
+        # count_nodes_of_type must equal the old subgraph().number_of_nodes().
+        for t in ("Customer", "SalesOrder", "Nope"):
+            assert (
+                self.kg.count_nodes_of_type(t) == self.kg.subgraph(t).number_of_nodes()
+            )
+
+    def test_iter_edges_streams_all(self):
+        self.kg._add_edge("SalesOrder:10", "Customer:1", "PLACED_BY")
+        self.kg._add_edge("SalesOrder:10", "Customer:2", "PLACED_BY")
+        streamed = list(self.kg.iter_edges())
+        assert len(streamed) == 2
+        # Same content as all_edges(), without building a list internally.
+        assert len(streamed) == len(self.kg.all_edges())
+
 
 # ── build_from_schema ─────────────────────────────────────────────────────────
 

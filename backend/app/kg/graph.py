@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from collections.abc import Iterator
 from typing import Any
 
 import networkx as nx
@@ -501,6 +502,18 @@ class KnowledgeGraph:
         ]
         return self._g.subgraph(nodes).copy()
 
+    def count_nodes_of_type(self, entity_type: str) -> int:
+        """Count nodes of an entity type without copying an induced subgraph.
+
+        subgraph(t).number_of_nodes() builds a full copy just to count; this
+        streams the node view instead — O(1) memory.
+        """
+        return sum(
+            1
+            for _, data in self._g.nodes(data=True)
+            if data.get("entity_type") == entity_type
+        )
+
     def get_node(self, node_id: str) -> dict[str, Any] | None:
         if node_id in self._g:
             return dict(self._g.nodes[node_id])
@@ -514,6 +527,15 @@ class KnowledgeGraph:
 
     def all_edges(self) -> list[tuple[str, str, dict]]:
         return list(self._g.edges(data=True))
+
+    def iter_edges(self) -> "Iterator[tuple[str, str, dict]]":
+        """Stream (src, dst, data) edge tuples without building a full list.
+
+        Use this instead of all_edges() when you only need to scan edges once
+        (e.g. deriving distinct schema-level relations), to avoid copying the
+        entire edge set into a Python list.
+        """
+        return iter(self._g.edges(data=True))
 
     # ── private: node helpers ─────────────────────────────────────────────────
 
