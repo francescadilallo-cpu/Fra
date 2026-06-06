@@ -298,8 +298,6 @@ class MetadataCatalog:
         import sqlite3 as _sqlite3
 
         url = str(self._engine.url)
-        if ":memory:" in url or "///":
-            pass
         db_path = url.split("///")[-1] if "///" in url else None
         if not db_path or ":memory:" in db_path:
             return
