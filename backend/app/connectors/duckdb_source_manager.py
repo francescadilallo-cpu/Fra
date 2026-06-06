@@ -671,21 +671,32 @@ class DuckDBSourceManager:
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
         if inline:
+            # Small browser uploads — pandas is fine and avoids a temp file.
             if len(inline.encode("utf-8")) > _MAX_INLINE_BYTES:
                 raise ValueError(f"Inline CSV exceeds 5 MB limit ({len(inline)} chars)")
             df = pd.read_csv(io.StringIO(inline), sep=",", low_memory=False)
+            conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
+            n = len(df)
         else:
             path = _safe_data_path(cfg.params.get("path", ""))
             if not path.exists():
                 raise FileNotFoundError(f"CSV not found: {path}")
             table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
             delimiter = cfg.params.get("delimiter", ",")
-            df = pd.read_csv(
-                str(path), sep=delimiter, encoding="utf-8", low_memory=False
+            safe_path = str(path).replace("'", "''")
+            safe_delim = delimiter.replace("'", "''")
+            # Stream the file straight into DuckDB — DuckDB parses it natively
+            # (parallel, out-of-core) instead of materialising the whole file in
+            # a pandas DataFrame in Python memory.
+            conn.execute(
+                f'CREATE TABLE IF NOT EXISTS "{table}" AS '
+                f"SELECT * FROM read_csv_auto('{safe_path}', "
+                f"delim='{safe_delim}', header=true)"
             )
-        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM df')
-        self._row_counts[f"{cfg.id}.{table}"] = len(df)
-        logger.info("CSV  %-25s %7d rows", table, len(df))
+            _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+            n = _row[0] if _row is not None else 0
+        self._row_counts[f"{cfg.id}.{table}"] = n
+        logger.info("CSV  %-25s %7d rows", table, n)
         if table not in cfg.target_tables:
             cfg.target_tables.append(table)
 
@@ -700,6 +711,31 @@ class DuckDBSourceManager:
             or path.stem.replace("-", "_").replace(" ", "_").lower()
         )
         records_key = cfg.params.get("records_key")
+        if not records_key:
+            # Top-level array (or ndjson): let DuckDB stream it natively instead
+            # of loading the whole document into Python + a pandas DataFrame.
+            safe_path = str(path).replace("'", "''")
+            try:
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{table}" AS '
+                    f"SELECT * FROM read_json_auto('{safe_path}')"
+                )
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+                n = _row[0] if _row is not None else 0
+                self._row_counts[f"{cfg.id}.{table}"] = n
+                logger.info("JSON %-25s %7d rows", table, n)
+                if table not in cfg.target_tables:
+                    cfg.target_tables.append(table)
+                return
+            except Exception as exc:
+                # Fall back to the pandas path (e.g. an object-wrapped payload
+                # DuckDB's sniffer can't flatten) rather than failing the sync.
+                logger.info(
+                    "JSON native read failed for %s (%s) — using pandas fallback",
+                    table,
+                    exc,
+                )
+
         raw = json.loads(path.read_text(encoding="utf-8"))
         records = (
             raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
