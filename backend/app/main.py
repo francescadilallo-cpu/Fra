@@ -2645,19 +2645,20 @@ def _agents_db() -> _sqlite3.Connection:
 
 
 class CustomAgentPayload(BaseModel):
-    id: str
-    sector_id: str
+    id: str = Field(min_length=1, max_length=128)
+    sector_id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=200)
-    description: str = ""
-    template: str = "monitor"
-    entities: list[str] = []
-    findings: list[dict] = []
-    actions: list[str] = []
+    description: str = Field(default="", max_length=2000)
+    template: str = Field(default="monitor", max_length=64)
+    entities: list[str] = Field(default_factory=list, max_length=100)
+    findings: list[dict] = Field(default_factory=list, max_length=500)
+    actions: list[str] = Field(default_factory=list, max_length=50)
     trigger: dict = Field(default_factory=lambda: {"kind": "manual"})
     created_at: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
+        max_length=64,
     )
-    last_run_at: str | None = None
+    last_run_at: str | None = Field(default=None, max_length=64)
 
 
 def _row_to_agent(row: _sqlite3.Row) -> dict:
@@ -2679,14 +2680,15 @@ def _row_to_agent(row: _sqlite3.Row) -> dict:
 
 @app.get("/api/agents/custom", tags=["agents"])
 def list_custom_agents(
-    sector_id: str = Query(default=DEFAULT_SECTOR),
+    sector_id: str = Query(default=DEFAULT_SECTOR, max_length=128),
+    limit: int = Query(default=200, ge=1, le=1000),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict]:
     conn = _agents_db()
     try:
         rows = conn.execute(
-            "SELECT * FROM custom_agents WHERE sector_id = ? ORDER BY created_at DESC",
-            (sector_id,),
+            "SELECT * FROM custom_agents WHERE sector_id = ? ORDER BY created_at DESC LIMIT ?",
+            (sector_id, limit),
         ).fetchall()
         return [_row_to_agent(r) for r in rows]
     finally:
