@@ -51,10 +51,28 @@ class ResyncResult(BaseModel):
     completed_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
+OrderStatus = Literal["shipped", "cancelled", "delivered", "processing"]
+
+_STATUS_IT_MAP: dict[str, str] = {
+    "spedito": "shipped",
+    "consegnato": "delivered",
+    "in lavorazione": "processing",
+    "in elaborazione": "processing",
+}
+
+_VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "processing": {"shipped", "cancelled"},
+    "shipped": {"delivered"},
+    "delivered": set(),
+    "cancelled": set(),
+}
+
+
 class ProposedWriteAction(BaseModel):
-    action_type: Literal["UPDATE_ORDER_DELIVERY_DATE"]
+    action_type: Literal["UPDATE_ORDER_DELIVERY_DATE", "UPDATE_ORDER_STATUS"]
     order_id: int
-    new_delivery_date: date
+    new_delivery_date: date | None = None
+    new_status: str | None = None
     rationale: str
 
 
@@ -263,26 +281,71 @@ class ExecutiveAgenticLayer:
         with self._lock:
             return list(self._audit_log[-limit:])
 
+    def list_actions(
+        self,
+        status_filter: str | None = None,
+        limit: int = 50,
+    ) -> list[PendingAgentAction]:
+        with self._lock:
+            actions = list(self._pending_actions.values())
+        if status_filter:
+            actions = [a for a in actions if a.status == status_filter]
+        return actions[-limit:]
+
     def _parse_command(self, command: str) -> ProposedWriteAction:
         import re
 
-        pattern = re.compile(
+        delivery_re = re.compile(
             r"sposta\s+la\s+data\s+di\s+consegna\s+dell[' ]ordine\s+(\d+)\s+(?:al|alla|a)\s+(\d{4}-\d{2}-\d{2})",
             re.IGNORECASE,
         )
-        match = pattern.search(command)
-        if not match:
-            raise AgentSemanticValidationError(
-                "Comando non supportato. Usa formato: 'Sposta la data di consegna dell'ordine <id> al YYYY-MM-DD'"
+        status_re = re.compile(
+            r"(?:segna|marca)\s+l[' ]ordine\s+(\d+)\s+come\s+(spedito|consegnato|in\s+lavorazione|in\s+elaborazione)",
+            re.IGNORECASE,
+        )
+        cancel_re = re.compile(
+            r"(?:cancella|annulla)\s+l[' ]ordine\s+(\d+)",
+            re.IGNORECASE,
+        )
+
+        m = delivery_re.search(command)
+        if m:
+            return ProposedWriteAction(
+                action_type="UPDATE_ORDER_DELIVERY_DATE",
+                order_id=int(m.group(1)),
+                new_delivery_date=date.fromisoformat(m.group(2)),
+                rationale="Write-back governato via Executive Agentic Layer",
             )
 
-        order_id = int(match.group(1))
-        new_date = date.fromisoformat(match.group(2))
-        return ProposedWriteAction(
-            action_type="UPDATE_ORDER_DELIVERY_DATE",
-            order_id=order_id,
-            new_delivery_date=new_date,
-            rationale="Write-back governato via Executive Agentic Layer",
+        m = status_re.search(command)
+        if m:
+            italian_status = m.group(2).lower().strip()
+            mapped = _STATUS_IT_MAP.get(italian_status)
+            if not mapped:
+                raise AgentSemanticValidationError(
+                    f"Stato non riconosciuto: {italian_status}"
+                )
+            return ProposedWriteAction(
+                action_type="UPDATE_ORDER_STATUS",
+                order_id=int(m.group(1)),
+                new_status=mapped,
+                rationale="Write-back governato via Executive Agentic Layer",
+            )
+
+        m = cancel_re.search(command)
+        if m:
+            return ProposedWriteAction(
+                action_type="UPDATE_ORDER_STATUS",
+                order_id=int(m.group(1)),
+                new_status="cancelled",
+                rationale="Write-back governato via Executive Agentic Layer",
+            )
+
+        raise AgentSemanticValidationError(
+            "Comando non supportato. Formati validi: "
+            "'Sposta la data di consegna dell'ordine <id> al YYYY-MM-DD' | "
+            "'Segna l'ordine <id> come spedito/consegnato' | "
+            "'Cancella l'ordine <id>'"
         )
 
     def _validate_semantics(self, action: ProposedWriteAction) -> ValidationOutcome:
@@ -318,7 +381,7 @@ class ExecutiveAgenticLayer:
         conn = self._get_db_connection()
         try:
             row = conn.execute(
-                "SELECT id, date, delivery_date FROM orders WHERE id = ?",
+                "SELECT id, date, delivery_date, status FROM orders WHERE id = ?",
                 (action.order_id,),
             ).fetchone()
         finally:
@@ -332,14 +395,33 @@ class ExecutiveAgenticLayer:
             )
         checks.append("order_exists")
 
-        order_date = date.fromisoformat(str(row["date"]))
-        if action.new_delivery_date < order_date:
-            return ValidationOutcome(
-                passed=False,
-                checks=checks,
-                reason="La data di consegna non puo essere antecedente alla data ordine",
+        if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
+            assert action.new_delivery_date is not None
+            order_date = date.fromisoformat(str(row["date"]))
+            if action.new_delivery_date < order_date:
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason="La data di consegna non puo essere antecedente alla data ordine",
+                )
+            checks.append("business_rule_delivery_date_gte_order_date")
+
+        elif action.action_type == "UPDATE_ORDER_STATUS":
+            assert action.new_status is not None
+            current_status = str(row["status"] or "processing").lower()
+            allowed = _VALID_STATUS_TRANSITIONS.get(current_status, set())
+            if action.new_status not in allowed:
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason=(
+                        f"Transizione di stato non valida: {current_status!r} → {action.new_status!r}. "
+                        f"Consentite: {sorted(allowed) or 'nessuna'}"
+                    ),
+                )
+            checks.append(
+                f"business_rule_valid_status_transition:{current_status}->{action.new_status}"
             )
-        checks.append("business_rule_delivery_date_gte_order_date")
 
         return ValidationOutcome(passed=True, checks=checks)
 
@@ -349,7 +431,19 @@ class ExecutiveAgenticLayer:
                 action_type=action.action_type,
                 affected_tables=["orders"],
                 affected_node_ids=[f"order:{action.order_id}"],
-                changed_fields={"delivery_date": action.new_delivery_date.isoformat()},
+                changed_fields={
+                    "delivery_date": action.new_delivery_date.isoformat()
+                    if action.new_delivery_date
+                    else ""
+                },
+                entity_types=["SalesOrder"],
+            )
+        if action.action_type == "UPDATE_ORDER_STATUS":
+            return ActionEffect(
+                action_type=action.action_type,
+                affected_tables=["orders"],
+                affected_node_ids=[f"order:{action.order_id}"],
+                changed_fields={"status": action.new_status or ""},
                 entity_types=["SalesOrder"],
             )
         return ActionEffect(action_type=action.action_type)
@@ -383,15 +477,24 @@ class ExecutiveAgenticLayer:
         )
 
     def _execute_writeback(self, action: ProposedWriteAction) -> None:
-        if action.action_type != "UPDATE_ORDER_DELIVERY_DATE":
-            raise AgentExecutionError(f"Unsupported action_type: {action.action_type}")
-
         conn = self._get_db_connection()
         try:
-            cursor = conn.execute(
-                "UPDATE orders SET delivery_date = ? WHERE id = ?",
-                (action.new_delivery_date.isoformat(), action.order_id),
-            )
+            if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
+                assert action.new_delivery_date is not None
+                cursor = conn.execute(
+                    "UPDATE orders SET delivery_date = ? WHERE id = ?",
+                    (action.new_delivery_date.isoformat(), action.order_id),
+                )
+            elif action.action_type == "UPDATE_ORDER_STATUS":
+                assert action.new_status is not None
+                cursor = conn.execute(
+                    "UPDATE orders SET status = ? WHERE id = ?",
+                    (action.new_status, action.order_id),
+                )
+            else:
+                raise AgentExecutionError(
+                    f"Unsupported action_type: {action.action_type}"
+                )
             conn.commit()
         finally:
             conn.close()

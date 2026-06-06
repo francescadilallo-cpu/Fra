@@ -55,7 +55,51 @@ function fromBackend(d: Record<string, unknown>): CustomAgentDef {
   }
 }
 
-// ── API functions ────────────────────────────────────────────────────────────
+// ── Executive action types ───────────────────────────────────────────────────
+
+export interface AgentActionResyncResult {
+  nodes_patched: number
+  cache_keys_invalidated: number
+  duration_ms: number
+  errors: string[]
+  completed_at: string
+}
+
+export interface AgentAction {
+  action_id: string
+  status: string
+  command: string
+  requested_by: string
+  requested_role: string
+  validation_checks: string[]
+  manager_note: string | null
+  created_at: string
+  updated_at: string
+  proposed_action: Record<string, unknown>
+  resync_result: AgentActionResyncResult | null
+}
+
+// ── Executive API ─────────────────────────────────────────────────────────────
+
+export const executeAgentCommand = (command: string): Promise<AgentAction> =>
+  http.post<AgentAction>('/api/agent/execute', { command }).then(r => r.data)
+
+export const approveAgentAction = (
+  actionId: string,
+  approve: boolean,
+  managerNote?: string,
+): Promise<AgentAction> =>
+  http.post<AgentAction>(`/api/agent/approve/${encodeURIComponent(actionId)}`, {
+    approve,
+    manager_note: managerNote ?? null,
+  }).then(r => r.data)
+
+export const listAgentActions = (statusFilter?: string): Promise<AgentAction[]> =>
+  http.get<AgentAction[]>('/api/agent/list', {
+    params: statusFilter ? { status: statusFilter } : undefined,
+  }).then(r => r.data)
+
+// ── Custom agent API functions ────────────────────────────────────────────────
 
 export const listAgents = (sectorId: string): Promise<CustomAgentDef[]> =>
   http.get<Record<string, unknown>[]>('/api/agents/custom', { params: { sector_id: sectorId } })
