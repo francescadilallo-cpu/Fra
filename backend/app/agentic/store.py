@@ -129,6 +129,51 @@ class AgentStateStore:
             finally:
                 self._close(conn)
 
+    def claim_pending_action(
+        self, action_id: str, claimed_status: str, updated_at: str
+    ) -> "PendingAgentAction | None":
+        """Atomically claim a PENDING_HUMAN_APPROVAL action for processing.
+
+        Transitions status from PENDING_HUMAN_APPROVAL to *claimed_status* via
+        a single ``UPDATE ... WHERE status = 'PENDING_HUMAN_APPROVAL'`` that
+        SQLite serialises at the file/WAL level — the database-level
+        compare-and-swap that plain get_action()+save_action() cannot offer.
+
+        Returns the claimed action (already reflecting *claimed_status*) iff
+        *this* call performed the transition, i.e. ``cursor.rowcount == 1``.
+        Returns None when the action doesn't exist OR another caller (same
+        process or a different worker sharing this file-backed store) already
+        transitioned it first — the caller must not execute the writeback.
+
+        The in-process RLock in ExecutiveAgenticLayer still prevents the
+        wasted DB round-trip on same-process concurrent calls; this method
+        provides the *cross-process* guarantee those locks can't.
+        """
+        with self._lock:
+            conn = self._open()
+            try:
+                row = conn.execute(
+                    "SELECT payload_json FROM pending_actions WHERE action_id = ?",
+                    (action_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                action = PendingAgentAction.model_validate_json(row["payload_json"])
+                action.status = claimed_status  # type: ignore[assignment]
+                action.updated_at = updated_at
+                cursor = conn.execute(
+                    """
+                    UPDATE pending_actions
+                       SET status = ?, payload_json = ?, updated_at = ?
+                     WHERE action_id = ? AND status = 'PENDING_HUMAN_APPROVAL'
+                    """,
+                    (claimed_status, action.model_dump_json(), updated_at, action_id),
+                )
+                conn.commit()
+                return action if cursor.rowcount == 1 else None
+            finally:
+                self._close(conn)
+
     def get_action(self, action_id: str) -> PendingAgentAction | None:
         with self._lock:
             conn = self._open()

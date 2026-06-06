@@ -169,3 +169,78 @@ class TestPersistence:
         store1.save_action(_make_action("only_in_1"))
         assert store1.get_action("only_in_1") is not None
         assert store2.get_action("only_in_1") is None
+
+
+# ── claim_pending_action (cross-process CAS) ────────────────────────────────
+
+
+class TestClaimPendingAction:
+    """claim_pending_action() is the compare-and-swap primitive that prevents
+    two workers from executing the same approval concurrently.
+
+    Without it, two processes racing approve_action() on the same action_id
+    would both read PENDING_HUMAN_APPROVAL, both execute the DB writeback, and
+    both append duplicate EXECUTED/RESYNCED audit entries for what must be a
+    single, irreversible state transition. The UPDATE...WHERE status=? inside
+    claim_pending_action() serialises at the SQLite file/WAL level, so only
+    the first caller observes rowcount==1; the second gets None back and must
+    not proceed."""
+
+    def test_first_claim_returns_action_with_new_status(self):
+        store = AgentStateStore()
+        store.save_action(_make_action("cas1"))
+
+        result = store.claim_pending_action("cas1", "PROCESSING", "2024-01-01T00:00:00")
+
+        assert result is not None
+        assert result.action_id == "cas1"
+        assert result.status == "PROCESSING"
+
+    def test_first_claim_persists_new_status(self):
+        store = AgentStateStore()
+        store.save_action(_make_action("cas2"))
+        store.claim_pending_action("cas2", "PROCESSING", "2024-01-01T00:00:00")
+
+        stored = store.get_action("cas2")
+        assert stored is not None
+        assert stored.status == "PROCESSING"
+
+    def test_second_claim_returns_none(self):
+        """Simulates a second worker arriving after the first already claimed."""
+        store = AgentStateStore()
+        store.save_action(_make_action("cas3"))
+        store.claim_pending_action("cas3", "PROCESSING", "2024-01-01T00:00:00")
+
+        second = store.claim_pending_action("cas3", "PROCESSING", "2024-01-01T00:00:01")
+        assert second is None, (
+            "the second concurrent worker must not be allowed to claim an "
+            "action that has already been claimed — returning None signals "
+            "'you lost the race, do not proceed with the writeback'"
+        )
+
+    def test_claim_nonexistent_returns_none(self):
+        store = AgentStateStore()
+        assert store.claim_pending_action("no-such-id", "PROCESSING", "t") is None
+
+    def test_cross_process_only_one_worker_wins(self, tmp_path):
+        """Two file-backed stores sharing the same SQLite file — only the
+        first claim succeeds; the second returns None."""
+        db = tmp_path / "agent_state.db"
+        worker_a = AgentStateStore(db)
+        worker_b = AgentStateStore(db)
+
+        worker_a.save_action(_make_action("race1"))
+
+        a_result = worker_a.claim_pending_action(
+            "race1", "PROCESSING", "2024-01-01T00:00:00"
+        )
+        b_result = worker_b.claim_pending_action(
+            "race1", "PROCESSING", "2024-01-01T00:00:00"
+        )
+
+        assert a_result is not None, "worker A should win (it claimed first)"
+        assert b_result is None, (
+            "worker B must not be allowed to re-claim an action already "
+            "claimed by worker A — without this, both would execute the "
+            "same writeback and append duplicate audit entries"
+        )

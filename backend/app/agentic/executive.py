@@ -35,6 +35,7 @@ class AgentExecutionError(Exception):
 
 AgentStatus = Literal[
     "PENDING_HUMAN_APPROVAL",
+    "PROCESSING",  # claimed by a worker; decision is being applied
     "VALIDATION_FAILED",
     "REJECTED",
     "EXECUTED",
@@ -217,18 +218,35 @@ class ExecutiveAgenticLayer:
         approve: bool,
         manager_note: str | None,
     ) -> PendingAgentAction:
+        now = datetime.now(UTC).isoformat()
         with self._lock:
-            action = self._store.get_action(action_id)
-            if not action:
-                raise AgentActionNotFoundError(f"Action '{action_id}' not found")
-
-            if action.status != "PENDING_HUMAN_APPROVAL":
+            # Atomically claim the action before doing any work.
+            #
+            # Two workers racing the same approve request (e.g. a manager
+            # double-clicking, hitting different processes behind a load
+            # balancer — see AgentStateStore's "shared across worker processes"
+            # design goal) must not both read PENDING_HUMAN_APPROVAL, both
+            # execute the DB writeback, and both append duplicate
+            # EXECUTED/RESYNCED audit entries for what must be a single,
+            # irreversible state transition. The in-process RLock above still
+            # serialises same-process callers cheaply; the real cross-process
+            # guarantee comes from claim_pending_action()'s
+            # UPDATE...WHERE status='PENDING_HUMAN_APPROVAL' — SQLite
+            # serialises writers at the file/WAL level, so only the first
+            # caller to reach that statement "wins" (rowcount == 1); everyone
+            # else gets None back and must not proceed.
+            action = self._store.claim_pending_action(action_id, "PROCESSING", now)
+            if action is None:
+                existing = self._store.get_action(action_id)
+                if existing is None:
+                    raise AgentActionNotFoundError(f"Action '{action_id}' not found")
                 raise AgentExecutionError(
-                    f"Action '{action_id}' is in status '{action.status}' and cannot be approved"
+                    f"Action '{action_id}' is in status '{existing.status}' "
+                    "and cannot be approved"
                 )
 
             action.manager_note = manager_note
-            action.updated_at = datetime.now(UTC).isoformat()
+            action.updated_at = now
 
             if not approve:
                 action.status = "REJECTED"

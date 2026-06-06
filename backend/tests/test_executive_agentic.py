@@ -547,3 +547,51 @@ class TestStatePersistence:
 
         # The rejection is visible back on worker A.
         assert layer_a.get_action(action.action_id).status == "REJECTED"
+
+    def test_double_approval_from_two_workers_executes_exactly_once(
+        self, tmp_path
+    ) -> None:
+        """Regression: two workers racing approve_action() on the same
+        action_id must not both execute the writeback and append duplicate
+        EXECUTED/RESYNCED audit entries. The first caller wins via
+        claim_pending_action()'s SQL compare-and-swap; the second raises
+        AgentExecutionError(\"cannot be approved\") without touching the DB."""
+        orders = [
+            {
+                "id": 20,
+                "date": "2024-01-01",
+                "delivery_date": "2024-02-01",
+                "status": "processing",
+            }
+        ]
+        db = tmp_path / "agent_state.db"
+        layer_a = _make_layer_with_db(orders, state_db_path=db)
+        layer_b = _make_layer_with_db(orders, state_db_path=db)
+
+        action = layer_a.submit_command(
+            "Cancella l'ordine 20", actor="u", actor_role="a"
+        )
+
+        # Worker A approves first.
+        result_a = layer_a.approve_action(
+            action.action_id, "mgr", "admin", approve=True, manager_note=None
+        )
+        assert result_a.status in {"SYNCED", "SYNC_FAILED", "EXECUTED", "FAILED"}
+
+        # Worker B tries to approve the same action — must be rejected.
+        with pytest.raises(AgentExecutionError, match="cannot be approved"):
+            layer_b.approve_action(
+                action.action_id, "mgr2", "admin", approve=True, manager_note=None
+            )
+
+        # Exactly one EXECUTED entry in the audit trail for this action.
+        audit_entries = [
+            r
+            for r in layer_a.get_audit_log(limit=100)
+            if r.action_id == action.action_id and r.phase == "EXECUTED"
+        ]
+        assert len(audit_entries) == 1, (
+            "the writeback must execute exactly once — two workers approved "
+            f"the same action but {len(audit_entries)} EXECUTED audit "
+            "entries were appended"
+        )
