@@ -281,7 +281,6 @@ def _complete_json_via_groq(
         ],
     }
     _MAX_ATTEMPTS = 3
-    resp = None
     for attempt in range(_MAX_ATTEMPTS):
         resp = httpx.post(
             "https://api.groq.com/openai/v1/chat/completions",
