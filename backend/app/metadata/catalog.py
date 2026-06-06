@@ -862,11 +862,11 @@ class MetadataCatalog:
         """
         available = self._get_available_tables()
         count = 0
-        for ann in annotations:
-            table = ann.get("table", "")
-            if available and table not in available:
-                continue
-            with self._Session() as s:
+        with self._Session() as s:
+            for ann in annotations:
+                table = ann.get("table", "")
+                if available and table not in available:
+                    continue
                 # populate_from_manager stores entities with name=table
                 row = s.query(EntityMetaRow).filter_by(name=table).first()
                 if row is None:
@@ -889,6 +889,7 @@ class MetadataCatalog:
                         changed = True
                 if changed:
                     count += 1
+            s.commit()
         return count
 
     # ── internal helpers ──────────────────────────────────────────────────────
