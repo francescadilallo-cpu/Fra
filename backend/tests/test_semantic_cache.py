@@ -277,3 +277,113 @@ def test_semantic_ask_redis_cache_short_circuits_repeated_layer_execution(
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     assert calls["count"] == 1
+
+
+class _FakeRedisWithIncr:
+    """Minimal Redis stand-in that also supports INCR (atomic generation bump)."""
+
+    def __init__(self) -> None:
+        self.storage: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.storage.get(key)
+
+    def setex(self, key: str, _ttl: int, value: str) -> None:
+        self.storage[key] = value
+
+    def incr(self, key: str) -> int:
+        new_value = int(self.storage.get(key, "0")) + 1
+        self.storage[key] = str(new_value)
+        return new_value
+
+
+class TestSemanticCacheNamespaceIsSharedAcrossWorkers:
+    """With SEMANTIC_REDIS_URL configured, the cache is shared across worker
+    processes, but a plain module-level int is NOT — each worker has its own
+    copy. If invalidation only bumped that local copy, the worker that
+    *handled* a write-back/sync would stop hitting pre-mutation entries, while
+    every *other* worker kept computing v{old_ns}:... keys and went on
+    serving (and re-writing!) stale answers from the shared cache for up to
+    SEMANTIC_REDIS_TTL_SECONDS. The generation must therefore be read back
+    from Redis — the same store the bump increments — so all workers agree."""
+
+    def test_bump_increments_the_shared_redis_generation(
+        self, app_module, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_redis = _FakeRedisWithIncr()
+        monkeypatch.setattr(
+            app_module, "_get_semantic_redis_client", lambda: fake_redis
+        )
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+
+        app_module._bump_semantic_cache_namespace()
+
+        assert fake_redis.storage[app_module._SEMANTIC_CACHE_NS_REDIS_KEY] == "1"
+
+    def test_cache_key_reflects_shared_generation_even_with_stale_local_counter(
+        self, app_module, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fake_redis = _FakeRedisWithIncr()
+        monkeypatch.setattr(
+            app_module, "_get_semantic_redis_client", lambda: fake_redis
+        )
+
+        # Worker A: handles the write-back and bumps the (shared) generation.
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        app_module._bump_semantic_cache_namespace()
+
+        # Worker B: never received the write-back, so ITS process-local
+        # counter is still stuck at 0 — exactly what would happen behind a
+        # real load balancer / multi-worker server.
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        key = app_module._semantic_cache_key("same question?", {}, fake_redis)
+
+        assert key.startswith("semantic:ask:v1:"), (
+            "worker B must key its lookup off the *shared* generation (v1, "
+            "bumped by worker A's write-back), not its own stale local "
+            "counter (v0) — a v0 key would hit pre-mutation entries still "
+            "sitting in the shared cache and serve stale answers"
+        )
+
+    def test_different_workers_compute_identical_keys_after_a_bump(
+        self, app_module, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The whole point of a shared cache is that every worker computes the
+        same key for the same question — otherwise hits never happen across
+        worker boundaries. Local counters diverge; the Redis-backed
+        generation must be what keeps them in lockstep."""
+        fake_redis = _FakeRedisWithIncr()
+        monkeypatch.setattr(
+            app_module, "_get_semantic_redis_client", lambda: fake_redis
+        )
+
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        app_module._bump_semantic_cache_namespace()  # worker A bumps to v1
+
+        monkeypatch.setattr(
+            app_module, "_semantic_cache_namespace", 0
+        )  # worker B, stuck at v0
+        key_worker_b = app_module._semantic_cache_key("q", {"s": 1}, fake_redis)
+
+        monkeypatch.setattr(
+            app_module, "_semantic_cache_namespace", 7
+        )  # worker C, drifted to v7
+        key_worker_c = app_module._semantic_cache_key("q", {"s": 1}, fake_redis)
+
+        assert (
+            key_worker_b
+            == key_worker_c
+            == "semantic:ask:v1:" + key_worker_b.split(":")[-1]
+        )
+
+    def test_falls_back_to_local_counter_when_redis_unavailable(
+        self, app_module, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No Redis configured → the in-process cache is used too, so the
+        process-local counter is the *correct* source of truth (both are
+        scoped to the same process and stay consistent with each other)."""
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 3)
+
+        key = app_module._semantic_cache_key("q", {}, None)
+
+        assert key.startswith("semantic:ask:v3:")

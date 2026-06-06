@@ -94,6 +94,9 @@ _semantic_redis_client_initialized = False
 _semantic_redis_lock = threading.Lock()
 _semantic_cache_namespace = 0
 _semantic_ns_lock = threading.Lock()
+# Shared invalidation generation, kept in Redis so every worker process agrees
+# on it — see _semantic_cache_namespace_value()/_bump_semantic_cache_namespace().
+_SEMANTIC_CACHE_NS_REDIS_KEY = "semantic:ask:ns"
 _IN_PROCESS_CACHE_MAX = 256
 _in_process_cache: dict[str, str] = {}
 _in_process_cache_lock = threading.Lock()
@@ -163,7 +166,34 @@ def _safe_json(raw: str | None, default: Any) -> Any:
         return default
 
 
-def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
+def _semantic_cache_namespace_value(redis_client: Any) -> int:
+    """Return the cache-invalidation generation to key lookups off of.
+
+    With SEMANTIC_REDIS_URL configured, the cache is *shared* across worker
+    processes/instances, but the plain ``_semantic_cache_namespace`` int is
+    process-local. Bumping only the local copy (as the worker that handles a
+    write-back/sync would) leaves every *other* worker still computing
+    ``v{old_ns}:...`` keys — so they keep reading (and re-writing) pre-mutation
+    answers out of the shared cache for up to SEMANTIC_REDIS_TTL_SECONDS,
+    serving stale results even though that worker "invalidated" the cache.
+    Reading the generation from Redis (incremented atomically by the same
+    bump) keeps every worker in agreement. Falls back to the process-local
+    counter when Redis is unavailable, which matches the in-process-cache path
+    (also process-local, so the two stay consistent with each other).
+    """
+    if redis_client is not None:
+        try:
+            raw = redis_client.get(_SEMANTIC_CACHE_NS_REDIS_KEY)
+            if raw is not None:
+                return int(raw)
+        except Exception:
+            pass
+    return _semantic_cache_namespace
+
+
+def _semantic_cache_key(
+    question: str, context: dict[str, Any], redis_client: Any = None
+) -> str:
     payload = json.dumps(
         {"q": question.strip(), "ctx": context},
         sort_keys=True,
@@ -171,11 +201,18 @@ def _semantic_cache_key(question: str, context: dict[str, Any]) -> str:
         default=str,
     )
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return f"semantic:ask:v{_semantic_cache_namespace}:{digest}"
+    ns = _semantic_cache_namespace_value(redis_client)
+    return f"semantic:ask:v{ns}:{digest}"
 
 
 def _bump_semantic_cache_namespace() -> None:
     global _semantic_cache_namespace
+    redis_client = _get_semantic_redis_client()
+    if redis_client is not None:
+        try:
+            redis_client.incr(_SEMANTIC_CACHE_NS_REDIS_KEY)
+        except Exception as exc:
+            logger.warning("semantic cache namespace bump (redis) failed: %s", exc)
     with _semantic_ns_lock:
         _semantic_cache_namespace += 1
     with _in_process_cache_lock:
@@ -1196,7 +1233,7 @@ def semantic_ask(
 
     merged_context = {"session_id": req.session_id, **(req.context or {})}
     redis_client = _get_semantic_redis_client()
-    cache_key = _semantic_cache_key(question, merged_context)
+    cache_key = _semantic_cache_key(question, merged_context, redis_client)
     if redis_client is not None:
         try:
             cached_payload = redis_client.get(cache_key)
