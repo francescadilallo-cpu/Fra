@@ -723,7 +723,8 @@ class DuckDBSourceManager:
                 conn.execute(
                     f'CREATE TABLE IF NOT EXISTS "{table}" AS SELECT * FROM _pg_src."{schema}"."{table}"'
                 )
-                n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+                n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
                 logger.info("PG   %-25s %7d rows", table, n)
                 if table not in cfg.target_tables:
@@ -744,7 +745,8 @@ class DuckDBSourceManager:
             f'CREATE TABLE IF NOT EXISTS "{table}" AS '
             f"SELECT * FROM read_parquet('{safe_path}')"
         )
-        n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+        n = _row[0] if _row is not None else 0
         self._row_counts[f"{cfg.id}.{table}"] = n
         logger.info("PQT  %-25s %7d rows", table, n)
         if table not in cfg.target_tables:

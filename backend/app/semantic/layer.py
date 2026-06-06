@@ -321,7 +321,10 @@ def _complete_json_via_anthropic(
     )
     if not msg.content:
         raise ValueError("Anthropic returned empty content array")
-    return msg.content[0].text
+    block = msg.content[0]
+    if not hasattr(block, "text"):
+        raise ValueError(f"Unexpected content block type: {type(block)}")
+    return block.text
 
 
 def _extract_json_payload(text: str) -> dict[str, Any]:

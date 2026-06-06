@@ -211,7 +211,7 @@ def run_aw_query(
                 {
                     "type": "text",
                     "text": SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
+                    "cache_control": {"type": "ephemeral"},  # type: ignore[typeddict-unknown-key]
                 }
             ],
             messages=[
@@ -224,7 +224,7 @@ def run_aw_query(
                 }
             ],
         )
-        raw_text = translation_response.content[0].text
+        raw_text = translation_response.content[0].text  # type: ignore[union-attr]
         parsed = _extract_json(raw_text)
     except Exception as exc:
         logger.error("Claude NL→SQL failed: %s", exc)
@@ -309,7 +309,7 @@ def run_aw_query(
                     }
                 ],
             )
-            summary = summary_response.content[0].text.strip()
+            summary = summary_response.content[0].text.strip()  # type: ignore[union-attr]
         except Exception as exc:
             logger.warning("Summary generation failed: %s", exc)
             summary = f"Query eseguita con successo: {total_rows} righe restituite."

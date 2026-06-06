@@ -104,11 +104,8 @@ async def upload_document(
     store: ContextStore = Depends(_get_store),
 ):
     allowed = {".txt", ".md", ".pdf"}
-    ext = (
-        "." + file.filename.rsplit(".", 1)[-1].lower()
-        if "." in (file.filename or "")
-        else ""
-    )
+    _fname = file.filename or ""
+    ext = "." + _fname.rsplit(".", 1)[-1].lower() if "." in _fname else ""
     if ext not in allowed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

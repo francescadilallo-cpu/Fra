@@ -15,17 +15,8 @@ import json
 import logging
 from datetime import datetime
 
-from sqlalchemy import (
-    Column,
-    Float,
-    Integer,
-    String,
-    Text,
-    create_engine,
-    delete,
-    select,
-)
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import Float, Integer, String, Text, create_engine, delete, select
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 logger = logging.getLogger(__name__)
@@ -43,67 +34,67 @@ class Base(DeclarativeBase):
 class EntityMetaRow(Base):
     __tablename__ = "entity_meta"
 
-    name = Column(String, primary_key=True)
-    description = Column(Text, default="")
-    primary_key = Column(String, default="")
-    sources_json = Column(Text, default="[]")  # JSON list of source dicts
-    record_count = Column(Integer, default=0)
-    freshness = Column(String, default="")  # ISO 8601
-    quality_flags_json = Column(Text, default="{}")  # JSON dict
-    kg_node_count = Column(Integer, default=0)
-    user_description = Column(Text, default="")  # user-edited override
-    context_notes = Column(Text, default="")  # injected into LLM prompts
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    description: Mapped[str | None] = mapped_column(Text, default="")
+    primary_key: Mapped[str | None] = mapped_column(String, default="")
+    sources_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    record_count: Mapped[int | None] = mapped_column(Integer, default=0)
+    freshness: Mapped[str | None] = mapped_column(String, default="")
+    quality_flags_json: Mapped[str | None] = mapped_column(Text, default="{}")
+    kg_node_count: Mapped[int | None] = mapped_column(Integer, default=0)
+    user_description: Mapped[str | None] = mapped_column(Text, default="")
+    context_notes: Mapped[str | None] = mapped_column(Text, default="")
 
 
 class AttributeMetaRow(Base):
     __tablename__ = "attribute_meta"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    entity = Column(String, nullable=False)
-    attribute = Column(String, nullable=False)
-    data_type = Column(String, default="unknown")
-    nullability_rate = Column(Float, default=0.0)
-    business_definition = Column(Text, default="")
-    source_path = Column(String, default="")  # e.g. "erp.sales_order_header.total_due"
-    sample_values_json = Column(Text, default="[]")
-    lineage_edges_json = Column(Text, default="[]")
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    entity: Mapped[str] = mapped_column(String, nullable=False)
+    attribute: Mapped[str] = mapped_column(String, nullable=False)
+    data_type: Mapped[str | None] = mapped_column(String, default="unknown")
+    nullability_rate: Mapped[float | None] = mapped_column(Float, default=0.0)
+    business_definition: Mapped[str | None] = mapped_column(Text, default="")
+    source_path: Mapped[str | None] = mapped_column(String, default="")
+    sample_values_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    lineage_edges_json: Mapped[str | None] = mapped_column(Text, default="[]")
 
 
 class MetricMetaRow(Base):
     __tablename__ = "metric_meta"
 
-    name = Column(String, primary_key=True)
-    label = Column(String, default="")
-    description = Column(Text, default="")
-    formula = Column(Text, default="")
-    unit = Column(String, default="")
-    aliases_json = Column(Text, default="[]")
-    requires_join_json = Column(Text, default="[]")
-    sources_touched_json = Column(Text, default="[]")
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    label: Mapped[str | None] = mapped_column(String, default="")
+    description: Mapped[str | None] = mapped_column(Text, default="")
+    formula: Mapped[str | None] = mapped_column(Text, default="")
+    unit: Mapped[str | None] = mapped_column(String, default="")
+    aliases_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    requires_join_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    sources_touched_json: Mapped[str | None] = mapped_column(Text, default="[]")
 
 
 class QueryTemplateRow(Base):
     __tablename__ = "query_templates"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, unique=True)
-    description = Column(Text, default="")
-    sql_query = Column(Text, nullable=False)
-    keywords_json = Column(Text, default="[]")
-    sources_json = Column(Text, default="[]")
-    created_at = Column(String, default="")
-    updated_at = Column(String, default="")
-    is_active = Column(Integer, default=1)
-    auto_generated = Column(Integer, default=0)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, default="")
+    sql_query: Mapped[str] = mapped_column(Text, nullable=False)
+    keywords_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    sources_json: Mapped[str | None] = mapped_column(Text, default="[]")
+    created_at: Mapped[str | None] = mapped_column(String, default="")
+    updated_at: Mapped[str | None] = mapped_column(String, default="")
+    is_active: Mapped[int | None] = mapped_column(Integer, default=1)
+    auto_generated: Mapped[int | None] = mapped_column(Integer, default=0)
 
 
 class ContextDocRow(Base):
     __tablename__ = "context_docs"
 
-    id = Column(String, primary_key=True)
-    title = Column(String, nullable=False, unique=True)
-    content = Column(Text, default="")
-    created_at = Column(String, default="")
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    content: Mapped[str | None] = mapped_column(Text, default="")
+    created_at: Mapped[str | None] = mapped_column(String, default="")
 
 
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────

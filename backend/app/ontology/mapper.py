@@ -6,7 +6,10 @@ Supports in-memory updates (persisted per process lifetime).
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.models import MappingEntry
 
 # ── Default mapping ────────────────────────────────────────────────────────────
 
@@ -232,19 +235,21 @@ def get_mappings() -> dict[str, Any]:
     return copy.deepcopy(_mappings)
 
 
-def get_flat_mappings() -> list[dict[str, str]]:
+def get_flat_mappings() -> list["MappingEntry"]:
     """Return a flat list suitable for the frontend table."""
-    rows: list[dict[str, str]] = []
+    from app.models import MappingEntry
+
+    rows: list[MappingEntry] = []
     for table, fields in _mappings.items():
         for field, meta in fields.items():
             rows.append(
-                {
-                    "table": table,
-                    "field": field,
-                    "ontology_class": meta["ontology_class"],
-                    "ontology_property": meta["ontology_property"],
-                    "field_type": meta["type"],
-                }
+                MappingEntry(
+                    table=table,
+                    field=field,
+                    ontology_class=meta["ontology_class"],
+                    ontology_property=meta["ontology_property"],
+                    field_type=meta["type"],
+                )
             )
     return rows
 

@@ -763,7 +763,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
 
 _explicit_origins = _parse_allowed_origins()
@@ -1133,8 +1133,8 @@ def semantic_status(
         "kg_nodes": kg.node_count,
         "kg_edges": kg.edge_count,
         "metadata_rows": catalog.row_count(),
-        "sources": list(_semantic_state.get("mgr").describe().tables)
-        if _semantic_state.get("mgr")
+        "sources": list(_mgr.describe().tables)
+        if (_mgr := _semantic_state.get("mgr")) is not None
         else ["erp", "crm", "hr_pim"],
         "dedup_count": kg.dedup_count,
     }
