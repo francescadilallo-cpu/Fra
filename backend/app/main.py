@@ -814,14 +814,14 @@ class SemanticAskResponse(BaseModel):
 
 
 class EntityDraftUpdate(BaseModel):
-    user_description: str | None = None
-    context_notes: str | None = None
+    user_description: str | None = Field(default=None, max_length=2000)
+    context_notes: str | None = Field(default=None, max_length=2000)
 
 
 class MetricDraftUpdate(BaseModel):
-    description: str | None = None
-    formula: str | None = None
-    label: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    formula: str | None = Field(default=None, max_length=500)
+    label: str | None = Field(default=None, max_length=200)
 
 
 class ContextDocCreate(BaseModel):
@@ -833,8 +833,8 @@ class QueryTemplatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     sql_query: str = Field(min_length=10, max_length=8000)
-    keywords: list[str] = Field(default_factory=list)
-    sources: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list, max_length=50)
+    sources: list[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("sql_query")
     @classmethod
@@ -855,8 +855,8 @@ class QueryTemplateUpdatePayload(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     sql_query: str | None = Field(default=None, min_length=10, max_length=8000)
-    keywords: list[str] | None = None
-    sources: list[str] | None = None
+    keywords: list[str] | None = Field(default=None, max_length=50)
+    sources: list[str] | None = Field(default=None, max_length=50)
 
     @field_validator("sql_query")
     @classmethod
