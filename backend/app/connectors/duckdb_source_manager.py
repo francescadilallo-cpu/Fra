@@ -185,15 +185,25 @@ class DuckDBSourceManager:
             return self._mem_conn.cursor()
         return duckdb.connect(str(self._db_path), read_only=True)
 
-    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-        """Execute a SELECT and return up to 100 rows (for frontend queries)."""
+    def execute(
+        self, sql: str, params: tuple[Any, ...] = (), limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Execute a SELECT and return up to *limit* rows (for frontend queries).
+
+        Fetches directly from the cursor instead of materialising the full
+        result as a DataFrame first: a query without a LIMIT clause against a
+        multi-million-row table (e.g. LLM-generated SQL) would otherwise be
+        pulled entirely into memory just to be truncated to a handful of rows
+        afterwards. As a side effect, NULLs come back as native ``None``
+        rather than pandas ``NaN`` (the previous ``df.where(df.notna(), ...)``
+        pass did not actually convert NaN to None for numeric columns, since
+        pandas coerces ``None`` back to ``NaN`` in float dtype columns).
+        """
         conn = self.get_connection()
         try:
-            if params:
-                df = conn.execute(sql, params).df().head(100)
-            else:
-                df = conn.execute(sql).df().head(100)
-            return df.where(df.notna(), other=None).to_dict(orient="records")
+            cur = conn.execute(sql, params) if params else conn.execute(sql)
+            columns = [d[0] for d in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchmany(limit)]
         finally:
             conn.close()
 
