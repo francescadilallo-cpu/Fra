@@ -136,3 +136,74 @@ class TestKgRefreshReflectsNewSnapshot:
         main_module._refresh_catalog_and_kg_after_rebuild(mgr)
 
         assert main_module._semantic_state["kg"] is old_kg
+
+
+class TestSemanticCacheIsInvalidatedAfterCatalogRefresh:
+    """add_source / remove_source / sync_source / rebuild_data_store all funnel
+    through _refresh_catalog_and_kg_after_rebuild(), which calls
+    catalog.populate_from_manager() — live-mutating the very same
+    MetadataCatalog instance layer.ask() consults on every question, both for
+    entity/attribute/metric resolution (self._catalog.list_entities() /
+    get_entity() / get_attribute() / list_metrics()) and for the LLM
+    SQL-generation schema prompt (self._catalog.get_schema_context(), see
+    layer.py:1311). Once a source is added, removed, or (re-)synced, the set
+    of tables/columns the catalog reports has changed — yet the helper never
+    bumped the semantic-ask cache namespace, so a pre-change cached answer
+    kept being served (citing tables/columns that no longer exist, or omitting
+    ones that just appeared) until it expired from the cache or got evicted."""
+
+    class _DummyLayer:
+        def __init__(self) -> None:
+            self.clears = 0
+
+        def clear_semantic_cache(self) -> None:
+            self.clears += 1
+
+    def test_bumps_namespace_and_clears_layer_cache(
+        self, semantic_state, monkeypatch
+    ) -> None:
+        layer = self._DummyLayer()
+        monkeypatch.setattr(main_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(main_module._semantic_state, "layer", layer)
+
+        main_module._refresh_catalog_and_kg_after_rebuild(_make_mgr(_SCHEMA_V2))
+
+        assert main_module._semantic_cache_namespace == 1, (
+            "the catalog was just live-mutated to reflect the new schema — "
+            "a cached pre-refresh answer must not keep being served as if "
+            "the source add/remove/sync never happened"
+        )
+        assert layer.clears == 1
+
+    def test_repeated_refreshes_bump_repeatedly(
+        self, semantic_state, monkeypatch
+    ) -> None:
+        layer = self._DummyLayer()
+        monkeypatch.setattr(main_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(main_module._semantic_state, "layer", layer)
+        mgr = _make_mgr(_SCHEMA_V2)
+
+        main_module._refresh_catalog_and_kg_after_rebuild(mgr)
+        main_module._refresh_catalog_and_kg_after_rebuild(mgr)
+
+        assert main_module._semantic_cache_namespace == 2
+        assert layer.clears == 2
+
+    def test_noop_when_semantic_layer_not_yet_loaded_does_not_bump(
+        self, monkeypatch
+    ) -> None:
+        """Mirrors test_noop_when_semantic_layer_not_yet_loaded: before
+        _ensure_semantic_loaded() has ever run, there is no cached layer to
+        invalidate — bumping would just waste a Redis round-trip on every
+        no-op call, and would make the cache namespace grow unboundedly
+        every time an admin merely *looks at* the sources list before the
+        semantic stack finishes its first load."""
+        monkeypatch.setattr(main_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(main_module._semantic_state, "kg", None)
+        monkeypatch.setitem(main_module._semantic_state, "catalog", None)
+        monkeypatch.setitem(main_module._semantic_state, "ontology", None)
+        monkeypatch.setitem(main_module._semantic_state, "layer", None)
+
+        main_module._refresh_catalog_and_kg_after_rebuild(_make_mgr(_SCHEMA_V1))
+
+        assert main_module._semantic_cache_namespace == 0

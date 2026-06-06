@@ -622,6 +622,32 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)
 
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        # catalog.populate_from_manager() above just live-mutated the very
+        # same MetadataCatalog instance layer.ask() consults on every
+        # question — for entity/attribute/metric resolution
+        # (self._catalog.list_entities() / get_entity() / get_attribute() /
+        # list_metrics()) AND for the LLM SQL-generation schema prompt
+        # (self._catalog.get_schema_context(), see layer.py:1311). Once a
+        # source is added, removed, or (re-)synced, the set of
+        # tables/columns the catalog reports has changed, so every answer
+        # cached under the old generation may cite tables/columns that no
+        # longer exist (or omit ones that just appeared) until it expires
+        # from the cache (or lingers indefinitely in the in-process LRU when
+        # no Redis is configured). Bump + clear so the next ask() recomputes
+        # against the refreshed catalog instead of serving a pre-refresh
+        # answer. Gated on `layer is not None` (rather than running
+        # unconditionally like the catalog/KG refresh blocks above) because
+        # this function is a documented no-op before the semantic layer has
+        # ever been loaded — there is no cached layer to invalidate yet, and
+        # bumping would just waste a Redis round-trip on every no-op call.
+        _bump_semantic_cache_namespace()
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
+
 
 def _sync_context_docs_to_layer() -> None:
     """Push context_doc registry entries into the semantic layer LLM prompt."""
