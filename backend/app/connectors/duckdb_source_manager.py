@@ -210,14 +210,23 @@ class DuckDBSourceManager:
     def execute_all(
         self, sql: str, params: tuple[Any, ...] = ()
     ) -> list[dict[str, Any]]:
-        """Execute a SELECT and return ALL rows (for KG/catalog bulk loads)."""
+        """Execute a SELECT and return ALL rows (for KG/catalog bulk loads).
+
+        Fetches directly from the cursor rather than materialising a
+        DataFrame first. Besides skipping the pandas conversion overhead for
+        what can be multi-million-row tables, this hands back SQL NULLs as
+        native ``None`` rather than pandas ``NaN``: ``df.where(df.notna(),
+        other=None)`` does not actually convert NaN to None in numeric
+        columns (pandas coerces ``None`` back to ``NaN`` on assignment into a
+        float-dtype column), and downstream consumers such as
+        ``KnowledgeGraph._load_crm_customers`` call ``str``-only helpers like
+        ``_norm_email`` on these values — which crash on a stray float NaN.
+        """
         conn = self.get_connection()
         try:
-            if params:
-                df = conn.execute(sql, params).df()
-            else:
-                df = conn.execute(sql).df()
-            return df.where(df.notna(), other=None).to_dict(orient="records")
+            cur = conn.execute(sql, params) if params else conn.execute(sql)
+            columns = [d[0] for d in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
         finally:
             conn.close()
 

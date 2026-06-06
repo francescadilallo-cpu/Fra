@@ -110,3 +110,55 @@ class TestExecuteNullHandling:
 
         rows = mgr.execute("SELECT id, amount FROM withnull WHERE id = ?", params=(2,))
         assert rows[0]["amount"] is None
+
+
+# ── execute_all (bulk loader for KG / catalog — must NOT cap and must NOT NaN) ─
+
+
+class TestExecuteAllReturnsEverything:
+    def test_returns_more_than_100_rows(self, mgr_env):
+        scenario, registry, db_path, tmp = mgr_env
+        csv = tmp / "big.csv"
+        lines = ["id"] + [str(i) for i in range(250)]
+        csv.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "big"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        mgr.rebuild()
+
+        rows = mgr.execute_all("SELECT id FROM big ORDER BY id")
+        assert len(rows) == 250
+        assert rows[-1]["id"] == 249
+
+
+class TestExecuteAllNullHandling:
+    def test_null_values_come_back_as_none_not_nan(self, mgr_env):
+        """Regression test: a stray pandas NaN here makes KnowledgeGraph
+        helpers like ``_norm_email`` (which only guard against ``None``,
+        then call ``str``-only methods) crash with AttributeError on rows
+        whose source column is SQL NULL."""
+        scenario, registry, db_path, tmp = mgr_env
+        csv = tmp / "withnull.csv"
+        csv.write_text("id,amount,label\n1,10.5,a\n2,,\n3,30.5,c\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "withnull"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        mgr.rebuild()
+
+        rows = mgr.execute_all("SELECT id, amount, label FROM withnull ORDER BY id")
+        assert rows[1]["amount"] is None
+        assert rows[1]["label"] is None
+        assert not (
+            isinstance(rows[1]["amount"], float) and math.isnan(rows[1]["amount"])
+        )
+
+    def test_params_variant_also_returns_none_for_null(self, mgr_env):
+        scenario, registry, db_path, tmp = mgr_env
+        csv = tmp / "withnull.csv"
+        csv.write_text("id,amount\n1,10.5\n2,\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "withnull"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        mgr.rebuild()
+
+        rows = mgr.execute_all(
+            "SELECT id, amount FROM withnull WHERE id = ?", params=(2,)
+        )
+        assert rows[0]["amount"] is None
