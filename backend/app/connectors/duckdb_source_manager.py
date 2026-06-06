@@ -160,6 +160,10 @@ class DuckDBSourceManager:
         self._init_lock = threading.RLock()
         self._row_counts: dict[str, int] = {}
         self._built_at: datetime | None = None
+        # In nostore mode, the unified in-memory DuckDB is built once and kept
+        # alive for the process; callers get cheap cursors on it instead of a
+        # full re-ingest on every query.
+        self._mem_conn: duckdb.DuckDBPyConnection | None = None
         mode = os.getenv("FRA_STORAGE_MODE", "snapshot").strip().lower()
         self._storage_mode = mode if mode in {"nostore", "snapshot"} else "nostore"
 
@@ -168,12 +172,16 @@ class DuckDBSourceManager:
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        """Return a DuckDB connection for current storage mode."""
+        """Return a DuckDB connection for current storage mode.
+
+        In nostore mode this hands out a fresh cursor on the prebuilt in-memory
+        database (cheap) rather than re-ingesting every source on each call. The
+        cursor shares the underlying data and is safe to use and close per query.
+        """
         self._ensure_ready()
         if self._storage_mode == "nostore":
-            conn = duckdb.connect(":memory:")
-            self._populate_connection(conn)
-            return conn
+            assert self._mem_conn is not None  # set by _ensure_ready
+            return self._mem_conn.cursor()
         return duckdb.connect(str(self._db_path), read_only=True)
 
     def execute(self, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
@@ -208,6 +216,11 @@ class DuckDBSourceManager:
             if self._storage_mode == "snapshot" and self._db_path.exists():
                 self._db_path.unlink()
                 logger.info("Removed stale snapshot: %s", self._db_path)
+            # Drop our reference to the old in-memory DB. Any cursor still in
+            # flight keeps it alive (DuckDB refcounts the database via its
+            # connections), so this never breaks a concurrent query; the old DB
+            # is freed once those cursors close.
+            self._mem_conn = None
             self._ready = False
             self._row_counts = {}
             self._built_at = None
@@ -421,11 +434,11 @@ class DuckDBSourceManager:
             if self._ready:
                 return
             if self._storage_mode == "nostore":
-                probe = duckdb.connect(":memory:")
-                try:
-                    self._populate_connection(probe)
-                finally:
-                    probe.close()
+                # Build the unified in-memory database once and keep it alive;
+                # get_connection() then hands out cheap cursors on it.
+                mem = duckdb.connect(":memory:")
+                self._populate_connection(mem)
+                self._mem_conn = mem
                 self._ready = True
                 return
             if self._db_path.exists():
