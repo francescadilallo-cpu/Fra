@@ -257,9 +257,15 @@ def run_aw_query(
     try:
         if not sql.strip().upper().startswith("SELECT"):
             raise ValueError("Only SELECT queries are allowed")
-        result_df = unified.execute(sql).df()
-        result_df = result_df.head(100)
-        rows = result_df.where(result_df.notna(), other=None).to_dict(orient="records")
+        # Fetch directly from the cursor instead of materialising the full
+        # result as a DataFrame first — a generated query without a LIMIT
+        # clause against a large table would otherwise be pulled entirely
+        # into memory just to be truncated to 100 rows afterwards. This also
+        # hands back SQL NULLs as native None (DataFrame.where(.notna(), None)
+        # does not actually convert NaN to None in numeric columns).
+        cur = unified.execute(sql)
+        columns = [d[0] for d in cur.description]
+        rows = [dict(zip(columns, row)) for row in cur.fetchmany(100)]
     except Exception as exc:
         sql_error = str(exc)
         logger.error("SQL execution error: %s\nSQL: %s", exc, sql)
