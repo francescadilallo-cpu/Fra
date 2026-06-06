@@ -21,7 +21,9 @@ def reg(tmp_path) -> SourceRegistry:
     return SourceRegistry(db_path=tmp_path / "registry.db")
 
 
-def _cfg(id: str = "src-1", connector_type: str = "csv", label: str = "Test", **kw) -> SourceConfig:
+def _cfg(
+    id: str = "src-1", connector_type: str = "csv", label: str = "Test", **kw
+) -> SourceConfig:
     return SourceConfig(id=id, connector_type=connector_type, label=label, **kw)
 
 

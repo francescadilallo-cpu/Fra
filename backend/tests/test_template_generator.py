@@ -9,7 +9,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -229,7 +228,9 @@ class TestGenerateTemplates:
         assert any("{year}" in sql for sql in sqls)
 
     def test_empty_draft_returns_empty(self):
-        result = generate_templates_from_draft({"entities": [], "metrics": [], "relations": []})
+        result = generate_templates_from_draft(
+            {"entities": [], "metrics": [], "relations": []}
+        )
         assert result == []
 
     def test_metric_without_valid_formula_skipped(self):
@@ -247,7 +248,9 @@ class TestGenerateTemplates:
         }
         result = generate_templates_from_draft(draft)
         # No metric templates — but entity count template should still be there
-        metric_names = [t["name"] for t in result if "invalid_metric" in t.get("sql_query", "")]
+        metric_names = [
+            t["name"] for t in result if "invalid_metric" in t.get("sql_query", "")
+        ]
         assert len(metric_names) == 0
 
     def test_top_n_template_generated_when_relation_present(self):
@@ -300,10 +303,19 @@ class TestGenerateTemplates:
                 },
             ],
             "metrics": [
-                {"name": "revenue", "label": "Revenue", "formula": "SUM(amount)", "unit": ""}
+                {
+                    "name": "revenue",
+                    "label": "Revenue",
+                    "formula": "SUM(amount)",
+                    "unit": "",
+                }
             ],
             "relations": [
-                {"from_table": "orders", "to_table": "customers", "via_column": "customer_id"}
+                {
+                    "from_table": "orders",
+                    "to_table": "customers",
+                    "via_column": "customer_id",
+                }
             ],
         }
         result = generate_templates_from_draft(draft)

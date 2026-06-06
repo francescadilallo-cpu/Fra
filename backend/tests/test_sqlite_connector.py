@@ -14,7 +14,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.connectors.sqlite_connector import ENTITY_TABLE_MAP, KNOWN_TABLES, SQLiteConnector
+from app.connectors.sqlite_connector import (
+    ENTITY_TABLE_MAP,
+    KNOWN_TABLES,
+    SQLiteConnector,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -64,9 +68,15 @@ def crm_db(tmp_path) -> Path:
     conn = sqlite3.connect(str(db_path))
     conn.executescript(CRM_SCHEMA)
     # Insert a few rows
-    conn.execute("INSERT INTO account (name, account_number, customer_type) VALUES ('Acme Corp', 'C001', 'Company')")
-    conn.execute("INSERT INTO account (name, account_number, customer_type) VALUES ('Bob Smith', 'C002', 'Individual')")
-    conn.execute("INSERT INTO contact (account_id, first_name, last_name, email) VALUES (1, 'Alice', 'Johnson', 'alice@acme.com')")
+    conn.execute(
+        "INSERT INTO account (name, account_number, customer_type) VALUES ('Acme Corp', 'C001', 'Company')"
+    )
+    conn.execute(
+        "INSERT INTO account (name, account_number, customer_type) VALUES ('Bob Smith', 'C002', 'Individual')"
+    )
+    conn.execute(
+        "INSERT INTO contact (account_id, first_name, last_name, email) VALUES (1, 'Alice', 'Johnson', 'alice@acme.com')"
+    )
     conn.execute("INSERT INTO state_province (name, code) VALUES ('Lombardia', 'LOM')")
     conn.execute("INSERT INTO country (name, code) VALUES ('Italy', 'IT')")
     conn.commit()

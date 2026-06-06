@@ -83,26 +83,28 @@ Mario Rossi;mario@example.com;IT;15/03/1985;01/09/2010;Software Engineer
 Giulia Bianchi;giulia@example.com;HR;22/07/1990;15/02/2015;HR Manager
 """
 
-PIM_JSON = json.dumps({
-    "products": [
-        {
-            "productID": 1,
-            "name": "Widget A",
-            "category": "Widgets",
-            "sellStartDate": "01/15/2020",
-            "sellEndDate": "12/31/2025",
-            "listPrice": 9.99,
-        },
-        {
-            "productID": 2,
-            "name": "Gadget B",
-            "category": "Gadgets",
-            "sellStartDate": "03/01/2021",
-            "sellEndDate": None,
-            "listPrice": 49.99,
-        },
-    ]
-})
+PIM_JSON = json.dumps(
+    {
+        "products": [
+            {
+                "productID": 1,
+                "name": "Widget A",
+                "category": "Widgets",
+                "sellStartDate": "01/15/2020",
+                "sellEndDate": "12/31/2025",
+                "listPrice": 9.99,
+            },
+            {
+                "productID": 2,
+                "name": "Gadget B",
+                "category": "Gadgets",
+                "sellStartDate": "03/01/2021",
+                "sellEndDate": None,
+                "listPrice": 49.99,
+            },
+        ]
+    }
+)
 
 
 @pytest.fixture()

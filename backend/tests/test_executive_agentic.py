@@ -82,7 +82,9 @@ class TestParseCommand:
         assert action.order_id == 1
 
     def test_delivery_date_update_alla_variant(self):
-        action = self._parse("Sposta la data di consegna dell'ordine 10 alla 2025-06-30")
+        action = self._parse(
+            "Sposta la data di consegna dell'ordine 10 alla 2025-06-30"
+        )
         assert action.order_id == 10
         assert action.new_delivery_date == date(2025, 6, 30)
 
@@ -139,7 +141,11 @@ def _make_mock_ontology():
     ontology = MagicMock()
     ontology.entity_names.return_value = ["SalesOrder", "Customer", "Product"]
     salesorder_model = MagicMock()
-    salesorder_model.model_fields = {"order_id": None, "order_date": None, "status_code": None}
+    salesorder_model.model_fields = {
+        "order_id": None,
+        "order_date": None,
+        "status_code": None,
+    }
     ontology.entity.return_value = salesorder_model
     return ontology
 
@@ -156,7 +162,7 @@ def _make_test_db(orders: list[dict] | None = None) -> sqlite3.Connection:
             status TEXT NOT NULL
         )
     """)
-    for row in (orders or []):
+    for row in orders or []:
         conn.execute(
             "INSERT INTO orders (id, date, delivery_date, status) VALUES (?,?,?,?)",
             (row["id"], row["date"], row["delivery_date"], row["status"]),
@@ -167,7 +173,6 @@ def _make_test_db(orders: list[dict] | None = None) -> sqlite3.Connection:
 
 def _make_layer_with_db(orders: list[dict] | None = None) -> ExecutiveAgenticLayer:
     ontology = _make_mock_ontology()
-    db_conn = _make_test_db(orders)
 
     # Each call to get_db_connection returns a fresh connection (closes after validate)
     def _get_conn():
@@ -182,7 +187,14 @@ def _make_layer_with_db(orders: list[dict] | None = None) -> ExecutiveAgenticLay
 class TestSubmitCommand:
     def test_submit_valid_command_returns_action(self):
         layer = _make_layer_with_db(
-            [{"id": 10, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 10,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         action = layer.submit_command(
             "Cancella l'ordine 10", actor="manager1", actor_role="admin"
@@ -194,19 +206,37 @@ class TestSubmitCommand:
     def test_submit_unknown_order_raises_validation_error(self):
         layer = _make_layer_with_db([])
         with pytest.raises(AgentSemanticValidationError, match="non trovato"):
-            layer.submit_command("Cancella l'ordine 999", actor="user", actor_role="admin")
+            layer.submit_command(
+                "Cancella l'ordine 999", actor="user", actor_role="admin"
+            )
 
     def test_submit_duplicate_status_transition_fails(self):
         # delivered → shipped is forbidden
         layer = _make_layer_with_db(
-            [{"id": 20, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "delivered"}]
+            [
+                {
+                    "id": 20,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "delivered",
+                }
+            ]
         )
         with pytest.raises(AgentSemanticValidationError, match="[Tt]ransizione"):
-            layer.submit_command("Segna l'ordine 20 come spedito", actor="u", actor_role="a")
+            layer.submit_command(
+                "Segna l'ordine 20 come spedito", actor="u", actor_role="a"
+            )
 
     def test_pending_action_stored(self):
         layer = _make_layer_with_db(
-            [{"id": 5, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 5,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         action = layer.submit_command("Cancella l'ordine 5", actor="u", actor_role="a")
         actions = layer.list_actions()
@@ -216,12 +246,22 @@ class TestSubmitCommand:
 class TestApproveAction:
     def test_reject_action_sets_rejected_status(self):
         layer = _make_layer_with_db(
-            [{"id": 1, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 1,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         action = layer.submit_command("Cancella l'ordine 1", actor="u", actor_role="a")
         result = layer.approve_action(
-            action.action_id, actor="mgr", actor_role="admin",
-            approve=False, manager_note="Not now"
+            action.action_id,
+            actor="mgr",
+            actor_role="admin",
+            approve=False,
+            manager_note="Not now",
         )
         assert result.status == "REJECTED"
         assert result.manager_note == "Not now"
@@ -229,11 +269,20 @@ class TestApproveAction:
     def test_approve_nonexistent_raises_not_found(self):
         layer = _make_layer_with_db([])
         with pytest.raises(AgentActionNotFoundError):
-            layer.approve_action("bad-id", actor="u", actor_role="a", approve=True, manager_note=None)
+            layer.approve_action(
+                "bad-id", actor="u", actor_role="a", approve=True, manager_note=None
+            )
 
     def test_list_actions_with_status_filter(self):
         layer = _make_layer_with_db(
-            [{"id": 2, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 2,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         action = layer.submit_command("Cancella l'ordine 2", actor="u", actor_role="a")
         pending = layer.list_actions(status_filter="PENDING_HUMAN_APPROVAL")
@@ -241,18 +290,36 @@ class TestApproveAction:
 
     def test_approve_already_rejected_raises(self):
         layer = _make_layer_with_db(
-            [{"id": 3, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 3,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         action = layer.submit_command("Cancella l'ordine 3", actor="u", actor_role="a")
-        layer.approve_action(action.action_id, "mgr", "admin", approve=False, manager_note=None)
+        layer.approve_action(
+            action.action_id, "mgr", "admin", approve=False, manager_note=None
+        )
         with pytest.raises(AgentExecutionError, match="cannot be approved"):
-            layer.approve_action(action.action_id, "mgr", "admin", approve=True, manager_note=None)
+            layer.approve_action(
+                action.action_id, "mgr", "admin", approve=True, manager_note=None
+            )
 
 
 class TestAuditLog:
     def test_submit_creates_audit_entries(self):
         layer = _make_layer_with_db(
-            [{"id": 4, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 4,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         layer.submit_command("Cancella l'ordine 4", actor="u", actor_role="a")
         log = layer.get_audit_log()
@@ -262,7 +329,14 @@ class TestAuditLog:
 
     def test_audit_log_limit(self):
         layer = _make_layer_with_db(
-            [{"id": 6, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"}]
+            [
+                {
+                    "id": 6,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                }
+            ]
         )
         layer.submit_command("Cancella l'ordine 6", actor="u", actor_role="a")
         # Requesting limit=1 should return at most 1 entry
@@ -278,8 +352,18 @@ class TestListActions:
     def test_list_actions_without_filter_returns_all(self):
         layer = _make_layer_with_db(
             [
-                {"id": 10, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"},
-                {"id": 11, "date": "2024-01-01", "delivery_date": "2024-02-01", "status": "processing"},
+                {
+                    "id": 10,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                },
+                {
+                    "id": 11,
+                    "date": "2024-01-01",
+                    "delivery_date": "2024-02-01",
+                    "status": "processing",
+                },
             ]
         )
         layer.submit_command("Cancella l'ordine 10", actor="u", actor_role="a")
