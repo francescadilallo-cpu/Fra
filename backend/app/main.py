@@ -1538,6 +1538,9 @@ class SourceAddRequest(BaseModel):
     def _validate_params(self) -> "SourceAddRequest":
         if len(self.params) > 32:
             raise ValueError("params dict must not exceed 32 keys")
+        total_value_bytes = sum(len(str(v)) for v in self.params.values())
+        if total_value_bytes > 10 * 1024 * 1024:
+            raise ValueError("params values must not exceed 10 MB total")
         return self
 
 
