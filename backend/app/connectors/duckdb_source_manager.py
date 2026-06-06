@@ -215,12 +215,78 @@ class DuckDBSourceManager:
         return dict(self._row_counts)
 
     def ingest_one(self, source_id: str) -> dict[str, int]:
-        """Re-ingest a single source then rebuild the full snapshot."""
+        """Re-ingest a single source.
+
+        In **snapshot** mode this updates only the target source's tables in the
+        existing snapshot, leaving every other source untouched — so syncing one
+        small source no longer forces a re-ingest of all the others. Any failure
+        falls back to a full rebuild so correctness is never compromised.
+
+        In **nostore** mode (ephemeral, rebuilt on every connection) there is no
+        persistent snapshot to patch, so it delegates to rebuild().
+        """
         cfg = self._registry.get(source_id)
         if cfg is None:
             raise KeyError(f"Source '{source_id}' not found in registry")
         self._registry.patch(source_id, status="syncing", error_msg=None)
+
+        if self._storage_mode == "snapshot" and self._db_path.exists():
+            try:
+                with self._init_lock:
+                    # Ensure row_counts/built_at reflect the current snapshot.
+                    self._ensure_ready()
+                    self._ingest_incremental(cfg)
+                return dict(self._row_counts)
+            except Exception as exc:
+                logger.warning(
+                    "Incremental ingest of '%s' failed (%s) — falling back to "
+                    "full rebuild",
+                    source_id,
+                    exc,
+                )
+                return self.rebuild()
+
         return self.rebuild()
+
+    def _ingest_incremental(self, cfg: SourceConfig) -> None:
+        """Replace a single source's tables in the existing snapshot in place.
+
+        Drops the tables the source previously owned (ingesters use
+        CREATE TABLE IF NOT EXISTS, so a clean drop is required for fresh data),
+        re-ingests just this source, then rewrites the build metadata.
+        """
+        old_tables = list(cfg.target_tables)
+        conn = duckdb.connect(str(self._db_path))
+        try:
+            for table in old_tables:
+                safe = table.replace('"', '""')
+                conn.execute(f'DROP TABLE IF EXISTS "{safe}"')
+
+            # Forget this source's old row counts; the ingester repopulates them.
+            prefix = f"{cfg.id}."
+            self._row_counts = {
+                k: v for k, v in self._row_counts.items() if not k.startswith(prefix)
+            }
+            # The ingester appends to target_tables — start clean to avoid dupes.
+            cfg.target_tables = []
+            self._ingest_source(conn, cfg)
+
+            self._write_meta(conn)
+            conn.execute("CHECKPOINT")
+        finally:
+            conn.close()
+
+        now = datetime.utcnow().isoformat()
+        self._registry.patch(
+            cfg.id,
+            status="active",
+            error_msg=None,
+            last_sync_at=now,
+            target_tables=cfg.target_tables,
+            row_count=sum(
+                v for k, v in self._row_counts.items() if k.startswith(f"{cfg.id}.")
+            ),
+        )
 
     def describe(self) -> SourceMeta:
         self._ensure_ready()
