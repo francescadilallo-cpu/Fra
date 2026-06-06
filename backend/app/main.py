@@ -491,20 +491,53 @@ def _ensure_semantic_loaded() -> None:
         _sync_context_docs_to_layer()
 
 
-def _refresh_catalog_after_rebuild(mgr) -> None:
-    """Re-populate the catalog from the DuckDB snapshot after any rebuild.
+def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
+    """Refresh the catalog AND the Knowledge Graph after a snapshot rebuild.
 
-    Called after mgr.rebuild() / mgr.ingest_one() so that newly added (or
-    removed) tables are immediately reflected in schema-driven LLM SQL generation.
-    No-op if the semantic layer hasn't been loaded yet.
+    Called after mgr.rebuild() / mgr.ingest_one() (source sync, add/remove, or
+    full re-ingest) so that schema *and data* changes are immediately reflected
+    in schema-driven LLM SQL generation (catalog) and in KG-derived views —
+    the semantic draft's relations, /api/semantic/status's node/edge counts,
+    and the executive agentic layer's graph patches. Without this, the KG
+    keeps showing nodes/edges/relations from the snapshot that existed when it
+    was first built, even though the underlying tables have since changed.
+
+    No-op for either half if the semantic layer hasn't been loaded yet.
     """
     catalog = _semantic_state.get("catalog")
-    if catalog is None:
-        return
-    try:
-        catalog.populate_from_manager(mgr)
-    except Exception as exc:
-        logger.warning("_refresh_catalog_after_rebuild failed: %s", exc)
+    if catalog is not None:
+        try:
+            catalog.populate_from_manager(mgr)
+        except Exception as exc:
+            logger.warning("catalog refresh after rebuild failed: %s", exc)
+
+    kg = _semantic_state.get("kg")
+    if kg is not None:
+        try:
+            from .kg.graph import KnowledgeGraph
+
+            # Probe schema discovery before committing to a rebuild:
+            # build_from_ontology()/build_from_schema() swallow
+            # get_schema_info() failures internally and degrade to an empty
+            # graph instead of raising — which would otherwise let a
+            # transient snapshot read error silently replace a perfectly
+            # good KG with an empty one.
+            mgr.get_schema_info()
+
+            # Rebuild into a fresh instance rather than re-running the loaders
+            # on the existing graph: KnowledgeGraph is backed by a
+            # MultiDiGraph, whose add_edge() always appends a parallel edge —
+            # looping the loaders in place would silently double (then
+            # triple, ...) every edge on each successive sync.
+            new_kg = KnowledgeGraph()
+            ontology = _semantic_state.get("ontology")
+            if ontology is not None:
+                new_kg.build_from_ontology(mgr, ontology)
+            else:
+                new_kg.build_from_schema(mgr)
+            _semantic_state["kg"] = new_kg
+        except Exception as exc:
+            logger.warning("KG refresh after rebuild failed: %s", exc)
 
 
 def _sync_context_docs_to_layer() -> None:
@@ -1340,7 +1373,7 @@ def rebuild_data_store(
     mgr = get_source_manager(_SCENARIO_PATH)
     row_counts = mgr.rebuild()
     meta = mgr.describe()
-    _refresh_catalog_after_rebuild(mgr)
+    _refresh_catalog_and_kg_after_rebuild(mgr)
     return {
         "rebuilt": True,
         "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
@@ -1432,7 +1465,7 @@ def add_source(
         try:
             mgr.rebuild()
             cfg = mgr.registry.get(source_id) or cfg
-            _refresh_catalog_after_rebuild(mgr)
+            _refresh_catalog_and_kg_after_rebuild(mgr)
         except Exception as exc:
             mgr.registry.patch(source_id, status="error", error_msg=str(exc))
             cfg = mgr.registry.get(source_id) or cfg
@@ -1457,7 +1490,7 @@ def remove_source(
         raise HTTPException(status_code=400, detail=str(exc))
     try:
         mgr.rebuild()
-        _refresh_catalog_after_rebuild(mgr)
+        _refresh_catalog_and_kg_after_rebuild(mgr)
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -1479,7 +1512,7 @@ def sync_source(
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
     try:
         mgr.ingest_one(source_id)
-        _refresh_catalog_after_rebuild(mgr)
+        _refresh_catalog_and_kg_after_rebuild(mgr)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     cfg = mgr.registry.get(source_id) or cfg
