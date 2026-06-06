@@ -323,7 +323,12 @@ class KnowledgeGraph:
                     else base_query
                 )
                 try:
-                    edge_rows = mgr.execute(query)
+                    # mgr.execute() is the *frontend-query* path and silently
+                    # caps results at 100 rows — that would defeat both
+                    # FRA_KG_EDGE_LIMIT (default 100k) and the truncation
+                    # detection below (len(edge_rows) would never exceed
+                    # edge_limit). execute_all() respects the SQL LIMIT above.
+                    edge_rows = mgr.execute_all(query)
                 except Exception as exc:
                     logger.warning(
                         "build_from_ontology: edge query failed %s.%s: %s",

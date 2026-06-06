@@ -7,6 +7,7 @@ build_from_schema() path (via a minimal mock DuckDB manager).
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -451,3 +452,104 @@ class TestBuildFromOntologyNodes:
         kg = KnowledgeGraph()
         kg.build_from_ontology(mgr, _FakeOntology(_CFG))
         assert kg.node_count == 4
+
+
+# ── build_from_ontology edge loading (must use execute_all, not execute) ────────
+
+
+_REL_CFG = {
+    "Customer": {
+        "sources": [{"table": "customers", "key_field": "id", "source": "crm"}],
+        "attributes": {},
+    },
+    "Order": {
+        "sources": [{"table": "orders", "key_field": "id", "source": "erp"}],
+        "attributes": {
+            "customer": {
+                "relation": "many_to_one",
+                "via": "customer_id->Customer.id",
+                "target": "Customer",
+            }
+        },
+    },
+}
+
+
+class _FakeMgrEdges:
+    """Manager double for the edge-loading phase of build_from_ontology.
+
+    Mimics the real DuckDBSourceManager split: ``execute()`` is the
+    frontend-query path that silently caps results at 100 rows, while
+    ``execute_all()`` returns everything the SQL LIMIT allows. Edge loading
+    builds a query with ``LIMIT {edge_limit + 1}`` (to reliably detect
+    truncation) — if it goes through ``execute()`` instead of
+    ``execute_all()``, the 100-row cap silently shrinks the graph and the
+    `len(edge_rows) > edge_limit` truncation check can never fire whenever
+    edge_limit >= 100 (e.g. the 100k default).
+    """
+
+    def __init__(self, tables: dict[str, list[dict]]) -> None:
+        self._tables = tables
+        self.execute_calls: list[str] = []
+        self.execute_all_calls: list[str] = []
+
+    def get_schema_info(self) -> dict:
+        return {
+            name: {"columns": [], "row_count": len(rows)}
+            for name, rows in self._tables.items()
+        }
+
+    def execute_iter(self, sql: str, params=(), batch_size: int = 10000):
+        yield from self._rows_for(sql)
+
+    def _rows_for(self, sql: str) -> list[dict]:
+        for name, rows in self._tables.items():
+            if f'"{name}"' in sql:
+                return rows
+        return []
+
+    @staticmethod
+    def _sql_limit(sql: str) -> int | None:
+        m = re.search(r"LIMIT (\d+)", sql)
+        return int(m.group(1)) if m else None
+
+    def execute(self, sql: str, params=()):
+        self.execute_calls.append(sql)
+        rows = self._rows_for(sql)
+        limit = self._sql_limit(sql)
+        capped = rows[:limit] if limit is not None else rows
+        return capped[:100]  # mimic DuckDBSourceManager.execute()'s frontend cap
+
+    def execute_all(self, sql: str, params=()):
+        self.execute_all_calls.append(sql)
+        rows = self._rows_for(sql)
+        limit = self._sql_limit(sql)
+        return rows[:limit] if limit is not None else rows
+
+
+class TestBuildFromOntologyEdges:
+    def test_edge_query_uses_execute_all_and_respects_edge_limit(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "150")
+        customers = [{"id": i} for i in range(5)]
+        orders = [{"id": i, "customer_id": i % 5} for i in range(200)]
+        mgr = _FakeMgrEdges({"customers": customers, "orders": orders})
+
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_REL_CFG))
+
+        # Capped at FRA_KG_EDGE_LIMIT=150, not silently shrunk to execute()'s
+        # internal 100-row cap.
+        assert kg.edge_count == 150
+        assert mgr.execute_all_calls
+        assert not mgr.execute_calls
+
+    def test_edge_query_under_limit_loads_everything(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_EDGE_LIMIT", "150")
+        customers = [{"id": i} for i in range(5)]
+        orders = [{"id": i, "customer_id": i % 5} for i in range(40)]
+        mgr = _FakeMgrEdges({"customers": customers, "orders": orders})
+
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_REL_CFG))
+
+        assert kg.edge_count == 40
