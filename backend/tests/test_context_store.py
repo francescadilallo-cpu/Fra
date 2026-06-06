@@ -65,6 +65,17 @@ class TestDocuments:
         store.add_document("note.txt", "Something else entirely.", "txt")
         assert store.search_documents(["revenue"]) == []
 
+    def test_list_document_meta_omits_content(self, store):
+        store.add_document("report.txt", "A" * 10_000, "txt")
+        metas = store.list_document_meta()
+        assert len(metas) == 1
+        assert metas[0].filename == "report.txt"
+        assert metas[0].content == ""
+
+    def test_list_document_meta_does_not_affect_list_documents(self, store):
+        store.add_document("report.txt", "hello world", "txt")
+        assert store.list_documents()[0].content == "hello world"
+
 
 # ── Entities ──────────────────────────────────────────────────────────────────
 

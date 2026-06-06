@@ -130,6 +130,16 @@ class ContextStore:
             ).fetchall()
         return [ContextDocument(**dict(r)) for r in rows]
 
+    def list_document_meta(self) -> list[ContextDocument]:
+        """Return all documents with content='' — avoids loading large text blobs
+        when only the listing metadata (id, filename, file_type, created_at) is needed."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, filename, '' AS content, file_type, created_at "
+                "FROM context_documents ORDER BY created_at DESC"
+            ).fetchall()
+        return [ContextDocument(**dict(r)) for r in rows]
+
     def delete_document(self, doc_id: int) -> bool:
         with self._conn() as conn:
             cur = conn.execute("DELETE FROM context_documents WHERE id=?", (doc_id,))

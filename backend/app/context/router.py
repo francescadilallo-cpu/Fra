@@ -138,7 +138,7 @@ def list_documents(store: ContextStore = Depends(_get_store)):
         DocumentMeta(
             id=d.id, filename=d.filename, file_type=d.file_type, created_at=d.created_at
         )
-        for d in store.list_documents()
+        for d in store.list_document_meta()
     ]
 
 
