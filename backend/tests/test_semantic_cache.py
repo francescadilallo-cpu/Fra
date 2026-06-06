@@ -221,6 +221,81 @@ def test_cache_namespace_is_bumped_on_kg_rebuild(
     assert app_module._semantic_cache_namespace == 1
 
 
+def test_cache_namespace_is_bumped_on_full_semantic_rebuild(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    app_module,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """POST /api/semantic/build → reload_semantic() swaps in a brand-new
+    SemanticLayer instance (plus fresh ontology/catalog/KG/templates) — the
+    most thorough kind of semantic-stack mutation there is. Every answer
+    cached under the old generation reflects the OLD stack; it must stop
+    being served immediately, exactly like the narrower mutations
+    (mapping update, KG rebuild, metric/context-doc/template edits) already
+    do — a full rebuild invalidating *less* than its own sub-parts would be
+    a regression, not an oversight worth tolerating."""
+
+    class DummyLayer:
+        def __init__(self) -> None:
+            self.clears = 0
+
+        def clear_semantic_cache(self) -> None:
+            self.clears += 1
+
+        def set_context_docs(self, docs: list[dict]) -> None:
+            pass
+
+        def set_templates(self, templates: list[dict]) -> None:
+            pass
+
+    class DummyCatalog:
+        def list_templates(self) -> list[dict]:
+            return []
+
+        def upsert_auto_templates(self, tpls: list[dict]) -> int:
+            return 0
+
+    old_layer = DummyLayer()
+    new_layer = DummyLayer()
+    monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+    monkeypatch.setitem(app_module._semantic_state, "loaded", True)
+    monkeypatch.setitem(app_module._semantic_state, "layer", old_layer)
+    monkeypatch.setitem(app_module._semantic_state, "catalog", DummyCatalog())
+
+    def _fake_ensure_semantic_loaded() -> None:
+        # Mirrors what the real rebuild does: a brand-new layer/catalog
+        # replace the old ones wholesale (atomic dict-item reassignment).
+        app_module._semantic_state.update(
+            {"loaded": True, "layer": new_layer, "catalog": DummyCatalog()}
+        )
+
+    monkeypatch.setattr(
+        app_module, "_ensure_semantic_loaded", _fake_ensure_semantic_loaded
+    )
+    monkeypatch.setattr(app_module, "_sync_context_docs_to_layer", lambda: None)
+    monkeypatch.setattr(
+        app_module,
+        "_get_semantic_draft",
+        lambda: {"entities": [], "metrics": [], "relations": []},
+    )
+    monkeypatch.setattr(app_module, "generate_templates_from_draft", lambda draft: [])
+
+    response = client.post("/api/semantic/build", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert app_module._semantic_state["layer"] is new_layer, (
+        "test setup sanity check — the rebuild must have actually swapped "
+        "in the new layer instance for the assertions below to mean anything"
+    )
+    assert app_module._semantic_cache_namespace == 1, (
+        "a full rebuild replaces the entire semantic stack — a cached "
+        "pre-rebuild answer must not keep being served as if nothing changed"
+    )
+    assert new_layer.clears == 1
+    assert old_layer.clears == 0
+
+
 class TestCacheNamespaceIsBumpedOnSemanticEditorMutations:
     """update_ontology_mapping/rebuild_knowledge_graph/agentic write-backs all
     bump the cache namespace because they change what layer.ask() returns for

@@ -722,6 +722,18 @@ def reload_semantic() -> None:
         _semantic_state["loaded"] = False
     _ensure_semantic_loaded()
     _sync_context_docs_to_layer()
+    # _ensure_semantic_loaded() just swapped in a brand-new SemanticLayer
+    # instance (plus fresh ontology/catalog/KG/templates) — every answer
+    # cached under the old generation reflects the OLD stack and must stop
+    # being served immediately, not linger for up to the cache TTL (or
+    # indefinitely from the in-process LRU when no Redis is configured).
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
 
 
 # ── Pydantic models for semantic endpoints ──────────────────────────────────
