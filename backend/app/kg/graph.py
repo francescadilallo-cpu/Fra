@@ -498,7 +498,7 @@ class KnowledgeGraph:
             if aid < 0:
                 # Duplicate: find canonical via email
                 em = _norm_email(row.get("emailContatto"))
-                canonical = pos_by_email.get(em)
+                canonical = pos_by_email.get(em) if em else None
                 if canonical:
                     self._dup_map[aid] = canonical["accountId"]
                     self._dedup_count += 1

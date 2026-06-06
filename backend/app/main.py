@@ -875,7 +875,11 @@ def login_for_access_token(
 
 @app.get("/api/auth/me", tags=["auth"])
 def get_me(principal: UserPrincipal = Depends(require_roles("user", "admin"))) -> dict:
-    return {"username": principal.username, "role": principal.role, "mode": principal.mode}
+    return {
+        "username": principal.username,
+        "role": principal.role,
+        "mode": principal.mode,
+    }
 
 
 @app.get("/api/dashboard", response_model=DashboardData)
@@ -1123,15 +1127,14 @@ def semantic_status(
         }
     kg = _semantic_state["kg"]
     catalog = _semantic_state["catalog"]
+    mgr = _semantic_state.get("mgr")
     return {
         "loaded": True,
         "entities": catalog.list_entities(),
         "kg_nodes": kg.node_count,
         "kg_edges": kg.edge_count,
         "metadata_rows": catalog.row_count(),
-        "sources": list(_semantic_state.get("mgr").describe().tables)
-        if _semantic_state.get("mgr")
-        else ["erp", "crm", "hr_pim"],
+        "sources": list(mgr.describe().tables) if mgr else ["erp", "crm", "hr_pim"],
         "dedup_count": kg.dedup_count,
     }
 

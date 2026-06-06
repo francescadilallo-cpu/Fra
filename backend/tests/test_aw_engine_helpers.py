@@ -10,7 +10,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.query.aw_engine import _build_table_source_map, _extract_json, build_system_prompt
+from app.query.aw_engine import (
+    _build_table_source_map,
+    _extract_json,
+    build_system_prompt,
+)
 
 
 # ── _extract_json ──────────────────────────────────────────────────────────────
@@ -87,7 +91,12 @@ class TestBuildSystemPrompt:
         layer = MagicMock()
         draft = MagicMock()
         draft.relations = [
-            {"from_entity": "Order", "to_entity": "Customer", "from_field": "customer_id", "to_field": "id"}
+            {
+                "from_entity": "Order",
+                "to_entity": "Customer",
+                "from_field": "customer_id",
+                "to_field": "id",
+            }
         ]
         layer.draft = draft
         result = build_system_prompt(layer=layer)

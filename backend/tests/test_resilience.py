@@ -231,6 +231,7 @@ def test_limit_clamp_applied_in_template_query(monkeypatch):
     assert executed_sql, "No SQL executed"
     # The clamped LIMIT (max 100) should appear in the SQL
     import re
+
     for sql in executed_sql:
         m = re.search(r"LIMIT\s+(\d+)", sql, re.IGNORECASE)
         if m:

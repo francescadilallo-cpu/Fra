@@ -6,7 +6,10 @@ Supports in-memory updates (persisted per process lifetime).
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.models import MappingEntry
 
 # ── Default mapping ────────────────────────────────────────────────────────────
 
