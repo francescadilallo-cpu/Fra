@@ -162,3 +162,31 @@ class TestExecuteAllNullHandling:
             "SELECT id, amount FROM withnull WHERE id = ?", params=(2,)
         )
         assert rows[0]["amount"] is None
+
+
+# ── get_schema_info (catalog/LLM schema discovery — sample rows) ──────────────
+
+
+class TestGetSchemaInfoSampleNullHandling:
+    def test_sample_rows_use_none_not_nan_for_nulls(self, mgr_env):
+        """Regression test: catalog.populate_from_manager() builds
+        sample_values via `if r.get(col_name) is not None` and null_rate via
+        `if r.get(col_name) is None`. A stray pandas NaN satisfies neither
+        check correctly — it slips into sample_values as the literal string
+        "nan" and is excluded from the null-rate count, understating it."""
+        scenario, registry, db_path, tmp = mgr_env
+        csv = tmp / "withnull.csv"
+        csv.write_text("id,amount,label\n1,10.5,a\n2,,\n3,30.5,c\n", encoding="utf-8")
+        registry.upsert(_csv_source("s1", csv, "withnull"))
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        mgr.rebuild()
+
+        info = mgr.get_schema_info()
+        sample = info["withnull"]["sample"]
+        row_with_null = next(r for r in sample if r["id"] == 2)
+        assert row_with_null["amount"] is None
+        assert row_with_null["label"] is None
+        assert not (
+            isinstance(row_with_null["amount"], float)
+            and math.isnan(row_with_null["amount"])
+        )

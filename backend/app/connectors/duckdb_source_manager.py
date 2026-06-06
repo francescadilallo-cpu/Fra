@@ -382,10 +382,15 @@ class DuckDBSourceManager:
                         f'SELECT COUNT(*) AS n FROM "{safe}"'
                     ).fetchone()
                     count = int(_row[0]) if _row else 0
-                    sample_df = conn.execute(f'SELECT * FROM "{safe}" LIMIT 5').df()
-                    sample = sample_df.where(sample_df.notna(), other=None).to_dict(
-                        orient="records"
-                    )
+                    # Fetch from the cursor rather than via .df().where(.notna(), ...):
+                    # the latter leaves NaN (not None) in numeric columns, which then
+                    # pollutes catalog sample_values with literal "nan" strings and
+                    # understates nullability_rate in populate_from_manager().
+                    sample_cur = conn.execute(f'SELECT * FROM "{safe}" LIMIT 5')
+                    sample_cols = [d[0] for d in sample_cur.description]
+                    sample = [
+                        dict(zip(sample_cols, row)) for row in sample_cur.fetchall()
+                    ]
                     result[table] = {
                         "columns": [{"name": c[0], "type": c[1]} for c in cols],
                         "row_count": count,
