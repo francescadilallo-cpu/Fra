@@ -947,7 +947,7 @@ class DuckDBSourceManager:
                 conn.execute(
                     f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
                 )
-                _row = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
                 logger.info("PG   %-25s %7d rows", table, n)
