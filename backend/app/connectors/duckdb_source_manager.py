@@ -290,20 +290,34 @@ class DuckDBSourceManager:
         self._registry.patch(source_id, status="syncing", error_msg=None)
 
         if self._storage_mode == "snapshot" and self._db_path.exists():
-            try:
-                with self._init_lock:
-                    # Ensure row_counts/built_at reflect the current snapshot.
-                    self._ensure_ready()
+            with self._init_lock:
+                # Ensure row_counts/built_at reflect the current snapshot.
+                self._ensure_ready()
+                # _ingest_incremental() opens its own read-write connection on
+                # db_path; DuckDB refuses a second connection to the same file
+                # with a different config (read_only=True vs. read-write) while
+                # one is already open in this process — it raises
+                # ConnectionException immediately rather than queuing the
+                # request. Flip _ready False first, exactly like rebuild()
+                # does, so concurrent get_connection() callers take the slow
+                # path in _ensure_ready(), block on _init_lock (an RLock —
+                # nesting into rebuild() below is safe) instead of racing our
+                # write connection, and only resume once the snapshot is
+                # provably consistent again — whether that's via a successful
+                # incremental ingest or the full-rebuild fallback.
+                self._ready = False
+                try:
                     self._ingest_incremental(cfg)
+                except Exception as exc:
+                    logger.warning(
+                        "Incremental ingest of '%s' failed (%s) — falling back "
+                        "to full rebuild",
+                        source_id,
+                        exc,
+                    )
+                    return self.rebuild()
+                self._ready = True
                 return dict(self._row_counts)
-            except Exception as exc:
-                logger.warning(
-                    "Incremental ingest of '%s' failed (%s) — falling back to "
-                    "full rebuild",
-                    source_id,
-                    exc,
-                )
-                return self.rebuild()
 
         return self.rebuild()
 

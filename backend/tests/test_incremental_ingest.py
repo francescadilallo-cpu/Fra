@@ -8,7 +8,9 @@ on error.
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -127,3 +129,80 @@ class TestIncrementalIngest:
         assert cfg is not None
         assert cfg.status == "active"
         assert "table_a" in cfg.target_tables
+
+
+class TestConcurrentReadDuringIncrementalSync:
+    """get_connection() hands out read-only DuckDB connections to the same
+    snapshot file _ingest_incremental() writes to with its own read-write
+    connection. DuckDB refuses a second connection to one database file with
+    a *different* configuration (read_only=True vs. the ingest's read-write
+    default) while the process already holds one open — it raises
+    ConnectionException immediately, it does not queue or degrade.
+
+    rebuild() avoids this by flipping `_ready` to False first, so concurrent
+    get_connection() calls funnel through _ensure_ready()'s lock and block
+    until the rebuild finishes. _ingest_incremental() never touches `_ready`,
+    so it stays True the whole time — every concurrent reader takes the fast
+    `if self._ready: return` path in _ensure_ready(), skips the lock, and
+    collides with the ingest's open write connection."""
+
+    def test_query_does_not_crash_while_a_sync_holds_the_write_connection(
+        self, snapshot_env, monkeypatch
+    ):
+        scenario, registry, db_path, tmp = snapshot_env
+        a_csv = tmp / "a.csv"
+        b_csv = tmp / "b.csv"
+        _write_csv(a_csv, ["id,name", "1,alpha"])
+        _write_csv(b_csv, ["id,name", "1,beta"])
+        registry.upsert(_make_csv_source("srca", a_csv, "table_a"))
+        registry.upsert(_make_csv_source("srcb", b_csv, "table_b"))
+
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        mgr.rebuild()
+
+        # Stretch the window in which _ingest_incremental's write connection
+        # is open, so a concurrent read is guaranteed to land inside it.
+        write_connection_open = threading.Event()
+        release_write_connection = threading.Event()
+        original_ingest_source = mgr._ingest_source
+
+        def _blocking_ingest_source(conn, cfg):
+            write_connection_open.set()
+            release_write_connection.wait(timeout=5)
+            return original_ingest_source(conn, cfg)
+
+        monkeypatch.setattr(mgr, "_ingest_source", _blocking_ingest_source)
+
+        sync_thread = threading.Thread(target=mgr.ingest_one, args=("srca",))
+        sync_thread.start()
+        try:
+            assert write_connection_open.wait(timeout=5), (
+                "sync never reached _ingest_source — write connection not open"
+            )
+
+            read_rows: list[dict[str, Any]] = []
+            read_error: list[BaseException] = []
+
+            def _read():
+                try:
+                    read_rows.extend(mgr.execute("SELECT COUNT(*) AS n FROM table_b"))
+                except BaseException as exc:  # capture *any* crash, not just ours
+                    read_error.append(exc)
+
+            read_thread = threading.Thread(target=_read)
+            read_thread.start()
+            read_thread.join(timeout=2)
+            still_running = read_thread.is_alive()
+        finally:
+            release_write_connection.set()
+            sync_thread.join(timeout=10)
+
+        if still_running:
+            read_thread.join(timeout=10)
+
+        assert not read_error, (
+            "a query concurrent with an in-progress source sync must wait "
+            "for the sync (like rebuild() makes it do) or simply succeed — "
+            f"not crash: {read_error[0]!r}"
+        )
+        assert read_rows[0]["n"] == 1
