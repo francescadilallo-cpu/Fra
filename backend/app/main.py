@@ -87,7 +87,53 @@ def _semantic_limit_key(request: Request) -> str:
     return f"ip:{get_remote_address(request)}"
 
 
-limiter = Limiter(key_func=get_remote_address)
+def _rate_limit_storage_uri() -> str | None:
+    """Resolve the shared bucket-storage URI; None means "use in-process".
+
+    Without a shared store, slowapi keeps per-IP/per-token request counts in
+    an in-process MemoryStorage: each worker enforces its *own* copy, so a
+    client effectively gets LOGIN_RATE_LIMIT/SEMANTIC_RATE_LIMIT *per worker*
+    — silently multiplying the configured ceiling by the worker count (the
+    very thing rate limiting exists to prevent). Reuses SEMANTIC_REDIS_URL
+    when no dedicated URI is given, since deployments typically run a single
+    shared Redis for both purposes.
+    """
+    return (
+        os.getenv("RATE_LIMIT_STORAGE_URI", "").strip()
+        or os.getenv("SEMANTIC_REDIS_URL", "").strip()
+        or None
+    )
+
+
+def _build_rate_limiter() -> Limiter:
+    """Construct the limiter, preferring shared Redis-backed bucket storage.
+
+    A bad storage URI must degrade gracefully (log + fall back to in-process
+    buckets) rather than crash the app at import time — `Limiter.__init__`
+    builds the storage backend eagerly (`storage_from_string`), so an
+    unparsable URI raises immediately. `in_memory_fallback_enabled` covers the
+    complementary runtime case: if Redis becomes unreachable after startup,
+    slowapi switches to per-process limiting instead of raising 5xxs on every
+    rate-limited request, and probes for recovery automatically.
+    """
+    storage_uri = _rate_limit_storage_uri()
+    if storage_uri:
+        try:
+            return Limiter(
+                key_func=get_remote_address,
+                storage_uri=storage_uri,
+                in_memory_fallback_enabled=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Rate limit shared storage unusable (%s); falling back to "
+                "in-process limiting (buckets won't be shared across workers)",
+                exc,
+            )
+    return Limiter(key_func=get_remote_address, in_memory_fallback_enabled=True)
+
+
+limiter = _build_rate_limiter()
 
 _semantic_redis_client: Any = None
 _semantic_redis_client_initialized = False
