@@ -536,6 +536,7 @@ class MetadataCatalog:
         removed = 0
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
+            names_to_delete: list[str] = []
             for row in entity_rows:
                 sources = json.loads(row.sources_json or "[]")
                 table = next(
@@ -552,13 +553,15 @@ class MetadataCatalog:
                         row.name,
                         table,
                     )
-                    session.execute(
-                        delete(AttributeMetaRow).where(
-                            AttributeMetaRow.entity == row.name
-                        )
-                    )
+                    names_to_delete.append(row.name)
                     session.delete(row)
                     removed += 1
+            if names_to_delete:
+                session.execute(
+                    delete(AttributeMetaRow).where(
+                        AttributeMetaRow.entity.in_(names_to_delete)
+                    )
+                )
             session.commit()
         if removed:
             logger.info(
@@ -611,18 +614,15 @@ class MetadataCatalog:
         """Return all entities with their user-edited fields for the draft editor."""
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
+            all_attrs = session.execute(select(AttributeMetaRow)).scalars().all()
+            attrs_by_entity: dict[str, list[AttributeMetaRow]] = {}
+            for a in all_attrs:
+                attrs_by_entity.setdefault(a.entity, []).append(a)
+
             result = []
             for row in entity_rows:
                 sources = json.loads(row.sources_json or "[]")
-                attrs = (
-                    session.execute(
-                        select(AttributeMetaRow).where(
-                            AttributeMetaRow.entity == row.name
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
+                attrs = attrs_by_entity.get(row.name, [])
                 result.append(
                     {
                         "name": row.name,

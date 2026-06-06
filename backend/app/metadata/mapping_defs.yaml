@@ -56,8 +56,9 @@ definitions:
     field: customerType
     definition: >
       Customer classification: "Company" (B2B reseller/retailer) or "Individual" (B2C direct buyer).
-      Drives pricing tier and rep assignment.
-    status: todo
+      Drives pricing tier and rep assignment. Sourced from the CRM CustomerType field
+      (ClientHub). Use for segmenting revenue by channel and for territory analysis.
+    status: ok
 
   - entity: Salesperson
     field: salesPersonId
