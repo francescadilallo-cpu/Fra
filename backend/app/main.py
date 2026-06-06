@@ -2218,7 +2218,7 @@ def delete_draft_context(
 
 
 @app.get("/api/semantic/templates", tags=["semantic"])
-async def list_templates(
+def list_templates(
     _user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict]:
     _ensure_semantic_loaded()
@@ -2229,7 +2229,7 @@ async def list_templates(
 
 
 @app.post("/api/semantic/templates", status_code=201, tags=["semantic"])
-async def create_template(
+def create_template(
     payload: QueryTemplatePayload,
     _admin: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict:
@@ -2249,7 +2249,7 @@ async def create_template(
 
 
 @app.patch("/api/semantic/templates/{template_id}", tags=["semantic"])
-async def update_template(
+def update_template(
     template_id: int,
     payload: QueryTemplateUpdatePayload,
     _admin: UserPrincipal = Depends(require_roles("admin")),
@@ -2270,7 +2270,7 @@ async def update_template(
 
 
 @app.delete("/api/semantic/templates/{template_id}", status_code=204, tags=["semantic"])
-async def delete_template(
+def delete_template(
     template_id: int,
     _admin: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
@@ -2468,7 +2468,7 @@ def _build_process_stages(entities: list[dict]) -> list[dict]:
 
 
 @app.get("/api/semantic/live-config", tags=["semantic"])
-async def get_live_config(
+def get_live_config(
     _user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict:
     """Return a live-derived sector config: connectors, ontology nodes/edges, metrics."""

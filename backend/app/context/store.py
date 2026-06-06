@@ -136,12 +136,26 @@ class ContextStore:
         return cur.rowcount > 0
 
     def search_documents(self, keywords: list[str]) -> list[str]:
+        if not keywords:
+            return []
+        # Pre-filter at the SQL level so the full collection is never loaded
+        # into Python when only a small fraction of docs are relevant.
+        like_clause = " OR ".join("LOWER(content) LIKE ?" for _ in keywords)
+        params = [f"%{kw.lower()}%" for kw in keywords]
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"SELECT filename, content FROM context_documents "  # noqa: S608
+                f"WHERE {like_clause} ORDER BY created_at DESC LIMIT 50",
+                params,
+            ).fetchall()
         snippets: list[str] = []
-        for doc in self.list_documents():
-            for para in (p.strip() for p in doc.content.split("\n\n") if p.strip()):
+        for row in rows:
+            for para in (p.strip() for p in row["content"].split("\n\n") if p.strip()):
                 if any(kw.lower() in para.lower() for kw in keywords):
-                    snippets.append(f"[{doc.filename}]: {para[:500]}")
-        return snippets[:10]
+                    snippets.append(f"[{row['filename']}]: {para[:500]}")
+                    if len(snippets) >= 10:
+                        return snippets
+        return snippets
 
     # ── Entities ───────────────────────────────────────────────────────────────
 
