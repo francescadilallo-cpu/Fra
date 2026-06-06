@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from .executive import (
@@ -19,13 +19,15 @@ logger = logging.getLogger(__name__)
 
 class AgentExecuteRequest(BaseModel):
     command: str = Field(
-        min_length=5, description="Executive command in natural language"
+        min_length=5,
+        max_length=500,
+        description="Executive command in natural language",
     )
 
 
 class AgentApproveRequest(BaseModel):
     approve: bool = True
-    manager_note: str | None = None
+    manager_note: str | None = Field(default=None, max_length=2000)
 
 
 class AgentActionResponse(BaseModel):
@@ -141,7 +143,7 @@ def build_agent_router(
     @router.get("/list", response_model=list[AgentActionResponse])
     def list_actions(
         status: str | None = None,
-        limit: int = 50,
+        limit: int = Query(default=50, ge=1, le=500),
         _: Any = Depends(admin_dependency),
     ) -> list[AgentActionResponse]:
         actions = layer.list_actions(status_filter=status, limit=limit)
@@ -167,7 +169,7 @@ def build_agent_router(
 
     @router.get("/audit", response_model=AgentAuditListResponse)
     def list_audit(
-        limit: int = 200,
+        limit: int = Query(default=200, ge=1, le=2000),
         _: Any = Depends(admin_dependency),
     ) -> AgentAuditListResponse:
         records = [r.model_dump(mode="json") for r in layer.get_audit_log(limit=limit)]
