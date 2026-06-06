@@ -221,6 +221,181 @@ def test_cache_namespace_is_bumped_on_kg_rebuild(
     assert app_module._semantic_cache_namespace == 1
 
 
+class TestCacheNamespaceIsBumpedOnSemanticEditorMutations:
+    """update_ontology_mapping/rebuild_knowledge_graph/agentic write-backs all
+    bump the cache namespace because they change what layer.ask() returns for
+    a given question. Three other mutation surfaces feed layer.ask() through
+    the exact same channels — catalog.list_metric_objects() (metric-definition
+    answers), layer._context_docs (the LLM SQL-generation prompt, pushed via
+    _sync_context_docs_to_layer/set_context_docs), and layer._templates
+    (deterministic tpl_<id> intents, pushed via _hot_reload_templates/
+    set_templates) — yet their endpoints never invalidated the cache, so a
+    pre-edit cached answer kept being served (citing the old metric formula,
+    ignoring new/removed business context, skipping the new/changed/removed
+    template) until the entry expired or got evicted."""
+
+    class _DummyLayer:
+        def __init__(self) -> None:
+            self.clears = 0
+
+        def clear_semantic_cache(self) -> None:
+            self.clears += 1
+
+        def set_context_docs(self, docs: list[dict]) -> None:
+            pass
+
+        def set_templates(self, templates: list[dict]) -> None:
+            pass
+
+    def test_metric_draft_update(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        app_module,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyCatalog:
+            def save_metric_draft(self, name, **_kwargs) -> bool:
+                return True
+
+        layer = self._DummyLayer()
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(app_module._semantic_state, "loaded", True)
+        monkeypatch.setitem(app_module._semantic_state, "layer", layer)
+        monkeypatch.setitem(app_module._semantic_state, "catalog", DummyCatalog())
+
+        response = client.patch(
+            "/api/semantic/draft/metrics/order_count",
+            json={"description": "Conteggio ordini aggiornato"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200, response.text
+        assert layer.clears == 1
+        assert app_module._semantic_cache_namespace == 1
+
+    def test_context_doc_add_and_delete(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        app_module,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.connectors.source_registry import get_source_registry
+
+        layer = self._DummyLayer()
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(app_module._semantic_state, "loaded", True)
+        monkeypatch.setitem(app_module._semantic_state, "layer", layer)
+
+        create = client.post(
+            "/api/semantic/draft/context",
+            json={
+                "title": "cache-bump-regression-doc",
+                "content": "Revenue excludes intercompany transfers.",
+            },
+            headers=auth_headers,
+        )
+        assert create.status_code == 201, create.text
+        doc_id = create.json()["id"]
+        try:
+            assert app_module._semantic_cache_namespace == 1, (
+                "adding a context doc changes the LLM SQL-generation prompt — "
+                "a cached pre-edit answer must stop being served immediately"
+            )
+            assert layer.clears == 1
+
+            delete = client.delete(
+                f"/api/semantic/draft/context/{doc_id}", headers=auth_headers
+            )
+            assert delete.status_code == 200, delete.text
+            assert app_module._semantic_cache_namespace == 2, (
+                "removing a context doc must also invalidate cached answers "
+                "that were generated while it was still part of the prompt"
+            )
+            assert layer.clears == 2
+        finally:
+            registry = get_source_registry()
+            if registry.get(doc_id) is not None:
+                registry.remove(doc_id)
+
+    def test_template_create_update_delete(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        app_module,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyCatalog:
+            def __init__(self) -> None:
+                self._next_id = 1
+                self._templates: dict[int, dict] = {}
+
+            def create_template(self, **kwargs) -> dict:
+                tid = self._next_id
+                self._next_id += 1
+                tpl = {"id": tid, **kwargs}
+                self._templates[tid] = tpl
+                return dict(tpl)
+
+            def update_template(self, template_id: int, **kwargs) -> dict:
+                if template_id not in self._templates:
+                    raise KeyError(f"Template {template_id} not found")
+                self._templates[template_id].update(kwargs)
+                return dict(self._templates[template_id])
+
+            def delete_template(self, template_id: int) -> None:
+                if template_id not in self._templates:
+                    raise KeyError(f"Template {template_id} not found")
+                del self._templates[template_id]
+
+            def list_templates(self) -> list[dict]:
+                return [dict(t) for t in self._templates.values()]
+
+        layer = self._DummyLayer()
+        monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
+        monkeypatch.setitem(app_module._semantic_state, "loaded", True)
+        monkeypatch.setitem(app_module._semantic_state, "layer", layer)
+        monkeypatch.setitem(app_module._semantic_state, "catalog", DummyCatalog())
+
+        create = client.post(
+            "/api/semantic/templates",
+            json={
+                "name": "cache-bump-regression-template",
+                "sql_query": "SELECT 1 AS one",
+                "keywords": ["bump"],
+            },
+            headers=auth_headers,
+        )
+        assert create.status_code == 201, create.text
+        tid = create.json()["id"]
+        assert app_module._semantic_cache_namespace == 1, (
+            "a new template can deterministically answer questions it "
+            "matches — a cached pre-creation answer must not keep skipping it"
+        )
+        assert layer.clears == 1
+
+        update = client.patch(
+            f"/api/semantic/templates/{tid}",
+            json={"description": "updated description"},
+            headers=auth_headers,
+        )
+        assert update.status_code == 200, update.text
+        assert app_module._semantic_cache_namespace == 2, (
+            "editing a template's SQL/keywords changes what layer.ask() "
+            "returns for matching questions"
+        )
+        assert layer.clears == 2
+
+        delete = client.delete(f"/api/semantic/templates/{tid}", headers=auth_headers)
+        assert delete.status_code == 204, delete.text
+        assert app_module._semantic_cache_namespace == 3, (
+            "deleting a template must stop cached answers from keeping its "
+            "(now-removed) deterministic behavior alive"
+        )
+        assert layer.clears == 3
+
+
 def test_semantic_ask_redis_cache_short_circuits_repeated_layer_execution(
     client: TestClient,
     auth_headers: dict[str, str],

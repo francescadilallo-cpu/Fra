@@ -694,12 +694,26 @@ def _get_semantic_draft() -> dict:
 
 
 def _hot_reload_templates() -> None:
-    """Push fresh templates to the live SemanticLayer instance."""
+    """Push fresh templates to the live SemanticLayer instance.
+
+    Templates are matched against incoming questions and can deterministically
+    answer them (see SemanticLayer._execute_template_query / dynamic tpl_<id>
+    intents) — a create/update/delete here changes what layer.ask() returns
+    for matching questions. Bump the cache namespace so a pre-edit cached
+    answer doesn't keep being served (skipping the new/changed/removed
+    template entirely) until it expires or gets evicted.
+    """
     _ensure_semantic_loaded()
     layer = _semantic_state.get("layer")
     catalog = _semantic_state.get("catalog")
     if layer is not None and catalog is not None:
         layer.set_templates(catalog.list_templates())
+    _bump_semantic_cache_namespace()
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
 
 
 def reload_semantic() -> None:
@@ -2045,6 +2059,16 @@ def patch_draft_metric(
     )
     if not ok:
         raise HTTPException(status_code=404, detail=f"Metric '{name}' not found")
+    # catalog.list_metric_objects() feeds metric-definition answers straight
+    # into layer.ask() — without this, a cached pre-edit answer keeps citing
+    # the old formula/description/label until the cache entry expires/evicts.
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
     return {"ok": True}
 
 
@@ -2095,6 +2119,17 @@ def add_draft_context(
     )
     registry.upsert(cfg)
     _sync_context_docs_to_layer()
+    # _sync_context_docs_to_layer() pushes these docs straight into the LLM
+    # SQL-generation prompt (layer._context_docs) — without this, a cached
+    # pre-edit answer keeps being served without the new business context
+    # until the cache entry expires/evicts.
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
     return {
         "id": doc_id,
         "title": body.title,
@@ -2120,6 +2155,15 @@ def delete_draft_context(
         raise HTTPException(status_code=404, detail="Context document not found")
     registry.remove(doc_id)
     _sync_context_docs_to_layer()
+    # Same reasoning as add_draft_context: the removed doc must stop
+    # influencing answers immediately, not just once the cache entry expires.
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
     return {"ok": True}
 
 
