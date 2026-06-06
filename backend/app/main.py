@@ -94,6 +94,9 @@ _semantic_redis_client_initialized = False
 _semantic_redis_lock = threading.Lock()
 _semantic_cache_namespace = 0
 _semantic_ns_lock = threading.Lock()
+_IN_PROCESS_CACHE_MAX = 256
+_in_process_cache: dict[str, str] = {}
+_in_process_cache_lock = threading.Lock()
 
 
 def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
@@ -175,6 +178,8 @@ def _bump_semantic_cache_namespace() -> None:
     global _semantic_cache_namespace
     with _semantic_ns_lock:
         _semantic_cache_namespace += 1
+    with _in_process_cache_lock:
+        _in_process_cache.clear()
 
 
 def _get_jwt_secret() -> str:
@@ -1163,6 +1168,11 @@ def semantic_ask(
                 return SemanticAskResponse.model_validate_json(cached_payload)
         except Exception:
             pass
+    else:
+        with _in_process_cache_lock:
+            hit = _in_process_cache.get(cache_key)
+        if hit:
+            return SemanticAskResponse.model_validate_json(hit)
 
     _ensure_semantic_loaded()
     layer = _semantic_state["layer"]
@@ -1200,15 +1210,19 @@ def semantic_ask(
             notes=result.notes,
             ambiguity_error=False,
         )
+        response_json = response_model.model_dump_json()
         if redis_client is not None:
             try:
                 redis_client.setex(
-                    cache_key,
-                    _semantic_cache_ttl_seconds(),
-                    response_model.model_dump_json(),
+                    cache_key, _semantic_cache_ttl_seconds(), response_json
                 )
             except Exception:
                 pass
+        else:
+            with _in_process_cache_lock:
+                if len(_in_process_cache) >= _IN_PROCESS_CACHE_MAX:
+                    _in_process_cache.pop(next(iter(_in_process_cache)))
+                _in_process_cache[cache_key] = response_json
         return response_model
     except AmbiguityError as e:
         return SemanticAskResponse(

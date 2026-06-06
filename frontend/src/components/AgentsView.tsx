@@ -10,6 +10,9 @@ import { SECTORS } from '../data/sectors'
 import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { IS_DEMO_MODE } from '../lib/demoMode'
+import { getAuthToken } from '../api/client'
+import { executeAgentCommand, approveAgentAction, listAgentActions } from '../api/agents'
+import type { AgentAction } from '../api/agents'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
@@ -1026,10 +1029,210 @@ function AgentCard({
   )
 }
 
+// ── Role detection ────────────────────────────────────────────────────────────
+function getRole(): 'admin' | 'user' {
+  const token = getAuthToken()
+  if (!token) return 'user'
+  try {
+    const b64 = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/')
+    if (!b64) return 'user'
+    const payload = JSON.parse(atob(b64)) as Record<string, unknown>
+    return payload.role === 'admin' ? 'admin' : 'user'
+  } catch { return 'user' }
+}
+
+// ── Executive Actions Panel ──────────────────────────────────────────────────
+function ExecutiveActionsPanel() {
+  const [command, setCommand] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [actions, setActions] = useState<AgentAction[]>([])
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await listAgentActions()
+      setActions([...data].reverse())
+    } catch { /* backend may not be live */ }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    const id = setInterval(refresh, 15_000)
+    return () => clearInterval(id)
+  }, [refresh])
+
+  const handleSubmit = useCallback(async () => {
+    const cmd = command.trim()
+    if (!cmd || submitting) return
+    setSubmitting(true)
+    try {
+      await executeAgentCommand(cmd)
+      setCommand('')
+      toast('Command submitted — awaiting approval', 'success')
+      await refresh()
+    } catch (e) {
+      const msg = (e as { response?: { data?: { detail?: { message?: string } } } })
+        ?.response?.data?.detail?.message
+      toast(msg ?? 'Command rejected — check syntax or business rules', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [command, submitting, refresh])
+
+  const handleApprove = useCallback(async (id: string, approve: boolean) => {
+    setApprovingId(id)
+    try {
+      const result = await approveAgentAction(id, approve)
+      if (approve) {
+        const r = result.resync_result
+        toast(
+          result.status === 'SYNCED'
+            ? `Approved · ${r?.nodes_patched ?? 0} KG nodes updated · ${r?.duration_ms ?? 0}ms`
+            : result.status === 'SYNC_FAILED'
+              ? 'Executed but re-sync failed — check audit log'
+              : 'Approved and executed',
+          result.status === 'SYNC_FAILED' ? 'error' : 'success',
+        )
+      } else {
+        toast('Action rejected', 'success')
+      }
+      await refresh()
+    } catch { toast('Approval failed', 'error') }
+    finally { setApprovingId(null) }
+  }, [refresh])
+
+  const pending = actions.filter(a => a.status === 'PENDING_HUMAN_APPROVAL')
+  const recent = actions.filter(a => a.status !== 'PENDING_HUMAN_APPROVAL').slice(0, 6)
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldCheck className="w-4 h-4 text-amber-500" />
+        <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Executive Actions</h2>
+        <span className="text-xs text-slate-400">· human-in-the-loop write-backs with cascade re-sync</span>
+        {pending.length > 0 && (
+          <span className="ml-auto text-xs font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full animate-pulse">
+            {pending.length} pending approval
+          </span>
+        )}
+      </div>
+
+      {/* Command input */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
+        <p className="text-[10px] text-slate-400 mb-2 font-mono">
+          "Sposta la data di consegna dell'ordine 1 al 2026-12-31" · "Segna l'ordine 1 come spedito" · "Cancella l'ordine 2"
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={command}
+            onChange={e => setCommand(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSubmit() }}
+            placeholder="Enter executive command…"
+            className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-amber-400 transition-colors"
+          />
+          <button
+            onClick={handleSubmit}
+            disabled={!command.trim() || submitting}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              !command.trim() || submitting
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : 'bg-amber-500 text-white hover:bg-amber-600'
+            }`}
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit'}
+          </button>
+        </div>
+      </div>
+
+      {/* Pending approvals */}
+      {pending.length > 0 && (
+        <div className="space-y-2 mb-3">
+          <p className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">Awaiting approval</p>
+          {pending.map(a => (
+            <div key={a.action_id} className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-slate-700 leading-snug">{a.command}</p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {String(a.proposed_action?.action_type ?? '')} · by {a.requested_by}
+                  {a.validation_checks.length > 0 && (
+                    <span className="ml-1 text-teal-600">· {a.validation_checks.length} checks passed</span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  onClick={() => handleApprove(a.action_id, false)}
+                  disabled={approvingId === a.action_id}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => handleApprove(a.action_id, true)}
+                  disabled={approvingId === a.action_id}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors disabled:opacity-40"
+                >
+                  {approvingId === a.action_id ? '…' : 'Approve'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recent completed */}
+      {recent.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400">Recent</p>
+          {recent.map(a => {
+            const isSynced = a.status === 'SYNCED'
+            const isFailed = a.status === 'FAILED' || a.status === 'SYNC_FAILED'
+            return (
+              <div key={a.action_id} className={`border rounded-lg px-3 py-2 flex items-center gap-2 ${
+                isSynced ? 'bg-teal-50 border-teal-200' :
+                isFailed ? 'bg-red-50 border-red-200' :
+                'bg-slate-50 border-slate-200'
+              }`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-mono text-slate-700 truncate">{a.command}</p>
+                  {isSynced && a.resync_result && (
+                    <p className="text-[10px] text-teal-600 mt-0.5">
+                      {a.resync_result.nodes_patched} KG nodes · {a.resync_result.cache_keys_invalidated} cache keys · {a.resync_result.duration_ms}ms
+                    </p>
+                  )}
+                  {isFailed && (
+                    <p className="text-[10px] text-red-500 mt-0.5">
+                      {a.resync_result?.errors?.join(', ') ?? 'Execution failed'}
+                    </p>
+                  )}
+                </div>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none flex-shrink-0 ${
+                  isSynced ? 'bg-teal-100 text-teal-700' :
+                  isFailed ? 'bg-red-100 text-red-700' :
+                  'bg-slate-200 text-slate-500'
+                }`}>
+                  {a.status}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {pending.length === 0 && recent.length === 0 && (
+        <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl px-4 py-6 text-center">
+          <p className="text-xs text-slate-400">No executive actions yet. Submit a command above to start.</p>
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AgentsView() {
   const { sectorId } = useSector()
   const agents = AGENTS[sectorId]
+  const isAdmin = !IS_DEMO_MODE && getRole() === 'admin'
 
   // ── Custom agents ──────────────────────────────────────────────────────────
   const customAgentsDefs = useCustomAgents(sectorId)
@@ -1492,6 +1695,9 @@ export default function AgentsView() {
               </div>
             </section>
           )}
+
+          {/* Executive Actions (admin + live mode only) */}
+          {isAdmin && <ExecutiveActionsPanel />}
 
           {/* Empty state for custom agents */}
           {customAgents.length === 0 && (

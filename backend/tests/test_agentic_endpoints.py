@@ -70,13 +70,14 @@ def db_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
             CREATE TABLE orders (
                 id INTEGER PRIMARY KEY,
                 date TEXT NOT NULL,
-                delivery_date TEXT NOT NULL
+                delivery_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'processing'
             )
             """
         )
         conn.execute(
-            "INSERT INTO orders (id, date, delivery_date) VALUES (?, ?, ?)",
-            (1, "2026-01-10", "2026-01-20"),
+            "INSERT INTO orders (id, date, delivery_date, status) VALUES (?, ?, ?, ?)",
+            (1, "2026-01-10", "2026-01-20", "processing"),
         )
         conn.commit()
     finally:

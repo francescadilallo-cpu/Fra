@@ -114,6 +114,15 @@ def build_agent_router(
                 detail={"error": "AGENT_ACTION_EXECUTION_FAILED", "message": str(exc)},
             ) from exc
 
+    @router.get("/list", response_model=list[AgentActionResponse])
+    def list_actions(
+        status: str | None = None,
+        limit: int = 50,
+        _: Any = Depends(admin_dependency),
+    ) -> list[AgentActionResponse]:
+        actions = layer.list_actions(status_filter=status, limit=limit)
+        return [_to_response(a) for a in actions]
+
     @router.get("/status/{action_id}", response_model=AgentActionResponse)
     def get_action_status(
         action_id: str,
