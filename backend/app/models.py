@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -97,15 +97,19 @@ class MetricCreate(BaseModel):
     numerator: str = Field(default="", max_length=256)
     denominator: str = Field(default="", max_length=256)
     expression: str = Field(default="", max_length=512)
-    filters: list[str] = Field(default_factory=list, max_length=20)
+    filters: list[Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=list, max_length=20
+    )
     time_dimension: str = Field(default="", max_length=128)
-    grains: list[str] = Field(
+    grains: list[Annotated[str, Field(max_length=32)]] = Field(
         default_factory=lambda: ["month", "quarter", "year"], max_length=10
     )
     format: Literal["number", "currency", "percentage"] = "number"
     status: Literal["draft", "verified"] = "draft"
     owner: str = Field(default="", max_length=128)
-    tags: list[str] = Field(default_factory=list, max_length=20)
+    tags: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=20
+    )
 
 
 class HierarchyCreate(BaseModel):
@@ -123,8 +127,12 @@ class SegmentCreate(BaseModel):
     description: str = Field(default="", max_length=1000)
     entity: str = Field(default="", max_length=128)
     conditions: list[dict] = Field(default_factory=list, max_length=50)
-    tags: list[str] = Field(default_factory=list, max_length=20)
-    used_by: list[str] = Field(default_factory=list, max_length=50)
+    tags: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=20
+    )
+    used_by: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=50
+    )
 
 
 class AskRequest(BaseModel):
