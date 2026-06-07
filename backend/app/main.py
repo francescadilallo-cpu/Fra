@@ -2670,6 +2670,12 @@ class CustomAgentPayload(BaseModel):
     )
     last_run_at: str | None = Field(default=None, max_length=64)
 
+    @model_validator(mode="after")
+    def _validate_trigger(self) -> "CustomAgentPayload":
+        if len(self.trigger) > 16:
+            raise ValueError("trigger dict must not exceed 16 keys")
+        return self
+
 
 def _row_to_agent(row: _sqlite3.Row) -> dict:
     return {
