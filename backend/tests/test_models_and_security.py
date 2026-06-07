@@ -1,5 +1,6 @@
-"""Unit tests for app/models.py (Pydantic validators) and the
-_safe_data_path security guard in connectors/duckdb_source_manager.py.
+"""Unit tests for app/models.py (Pydantic validators), the
+_safe_data_path security guard in connectors/duckdb_source_manager.py,
+and CustomAgentPayload field constraints in app/main.py.
 """
 
 from __future__ import annotations
@@ -320,3 +321,51 @@ class TestVerifyPassword:
 
     def test_excessive_iterations_rejected(self):
         assert self._call("p", "pbkdf2_sha256$9999999$salt$hash") is False
+
+
+# ── CustomAgentPayload ────────────────────────────────────────────────────────
+
+
+class TestCustomAgentPayload:
+    @staticmethod
+    def _make(**kwargs):
+        import importlib
+
+        mod = importlib.import_module("app.main")
+        defaults = {
+            "id": "agent-1",
+            "sector_id": "manufacturing",
+            "name": "Test Agent",
+        }
+        defaults.update(kwargs)
+        return mod.CustomAgentPayload(**defaults)
+
+    def test_minimal_valid(self):
+        p = self._make()
+        assert p.name == "Test Agent"
+        assert p.entities == []
+        assert p.actions == []
+
+    def test_entity_string_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            self._make(entities=["x" * 201])
+
+    def test_entity_list_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            self._make(entities=["ok"] * 101)
+
+    def test_action_string_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            self._make(actions=["x" * 501])
+
+    def test_action_list_too_long_rejected(self):
+        with pytest.raises(ValueError):
+            self._make(actions=["ok"] * 51)
+
+    def test_trigger_too_many_keys_rejected(self):
+        with pytest.raises(ValueError):
+            self._make(trigger={str(i): i for i in range(17)})
+
+    def test_trigger_16_keys_accepted(self):
+        p = self._make(trigger={str(i): i for i in range(16)})
+        assert len(p.trigger) == 16

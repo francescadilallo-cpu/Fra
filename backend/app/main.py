@@ -15,7 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
@@ -963,6 +963,24 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Reject obviously oversized requests before the JSON parser buffers them.
+# Protects against Content-Length bombs on endpoints without per-field caps.
+_MAX_REQUEST_BODY_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+@app.middleware("http")
+async def _reject_oversized_requests(request: Request, call_next):
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > _MAX_REQUEST_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413, content={"detail": "Request body too large"}
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
 
 
 def _get_agentic_ontology() -> Any:
@@ -2660,9 +2678,13 @@ class CustomAgentPayload(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     template: str = Field(default="monitor", max_length=64)
-    entities: list[str] = Field(default_factory=list, max_length=100)
+    entities: list[Annotated[str, Field(max_length=200)]] = Field(
+        default_factory=list, max_length=100
+    )
     findings: list[dict] = Field(default_factory=list, max_length=500)
-    actions: list[str] = Field(default_factory=list, max_length=50)
+    actions: list[Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=list, max_length=50
+    )
     trigger: dict = Field(default_factory=lambda: {"kind": "manual"})
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
