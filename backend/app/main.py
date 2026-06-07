@@ -840,8 +840,12 @@ class QueryTemplatePayload(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     sql_query: str = Field(min_length=10, max_length=8000)
-    keywords: list[str] = Field(default_factory=list, max_length=50)
-    sources: list[str] = Field(default_factory=list, max_length=50)
+    keywords: list[Annotated[str, Field(max_length=200)]] = Field(
+        default_factory=list, max_length=50
+    )
+    sources: list[Annotated[str, Field(max_length=256)]] = Field(
+        default_factory=list, max_length=50
+    )
 
     @field_validator("sql_query")
     @classmethod
@@ -862,8 +866,12 @@ class QueryTemplateUpdatePayload(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     sql_query: str | None = Field(default=None, min_length=10, max_length=8000)
-    keywords: list[str] | None = Field(default=None, max_length=50)
-    sources: list[str] | None = Field(default=None, max_length=50)
+    keywords: list[Annotated[str, Field(max_length=200)]] | None = Field(
+        default=None, max_length=50
+    )
+    sources: list[Annotated[str, Field(max_length=256)]] | None = Field(
+        default=None, max_length=50
+    )
 
     @field_validator("sql_query")
     @classmethod
