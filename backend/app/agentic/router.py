@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 
 from .executive import (
@@ -101,7 +101,7 @@ def build_agent_router(
 
     @router.post("/approve/{action_id}", response_model=AgentActionResponse)
     def approve_action(
-        action_id: str,
+        action_id: Annotated[str, Path(max_length=128)],
         req: AgentApproveRequest,
         current_user: Any = Depends(admin_dependency),
     ) -> AgentActionResponse:
@@ -152,7 +152,7 @@ def build_agent_router(
 
     @router.get("/status/{action_id}", response_model=AgentActionResponse)
     def get_action_status(
-        action_id: str,
+        action_id: Annotated[str, Path(max_length=128)],
         _: Any = Depends(admin_dependency),
     ) -> AgentActionResponse:
         action = layer.get_action(action_id)
