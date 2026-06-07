@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
@@ -61,7 +62,9 @@ _MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB — prevent OOM on Render 512 MB tie
 class EntityIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
-    synonyms: list[str] = Field(default_factory=list, max_length=20)
+    synonyms: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=20
+    )
     description: str = Field(default="", max_length=1000)
     source: str = Field(default="", max_length=256)
 
@@ -74,7 +77,9 @@ class EntityOut(EntityIn):
 class MetricIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
-    synonyms: list[str] = Field(default_factory=list, max_length=20)
+    synonyms: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=20
+    )
     description: str = Field(default="", max_length=1000)
     unit: str = Field(default="", max_length=64)
     certified: bool = False
