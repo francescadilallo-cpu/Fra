@@ -12,6 +12,7 @@ Safe substitution tokens in sql_query:
 from __future__ import annotations
 
 import re
+from typing import Annotated
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,8 +24,12 @@ class QueryTemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
     sql_query: str = Field(min_length=10, max_length=8000)
-    keywords: list[str] = Field(default_factory=list)
-    sources: list[str] = Field(default_factory=list)
+    keywords: list[Annotated[str, Field(max_length=200)]] = Field(
+        default_factory=list, max_length=50
+    )
+    sources: list[Annotated[str, Field(max_length=256)]] = Field(
+        default_factory=list, max_length=50
+    )
 
     @model_validator(mode="after")
     def _validate_tokens(self) -> "QueryTemplateCreate":
@@ -42,8 +47,12 @@ class QueryTemplateUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     sql_query: str | None = Field(default=None, min_length=10, max_length=8000)
-    keywords: list[str] | None = None
-    sources: list[str] | None = None
+    keywords: list[Annotated[str, Field(max_length=200)]] | None = Field(
+        default=None, max_length=50
+    )
+    sources: list[Annotated[str, Field(max_length=256)]] | None = Field(
+        default=None, max_length=50
+    )
 
     @model_validator(mode="after")
     def _validate_tokens(self) -> "QueryTemplateUpdate":
