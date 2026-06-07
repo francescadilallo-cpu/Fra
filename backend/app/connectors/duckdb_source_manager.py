@@ -1065,7 +1065,8 @@ class _DuckDBConnectorAdapter:
         table = self._ENTITY_MAP.get(entity_type)
         if not table:
             raise ValueError(f"{self._SOURCE_NAME}: unknown entity '{entity_type}'")
-        return self._mgr.execute_all(f'SELECT * FROM "{table}"')
+        safe_table = table.replace('"', '""')
+        return self._mgr.execute_all(f'SELECT * FROM "{safe_table}"')
 
     def execute_query(
         self, sql: str, params: tuple[Any, ...] = ()
