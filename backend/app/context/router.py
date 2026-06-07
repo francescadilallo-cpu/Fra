@@ -111,7 +111,8 @@ async def upload_document(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"File type not supported. Allowed: {', '.join(allowed)}",
         )
-    raw = await file.read()
+    # Read at most MAX+1 bytes so we never buffer a multi-GB file in RAM.
+    raw = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(raw) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,

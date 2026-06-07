@@ -126,7 +126,7 @@ class ContextStore:
     def list_documents(self) -> list[ContextDocument]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_documents ORDER BY created_at DESC"
+                "SELECT * FROM context_documents ORDER BY created_at DESC LIMIT 500"
             ).fetchall()
         return [ContextDocument(**dict(r)) for r in rows]
 
@@ -136,7 +136,7 @@ class ContextStore:
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT id, filename, '' AS content, file_type, created_at "
-                "FROM context_documents ORDER BY created_at DESC"
+                "FROM context_documents ORDER BY created_at DESC LIMIT 500"
             ).fetchall()
         return [ContextDocument(**dict(r)) for r in rows]
 
@@ -200,7 +200,7 @@ class ContextStore:
     def list_entities(self) -> list[ContextEntity]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_entities ORDER BY created_at DESC"
+                "SELECT * FROM context_entities ORDER BY created_at DESC LIMIT 500"
             ).fetchall()
         result = []
         for r in rows:
@@ -251,7 +251,7 @@ class ContextStore:
     def list_metrics(self) -> list[ContextMetric]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_metrics ORDER BY created_at DESC"
+                "SELECT * FROM context_metrics ORDER BY created_at DESC LIMIT 500"
             ).fetchall()
         result = []
         for r in rows:
@@ -283,7 +283,7 @@ class ContextStore:
     def list_glossary(self) -> list[ContextGlossaryTerm]:
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_glossary ORDER BY term"
+                "SELECT * FROM context_glossary ORDER BY term LIMIT 500"
             ).fetchall()
         return [ContextGlossaryTerm(**dict(r)) for r in rows]
 
