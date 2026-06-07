@@ -18,7 +18,16 @@ from pathlib import Path
 from typing import Annotated, Any, Callable, Literal
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    Form,
+    HTTPException,
+    Path as _ApiPath,
+    Query,
+    Request,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -1260,7 +1269,7 @@ def validate_ontology_configuration(
 
 @app.get("/api/data/{table}", response_model=PaginatedData)
 def get_table_data(
-    table: str,
+    table: Annotated[str, _ApiPath(max_length=256)],
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
@@ -1673,7 +1682,7 @@ def add_source(
 
 @app.delete("/api/sources/{source_id}", status_code=204)
 def remove_source(
-    source_id: str,
+    source_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     """Remove a source from the registry and trigger a DuckDB rebuild."""
@@ -1698,7 +1707,7 @@ def remove_source(
 
 @app.post("/api/sources/{source_id}/sync", response_model=SourceResponse)
 def sync_source(
-    source_id: str,
+    source_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> SourceResponse:
     """Re-ingest a single source and rebuild the DuckDB snapshot."""
@@ -1853,7 +1862,7 @@ def create_metric(
 
 @app.delete("/api/semantic/metrics/{metric_id}", status_code=204)
 def delete_metric(
-    metric_id: str,
+    metric_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     conn = get_connection()
@@ -1925,7 +1934,7 @@ def create_hierarchy(
 
 @app.delete("/api/semantic/hierarchies/{hierarchy_id}", status_code=204)
 def delete_hierarchy(
-    hierarchy_id: str,
+    hierarchy_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     conn = get_connection()
@@ -2000,7 +2009,7 @@ def create_segment(
 
 @app.delete("/api/semantic/segments/{segment_id}", status_code=204)
 def delete_segment(
-    segment_id: str,
+    segment_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     conn = get_connection()
@@ -2101,7 +2110,7 @@ def get_semantic_draft_endpoint(
     summary="Update user description and context notes for an entity",
 )
 def patch_draft_entity(
-    name: str,
+    name: Annotated[str, _ApiPath(max_length=128)],
     body: EntityDraftUpdate,
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
@@ -2126,7 +2135,7 @@ def patch_draft_entity(
     summary="Update description/formula for a metric",
 )
 def patch_draft_metric(
-    name: str,
+    name: Annotated[str, _ApiPath(max_length=128)],
     body: MetricDraftUpdate,
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
@@ -2227,7 +2236,7 @@ def add_draft_context(
     summary="Remove a context document",
 )
 def delete_draft_context(
-    doc_id: str,
+    doc_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     from .connectors.source_registry import get_source_registry
@@ -2788,7 +2797,7 @@ def create_custom_agent(
 
 @app.put("/api/agents/custom/{agent_id}", tags=["agents"])
 def update_custom_agent(
-    agent_id: str,
+    agent_id: Annotated[str, _ApiPath(max_length=128)],
     body: CustomAgentPayload,
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict:
@@ -2831,7 +2840,7 @@ def update_custom_agent(
 
 @app.delete("/api/agents/custom/{agent_id}", status_code=204, tags=["agents"])
 def delete_custom_agent(
-    agent_id: str,
+    agent_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> None:
     conn = _agents_db()
@@ -2912,7 +2921,7 @@ def save_query(
 
 @app.delete("/api/queries/saved/{query_id}", status_code=204, tags=["queries"])
 def delete_saved_query(
-    query_id: str,
+    query_id: Annotated[str, _ApiPath(max_length=128)],
     _user: dict = Depends(get_current_user),
 ):
     conn = _queries_db()
