@@ -1059,7 +1059,7 @@ def health() -> dict[str, str]:
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    mode: str = Form("demo"),
+    mode: str = Form("demo", max_length=32),
 ) -> TokenResponse:
     if not os.getenv(AUTH_USERS_JSON_ENV, ""):
         raise HTTPException(
