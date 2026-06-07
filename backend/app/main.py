@@ -2629,6 +2629,9 @@ _AGENTS_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "custom_agents.db"
 def _agents_db() -> _sqlite3.Connection:
     conn = _sqlite3.connect(str(_AGENTS_DB_PATH))
     conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS custom_agents (
@@ -2811,6 +2814,9 @@ _QUERIES_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "saved_queries.db"
 def _queries_db() -> _sqlite3.Connection:
     conn = _sqlite3.connect(str(_QUERIES_DB_PATH))
     conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute(
         """CREATE TABLE IF NOT EXISTS saved_queries (
             id TEXT PRIMARY KEY,
