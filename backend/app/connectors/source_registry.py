@@ -148,12 +148,13 @@ class SourceRegistry:
             finally:
                 conn.close()
 
-    def list(self) -> list[SourceConfig]:
+    def list(self, limit: int = 200) -> list[SourceConfig]:
         with self._lock:
             conn = self._open()
             try:
                 rows = conn.execute(
-                    "SELECT * FROM sources ORDER BY is_default DESC, connected_at ASC"
+                    "SELECT * FROM sources ORDER BY is_default DESC, connected_at ASC LIMIT ?",
+                    (limit,),
                 ).fetchall()
                 return [self._from_row(r) for r in rows]
             finally:
