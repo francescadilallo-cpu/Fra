@@ -281,3 +281,42 @@ class TestMappingModels:
     def test_mapping_update_request_empty_fields_rejected(self):
         with pytest.raises(ValueError):
             MappingUpdateRequest(table="", field="f", ontology_path="o")
+
+
+# ── _verify_password ────────────────────────────────────────────────────────────
+
+
+class TestVerifyPassword:
+    @pytest.fixture()
+    def valid_hash(self):
+        import hashlib, base64  # noqa: E401
+
+        salt = "testsalt"
+        password = "correct"
+        iterations = 260000
+        h = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
+        return f"pbkdf2_sha256${iterations}${salt}${base64.b64encode(h).decode()}"
+
+    def _call(self, password, stored_hash):
+        import importlib  # noqa: E401
+
+        mod = importlib.import_module("app.main")
+        return mod._verify_password(password, stored_hash)
+
+    def test_correct_password_accepted(self, valid_hash):
+        assert self._call("correct", valid_hash) is True
+
+    def test_wrong_password_rejected(self, valid_hash):
+        assert self._call("wrong", valid_hash) is False
+
+    def test_oversized_password_fast_rejected(self, valid_hash):
+        # 4097 bytes of UTF-8 must be rejected without running PBKDF2
+        assert self._call("x" * 4097, valid_hash) is False
+
+    def test_invalid_iterations_rejected(self, valid_hash):
+        # iterations=0 must fail the bounds check
+        bad = valid_hash.replace("pbkdf2_sha256$260000$", "pbkdf2_sha256$0$")
+        assert self._call("correct", bad) is False
+
+    def test_excessive_iterations_rejected(self):
+        assert self._call("p", "pbkdf2_sha256$9999999$salt$hash") is False

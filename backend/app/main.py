@@ -294,13 +294,20 @@ def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
         raise ValueError("Invalid token") from exc
 
 
+_MAX_PASSWORD_BYTES = 4096  # fast-reject oversized inputs before PBKDF2
+
+
 def _verify_password(password: str, stored_hash: str) -> bool:
     """Verify passwords stored as pbkdf2_sha256$iterations$salt$hash."""
+    if len(password.encode("utf-8")) > _MAX_PASSWORD_BYTES:
+        return False
     try:
         scheme, iters_raw, salt, expected = stored_hash.split("$", 3)
         if scheme != "pbkdf2_sha256":
             return False
         iterations = int(iters_raw)
+        if iterations < 1 or iterations > 1_000_000:
+            return False
     except (TypeError, ValueError):
         return False
 
@@ -1989,7 +1996,7 @@ def delete_segment(
 
 @app.get("/api/semantic/coverage")
 def semantic_coverage(
-    sector_id: str = "manufacturing",
+    sector_id: str = Query(default="manufacturing", max_length=64),
     _: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     conn = get_connection()
