@@ -436,10 +436,19 @@ class DuckDBSourceManager:
     def _seed_defaults(self) -> None:
         """Seed the 4 default scenario sources if the registry is empty.
 
-        After seeding (or if defaults already exist), scan the scenario path
-        for any additional data files not yet in the registry and register them
-        automatically so real sources require no manual configuration.
+        Only runs when FRA_SEED_DEMO_SOURCES=true — intended for demo deployments
+        that ship with the test_scenario dataset (Adventure Works / OrionSales).
+        Live deployments leave this unset so the registry starts empty and admins
+        configure their own sources via the UI.
         """
+        seed_enabled = os.getenv("FRA_SEED_DEMO_SOURCES", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if not seed_enabled:
+            return
+
         if self._registry.count() == 0:
             sp = self._scenario_path
             defaults = [
