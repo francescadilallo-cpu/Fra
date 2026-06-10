@@ -403,6 +403,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
             <span className="text-xs text-slate-500">SemanticIntelligence</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-600">v0.2 · Multi-Sector</p>
+          <p className="text-[10px] text-slate-700" title="Build timestamp">build {__BUILD_ID__}</p>
         </div>
       </aside>
 
