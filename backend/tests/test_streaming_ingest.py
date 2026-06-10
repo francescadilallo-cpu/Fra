@@ -16,6 +16,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import duckdb
+
+import app.connectors.duckdb_source_manager as dsm
 from app.connectors.duckdb_source_manager import DuckDBSourceManager
 from app.connectors.source_registry import SourceConfig, SourceRegistry
 
@@ -144,3 +147,95 @@ class TestNativeJson:
         mgr = DuckDBSourceManager(scenario, db_path, registry)
         counts = mgr.rebuild()
         assert counts["s1.t"] == 2
+
+
+# ── Chunked DB-API cursor streaming (SQLite / PostgreSQL ingest) ───────────────
+
+
+class FakeCursor:
+    """Minimal DB-API cursor backed by an in-memory row list."""
+
+    def __init__(self, rows: list[dict], description: list[tuple]):
+        self._rows = list(rows)
+        self.description = description
+
+    def fetchmany(self, n: int) -> list[dict]:
+        out, self._rows = self._rows[:n], self._rows[n:]
+        return out
+
+
+class TestStreamCursorIntoTable:
+    def _mgr(self, mgr_env) -> DuckDBSourceManager:
+        scenario, registry, db_path, _tmp = mgr_env
+        return DuckDBSourceManager(scenario, db_path, registry)
+
+    def test_multi_chunk_assembly(self, mgr_env, monkeypatch):
+        monkeypatch.setattr(dsm, "_INGEST_CHUNK_ROWS", 7)
+        mgr = self._mgr(mgr_env)
+        conn = duckdb.connect()
+        rows = [{"id": i, "v": f"r{i}"} for i in range(20)]
+        cur = FakeCursor(rows, [("id",), ("v",)])
+        n, truncated = mgr._stream_cursor_into_table(conn, cur, "t")
+        assert (n, truncated) == (20, False)
+        assert conn.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 20
+        assert conn.execute("SELECT v FROM t WHERE id=13").fetchone()[0] == "r13"
+
+    def test_row_limit_truncates_and_reports(self, mgr_env, monkeypatch):
+        monkeypatch.setattr(dsm, "_INGEST_CHUNK_ROWS", 4)
+        mgr = self._mgr(mgr_env)
+        conn = duckdb.connect()
+        rows = [{"id": i} for i in range(25)]
+        cur = FakeCursor(rows, [("id",)])
+        n, truncated = mgr._stream_cursor_into_table(conn, cur, "t", row_limit=10)
+        assert (n, truncated) == (10, True)
+        assert conn.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 10
+
+    def test_limit_exactly_on_chunk_boundary(self, mgr_env, monkeypatch):
+        # The +1 sentinel row arrives in its own (then fully trimmed) chunk —
+        # must not attempt to INSERT an empty DataFrame.
+        monkeypatch.setattr(dsm, "_INGEST_CHUNK_ROWS", 5)
+        mgr = self._mgr(mgr_env)
+        conn = duckdb.connect()
+        rows = [{"id": i} for i in range(11)]
+        cur = FakeCursor(rows, [("id",)])
+        n, truncated = mgr._stream_cursor_into_table(conn, cur, "t", row_limit=10)
+        assert (n, truncated) == (10, True)
+        assert conn.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 10
+
+    def test_empty_cursor_creates_empty_table_with_columns(self, mgr_env):
+        mgr = self._mgr(mgr_env)
+        conn = duckdb.connect()
+        cur = FakeCursor([], [("a",), ("b",)])
+        n, truncated = mgr._stream_cursor_into_table(conn, cur, "t")
+        assert (n, truncated) == (0, False)
+        cols = [d[0] for d in conn.execute("SELECT * FROM t").description]
+        assert cols == ["a", "b"]
+        assert conn.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 0
+
+    def test_sqlite_source_streams_in_chunks(self, mgr_env, monkeypatch):
+        import sqlite3
+
+        monkeypatch.setattr(dsm, "_INGEST_CHUNK_ROWS", 7)
+        scenario, registry, db_path, tmp = mgr_env
+        src_db = tmp / "src.db"
+        sconn = sqlite3.connect(str(src_db))
+        sconn.execute("CREATE TABLE items (id INTEGER, name TEXT)")
+        sconn.executemany(
+            "INSERT INTO items VALUES (?, ?)", [(i, f"n{i}") for i in range(20)]
+        )
+        sconn.commit()
+        sconn.close()
+        registry.upsert(
+            SourceConfig(
+                id="s1",
+                connector_type="sqlite",
+                label="SQLite",
+                params={"path": str(src_db)},
+                target_tables=[],
+            )
+        )
+        mgr = DuckDBSourceManager(scenario, db_path, registry)
+        counts = mgr.rebuild()
+        assert counts["s1.items"] == 20
+        rows = mgr.execute("SELECT name FROM items WHERE id = 13")
+        assert rows[0]["name"] == "n13"

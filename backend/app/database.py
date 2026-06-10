@@ -124,6 +124,10 @@ CREATE TABLE IF NOT EXISTS sl_segments (
     is_builtin INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_sl_metrics_sector ON sl_metrics(sector_id, is_builtin);
+CREATE INDEX IF NOT EXISTS idx_sl_hierarchies_sector ON sl_hierarchies(sector_id, is_builtin);
+CREATE INDEX IF NOT EXISTS idx_sl_segments_sector ON sl_segments(sector_id, is_builtin);
 """
 
 # ── Seed data helpers ──────────────────────────────────────────────────────────

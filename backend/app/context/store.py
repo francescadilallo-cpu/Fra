@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,6 +60,15 @@ class ContextStore:
         self._db = db_path
         self._db.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        # Memoised SemanticDocs — to_semantic_docs_override() runs on every
+        # semantic ask, and rereading up to 1500 rows of entities/metrics/
+        # glossary per request is pure waste. Invalidated on any mutation.
+        self._docs_cache_lock = threading.Lock()
+        self._docs_cache: object | None = None
+
+    def _invalidate_docs_cache(self) -> None:
+        with self._docs_cache_lock:
+            self._docs_cache = None
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db)
@@ -195,6 +205,7 @@ class ContextStore:
             ).fetchone()
         d = dict(row)
         d["synonyms"] = json.loads(d["synonyms"])
+        self._invalidate_docs_cache()
         return ContextEntity(**d)
 
     def list_entities(self) -> list[ContextEntity]:
@@ -212,6 +223,7 @@ class ContextStore:
     def delete_entity(self, entity_id: int) -> bool:
         with self._conn() as conn:
             cur = conn.execute("DELETE FROM context_entities WHERE id=?", (entity_id,))
+        self._invalidate_docs_cache()
         return cur.rowcount > 0
 
     # ── Metrics ────────────────────────────────────────────────────────────────
@@ -246,6 +258,7 @@ class ContextStore:
         d = dict(row)
         d["synonyms"] = json.loads(d["synonyms"])
         d["certified"] = bool(d["certified"])
+        self._invalidate_docs_cache()
         return ContextMetric(**d)
 
     def list_metrics(self) -> list[ContextMetric]:
@@ -264,6 +277,7 @@ class ContextStore:
     def delete_metric(self, metric_id: int) -> bool:
         with self._conn() as conn:
             cur = conn.execute("DELETE FROM context_metrics WHERE id=?", (metric_id,))
+        self._invalidate_docs_cache()
         return cur.rowcount > 0
 
     # ── Glossary ───────────────────────────────────────────────────────────────
@@ -278,6 +292,7 @@ class ContextStore:
             row = conn.execute(
                 "SELECT * FROM context_glossary WHERE term=?", (t,)
             ).fetchone()
+        self._invalidate_docs_cache()
         return ContextGlossaryTerm(**dict(row))
 
     def list_glossary(self) -> list[ContextGlossaryTerm]:
@@ -290,6 +305,7 @@ class ContextStore:
     def delete_glossary_term(self, term_id: int) -> bool:
         with self._conn() as conn:
             cur = conn.execute("DELETE FROM context_glossary WHERE id=?", (term_id,))
+        self._invalidate_docs_cache()
         return cur.rowcount > 0
 
     # ── Semantic docs merge ────────────────────────────────────────────────────
@@ -301,6 +317,10 @@ class ContextStore:
             MetricDoc,
             SemanticDocs,
         )
+
+        with self._docs_cache_lock:
+            if self._docs_cache is not None:
+                return self._docs_cache
 
         entities = [
             EntityDoc(
@@ -327,12 +347,15 @@ class ContextStore:
             GlossaryTerm(term=g.term, definition=g.definition)
             for g in self.list_glossary()
         ]
-        return SemanticDocs(
+        docs = SemanticDocs(
             entities=entities,
             metrics=metrics,
             glossary=glossary,
             disambiguation_rules=[],
         )
+        with self._docs_cache_lock:
+            self._docs_cache = docs
+        return docs
 
 
 # Module-level singleton — import this instead of constructing a new instance

@@ -58,12 +58,18 @@ _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 _BLOCKED_PATH_ROOTS = ("/etc", "/proc", "/sys", "/dev", "/run", "/boot")
 
 
+# External-database ingestion copies rows in fixed-size chunks so a large
+# source table never has to fit in Python memory all at once.
+_INGEST_CHUNK_ROWS = 50_000
+
+
 def _pg_ingest_limit() -> int:
     """Per-table row cap for the psycopg2 PostgreSQL ingestion path.
 
-    Defaults to 100k to bound memory (the rows are materialised into a pandas
-    DataFrame). Set FRA_PG_INGEST_LIMIT=0 to disable the cap, or to a custom
-    value. Invalid values fall back to the default.
+    Defaults to 100k to bound memory. Set FRA_PG_INGEST_LIMIT=0 to disable
+    the cap, or to a custom value. Invalid values fall back to the default.
+    Rows are streamed in chunks, so even FRA_PG_INGEST_LIMIT=0 keeps memory
+    bounded by the chunk size rather than the table size.
     """
     raw = os.getenv("FRA_PG_INGEST_LIMIT", "100000").strip()
     try:
@@ -864,6 +870,55 @@ class DuckDBSourceManager:
         if table not in cfg.target_tables:
             cfg.target_tables.append(table)
 
+    def _stream_cursor_into_table(
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        cur: Any,
+        safe_table: str,
+        row_limit: int = 0,
+    ) -> tuple[int, bool]:
+        """Copy a DB-API cursor into a DuckDB table in fixed-size chunks.
+
+        Keeps memory bounded by the chunk size rather than the source table
+        size: each chunk becomes a small DataFrame that is appended and then
+        discarded. Returns ``(row_count, truncated)``; with ``row_limit > 0``
+        ingestion stops at the limit and ``truncated`` reports whether the
+        source had more rows.
+        """
+        total = 0
+        created = False
+        truncated = False
+        while True:
+            batch = cur.fetchmany(_INGEST_CHUNK_ROWS)
+            if not batch:
+                break
+            if row_limit > 0 and total + len(batch) > row_limit:
+                batch = batch[: row_limit - total]
+                truncated = True
+                if not batch:
+                    break
+            df = pd.DataFrame([dict(r) for r in batch])
+            if created:
+                conn.execute(f'INSERT INTO "{safe_table}" SELECT * FROM df')
+            else:
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df'
+                )
+                created = True
+            total += len(df)
+            if truncated:
+                break
+        if not created:
+            # Empty source table: still create the target with the cursor's
+            # column names so downstream introspection sees a real table.
+            cols = ", ".join(
+                '"' + str(d[0]).replace('"', '""') + '" VARCHAR'
+                for d in (cur.description or [])
+            )
+            if cols:
+                conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" ({cols})')
+        return total, truncated
+
     def _ingest_sqlite_generic(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
@@ -886,13 +941,10 @@ class DuckDBSourceManager:
                 tables = [t for t in tables if t in table_filter]
             for table in tables:
                 safe_id = table.replace('"', '""')  # escape SQL identifier
-                rows = src.execute(f'SELECT * FROM "{safe_id}"').fetchall()
-                df = pd.DataFrame([dict(r) for r in rows])
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_id}" AS SELECT * FROM df'
-                )
-                self._row_counts[f"{cfg.id}.{table}"] = len(df)
-                logger.info("SDB  %-25s %7d rows", table, len(df))
+                cur = src.execute(f'SELECT * FROM "{safe_id}"')
+                n, _ = self._stream_cursor_into_table(conn, cur, safe_id)
+                self._row_counts[f"{cfg.id}.{table}"] = n
+                logger.info("SDB  %-25s %7d rows", table, n)
                 if table not in cfg.target_tables:
                     cfg.target_tables.append(table)
         finally:
@@ -918,21 +970,33 @@ class DuckDBSourceManager:
             pg_conn = psycopg2.connect(dsn, connect_timeout=10)
             safe_schema = schema.replace('"', '""')
             try:
-                cur = pg_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                for table in tables:
+                for i, table in enumerate(tables):
                     safe_table = table.replace('"', '""')
-                    if limit > 0:
-                        # Fetch one extra row so we can detect (and warn about)
-                        # silent truncation rather than capping invisibly.
-                        cur.execute(
-                            f'SELECT * FROM "{safe_schema}"."{safe_table}" LIMIT {limit + 1}'
+                    # Server-side (named) cursor: PostgreSQL streams rows in
+                    # batches instead of sending the whole table up front, so
+                    # neither side materialises a multi-million-row result.
+                    # Named cursors are one-shot — one per table.
+                    cur = pg_conn.cursor(
+                        name=f"fra_ingest_{i}",
+                        cursor_factory=psycopg2.extras.RealDictCursor,
+                    )
+                    cur.itersize = _INGEST_CHUNK_ROWS
+                    try:
+                        if limit > 0:
+                            # Fetch one extra row so we can detect (and warn
+                            # about) silent truncation rather than capping
+                            # invisibly.
+                            cur.execute(
+                                f'SELECT * FROM "{safe_schema}"."{safe_table}" LIMIT {limit + 1}'
+                            )
+                        else:
+                            cur.execute(f'SELECT * FROM "{safe_schema}"."{safe_table}"')
+                        n, truncated = self._stream_cursor_into_table(
+                            conn, cur, safe_table, row_limit=limit
                         )
-                    else:
-                        cur.execute(f'SELECT * FROM "{safe_schema}"."{safe_table}"')
-                    rows = cur.fetchall()
-                    truncated = limit > 0 and len(rows) > limit
+                    finally:
+                        cur.close()
                     if truncated:
-                        rows = rows[:limit]
                         logger.warning(
                             "PG   %-25s TRUNCATED at %d rows — table has more data. "
                             "Raise FRA_PG_INGEST_LIMIT (or set 0 for unlimited) to "
@@ -940,12 +1004,8 @@ class DuckDBSourceManager:
                             table,
                             limit,
                         )
-                    df = pd.DataFrame([dict(r) for r in rows])
-                    conn.execute(
-                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df'
-                    )
-                    self._row_counts[f"{cfg.id}.{table}"] = len(df)
-                    logger.info("PG   %-25s %7d rows", table, len(df))
+                    self._row_counts[f"{cfg.id}.{table}"] = n
+                    logger.info("PG   %-25s %7d rows", table, n)
                     if table not in cfg.target_tables:
                         cfg.target_tables.append(table)
             finally:

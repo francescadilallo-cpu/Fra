@@ -185,3 +185,39 @@ class TestGlossary:
         store.add_glossary_term("  MARGINE  ", "Net margin")
         terms = store.list_glossary()
         assert terms[0].term == "margine"
+
+
+# ── Semantic docs cache ────────────────────────────────────────────────────────
+
+
+class TestSemanticDocsCache:
+    def test_repeated_calls_return_cached_object(self, store):
+        store.add_entity("orders", "Orders", [], "Order header", "erp")
+        first = store.to_semantic_docs_override()
+        second = store.to_semantic_docs_override()
+        assert first is second
+
+    def test_entity_mutation_invalidates_cache(self, store):
+        store.to_semantic_docs_override()
+        e = store.add_entity("orders", "Orders", [], "Order header", "erp")
+        docs = store.to_semantic_docs_override()
+        assert [x.name for x in docs.entities] == ["orders"]
+        store.delete_entity(e.id)
+        docs = store.to_semantic_docs_override()
+        assert docs.entities == []
+
+    def test_metric_mutation_invalidates_cache(self, store):
+        store.to_semantic_docs_override()
+        m = store.add_metric("revenue", "Revenue", [], "Total sales", "EUR", True)
+        docs = store.to_semantic_docs_override()
+        assert [x.name for x in docs.metrics] == ["revenue"]
+        store.delete_metric(m.id)
+        assert store.to_semantic_docs_override().metrics == []
+
+    def test_glossary_mutation_invalidates_cache(self, store):
+        store.to_semantic_docs_override()
+        g = store.add_glossary_term("margine", "Net margin")
+        docs = store.to_semantic_docs_override()
+        assert [x.term for x in docs.glossary] == ["margine"]
+        store.delete_glossary_term(g.id)
+        assert store.to_semantic_docs_override().glossary == []
