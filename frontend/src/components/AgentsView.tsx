@@ -1362,7 +1362,7 @@ export default function AgentsView() {
           ...prev,
           [def.id]: { status: 'completed', progress: 100, logLines: prev[def.id].logLines },
         }))
-        appendLog(def.id, def.name, `✓ Completed — ${def.metrics[0].value} ${def.metrics[0].label}`, 'done')
+        appendLog(def.id, def.name, def.metrics.length > 0 ? `✓ Completed — ${def.metrics[0].value} ${def.metrics[0].label}` : '✓ Completed', 'done')
         setExpanded(prev => ({ ...prev, [def.id]: true }))
         const critCount = def.findings.filter(f => f.severity === 'critical').length
         toast(

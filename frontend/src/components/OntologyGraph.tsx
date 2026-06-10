@@ -435,11 +435,11 @@ ${extendedOntology.edges.map(e => `${prefix}:${e.label} a owl:ObjectProperty ;
 
   const sparqlExamples = [
     {
-      title: `Query ${extendedOntology.nodes[0].data.label} with relation`,
+      title: `Query ${extendedOntology.nodes[0]?.data.label ?? 'Entity'} with relation`,
       code: `PREFIX ${prefix}: <${baseUri}>
 
 SELECT ?entity ?related WHERE {
-  ?entity a ${prefix}:${extendedOntology.nodes[0].data.label} ;
+  ?entity a ${prefix}:${extendedOntology.nodes[0]?.data.label ?? 'Entity'} ;
           ${prefix}:${extendedOntology.edges[0]?.label ?? 'hasRelation'} ?related .
 }
 LIMIT 100`,
@@ -482,7 +482,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
     "properties": {
       "class": {
         "type": "string",
-        "description": "Ontology class URI (e.g., ${prefix}:${sector.ontology.nodes[0].data.label})"
+        "description": "Ontology class URI (e.g., ${prefix}:${extendedOntology.nodes[0]?.data.label ?? sector.ontology.nodes[0]?.data.label ?? 'Entity'})"
       },
       "filter": { "type": "object" },
       "limit": { "type": "integer", "default": 100 }
