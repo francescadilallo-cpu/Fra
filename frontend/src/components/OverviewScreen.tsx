@@ -150,7 +150,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       <section className="px-4 md:px-8 lg:px-12 py-14 border-b border-slate-100">
         <div className="max-w-4xl">
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
-            {IS_DEMO_MODE ? `Demo — ${sector.name}` : `Live — ${sector.name}`}
+            {IS_DEMO_MODE ? `Demo — ${sector.name}` : 'Live workspace'}
           </span>
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
             Semantic<span className="text-teal-600">Intelligence</span>

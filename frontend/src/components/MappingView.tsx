@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Table2, Pencil, Check, X, Search, GitBranch, ChevronDown, ChevronRight, BookOpen, AlertTriangle, Plus, Tag } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
+import { workspaceLabel } from '../lib/demoMode'
 import type { OntologyNode } from '../types'
 import { api } from '../api/client'
 
@@ -401,7 +402,7 @@ export default function MappingView() {
               <h1 className="text-2xl font-bold text-slate-900">Semantic Layer</h1>
             </div>
             <p className="text-slate-400 mt-1 text-sm">
-              {sector.name} · {totalTables} tables · {totalFields} field mappings · semantic definitions and ambiguities
+              {workspaceLabel(sector.name)} · {totalTables} tables · {totalFields} field mappings · semantic definitions and ambiguities
             </p>
           </div>
           <div className="flex items-center gap-3">

@@ -19,6 +19,7 @@ import {
 import { SECTORS } from '../data/sectors'
 import { showConfirm } from './ConfirmDialog'
 import { getLiveConfig, type LiveConfig } from '../api/semantic'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Type color map (same as OntologyGraph) ───────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -831,6 +832,8 @@ function buildAddClassWithLinkIntent(
 function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string | number>; labelStyle: Record<string, string | number> }[] } }, sectorId: string, liveConfig?: LiveConfig | null): { nodes: Node[]; edges: Edge[] } {
   const ext = loadExtension(sectorId)
 
+  // Live workspaces start from scratch: only the backend-derived ontology
+  // (already mode-filtered) or user extensions — never the demo sector schema.
   const sourceNodes = liveConfig?.ontology.nodes.length
     ? liveConfig.ontology.nodes.map((n) => ({
         id: n.id,
@@ -838,10 +841,10 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
         position: n.position,
         data: n.data,
       }))
-    : sector.ontology.nodes
+    : (IS_DEMO_MODE ? sector.ontology.nodes : [])
   const sourceEdges = liveConfig?.ontology.edges?.length
     ? liveConfig.ontology.edges
-    : (sector.ontology.edges ?? [])
+    : (IS_DEMO_MODE ? (sector.ontology.edges ?? []) : [])
 
   // Base nodes (possibly with extra properties added via builder)
   const baseNodes: Node[] = sourceNodes.map((n) => {
@@ -930,9 +933,11 @@ export default function OntologyBuilder() {
     () => ({
       id: 'm-welcome',
       role: 'assistant',
-      text:
-        `Hi! I am the Ontology Builder AI. I can help you modify the **${sector.name}** ontology in natural language. ` +
-        'Describe a new entity, relation, or property — I propose changes and you approve.',
+      text: IS_DEMO_MODE
+        ? `Hi! I am the Ontology Builder AI. I can help you modify the **${sector.name}** ontology in natural language. ` +
+          'Describe a new entity, relation, or property — I propose changes and you approve.'
+        : 'Hi! I am the Ontology Builder AI. Your ontology starts empty — describe the entities of your business in natural language ' +
+          '(e.g. "Add entity Customer with name, email") and I will build it with you, change by change.',
     }),
     [sector.name],
   )
@@ -942,8 +947,12 @@ export default function OntologyBuilder() {
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
 
+  // Canned demo intents reference demo entities (Product, Order…) so they are
+  // demo-only; in live mode every prompt goes through the dynamic parser.
   const intents = useMemo(
-    () => buildIntents(sectorId, nodes.map((n) => (n.data as unknown as BuilderNodeData).label)),
+    () => IS_DEMO_MODE
+      ? buildIntents(sectorId, nodes.map((n) => (n.data as unknown as BuilderNodeData).label))
+      : [],
     [sectorId, nodes],
   )
 
@@ -1329,7 +1338,15 @@ export default function OntologyBuilder() {
     }
   }, [pending])
 
-  const quickPrompts = intents.map((i) => i.prompt)
+  // In live mode the suggestions are generic starters handled by the dynamic
+  // NLP parser (they create standalone entities, no demo references).
+  const quickPrompts = IS_DEMO_MODE
+    ? intents.map((i) => i.prompt)
+    : [
+        'Add entity Customer with name, email, country',
+        'Add entity Product with name, price, category',
+        'Add entity Order with orderDate, total, status',
+      ]
   const pendingCount = pending.filter((c) => c.status === 'pending').length
 
   // Count of saved extensions for the badge

@@ -14,3 +14,17 @@ function getModeFromToken(): 'demo' | 'live' {
 }
 
 export const IS_DEMO_MODE = getModeFromToken() !== 'live'
+
+/**
+ * Label for the active workspace in page headers.
+ * Demo: the sector name (Manufacturing, Retail…) — sectors are a demo concept.
+ * Live: the user's company name from onboarding, falling back to "Live workspace".
+ */
+export function workspaceLabel(sectorName: string): string {
+  if (IS_DEMO_MODE) return sectorName
+  try {
+    return localStorage.getItem('si-company-name') ?? 'Live workspace'
+  } catch {
+    return 'Live workspace'
+  }
+}

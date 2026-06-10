@@ -15,7 +15,7 @@ import {
   type BackendSource, type ParamField,
 } from '../api/sources'
 import { buildSemanticLayer, semanticSources } from '../api/semantic'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -753,7 +753,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.name} · Connect business systems or upload files — data ingests into DuckDB and becomes queryable instantly
+          {workspaceLabel(sector.name)} · Connect business systems or upload files — data ingests into DuckDB and becomes queryable instantly
         </p>
       </div>
 

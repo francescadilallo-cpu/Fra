@@ -181,7 +181,9 @@ function CompanyMenu({ companyName }: { companyName: string }) {
               <Check className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
               <p className="text-sm font-bold text-slate-900 truncate">{companyName}</p>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{sector.icon} {sector.name} · {sector.domain}</p>
+            {IS_DEMO_MODE && (
+              <p className="text-xs text-slate-500 mt-0.5">{sector.icon} {sector.name} · {sector.domain}</p>
+            )}
           </div>
 
           {/* Other saved companies */}
@@ -304,8 +306,13 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
             <Database className="w-3 h-3" />Live
           </span>
         )}
-        <div className="w-px h-5 bg-slate-200" />
-        <SectorSwitcher />
+        {/* Sectors are a demo concept — live workspaces have a single, real one */}
+        {IS_DEMO_MODE && (
+          <>
+            <div className="w-px h-5 bg-slate-200" />
+            <SectorSwitcher />
+          </>
+        )}
       </div>
     </div>
   )

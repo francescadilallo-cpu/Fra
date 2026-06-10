@@ -5,6 +5,7 @@ import {
   Clock, Lock, Globe,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import {
   getSectorCompliance,
   computeComplianceScore,
@@ -264,8 +265,8 @@ export default function ComplianceView() {
               <h1 className="text-xl font-bold text-gray-900">Compliance &amp; Governance</h1>
             </div>
             <p className="text-sm text-gray-500">
-              GDPR data map and EU AI Act risk register — sector{' '}
-              <span className="font-medium text-gray-700">{sector.name}</span>
+              GDPR data map and EU AI Act risk register —{IS_DEMO_MODE ? ' sector' : ''}{' '}
+              <span className="font-medium text-gray-700">{workspaceLabel(sector.name)}</span>
             </p>
           </div>
           <div className="flex items-center gap-2">

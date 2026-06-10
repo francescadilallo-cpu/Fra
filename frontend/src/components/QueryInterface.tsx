@@ -9,6 +9,7 @@ import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQues
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
+import { workspaceLabel } from '../lib/demoMode'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -911,7 +912,7 @@ export default function QueryInterface() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
             <p className="text-slate-400 mt-1 text-sm">
-              {sector.name} · Ask questions in natural language — powered by the semantic layer
+              {workspaceLabel(sector.name)} · Ask questions in natural language — powered by the semantic layer
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1134,7 +1135,7 @@ export default function QueryInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Ask something about ${sector.name} data…`}
+            placeholder={`Ask something about ${workspaceLabel(sector.name)} data…`}
             rows={2}
             disabled={loading}
             className="flex-1 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 resize-none outline-none transition-colors disabled:opacity-50"

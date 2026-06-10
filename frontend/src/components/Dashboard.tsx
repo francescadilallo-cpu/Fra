@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
 import { semanticStatus, getLiveConfig, getDraft, type SemanticStatus, type LiveConfig, type SemanticDraft } from '../api/semantic'
@@ -505,7 +506,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-900">Welcome, {companyName} 👋</p>
             <p className="text-xs text-slate-600 mt-0.5">
-              Your semantic layer is ready · {ontology.nodes.length} entities · {sector.name} · 1 recommended agent pre-configured
+              Your semantic layer is ready · {ontology.nodes.length} entities · {workspaceLabel(sector.name)}{IS_DEMO_MODE ? ' · 1 recommended agent pre-configured' : ''}
             </p>
           </div>
           <button
@@ -520,7 +521,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1 text-sm">{sector.name} · {sector.domain}</p>
+          <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
         </div>
         <button
           onClick={handleGenerateReport}

@@ -4,7 +4,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateMockData } from '../data/mockDataGenerator'
 import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { OntologyNode } from '../types'
 
 // ── AW entity → source system map ─────────────────────────────────────────────
@@ -374,7 +374,7 @@ export default function DataExplorer() {
           )}
         </div>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.name} · Browse live data for each entity
+          {workspaceLabel(sector.name)} · Browse live data for each entity
           {selected && rowCount > 0 && (
             <span className="ml-2 text-teal-600 font-medium">{rowCount.toLocaleString('en-US')} records in production DB</span>
           )}
