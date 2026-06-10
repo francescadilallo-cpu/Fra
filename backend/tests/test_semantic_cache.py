@@ -277,7 +277,7 @@ def test_cache_namespace_is_bumped_on_full_semantic_rebuild(
     monkeypatch.setattr(
         app_module,
         "_get_semantic_draft",
-        lambda: {"entities": [], "metrics": [], "relations": []},
+        lambda hidden=frozenset(): {"entities": [], "metrics": [], "relations": []},
     )
     monkeypatch.setattr(app_module, "generate_templates_from_draft", lambda draft: [])
 

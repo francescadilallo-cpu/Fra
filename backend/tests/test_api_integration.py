@@ -690,3 +690,54 @@ def test_add_source_cannot_hijack_a_protected_default_source(client, admin_heade
     match = next(s for s in listing_after.json() if s["id"] == target["id"])
     assert match["is_default"] is True
     assert match["connector_type"] == target["connector_type"]
+
+
+# ── Demo vs live mode source visibility ───────────────────────────────────────
+# Live-mode users get a from-scratch workspace: sources flagged is_default=True
+# (the pre-seeded demo scenario) must be hidden from /api/sources, while
+# demo-mode users see everything. The JWT carries the mode chosen at login.
+
+
+def test_live_mode_hides_default_demo_sources(client):
+    import uuid
+
+    from app.connectors.source_registry import SourceConfig, get_source_registry
+
+    registry = get_source_registry()
+    probe_id = f"demo-visibility-probe-{uuid.uuid4().hex[:12]}"
+    registry.upsert(
+        SourceConfig(
+            id=probe_id,
+            connector_type="csv",
+            label="Demo visibility probe",
+            target_tables=["demo_probe_tbl"],
+            is_default=True,
+        )
+    )
+    try:
+        demo_login = client.post(
+            "/api/auth/token",
+            data={"username": "user_u", "password": "user_pw", "mode": "demo"},
+        )
+        assert demo_login.status_code == 200, demo_login.text
+        demo_headers = {"Authorization": f"Bearer {demo_login.json()['access_token']}"}
+
+        live_login = client.post(
+            "/api/auth/token",
+            data={"username": "user_u", "password": "user_pw", "mode": "live"},
+        )
+        assert live_login.status_code == 200, live_login.text
+        live_headers = {"Authorization": f"Bearer {live_login.json()['access_token']}"}
+
+        demo_ids = {
+            s["id"] for s in client.get("/api/sources", headers=demo_headers).json()
+        }
+        live_ids = {
+            s["id"] for s in client.get("/api/sources", headers=live_headers).json()
+        }
+
+        assert probe_id in demo_ids, "demo mode must see default demo sources"
+        assert probe_id not in live_ids, "live mode must hide default demo sources"
+    finally:
+        registry.patch(probe_id, is_default=False)
+        registry.remove(probe_id)

@@ -681,13 +681,66 @@ def _sync_context_docs_to_layer() -> None:
     layer.set_context_docs(docs)
 
 
-def _get_semantic_draft() -> dict:
-    """Return the current semantic layer state as an editable draft dict."""
+def _hidden_demo_tables(user: UserPrincipal) -> frozenset[str]:
+    """Demo-source tables to hide from live-mode users.
+
+    Demo sources are registry rows flagged is_default=True (the pre-seeded
+    Adventure Works scenario). Live-mode users get a from-scratch experience:
+    everything derived from these tables is filtered out of the semantic read
+    endpoints. Demo-mode users see everything.
+    """
+    if user.mode != "live":
+        return frozenset()
+    from .connectors.source_registry import get_source_registry
+
+    tables: set[str] = set()
+    for cfg in get_source_registry().list():
+        if cfg.is_default:
+            tables.update(cfg.target_tables)
+    return frozenset(tables)
+
+
+def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
+    """Node/edge counts of the KG ignoring nodes sourced from hidden tables."""
+    if not hidden:
+        return kg.node_count, kg.edge_count
+    visible: set[str] = set()
+    for node_id, data in kg.all_nodes():
+        prov = data.get("provenance") or []
+        table = (
+            prov[0].get("table", "")
+            if prov and isinstance(prov[0], dict)
+            else node_id.split(":")[0]
+        )
+        if table in hidden:
+            continue
+        visible.add(node_id)
+    edge_count = sum(
+        1 for src, dst, _ in kg.iter_edges() if src in visible and dst in visible
+    )
+    return len(visible), edge_count
+
+
+def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
+    """Return the current semantic layer state as an editable draft dict.
+
+    *hidden* is a set of table names whose derived entities, relations and
+    templates must be excluded (live-mode users hiding the demo dataset).
+    """
     catalog = _semantic_state.get("catalog")
     kg = _semantic_state.get("kg")
 
-    entities = catalog.get_draft_entities() if catalog else []
+    all_entities = catalog.get_draft_entities() if catalog else []
+    entities = [e for e in all_entities if e["table"] not in hidden]
     metrics = catalog.get_draft_metrics() if catalog else []
+    # Relations reference KG node-id prefixes, which can be entity names or
+    # table names depending on the build path — hide both forms.
+    hidden_keys = set(hidden) | {
+        e["name"] for e in all_entities if e["table"] in hidden
+    }
+    if hidden and not entities:
+        # Live workspace with no real sources yet: metrics all come from demo.
+        metrics = []
 
     relations: list[dict] = []
     if kg:
@@ -696,6 +749,8 @@ def _get_semantic_draft() -> dict:
             edge_type = data.get("type", "")
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
+            if src_table in hidden_keys or dst_table in hidden_keys:
+                continue
             key = (src_table, dst_table, edge_type)
             if key not in seen:
                 seen.add(key)
@@ -724,12 +779,20 @@ def _get_semantic_draft() -> dict:
         if c.connector_type == "context_doc"
     ]
 
+    templates = catalog.list_templates() if catalog else []
+    if hidden:
+        templates = [
+            t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
+        ]
+        if not entities:
+            templates = []
+
     return {
         "entities": entities,
         "relations": relations,
         "metrics": metrics,
         "context_docs": context_docs,
-        "templates": catalog.list_templates() if catalog else [],
+        "templates": templates,
         "loaded": _semantic_state.get("loaded", False),
         "built_at": datetime.utcnow().isoformat(),
     }
@@ -1334,7 +1397,7 @@ def get_table_data(
 
 @app.get("/api/semantic/status")
 def semantic_status(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     """Return the current status of the semantic layer (loaded/not loaded)."""
     if not _semantic_state["loaded"]:
@@ -1349,16 +1412,33 @@ def semantic_status(
         }
     kg = _semantic_state["kg"]
     catalog = _semantic_state["catalog"]
+    hidden = _hidden_demo_tables(current_user)
+    tables = (
+        list(_mgr.describe().tables)
+        if (_mgr := _semantic_state.get("mgr")) is not None
+        else ["erp", "crm", "hr_pim"]
+    )
+    if hidden:
+        draft_entities = catalog.get_draft_entities()
+        visible = [e for e in draft_entities if e["table"] not in hidden]
+        entities = [e["name"] for e in visible]
+        metadata_rows = sum(e.get("record_count") or 0 for e in visible)
+        kg_nodes, kg_edges = _kg_counts_excluding(kg, hidden)
+        tables = [t for t in tables if t not in hidden]
+        dedup_count = 0
+    else:
+        entities = catalog.list_entities()
+        metadata_rows = catalog.row_count()
+        kg_nodes, kg_edges = kg.node_count, kg.edge_count
+        dedup_count = kg.dedup_count
     return {
         "loaded": True,
-        "entities": catalog.list_entities(),
-        "kg_nodes": kg.node_count,
-        "kg_edges": kg.edge_count,
-        "metadata_rows": catalog.row_count(),
-        "sources": list(_mgr.describe().tables)
-        if (_mgr := _semantic_state.get("mgr")) is not None
-        else ["erp", "crm", "hr_pim"],
-        "dedup_count": kg.dedup_count,
+        "entities": entities,
+        "kg_nodes": kg_nodes,
+        "kg_edges": kg_edges,
+        "metadata_rows": metadata_rows,
+        "sources": tables,
+        "dedup_count": dedup_count,
     }
 
 
@@ -1739,16 +1819,24 @@ def sync_source(
 
 @app.get("/api/semantic/sources")
 def semantic_sources(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     """Return real data source metadata with freshness."""
     _ensure_semantic_loaded()
     mgr = _semantic_state.get("mgr")
+    hidden = _hidden_demo_tables(current_user)
 
     # Prefer unified mgr-based source info (reflects actual registered sources)
     if mgr is not None:
         try:
             meta = mgr.describe()
+            tables = [t for t in meta.tables if t not in hidden]
+            record_counts = {
+                t: c for t, c in meta.record_counts.items() if t not in hidden
+            }
+            if hidden and not tables:
+                # Live workspace with no real sources yet
+                return []
             built_at = meta.loaded_at
             if built_at is not None:
                 age_h = (datetime.utcnow() - built_at).total_seconds() / 3600
@@ -1757,16 +1845,16 @@ def semantic_sources(
                 )
             else:
                 freshness = "unknown"
-            non_empty = sum(1 for c in meta.record_counts.values() if c > 0)
-            quality = round(100 * non_empty / max(len(meta.tables), 1))
+            non_empty = sum(1 for c in record_counts.values() if c > 0)
+            quality = round(100 * non_empty / max(len(tables), 1))
             return [
                 {
                     "id": "unified",
                     "name": meta.name,
                     "source_type": meta.source_type,
-                    "tables": meta.tables,
-                    "record_counts": meta.record_counts,
-                    "total_rows": sum(meta.record_counts.values()),
+                    "tables": tables,
+                    "record_counts": record_counts,
+                    "total_rows": sum(record_counts.values()),
                     "loaded_at": built_at.isoformat() if built_at else None,
                     "quality_score": quality,
                     "freshness_status": freshness,
@@ -2081,14 +2169,15 @@ def semantic_coverage(
     summary="Rebuild semantic layer and return draft config",
 )
 async def build_semantic_layer(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     """Force a full rebuild of the KG + catalog, then return the draft config."""
     import asyncio
 
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, reload_semantic)
-    # Auto-generate templates from the freshly-built schema
+    # Auto-generate templates from the freshly-built schema (always from the
+    # full unfiltered draft — templates are shared system-wide)
     catalog = _semantic_state.get("catalog")
     layer = _semantic_state.get("layer")
     if catalog is not None and layer is not None:
@@ -2097,7 +2186,7 @@ async def build_semantic_layer(
         n = catalog.upsert_auto_templates(auto_tpls)
         logger.info("Auto-generated %d query templates from semantic layer", n)
         layer.set_templates(catalog.list_templates())
-    return _get_semantic_draft()
+    return _get_semantic_draft(_hidden_demo_tables(current_user))
 
 
 @app.get(
@@ -2106,10 +2195,10 @@ async def build_semantic_layer(
     summary="Get current semantic layer draft (entities, relations, metrics, context)",
 )
 def get_semantic_draft_endpoint(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     _ensure_semantic_loaded()
-    return _get_semantic_draft()
+    return _get_semantic_draft(_hidden_demo_tables(current_user))
 
 
 @app.patch(
@@ -2541,10 +2630,20 @@ def get_live_config(
 
     catalog = _semantic_state.get("catalog")
     kg = _semantic_state.get("kg")
+    hidden = _hidden_demo_tables(_user)
 
     # ── Entities & relations from catalog/kg ──────────────────────────────────
-    entities: list[dict] = catalog.get_draft_entities() if catalog else []
+    all_entities: list[dict] = catalog.get_draft_entities() if catalog else []
+    entities = [e for e in all_entities if e["table"] not in hidden]
     metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
+    if hidden and not entities:
+        # Live workspace with no real sources yet: metrics all come from demo.
+        metrics_raw = []
+    # Relations reference KG node-id prefixes, which can be entity names or
+    # table names depending on the build path — hide both forms.
+    hidden_keys = set(hidden) | {
+        e["name"] for e in all_entities if e["table"] in hidden
+    }
 
     relations: list[dict] = []
     if kg:
@@ -2553,6 +2652,8 @@ def get_live_config(
             edge_type = data.get("type", "")
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
+            if src_table in hidden_keys or dst_table in hidden_keys:
+                continue
             key = (src_table, dst_table, edge_type)
             if key not in seen:
                 seen.add(key)
@@ -2572,6 +2673,8 @@ def get_live_config(
 
     registry = get_source_registry()
     sources = [c for c in registry.list() if c.connector_type not in ("context_doc",)]
+    if hidden:
+        sources = [c for c in sources if not c.is_default]
     connector_names = [c.label for c in sources] if sources else []
 
     # Build domain string from connector types
