@@ -3,7 +3,7 @@ import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, 
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig } from '../api/semantic'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -91,6 +91,51 @@ function buildManufacturingLogs(
       { text: '✓ Ontology entities registered', type: 'ok' },
       { text: '✓ Semantic field definitions indexed', type: 'ok' },
       { text: '✓ Query engine ready — fatturato disambiguation active', type: 'ok' },
+      { text: '✓ Semantic layer ready', type: 'ok' },
+    ],
+  }
+}
+
+// Live workspaces: build neutral pipeline logs from the user's actual tables,
+// with none of the demo-scenario narrative (OrionSales, ClientHub, …).
+function buildLiveLogs(
+  counts: Record<string, number>,
+  kgNodes: number,
+  kgEdges: number,
+): Record<StepId, StepLog[]> {
+  const tables = Object.entries(counts)
+  const total = tables.reduce((s, [, n]) => s + n, 0)
+  const connect: StepLog[] = tables.length === 0
+    ? [{ text: 'No data sources connected — add a source in Data Sources', type: 'warn' }]
+    : [
+        { text: 'Initializing connection pool...', type: 'info' },
+        ...tables.map(([t, n]): StepLog => ({ text: `✓ ${t} — ${n.toLocaleString()} rows`, type: 'ok' })),
+        { text: `${tables.length} source table${tables.length !== 1 ? 's' : ''} ready`, type: 'ok' },
+      ]
+  return {
+    connect,
+    extract: tables.length === 0
+      ? [{ text: 'Nothing to extract', type: 'warn' }]
+      : [
+          { text: 'Starting extraction job...', type: 'info' },
+          ...tables.map(([t, n]): StepLog => ({ text: `→ ${t}: ${n.toLocaleString()} rows`, type: 'info' })),
+          { text: `✓ ${total.toLocaleString()} rows extracted`, type: 'ok' },
+        ],
+    map: tables.length === 0
+      ? [{ text: 'No mappings to resolve', type: 'warn' }]
+      : [
+          { text: 'Loading semantic mappings...', type: 'info' },
+          { text: 'Discovering column types and keys...', type: 'info' },
+          { text: `✓ ${total.toLocaleString()} rows mapped`, type: 'ok' },
+        ],
+    enrich: [
+      { text: 'Building Knowledge Graph nodes and edges...', type: 'info' },
+      { text: `✓ ${kgNodes.toLocaleString()} KG nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
+      { text: `✓ ${kgEdges.toLocaleString()} relationships indexed`, type: kgEdges > 0 ? 'ok' : 'info' },
+    ],
+    index: [
+      { text: 'Writing to semantic layer index...', type: 'info' },
+      { text: '✓ Ontology entities registered', type: 'ok' },
       { text: '✓ Semantic layer ready', type: 'ok' },
     ],
   }
@@ -336,14 +381,22 @@ export default function ProcessView() {
 
   useEffect(() => {
     getLiveConfig().then(setLiveConfig).catch(() => {})
-    if (sectorId === 'manufacturing') {
+    if (!IS_DEMO_MODE || sectorId === 'manufacturing') {
       Promise.all([
         semanticSources().catch(() => []),
         semanticStatus().catch(() => null),
       ]).then(([srcs, status]) => {
         const counts: Record<string, number> = {}
         srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
-        if (Object.keys(counts).length > 0) {
+        if (!IS_DEMO_MODE) {
+          // Live workspace: always neutral logs from real tables (or an
+          // empty-state message), never the demo narrative.
+          setLiveSectorLogs(buildLiveLogs(
+            counts,
+            status?.kg_nodes ?? 0,
+            status?.kg_edges ?? 0,
+          ))
+        } else if (Object.keys(counts).length > 0) {
           setLiveSectorLogs(buildManufacturingLogs(
             counts,
             status?.dedup_count ?? 0,
@@ -414,7 +467,9 @@ export default function ProcessView() {
       setElapsed(Date.now() - startTimeRef.current)
     }, 80)
 
-    const sectorLogs = (sectorId === 'manufacturing' && liveSectorLogs) ? liveSectorLogs : (SECTOR_LOGS[sectorId] ?? SECTOR_LOGS.manufacturing)
+    const sectorLogs = !IS_DEMO_MODE
+      ? (liveSectorLogs ?? buildLiveLogs({}, 0, 0))
+      : (sectorId === 'manufacturing' && liveSectorLogs) ? liveSectorLogs : (SECTOR_LOGS[sectorId] ?? SECTOR_LOGS.manufacturing)
     let offset = 0
 
     for (const step of PIPELINE_STEPS) {
@@ -458,23 +513,25 @@ export default function ProcessView() {
 
   const progressPct = Math.min(100, Math.round((elapsed / TOTAL_MS) * 100))
   const activeStepIdx = PIPELINE_STEPS.findIndex(s => statuses[s.id] === 'running')
-  const baseSummary = SECTOR_SUMMARY[sectorId] ?? SECTOR_SUMMARY.manufacturing
-  const summary = sectorId === 'manufacturing' && liveSectorLogs
+  const baseSummary = IS_DEMO_MODE
+    ? (SECTOR_SUMMARY[sectorId] ?? SECTOR_SUMMARY.manufacturing)
+    : { rows: '0', entities: 0, enrichments: '0', triples: '0' }
+  const summary = (!IS_DEMO_MODE || sectorId === 'manufacturing') && liveSectorLogs
     ? {
         ...baseSummary,
         rows: liveSectorLogs.extract.find(l => l.text.startsWith('✓') && l.text.includes('rows extracted'))?.text.match(/[\d,]+/)?.[0] ?? baseSummary.rows,
         enrichments: String(liveConfig?.ontology?.nodes?.length ?? baseSummary.entities),
       }
     : baseSummary
-  const funnel = liveConfig?.funnel ?? sector.funnel
-  const processStages = (liveConfig?.process_stages?.length ? liveConfig.process_stages : sector.processStages)
+  const funnel = liveConfig?.funnel ?? (IS_DEMO_MODE ? sector.funnel : [])
+  const processStages = (liveConfig?.process_stages?.length ? liveConfig.process_stages : (IS_DEMO_MODE ? sector.processStages : []))
   const maxCount = funnel[0]?.count ?? 1
 
   return (
     <div className="p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Process</h1>
-        <p className="text-slate-500 mt-1 text-sm">{sector.name} · {sector.domain}</p>
+        <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
       </div>
 
       {/* ── Pipeline executor ─────────────────────────────────────────────── */}
@@ -645,7 +702,7 @@ export default function ProcessView() {
           })}
         </div>
         <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
-          <span>Conversion rate: <strong className="text-teal-600">{Math.round((funnel[funnel.length - 1]?.count / Math.max(1, funnel[0]?.count)) * 100)}%</strong></span>
+          <span>Conversion rate: <strong className="text-teal-600">{funnel.length > 0 ? Math.round(((funnel[funnel.length - 1]?.count ?? 0) / Math.max(1, funnel[0]?.count ?? 1)) * 100) : 0}%</strong></span>
           <span>Stages: <strong className="text-teal-600">{funnel.length}</strong></span>
           {runState === 'done' && (
             <span className="flex items-center gap-1 text-teal-600">
@@ -679,7 +736,7 @@ export default function ProcessView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {ACTIVE_CASES_BY_SECTOR[sectorId].map(c => {
+              {(IS_DEMO_MODE ? ACTIVE_CASES_BY_SECTOR[sectorId] : []).map(c => {
                 const stageColor = isAWDemo
                   ? (STAGE_COLORS_AW[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
                   : (STAGE_COLORS[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
@@ -705,6 +762,9 @@ export default function ProcessView() {
               })}
             </tbody>
           </table>
+          {!IS_DEMO_MODE && (
+            <p className="py-6 text-center text-sm text-slate-400">No active cases yet — they will appear here once your data sources are connected.</p>
+          )}
         </div>
         {isAWDemo && (
           <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
