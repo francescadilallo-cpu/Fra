@@ -28,3 +28,14 @@ export function workspaceLabel(sectorName: string): string {
     return 'Live workspace'
   }
 }
+
+/**
+ * Mode-scoped storage namespace for sector-keyed user data (query history,
+ * custom agents, semantic rules, …). The same browser can be used for both
+ * demo and live sessions; without scoping, demo experiments leak into the
+ * live workspace. Demo keeps the bare sector id so existing saved data
+ * survives.
+ */
+export function modeScopedSector(sectorId: string): string {
+  return IS_DEMO_MODE ? sectorId : `live-${sectorId}`
+}
