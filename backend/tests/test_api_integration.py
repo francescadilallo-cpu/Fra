@@ -828,3 +828,59 @@ def test_builtin_semantic_definitions_hidden_in_live_mode(
         assert not any(d["is_builtin"] for d in live.json()), (
             f"live mode must hide builtin rows on {endpoint}"
         )
+
+
+def test_hidden_demo_tables_cover_schema_prefixed_and_legacy_names():
+    # Regression: the unified DuckDB snapshot exposes demo tables as
+    # "crm.account"/"erp.sales_order_header", and the semantic catalog uses
+    # legacy aliases like "dipendenti_hr". Exact-match filtering against bare
+    # registry names let all of them leak through to live-mode users.
+    from app.main import UserPrincipal, _hidden_demo_tables
+
+    hidden = _hidden_demo_tables(UserPrincipal(username="t", role="user", mode="live"))
+    for name in (
+        "account",
+        "crm.account",
+        "erp.sales_order_header",
+        "hr.hr_employees",
+        "pim.pim_products",
+        "dipendenti_hr",
+        "product_catalog_pim",
+        "hr_pim.dipendenti_hr",
+        "_build_meta",
+    ):
+        assert name in hidden, f"{name} must be hidden in live mode"
+
+    assert (
+        _hidden_demo_tables(UserPrincipal(username="t", role="user", mode="demo"))
+        == frozenset()
+    )
+
+
+def test_semantic_status_live_mode_is_empty(
+    client, demo_mode_headers, live_mode_headers
+):
+    # The test environment may not build the demo KG, so the demo side only
+    # checks the endpoint works; the regression target is live-mode emptiness.
+    demo = client.get("/api/semantic/status", headers=demo_mode_headers)
+    assert demo.status_code == 200, demo.text
+
+    live = client.get("/api/semantic/status", headers=live_mode_headers)
+    assert live.status_code == 200, live.text
+    body = live.json()
+    assert body["entities"] == []
+    assert body["kg_nodes"] == 0
+    assert body["kg_edges"] == 0
+    assert body["sources"] == []
+
+
+def test_semantic_sources_live_mode_is_empty(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/semantic/sources", headers=demo_mode_headers)
+    assert demo.status_code == 200, demo.text
+    assert sum(len(s["tables"]) for s in demo.json()) > 0
+
+    live = client.get("/api/semantic/sources", headers=live_mode_headers)
+    assert live.status_code == 200, live.text
+    assert live.json() == []

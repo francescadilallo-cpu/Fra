@@ -684,22 +684,56 @@ def _sync_context_docs_to_layer() -> None:
     layer.set_context_docs(docs)
 
 
+# Adventure Works demo scenario tables, by every name the codebase knows them
+# under: registry target tables, the legacy file-connector aliases used by the
+# semantic catalog and KG provenance, and the internal build-metadata table.
+# This must be a static set (not derived from the registry) because the demo
+# data also ships inside the unified DuckDB snapshot, which loads even when
+# FRA_SEED_DEMO_SOURCES is off and the registry is empty.
+_DEMO_SCENARIO_TABLES: frozenset[str] = frozenset(
+    {
+        "account",
+        "contact",
+        "address",
+        "account_address",
+        "state_province",
+        "hr_employees",
+        "pim_products",
+        "sales_order_header",
+        "sales_order_line",
+        "salesperson",
+        "territory",
+        "offer",
+        "dipendenti_hr",
+        "product_catalog_pim",
+        "_build_meta",
+    }
+)
+
+# Schema prefixes under which the demo tables appear (unified DuckDB snapshot
+# schemas plus the legacy hr_pim file-connector namespace).
+_DEMO_SCHEMA_PREFIXES = ("erp", "crm", "hr", "pim", "hr_pim")
+
+
 def _hidden_demo_tables(user: UserPrincipal) -> frozenset[str]:
     """Demo-source tables to hide from live-mode users.
 
-    Demo sources are registry rows flagged is_default=True (the pre-seeded
-    Adventure Works scenario). Live-mode users get a from-scratch experience:
-    everything derived from these tables is filtered out of the semantic read
-    endpoints. Demo-mode users see everything.
+    Live-mode users get a from-scratch experience: everything derived from the
+    pre-seeded Adventure Works scenario is filtered out of the semantic read
+    endpoints. Demo-mode users see everything. The set covers bare table names,
+    schema-prefixed variants (``crm.account``) and registry is_default sources.
     """
     if user.mode != "live":
         return frozenset()
     from .connectors.source_registry import get_source_registry
 
-    tables: set[str] = set()
+    tables: set[str] = set(_DEMO_SCENARIO_TABLES)
     for cfg in get_source_registry().list():
         if cfg.is_default:
             tables.update(cfg.target_tables)
+            tables.update(f"{cfg.id}.{t}" for t in cfg.target_tables)
+    for prefix in _DEMO_SCHEMA_PREFIXES:
+        tables.update(f"{prefix}.{t}" for t in _DEMO_SCENARIO_TABLES)
     return frozenset(tables)
 
 
