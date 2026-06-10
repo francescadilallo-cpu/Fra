@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Network, BookOpenCheck } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Network, BookOpenCheck, Sparkles, Database } from 'lucide-react'
 import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
@@ -7,6 +7,7 @@ import { SECTORS, type SectorId } from '../data/sectors'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import CommandPalette from './CommandPalette'
 import { showConfirm } from './ConfirmDialog'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 interface Props {
   activeTab: NavTab
@@ -292,6 +293,17 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
           <Command className="w-3 h-3" />
           <span className="font-sans font-medium">K</span>
         </button>
+        <div className="w-px h-5 bg-slate-200" />
+        {/* Mode badge — always visible so it's clear which workspace is active */}
+        {IS_DEMO_MODE ? (
+          <span className="flex items-center gap-1 text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-2 py-1">
+            <Sparkles className="w-3 h-3" />Demo
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-1">
+            <Database className="w-3 h-3" />Live
+          </span>
+        )}
         <div className="w-px h-5 bg-slate-200" />
         <SectorSwitcher />
       </div>
