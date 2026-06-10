@@ -1848,14 +1848,30 @@ class SourceResponse(BaseModel):
     is_default: bool
 
 
+def _redact_dsn(dsn: str) -> str:
+    """Mask the password in a connection-string DSN (postgres://u:pw@host/db)."""
+    return re.sub(r"://([^:/@]+):[^@]+@", r"://\1:***@", dsn)
+
+
 def _source_cfg_to_response(cfg) -> SourceResponse:
+    params: dict[str, Any] = {}
+    for k, v in cfg.params.items():
+        if k in ("api_key", "password"):
+            continue
+        if k == "inline_csv" and isinstance(v, str):
+            # The raw payload stays in the registry for rebuilds; echoing it
+            # back would put megabytes (or sensitive rows) in every sources
+            # listing.
+            params[k] = f"<inline data: {len(v.encode('utf-8'))} bytes>"
+        elif k == "dsn" and isinstance(v, str):
+            params[k] = _redact_dsn(v)
+        else:
+            params[k] = v
     return SourceResponse(
         id=cfg.id,
         connector_type=cfg.connector_type,
         label=cfg.label,
-        params={
-            k: v for k, v in cfg.params.items() if k not in ("api_key", "password")
-        },
+        params=params,
         target_tables=cfg.target_tables,
         row_count=cfg.row_count,
         status=cfg.status,

@@ -917,6 +917,59 @@ def test_add_source_rejects_reserved_table_names(client, admin_headers):
         registry.remove(probe_id)
 
 
+def test_source_response_redacts_inline_csv_and_dsn(client, admin_headers):
+    """Source params echo neither raw inline payloads nor DSN credentials.
+
+    inline_csv can be megabytes (and contain sensitive rows) — every sources
+    listing would ship it back to the browser. A DSN embeds the database
+    password outright.
+    """
+    csv_payload = "col_a,col_b\n" + "\n".join(f"{i},{i * 2}" for i in range(50))
+    r = client.post(
+        "/api/sources",
+        json={
+            "connector_type": "csv",
+            "label": "redaction probe",
+            "params": {"table_name": "redaction_probe", "inline_csv": csv_payload},
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    try:
+        body = r.json()
+        assert "col_a" not in json.dumps(body)
+        assert body["params"]["inline_csv"].startswith("<inline data:")
+
+        listed = client.get("/api/sources", headers=admin_headers).json()
+        mine = next(s for s in listed if s["id"] == sid)
+        assert "col_a" not in json.dumps(mine)
+
+        # DSN password redaction
+        r2 = client.post(
+            "/api/sources",
+            json={
+                "connector_type": "postgresql",
+                "label": "pg probe",
+                "params": {
+                    "dsn": "postgresql://app_user:s3cret-pw@db.internal:5432/prod",
+                    "tables": ["orders"],
+                },
+            },
+            headers=admin_headers,
+        )
+        assert r2.status_code == 201, r2.text
+        sid2 = r2.json()["id"]
+        try:
+            dsn = r2.json()["params"]["dsn"]
+            assert "s3cret-pw" not in dsn
+            assert "app_user:***@" in dsn
+        finally:
+            client.delete(f"/api/sources/{sid2}", headers=admin_headers)
+    finally:
+        client.delete(f"/api/sources/{sid}", headers=admin_headers)
+
+
 def test_ontology_extension_roundtrip(client, admin_headers):
     import uuid
 
