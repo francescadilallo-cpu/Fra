@@ -167,6 +167,15 @@ class DuckDBSourceManager:
         self._init_lock = threading.RLock()
         self._row_counts: dict[str, int] = {}
         self._built_at: datetime | None = None
+        # get_schema_info() runs DESCRIBE + COUNT + sample per table and is
+        # called several times per rebuild (catalog populate, phantom prune,
+        # KG probe, KG build). The snapshot only changes on rebuild/ingest,
+        # so memoise the result and invalidate on those paths. The generation
+        # counter prevents a compute that started before an invalidation from
+        # storing stale data afterwards.
+        self._schema_cache_lock = threading.Lock()
+        self._schema_info_cache: dict[str, dict] | None = None
+        self._schema_gen = 0
         # In nostore mode, the unified in-memory DuckDB is built once and kept
         # alive for the process; callers get cheap cursors on it instead of a
         # full re-ingest on every query.
@@ -175,6 +184,11 @@ class DuckDBSourceManager:
         self._storage_mode = mode if mode in {"nostore", "snapshot"} else "nostore"
 
         self._seed_defaults()
+
+    def _invalidate_schema_cache(self) -> None:
+        with self._schema_cache_lock:
+            self._schema_info_cache = None
+            self._schema_gen += 1
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -276,6 +290,7 @@ class DuckDBSourceManager:
             self._ready = False
             self._row_counts = {}
             self._built_at = None
+            self._invalidate_schema_cache()
             self._ensure_ready()
         return dict(self._row_counts)
 
@@ -312,6 +327,7 @@ class DuckDBSourceManager:
                 # provably consistent again — whether that's via a successful
                 # incremental ingest or the full-rebuild fallback.
                 self._ready = False
+                self._invalidate_schema_cache()
                 try:
                     self._ingest_incremental(cfg)
                 except Exception as exc:
@@ -388,8 +404,15 @@ class DuckDBSourceManager:
 
         Returns {table_name: {columns: [{name, type}], row_count: int, sample: [dict]}}
         Used to provide grounded schema context to the LLM for dynamic SQL generation.
+
+        Memoised until the next rebuild/ingest — callers treat the result as
+        read-only.
         """
         self._ensure_ready()
+        with self._schema_cache_lock:
+            if self._schema_info_cache is not None:
+                return self._schema_info_cache
+            gen = self._schema_gen
         conn = self.get_connection()
         try:
             tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
@@ -420,6 +443,10 @@ class DuckDBSourceManager:
                     logger.warning(
                         "get_schema_info: skipping table '%s': %s", table, exc
                     )
+            with self._schema_cache_lock:
+                # Only cache if no rebuild/ingest invalidated us mid-scan.
+                if gen == self._schema_gen:
+                    self._schema_info_cache = result
             return result
         finally:
             conn.close()

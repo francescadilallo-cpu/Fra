@@ -239,3 +239,48 @@ class TestStreamCursorIntoTable:
         assert counts["s1.items"] == 20
         rows = mgr.execute("SELECT name FROM items WHERE id = 13")
         assert rows[0]["name"] == "n13"
+
+
+# ── get_schema_info memoisation ────────────────────────────────────────────────
+
+
+class TestSchemaInfoCache:
+    def _mgr_with_csv(self, mgr_env) -> DuckDBSourceManager:
+        scenario, registry, db_path, tmp = mgr_env
+        csv = tmp / "data.csv"
+        csv.write_text("id,name\n1,a\n2,b\n", encoding="utf-8")
+        registry.upsert(
+            SourceConfig(
+                id="s1",
+                connector_type="csv",
+                label="CSV",
+                params={"path": str(csv), "table_name": "t"},
+                target_tables=["t"],
+            )
+        )
+        return DuckDBSourceManager(scenario, db_path, registry)
+
+    def test_repeated_calls_return_cached_object(self, mgr_env):
+        mgr = self._mgr_with_csv(mgr_env)
+        first = mgr.get_schema_info()
+        second = mgr.get_schema_info()
+        assert first is second
+        assert first["t"]["row_count"] == 2
+
+    def test_rebuild_invalidates_cache(self, mgr_env):
+        mgr = self._mgr_with_csv(mgr_env)
+        first = mgr.get_schema_info()
+        mgr.rebuild()
+        second = mgr.get_schema_info()
+        assert first is not second
+        assert second["t"]["row_count"] == 2
+
+    def test_ingest_one_invalidates_cache(self, mgr_env):
+        scenario, registry, db_path, tmp = mgr_env
+        mgr = self._mgr_with_csv(mgr_env)
+        mgr.get_schema_info()
+        # Grow the source file, re-ingest just that source, and confirm the
+        # schema info reflects the new row count (not the cached one).
+        (tmp / "data.csv").write_text("id,name\n1,a\n2,b\n3,c\n", encoding="utf-8")
+        mgr.ingest_one("s1")
+        assert mgr.get_schema_info()["t"]["row_count"] == 3
