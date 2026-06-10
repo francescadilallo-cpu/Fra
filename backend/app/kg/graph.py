@@ -176,6 +176,35 @@ class KnowledgeGraph:
             logger.warning("KG row fetch failed for %s: %s", sql, exc)
             return None
 
+    @staticmethod
+    def _resolve_pk_fields(entity_cfg: dict, primary_src: dict) -> list[str]:
+        """Primary-key columns for an ontology entity.
+
+        Prefers the source-level ``key_field``; falls back to the entity-level
+        ``primary_key`` (which may be a composite list, e.g. SalesOrderLine's
+        ``[order_id, line_id]``); defaults to ``id``. Without this fallback a
+        composite-key entity silently loaded zero nodes and its edge queries
+        failed on the nonexistent ``id`` column.
+        """
+        kf = primary_src.get("key_field")
+        if kf:
+            return [str(kf)]
+        pk = entity_cfg.get("primary_key")
+        if isinstance(pk, str) and pk.strip():
+            return [pk.strip()]
+        if isinstance(pk, list) and pk:
+            return [str(p) for p in pk]
+        return ["id"]
+
+    @staticmethod
+    def _composite_id(values: list) -> str | int | None:
+        """Node-id component from pk values — None if any component is NULL."""
+        if any(v is None for v in values):
+            return None
+        if len(values) == 1:
+            return values[0]
+        return "-".join(str(v) for v in values)
+
     def build_from_ontology(self, mgr, ontology) -> None:
         """Build the knowledge graph from ontology source definitions + DuckDB tables.
 
@@ -205,8 +234,8 @@ class KnowledgeGraph:
 
         # entity_name → DuckDB table name (after normalisation)
         entity_table_map: dict[str, str] = {}
-        # entity_name → primary-key column name in DuckDB
-        entity_pk_map: dict[str, str] = {}
+        # entity_name → primary-key column names in DuckDB (composite-safe)
+        entity_pk_map: dict[str, list[str]] = {}
 
         # ── Phase 1: load nodes ───────────────────────────────────────────────
         for entity_name, entity_cfg in entities_cfg.items():
@@ -218,7 +247,7 @@ class KnowledgeGraph:
 
             primary_src = sources[0]
             raw_table = primary_src.get("table", "")
-            key_field = primary_src.get("key_field", "id")
+            key_fields = self._resolve_pk_fields(entity_cfg, primary_src)
             table = _normalize_table_name(raw_table)
 
             if table not in available_tables:
@@ -230,7 +259,7 @@ class KnowledgeGraph:
                 continue
 
             entity_table_map[entity_name] = table
-            entity_pk_map[entity_name] = key_field
+            entity_pk_map[entity_name] = key_fields
 
             safe = table.replace('"', '""')
             node_limit = _node_limit()
@@ -253,7 +282,7 @@ class KnowledgeGraph:
                 if node_limit > 0 and loaded >= node_limit:
                     truncated = True
                     break
-                pk_val = row.get(key_field)
+                pk_val = self._composite_id([row.get(f) for f in key_fields])
                 if pk_val is None:
                     continue
                 node_id = f"{entity_name}:{pk_val}"
@@ -307,11 +336,11 @@ class KnowledgeGraph:
                 edge_type = attr_name.upper()
 
                 safe_from = from_table.replace('"', '""')
-                safe_pk = from_pk.replace('"', '""')
+                pk_select = ", ".join('"' + p.replace('"', '""') + '"' for p in from_pk)
                 safe_col = from_col.replace('"', '""')
                 edge_limit = _edge_limit()
                 base_query = (
-                    f'SELECT "{safe_pk}", "{safe_col}" '
+                    f'SELECT {pk_select}, "{safe_col}" '
                     f'FROM "{safe_from}" '
                     f'WHERE "{safe_col}" IS NOT NULL'
                 )
@@ -344,7 +373,7 @@ class KnowledgeGraph:
 
                 edges_added = 0
                 for row in edge_rows:
-                    from_id = row.get(from_pk)
+                    from_id = self._composite_id([row.get(p) for p in from_pk])
                     to_id = row.get(from_col)
                     if from_id is None or to_id is None:
                         continue

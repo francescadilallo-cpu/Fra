@@ -553,3 +553,72 @@ class TestBuildFromOntologyEdges:
         kg.build_from_ontology(mgr, _FakeOntology(_REL_CFG))
 
         assert kg.edge_count == 40
+
+
+# ── Composite primary keys (entity-level primary_key fallback) ──────────────────
+
+
+_COMPOSITE_CFG = {
+    "Product": {
+        "sources": [{"table": "products", "key_field": "product_id", "source": "pim"}],
+        "attributes": {},
+    },
+    "OrderLine": {
+        # No key_field on the source — must fall back to the entity-level
+        # composite primary_key, like SalesOrderLine in the demo ontology.
+        "primary_key": ["order_id", "line_id"],
+        "sources": [{"table": "order_lines", "source": "erp"}],
+        "attributes": {
+            "product": {
+                "relation": "many_to_one",
+                "via": "product_ref->Product.product_id",
+                "target": "Product",
+            }
+        },
+    },
+}
+
+
+class TestCompositePrimaryKey:
+    def _mgr(self) -> "_FakeMgrEdges":
+        products = [{"product_id": p} for p in (10, 20)]
+        order_lines = [
+            {"order_id": 1, "line_id": 1, "product_ref": 10},
+            {"order_id": 1, "line_id": 2, "product_ref": 20},
+            {"order_id": 2, "line_id": 1, "product_ref": 10},
+        ]
+        return _FakeMgrEdges({"products": products, "order_lines": order_lines})
+
+    def test_nodes_loaded_with_composite_ids(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_NODE_LIMIT", raising=False)
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(self._mgr(), _FakeOntology(_COMPOSITE_CFG))
+        # Lines (1,1) and (2,1) share line_id=1 — composite ids keep them distinct.
+        assert kg.get_node("OrderLine:1-1") is not None
+        assert kg.get_node("OrderLine:1-2") is not None
+        assert kg.get_node("OrderLine:2-1") is not None
+
+    def test_edges_built_from_composite_pk_rows(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_EDGE_LIMIT", raising=False)
+        mgr = self._mgr()
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(_COMPOSITE_CFG))
+        assert kg.edge_count == 3
+        # The edge query must select every pk component, not a nonexistent "id".
+        edge_sql = next(s for s in mgr.execute_all_calls if "product_ref" in s)
+        assert '"order_id"' in edge_sql and '"line_id"' in edge_sql
+        assert '"id"' not in edge_sql
+
+    def test_string_primary_key_still_works(self, monkeypatch):
+        monkeypatch.delenv("FRA_KG_NODE_LIMIT", raising=False)
+        cfg = {
+            "Customer": {
+                "primary_key": "customer_code",
+                "sources": [{"table": "customers", "source": "crm"}],
+                "attributes": {},
+            }
+        }
+        mgr = _FakeMgrEdges({"customers": [{"customer_code": "C1"}]})
+        kg = KnowledgeGraph()
+        kg.build_from_ontology(mgr, _FakeOntology(cfg))
+        assert kg.get_node("Customer:C1") is not None
