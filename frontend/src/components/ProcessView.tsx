@@ -3,7 +3,7 @@ import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, 
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig } from '../api/semantic'
-import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -506,7 +506,7 @@ export default function ProcessView() {
       setRunState('done')
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
       setElapsed(TOTAL_MS)
-      localStorage.setItem(`pipeline-last-run-${sectorId}`, new Date().toISOString())
+      localStorage.setItem(`pipeline-last-run-${modeScopedSector(sectorId)}`, new Date().toISOString())
       window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     }, offset))
   }

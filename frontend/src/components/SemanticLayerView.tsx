@@ -16,6 +16,7 @@ import {
   type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
+import { modeScopedSector } from '../lib/demoMode'
 import { SemanticDraftView } from './SemanticDraftView'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
@@ -40,7 +41,7 @@ const SOURCE_TYPES = [
   'CSV', 'JSON', 'REST API', 'Other',
 ]
 
-const SOURCES_KEY = (s: string) => `semantic-sources-${s}`
+const SOURCES_KEY = (s: string) => `semantic-sources-${modeScopedSector(s)}`
 function loadSources(id: string): SourceDef[] {
   try { return JSON.parse(localStorage.getItem(SOURCES_KEY(id)) ?? '[]') } catch { return [] }
 }
@@ -55,7 +56,7 @@ interface UserRule {
   opt1: string; opt1Desc: string; opt2: string; opt2Desc: string; resolution: string
 }
 
-const RULES_KEY = (s: string) => `semantic-rules-${s}`
+const RULES_KEY = (s: string) => `semantic-rules-${modeScopedSector(s)}`
 function loadUserRules(id: string): UserRule[] {
   try { return JSON.parse(localStorage.getItem(RULES_KEY(id)) ?? '[]') } catch { return [] }
 }
@@ -884,10 +885,10 @@ const METRIC_GRAIN_LABEL: Record<TimeGrain, string> = {
 }
 
 function loadMetrics(sid: string): Metric[] {
-  try { return JSON.parse(localStorage.getItem(`semantic-metrics-${sid}`) ?? '[]') } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(`semantic-metrics-${modeScopedSector(sid)}`) ?? '[]') } catch { return [] }
 }
 function saveMetrics(sid: string, m: Metric[]) {
-  try { localStorage.setItem(`semantic-metrics-${sid}`, JSON.stringify(m)) } catch { /* quota */ }
+  try { localStorage.setItem(`semantic-metrics-${modeScopedSector(sid)}`, JSON.stringify(m)) } catch { /* quota */ }
 }
 
 function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => void }) {
@@ -977,10 +978,10 @@ interface DimHierarchy {
 }
 
 function loadHierarchies(sid: string): DimHierarchy[] {
-  try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${sid}`) ?? '[]') } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(`semantic-hierarchies-${modeScopedSector(sid)}`) ?? '[]') } catch { return [] }
 }
 function saveHierarchies(sid: string, h: DimHierarchy[]) {
-  try { localStorage.setItem(`semantic-hierarchies-${sid}`, JSON.stringify(h)) } catch { /* quota */ }
+  try { localStorage.setItem(`semantic-hierarchies-${modeScopedSector(sid)}`, JSON.stringify(h)) } catch { /* quota */ }
 }
 
 function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void }) {
@@ -1037,10 +1038,10 @@ const OPERATOR_LABELS: Record<SegmentOperator, string> = {
 }
 
 function loadSegments(sid: string): Segment[] {
-  try { return JSON.parse(localStorage.getItem(`semantic-segments-${sid}`) ?? '[]') } catch { return [] }
+  try { return JSON.parse(localStorage.getItem(`semantic-segments-${modeScopedSector(sid)}`) ?? '[]') } catch { return [] }
 }
 function saveSegments(sid: string, s: Segment[]) {
-  try { localStorage.setItem(`semantic-segments-${sid}`, JSON.stringify(s)) } catch { /* quota */ }
+  try { localStorage.setItem(`semantic-segments-${modeScopedSector(sid)}`, JSON.stringify(s)) } catch { /* quota */ }
 }
 
 function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void }) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SectorId } from './sectors'
+import { modeScopedSector } from '../lib/demoMode'
 
 export type ConnectorCategory = 'erp' | 'accounting' | 'ecommerce' | 'crm' | 'payments' | 'database' | 'cloud' | 'logistics' | 'fiscal'
 export type ConnectorStatus = 'available' | 'beta' | 'coming-soon'
@@ -83,7 +84,7 @@ export interface ConnectedSource {
   rowCount: number
 }
 
-const SOURCES_KEY = (sectorId: string) => `connected-sources-${sectorId}`
+const SOURCES_KEY = (sectorId: string) => `connected-sources-${modeScopedSector(sectorId)}`
 const SOURCES_EVENT = 'connected-sources-changed'
 
 export function loadConnectedSources(sectorId: string): ConnectedSource[] {

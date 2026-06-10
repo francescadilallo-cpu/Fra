@@ -9,7 +9,7 @@ import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQues
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import { workspaceLabel } from '../lib/demoMode'
+import { workspaceLabel, modeScopedSector } from '../lib/demoMode'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ const FAVORITES_MAX = 20
 
 function loadHistory(sectorId: string): string[] {
   try {
-    const raw = localStorage.getItem(`query-history-${sectorId}`)
+    const raw = localStorage.getItem(`query-history-${modeScopedSector(sectorId)}`)
     return raw ? (JSON.parse(raw) as string[]) : []
   } catch { return [] }
 }
@@ -38,20 +38,20 @@ function loadHistory(sectorId: string): string[] {
 function saveToHistory(sectorId: string, query: string, current: string[]): string[] {
   const next = [query, ...current.filter(q => q !== query)].slice(0, HISTORY_MAX)
   try {
-    localStorage.setItem(`query-history-${sectorId}`, JSON.stringify(next))
+    localStorage.setItem(`query-history-${modeScopedSector(sectorId)}`, JSON.stringify(next))
   } catch { /* private browsing / quota */ }
   return next
 }
 
 function loadFavorites(sectorId: string): string[] {
   try {
-    const raw = localStorage.getItem(`query-favorites-${sectorId}`)
+    const raw = localStorage.getItem(`query-favorites-${modeScopedSector(sectorId)}`)
     return raw ? (JSON.parse(raw) as string[]) : []
   } catch { return [] }
 }
 
 function saveFavoritesLocal(sectorId: string, favs: string[]) {
-  try { localStorage.setItem(`query-favorites-${sectorId}`, JSON.stringify(favs)) } catch { /* quota */ }
+  try { localStorage.setItem(`query-favorites-${modeScopedSector(sectorId)}`, JSON.stringify(favs)) } catch { /* quota */ }
 }
 
 function stableQueryId(sectorId: string, query: string): string {

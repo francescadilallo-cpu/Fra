@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { SectorId } from './sectors'
 import { listAgents, createAgent, updateAgent, deleteAgentRemote } from '../api/agents'
+import { modeScopedSector } from '../lib/demoMode'
 
 export type AgentTemplate = 'monitor' | 'alert' | 'reconciler' | 'validator' | 'enricher'
 
@@ -35,7 +36,7 @@ export function getTrigger(agent: CustomAgentDef): AgentTrigger {
   return agent.trigger ?? { kind: 'manual' }
 }
 
-const KEY = (sectorId: string) => `custom-agents-${sectorId}`
+const KEY = (sectorId: string) => `custom-agents-${modeScopedSector(sectorId)}`
 const EVENT = 'custom-agents-changed'
 
 export function loadCustomAgents(sectorId: string): CustomAgentDef[] {

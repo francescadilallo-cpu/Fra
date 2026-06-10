@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
-import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
 import { semanticStatus, getLiveConfig, getDraft, type SemanticStatus, type LiveConfig, type SemanticDraft } from '../api/semantic'
@@ -332,13 +332,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   }, [])
 
   const [pipelineLastRun, setPipelineLastRun] = useState<Date | null>(() => {
-    const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
+    const raw = localStorage.getItem(`pipeline-last-run-${modeScopedSector(sectorId)}`)
     return raw ? new Date(raw) : null
   })
 
   useEffect(() => {
     const refresh = () => {
-      const raw = localStorage.getItem(`pipeline-last-run-${sectorId}`)
+      const raw = localStorage.getItem(`pipeline-last-run-${modeScopedSector(sectorId)}`)
       setPipelineLastRun(raw ? new Date(raw) : null)
     }
     refresh()
