@@ -44,7 +44,14 @@ const EMPTY: SavedExtension = {
   removedBaseNodes: [],
   removedBaseEdges: [],
 }
-const STORAGE_KEY = (sectorId: string) => `ontology-builder-ext-${sectorId}`
+// Demo and live workspaces must never share an ontology document: the same
+// browser can be used for both, and demo experiments must not leak into the
+// live workspace (or vice versa). Demo keeps the legacy un-prefixed key so
+// existing saved work survives.
+const STORAGE_KEY = (sectorId: string) =>
+  IS_DEMO_MODE ? `ontology-builder-ext-${sectorId}` : `ontology-builder-ext-live-${sectorId}`
+const WORKSPACE_ID = (sectorId: string) =>
+  IS_DEMO_MODE ? `demo-${sectorId}` : `live-${sectorId}`
 const STORAGE_EVENT = 'ontology-builder-changed'
 
 export function loadExtension(sectorId: string): SavedExtension {
@@ -72,7 +79,7 @@ const _pushTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 function schedulePush(sectorId: string, ext: SavedExtension) {
   clearTimeout(_pushTimers[sectorId])
   _pushTimers[sectorId] = setTimeout(() => {
-    pushRemoteExtension(sectorId, ext).catch(() => {
+    pushRemoteExtension(WORKSPACE_ID(sectorId), ext).catch(() => {
       // Offline / backend unreachable — localStorage still has the data and
       // the next save will retry.
     })
@@ -108,7 +115,7 @@ export async function hydrateExtensionFromBackend(sectorId: string): Promise<voi
     (local.removedBaseEdges?.length ?? 0) === 0
   if (!localEmpty) return
   try {
-    const remote = await fetchRemoteExtension(sectorId)
+    const remote = await fetchRemoteExtension(WORKSPACE_ID(sectorId))
     if (remote.payload && typeof remote.payload === 'object') {
       localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(remote.payload))
       window.dispatchEvent(new CustomEvent(STORAGE_EVENT, { detail: { sectorId } }))
