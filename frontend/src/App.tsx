@@ -13,6 +13,7 @@ import { clearAuthToken, getAuthToken } from './api/client'
 import { Toaster } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { IS_DEMO_MODE } from './lib/demoMode'
 
 // Lazy-load heavy tabs to split the JS bundle and speed up initial paint
 const OntologyGraph = lazy(() => import('./components/OntologyGraph'))
@@ -202,7 +203,7 @@ export default function App() {
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
         <Suspense fallback={<TabFallback />}>
           {activeTab === 'overview' && <OverviewScreen onNavigate={setActiveTab} />}
-          {activeTab === 'usecases' && <UseCasesView onNavigate={setActiveTab} />}
+          {activeTab === 'usecases' && (IS_DEMO_MODE ? <UseCasesView onNavigate={setActiveTab} /> : <OverviewScreen onNavigate={setActiveTab} />)}
           {activeTab === 'sembuilder' && <SemanticLayerView />}
           {activeTab === 'context' && <ContextTab />}
           {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Brain, ChevronRight, ChevronLeft, X, Check, Building2, Zap, Package, GitBranch } from 'lucide-react'
 import { SECTORS, type SectorId } from '../data/sectors'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 interface Props {
   onComplete: (companyName: string, sectorId: SectorId, customEntity: string) => void
@@ -35,12 +36,14 @@ const SECTOR_NAMES: Record<string, string> = {
   finance: 'Finance',
 }
 
-const TOTAL_STEPS = 5
+// Live workspaces have no sector concept: the wizard collapses to a single
+// step (company name) and the sector id is only an internal anchor.
+const TOTAL_STEPS = IS_DEMO_MODE ? 5 : 1
 
 export default function OnboardingWizard({ onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
   const [companyName, setCompanyName] = useState('')
-  const [selectedSector, setSelectedSector] = useState<SectorId | null>(null)
+  const [selectedSector, setSelectedSector] = useState<SectorId | null>(IS_DEMO_MODE ? null : 'manufacturing')
   const [customEntity, setCustomEntity] = useState('')
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set())
 
@@ -101,6 +104,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
               </div>
+              {IS_DEMO_MODE && (
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Industry</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -121,6 +125,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                   ))}
                 </div>
               </div>
+              )}
             </div>
           )}
 
@@ -261,7 +266,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               </button>
             )}
           </div>
-          <span className="text-xs text-gray-400">Step {step} of {TOTAL_STEPS}</span>
+          {TOTAL_STEPS > 1 && <span className="text-xs text-gray-400">Step {step} of {TOTAL_STEPS}</span>}
           <div>
             {step < TOTAL_STEPS ? (
               <button
@@ -275,9 +280,10 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             ) : (
               <button
                 onClick={handleComplete}
-                className="flex items-center gap-1 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors"
+                disabled={step === 1 && !canAdvanceStep1}
+                className="flex items-center gap-1 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Go to Dashboard
+                {IS_DEMO_MODE ? 'Go to Dashboard' : 'Get started'}
                 <ChevronRight size={16} />
               </button>
             )}

@@ -7,6 +7,7 @@ import {
 import { useSector } from '../contexts/SectorContext'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 interface Command {
   id: string
@@ -114,7 +115,8 @@ export default function CommandPalette({ onNavigate }: Props) {
       action: () => go(n.tab),
     }))
 
-    const sectorCommands: Command[] = (['manufacturing','retail','healthcare','finance'] as SectorId[])
+    // Sector switching is a demo concept — live workspaces have no sectors.
+    const sectorCommands: Command[] = (IS_DEMO_MODE ? (['manufacturing','retail','healthcare','finance'] as SectorId[]) : [])
       .filter(id => id !== sectorId)
       .map(id => ({
         id: `sector-${id}`,

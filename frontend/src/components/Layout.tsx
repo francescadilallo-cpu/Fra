@@ -357,7 +357,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 overflow-y-auto sidebar-scrollbar">
-          {NAV_ENTRIES.map((entry, i) => {
+          {NAV_ENTRIES.filter(e => IS_DEMO_MODE || e.kind !== 'item' || e.id !== 'usecases').map((entry, i) => {
             if (entry.kind === 'section') {
               return (
                 <p key={`s-${i}`} className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 first:pt-1">
