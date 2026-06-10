@@ -727,19 +727,32 @@ def _hidden_demo_tables(user: UserPrincipal) -> frozenset[str]:
     pre-seeded Adventure Works scenario is filtered out of the semantic read
     endpoints. Demo-mode users see everything. The set covers bare table names,
     schema-prefixed variants (``crm.account``) and registry is_default sources.
+
+    Tables owned by a user-added (non-default) source are never hidden, even
+    when their name collides with a demo table — "account", "contact" or
+    "offer" are perfectly normal business table names, and hiding them would
+    make the user's own uploaded data vanish.
     """
     if user.mode != "live":
         return frozenset()
     from .connectors.source_registry import get_source_registry
 
     tables: set[str] = set(_DEMO_SCENARIO_TABLES)
+    user_tables: set[str] = set()
     for cfg in get_source_registry().list():
         if cfg.is_default:
             tables.update(cfg.target_tables)
             tables.update(f"{cfg.id}.{t}" for t in cfg.target_tables)
+        else:
+            owned = set(cfg.target_tables)
+            table_name = (cfg.params or {}).get("table_name")
+            if table_name:
+                owned.add(str(table_name))
+            user_tables.update(owned)
+            user_tables.update(f"{cfg.id}.{t}" for t in owned)
     for prefix in _DEMO_SCHEMA_PREFIXES:
         tables.update(f"{prefix}.{t}" for t in _DEMO_SCENARIO_TABLES)
-    return frozenset(tables)
+    return frozenset(tables - user_tables)
 
 
 def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
@@ -1887,6 +1900,29 @@ def add_source(
                 "or remove the existing source first"
             ),
         )
+
+    # Physical table names are a single namespace shared by every source in
+    # the DuckDB snapshot. Reject names that would collide with the demo
+    # dataset when it is seeded on this deployment — otherwise whichever
+    # source ingests last silently overwrites the other's table. Underscore
+    # names are reserved for internal tables (_build_meta) on any deployment.
+    table_name = str(req.params.get("table_name") or "").strip()
+    if table_name:
+        if table_name.startswith("_"):
+            raise HTTPException(
+                status_code=422,
+                detail="Table names starting with '_' are reserved",
+            )
+        demo_seeded = any(c.is_default for c in mgr.registry.list())
+        if demo_seeded and table_name.lower() in _DEMO_SCENARIO_TABLES:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Table name '{table_name}' is reserved by the demo dataset "
+                    "on this deployment — rename the table and try again"
+                ),
+            )
+
     cfg = SourceConfig(
         id=source_id,
         connector_type=req.connector_type,

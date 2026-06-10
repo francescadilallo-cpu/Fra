@@ -857,6 +857,88 @@ def test_hidden_demo_tables_cover_schema_prefixed_and_legacy_names():
     )
 
 
+def test_add_source_rejects_reserved_table_names(client, admin_headers):
+    # Underscore-prefixed names are internal (_build_meta) on any deployment.
+    r = client.post(
+        "/api/sources",
+        json={
+            "connector_type": "csv",
+            "label": "x.csv",
+            "params": {"table_name": "_sneaky", "inline_csv": "a\n1"},
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 422, r.text
+
+    # When demo sources are seeded, demo table names are reserved: whichever
+    # source ingests last would silently overwrite the other's table.
+    import uuid
+
+    from app.connectors.source_registry import SourceConfig, get_source_registry
+
+    registry = get_source_registry()
+    probe_id = f"demo-seed-probe-{uuid.uuid4().hex[:12]}"
+    registry.upsert(
+        SourceConfig(
+            id=probe_id,
+            connector_type="crm_sqlite",
+            label="seed probe",
+            target_tables=["account"],
+            is_default=True,
+        )
+    )
+    try:
+        r = client.post(
+            "/api/sources",
+            json={
+                "connector_type": "csv",
+                "label": "account.csv",
+                "params": {"table_name": "account", "inline_csv": "a\n1"},
+            },
+            headers=admin_headers,
+        )
+        assert r.status_code == 409, r.text
+        assert "reserved" in r.json()["detail"]
+    finally:
+        registry.patch(probe_id, is_default=False)
+        registry.remove(probe_id)
+
+
+def test_user_table_with_demo_name_is_not_hidden_in_live_mode():
+    # Regression: "account"/"contact"/"offer" are normal business table names.
+    # A live user who uploads a CSV with one of those names must still see
+    # their own data — only tables NOT owned by a user-added source are hidden.
+    import uuid
+
+    from app.connectors.source_registry import SourceConfig, get_source_registry
+    from app.main import UserPrincipal, _hidden_demo_tables
+
+    registry = get_source_registry()
+    probe_id = f"csv-collision-probe-{uuid.uuid4().hex[:12]}"
+    registry.upsert(
+        SourceConfig(
+            id=probe_id,
+            connector_type="csv",
+            label="account.csv",
+            params={"table_name": "account", "inline_csv": "id\n1"},
+            is_default=False,
+        )
+    )
+    try:
+        live = UserPrincipal(username="t", role="user", mode="live")
+        hidden = _hidden_demo_tables(live)
+        assert "account" not in hidden, (
+            "a user-owned table must not be hidden even if it collides "
+            "with a demo table name"
+        )
+        assert f"{probe_id}.account" not in hidden
+        # Other demo tables stay hidden.
+        assert "sales_order_header" in hidden
+        assert "crm.contact" in hidden
+    finally:
+        registry.remove(probe_id)
+
+
 def test_semantic_status_live_mode_is_empty(
     client, demo_mode_headers, live_mode_headers
 ):
