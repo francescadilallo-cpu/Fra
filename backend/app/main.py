@@ -31,6 +31,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -1088,6 +1089,9 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 app.add_middleware(SlowAPIMiddleware)
+# Large JSON payloads (data pages, semantic drafts, templates) compress
+# 5-10x; clients that don't send Accept-Encoding are unaffected.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 _explicit_origins = _parse_allowed_origins()
 if _explicit_origins:
