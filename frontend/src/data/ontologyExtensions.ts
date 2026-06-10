@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { OntologyEdge, OntologyGraphData, OntologyNode, OntologyProperty } from '../types'
 import { SECTORS, type SectorId } from './sectors'
 import { IS_DEMO_MODE } from '../lib/demoMode'
+import { fetchRemoteExtension, pushRemoteExtension } from '../api/ontologyExtension'
 
 const EMPTY_ONTOLOGY: OntologyGraphData = { nodes: [], edges: [] }
 
@@ -64,6 +65,20 @@ export function loadExtension(sectorId: string): SavedExtension {
   }
 }
 
+// Debounced write-through to the backend so the hand-built ontology survives
+// a new browser/device. localStorage stays the synchronous source of truth.
+const _pushTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+
+function schedulePush(sectorId: string, ext: SavedExtension) {
+  clearTimeout(_pushTimers[sectorId])
+  _pushTimers[sectorId] = setTimeout(() => {
+    pushRemoteExtension(sectorId, ext).catch(() => {
+      // Offline / backend unreachable — localStorage still has the data and
+      // the next save will retry.
+    })
+  }, 800)
+}
+
 export function saveExtension(sectorId: string, ext: SavedExtension) {
   try {
     localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(ext))
@@ -71,6 +86,35 @@ export function saveExtension(sectorId: string, ext: SavedExtension) {
     window.dispatchEvent(new CustomEvent(STORAGE_EVENT, { detail: { sectorId } }))
   } catch {
     // quota — silent for demo
+  }
+  schedulePush(sectorId, ext)
+}
+
+// One-shot boot hydration: pull the server copy into localStorage when the
+// local copy is missing or empty (fresh browser / cleared storage). Local
+// edits always win — we never overwrite a non-empty local document.
+const _hydrated = new Set<string>()
+
+export async function hydrateExtensionFromBackend(sectorId: string): Promise<void> {
+  if (_hydrated.has(sectorId)) return
+  _hydrated.add(sectorId)
+  const local = loadExtension(sectorId)
+  const localEmpty =
+    local.nodes.length === 0 &&
+    local.edges.length === 0 &&
+    local.addedProperties.length === 0 &&
+    Object.keys(local.baseOverrides ?? {}).length === 0 &&
+    (local.removedBaseNodes?.length ?? 0) === 0 &&
+    (local.removedBaseEdges?.length ?? 0) === 0
+  if (!localEmpty) return
+  try {
+    const remote = await fetchRemoteExtension(sectorId)
+    if (remote.payload && typeof remote.payload === 'object') {
+      localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(remote.payload))
+      window.dispatchEvent(new CustomEvent(STORAGE_EVENT, { detail: { sectorId } }))
+    }
+  } catch {
+    // Backend unreachable — keep the empty local state.
   }
 }
 
@@ -249,6 +293,10 @@ export function useExtendedOntology(sectorId: SectorId): OntologyGraphData {
       if (e.key === STORAGE_KEY(sectorId)) refresh()
     }
     window.addEventListener('storage', onStorage)
+    // Fresh browser/device: pull the durable server copy (no-op if the
+    // local document already has content). The STORAGE_EVENT dispatched on
+    // hydration triggers `refresh` above.
+    void hydrateExtensionFromBackend(sectorId)
 
     return () => {
       window.removeEventListener(STORAGE_EVENT, refresh)

@@ -917,6 +917,84 @@ def test_add_source_rejects_reserved_table_names(client, admin_headers):
         registry.remove(probe_id)
 
 
+def test_ontology_extension_roundtrip(client, admin_headers):
+    import uuid
+
+    ws = f"test-ws-{uuid.uuid4().hex[:12]}"
+
+    # Empty workspace → null payload, not 404 (frontend treats it as "nothing saved")
+    r = client.get(
+        "/api/ontology/extension", params={"workspace_id": ws}, headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payload"] is None
+
+    doc = {
+        "nodes": [
+            {
+                "id": "n1",
+                "label": "Customer",
+                "uri": "live:Customer",
+                "properties": [{"name": "email", "type": "string"}],
+                "position": {"x": 10, "y": 20},
+            }
+        ],
+        "edges": [],
+        "addedProperties": [],
+    }
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": ws},
+        json={"payload": doc},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+
+    r = client.get(
+        "/api/ontology/extension", params={"workspace_id": ws}, headers=admin_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["payload"] == doc
+    assert body["updated_at"]
+
+    # Overwrite wins (INSERT OR REPLACE)
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": ws},
+        json={"payload": {"nodes": [], "edges": [], "addedProperties": []}},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200
+    r = client.get(
+        "/api/ontology/extension", params={"workspace_id": ws}, headers=admin_headers
+    )
+    assert r.json()["payload"]["nodes"] == []
+
+
+def test_ontology_extension_requires_auth(client):
+    r = client.get("/api/ontology/extension", params={"workspace_id": "x"})
+    assert r.status_code in (401, 403)
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": "x"},
+        json={"payload": {}},
+    )
+    assert r.status_code in (401, 403)
+
+
+def test_ontology_extension_rejects_oversized_payload(client, admin_headers):
+    huge = {"blob": "x" * (1024 * 1024 + 100)}
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": "big"},
+        json={"payload": huge},
+        headers=admin_headers,
+    )
+    assert r.status_code == 422, r.text
+
+
 def test_user_table_with_demo_name_is_not_hidden_in_live_mode():
     # Regression: "account"/"contact"/"offer" are normal business table names.
     # A live user who uploads a CSV with one of those names must still see

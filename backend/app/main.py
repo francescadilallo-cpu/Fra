@@ -3301,3 +3301,81 @@ def delete_saved_query(
         conn.commit()
     finally:
         conn.close()
+
+
+# ── Ontology builder extension persistence ───────────────────────────────────
+# The Ontology Builder keeps its working copy in browser localStorage for
+# instant rendering; these endpoints make it durable so a user's hand-built
+# ontology survives a new browser, device, or cleared storage.
+
+_ONTOLOGY_EXT_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "ontology_extensions.db"
+_ONTOLOGY_EXT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB per workspace document
+
+
+def _ontology_ext_db() -> _sqlite3.Connection:
+    conn = _sqlite3.connect(str(_ONTOLOGY_EXT_DB_PATH))
+    conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS ontology_extensions (
+            workspace_id TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    conn.commit()
+    return conn
+
+
+class OntologyExtensionPayload(BaseModel):
+    payload: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _validate_size(self) -> "OntologyExtensionPayload":
+        if len(json.dumps(self.payload)) > _ONTOLOGY_EXT_MAX_BYTES:
+            raise ValueError("ontology extension exceeds 1 MB limit")
+        return self
+
+
+@app.get("/api/ontology/extension", tags=["ontology"])
+def get_ontology_extension(
+    workspace_id: str = Query(min_length=1, max_length=128),
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    conn = _ontology_ext_db()
+    try:
+        row = conn.execute(
+            "SELECT payload, updated_at FROM ontology_extensions WHERE workspace_id=?",
+            (workspace_id,),
+        ).fetchone()
+        if row is None:
+            return {"payload": None, "updated_at": None}
+        try:
+            payload = json.loads(row["payload"])
+        except ValueError:
+            payload = None
+        return {"payload": payload, "updated_at": row["updated_at"]}
+    finally:
+        conn.close()
+
+
+@app.put("/api/ontology/extension", tags=["ontology"])
+def put_ontology_extension(
+    body: OntologyExtensionPayload,
+    workspace_id: str = Query(min_length=1, max_length=128),
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _ontology_ext_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO ontology_extensions "
+            "(workspace_id, payload, updated_at) VALUES (?,?,?)",
+            (workspace_id, json.dumps(body.payload), now),
+        )
+        conn.commit()
+        return {"ok": True, "updated_at": now}
+    finally:
+        conn.close()
