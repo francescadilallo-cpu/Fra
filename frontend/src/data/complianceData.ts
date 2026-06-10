@@ -1,4 +1,5 @@
 import type { SectorId } from './sectors'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // -- Types --
 export type DataCategory = 'identification' | 'contact' | 'financial' | 'health' | 'behavioral' | 'professional' | 'transactional'
@@ -557,6 +558,10 @@ export const COMPLIANCE: Record<SectorId, SectorCompliance> = {
 
 // -- Helpers --
 export function getSectorCompliance(sectorId: SectorId): SectorCompliance {
+  // Live workspaces must not present the fabricated demo GDPR/AI Act register
+  // as if it described the user's own data — they start empty and populate as
+  // the user classifies their ontology entities.
+  if (!IS_DEMO_MODE) return { entities: [], agents: [] }
   return COMPLIANCE[sectorId]
 }
 

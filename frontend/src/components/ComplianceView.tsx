@@ -337,9 +337,18 @@ export default function ComplianceView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {compliance.entities.map(entity => (
-                    <GdprRow key={entity.entityId} entity={entity} />
-                  ))}
+                  {compliance.entities.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-400">
+                        No entities classified yet — entities you add to your ontology
+                        will appear here for GDPR classification.
+                      </td>
+                    </tr>
+                  ) : (
+                    compliance.entities.map(entity => (
+                      <GdprRow key={entity.entityId} entity={entity} />
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -356,9 +365,16 @@ export default function ComplianceView() {
               <span className="text-xs text-gray-400">{compliance.agents.length} agents</span>
             </div>
             <div className="p-3 flex flex-col gap-2.5">
-              {sortedAgents.map(agent => (
-                <AgentCard key={agent.agentId} agent={agent} />
-              ))}
+              {sortedAgents.length === 0 ? (
+                <p className="px-1 py-6 text-center text-sm text-gray-400">
+                  No AI agents registered yet — agents you create will appear here
+                  with their EU AI Act risk classification.
+                </p>
+              ) : (
+                sortedAgents.map(agent => (
+                  <AgentCard key={agent.agentId} agent={agent} />
+                ))
+              )}
             </div>
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
               <button
