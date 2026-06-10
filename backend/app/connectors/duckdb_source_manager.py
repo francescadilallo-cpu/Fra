@@ -757,6 +757,10 @@ class DuckDBSourceManager:
         _MAX_INLINE_BYTES = 5 * 1024 * 1024  # 5 MB guard against OOM
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
+        if "inline_csv" in cfg.params and not (inline and inline.strip()):
+            # An empty upload must fail with a clear message, not fall through
+            # to the file-path branch and surface a server-path IO error.
+            raise ValueError("CSV is empty — upload a file with a header and rows")
         if inline:
             # Small browser uploads — pandas is fine and avoids a temp file.
             if len(inline.encode("utf-8")) > _MAX_INLINE_BYTES:

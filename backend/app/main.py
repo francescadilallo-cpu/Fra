@@ -1913,6 +1913,14 @@ def add_source(
                 status_code=422,
                 detail="Table names starting with '_' are reserved",
             )
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,62}", table_name):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Table name must start with a letter and contain only "
+                    "letters, digits and underscores (max 63 chars)"
+                ),
+            )
         demo_seeded = any(c.is_default for c in mgr.registry.list())
         if demo_seeded and table_name.lower() in _DEMO_SCENARIO_TABLES:
             raise HTTPException(

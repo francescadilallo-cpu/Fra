@@ -870,6 +870,19 @@ def test_add_source_rejects_reserved_table_names(client, admin_headers):
     )
     assert r.status_code == 422, r.text
 
+    # Identifier hygiene: spaces, semicolons and SQL fragments are rejected.
+    for bad in ("my table; DROP TABLE x--", "1starts_with_digit", "x" * 64):
+        r = client.post(
+            "/api/sources",
+            json={
+                "connector_type": "csv",
+                "label": "x.csv",
+                "params": {"table_name": bad, "inline_csv": "a\n1"},
+            },
+            headers=admin_headers,
+        )
+        assert r.status_code == 422, f"{bad!r}: {r.text}"
+
     # When demo sources are seeded, demo table names are reserved: whichever
     # source ingests last would silently overwrite the other's table.
     import uuid
