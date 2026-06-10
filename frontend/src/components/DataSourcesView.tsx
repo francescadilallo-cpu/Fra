@@ -760,8 +760,8 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       {/* Body */}
       <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
 
-        {/* AW active sources (manufacturing only) */}
-        {sectorId === 'manufacturing' && <AWSourcesPanel />}
+        {/* AW active sources (manufacturing demo only) */}
+        {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWSourcesPanel />}
 
         {/* Sources error */}
         {sourcesError && (

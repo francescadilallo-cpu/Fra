@@ -3,6 +3,7 @@ import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Load
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection } from './AdminSections'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Connectors ────────────────────────────────────────────────────────────────
 
@@ -408,7 +409,7 @@ export default function ConfigurationView() {
           </div>
         </div>
 
-        {sectorId === 'manufacturing' && <AWConfigSources />}
+        {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWConfigSources />}
 
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 mt-5">
           {connectors.map(c => (

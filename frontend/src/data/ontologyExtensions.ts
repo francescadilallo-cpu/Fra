@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { OntologyEdge, OntologyGraphData, OntologyNode, OntologyProperty } from '../types'
 import { SECTORS, type SectorId } from './sectors'
+import { IS_DEMO_MODE } from '../lib/demoMode'
+
+const EMPTY_ONTOLOGY: OntologyGraphData = { nodes: [], edges: [] }
 
 // Migration helper: converts old string format to OntologyProperty
 export function toOntologyProperty(p: OntologyProperty | string): OntologyProperty {
@@ -74,7 +77,9 @@ export function saveExtension(sectorId: string, ext: SavedExtension) {
 // ── Merging logic ───────────────────────────────────────────────────────────
 // Merge sector base ontology with saved user extensions.
 export function buildExtendedOntology(sectorId: SectorId): OntologyGraphData {
-  const base = SECTORS[sectorId].ontology
+  // Live workspaces start from scratch: no pre-built sector ontology, only
+  // entities the user adds (or that the semantic layer derives from real sources).
+  const base = IS_DEMO_MODE ? SECTORS[sectorId].ontology : EMPTY_ONTOLOGY
   const ext = loadExtension(sectorId)
   const removedNodes = new Set(ext.removedBaseNodes ?? [])
   const removedEdges = new Set(ext.removedBaseEdges ?? [])

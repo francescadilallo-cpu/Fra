@@ -4,6 +4,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateMockData } from '../data/mockDataGenerator'
 import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { OntologyNode } from '../types'
 
 // ── AW entity → source system map ─────────────────────────────────────────────
@@ -144,8 +145,11 @@ function DataTable({ node }: { node: OntologyNode }) {
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 10
 
-  const awRows = AW_SAMPLE_DATA[node.data.label as AWEntityName]
-  const rows = useMemo(() => awRows ?? generateMockData(node, 30), [node.id])
+  const awRows = IS_DEMO_MODE ? AW_SAMPLE_DATA[node.data.label as AWEntityName] : undefined
+  const rows = useMemo(
+    () => awRows ?? (IS_DEMO_MODE ? generateMockData(node, 30) : []),
+    [node.id],
+  )
 
   const filtered = useMemo(() => {
     if (!search.trim()) return rows
@@ -416,7 +420,7 @@ export default function DataExplorer() {
                 </div>
               </div>
               <DataTable key={selected.id} node={selected} />
-              {sectorId === 'manufacturing' && <CrossSourcePanel entityLabel={selected.data.label} />}
+              {IS_DEMO_MODE && sectorId === 'manufacturing' && <CrossSourcePanel entityLabel={selected.data.label} />}
             </>
           ) : (
             <div className="flex items-center justify-center h-full text-slate-400">

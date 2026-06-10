@@ -329,6 +329,7 @@ function fmt(v: number) {
 
 export default function ProcessView() {
   const { sectorId, sector } = useSector()
+  const isAWDemo = IS_DEMO_MODE && sectorId === 'manufacturing'
 
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   const [liveSectorLogs, setLiveSectorLogs] = useState<Record<StepId, StepLog[]> | null>(null)
@@ -659,9 +660,9 @@ export default function ProcessView() {
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-slate-900">
-            {sectorId === 'manufacturing' ? 'Recent Orders — ERP OrionSales' : 'Active Cases'}
+            {isAWDemo ? 'Recent Orders — ERP OrionSales' : 'Active Cases'}
           </h2>
-          {sectorId === 'manufacturing' && (
+          {isAWDemo && (
             <span className="text-xs text-slate-400 font-mono">31,465 total orders · showing latest 5</span>
           )}
         </div>
@@ -671,7 +672,7 @@ export default function ProcessView() {
               <tr className="text-xs text-slate-500 border-b border-slate-200">
                 <th className="text-left pb-2 font-medium">Order ID</th>
                 <th className="text-left pb-2 font-medium">Customer</th>
-                {sectorId === 'manufacturing' && <th className="text-left pb-2 font-medium">Territory</th>}
+                {isAWDemo && <th className="text-left pb-2 font-medium">Territory</th>}
                 <th className="text-left pb-2 font-medium">Status</th>
                 <th className="text-right pb-2 font-medium">Value (subtotal)</th>
                 <th className="text-right pb-2 font-medium">Days open</th>
@@ -679,14 +680,14 @@ export default function ProcessView() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {ACTIVE_CASES_BY_SECTOR[sectorId].map(c => {
-                const stageColor = sectorId === 'manufacturing'
+                const stageColor = isAWDemo
                   ? (STAGE_COLORS_AW[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
                   : (STAGE_COLORS[c.stage] ?? 'bg-slate-100 text-slate-600 border border-slate-200')
                 return (
                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 text-slate-400 font-mono text-xs">#{c.id}</td>
                     <td className="py-3 text-slate-900 font-medium">{c.name}</td>
-                    {sectorId === 'manufacturing' && (
+                    {isAWDemo && (
                       <td className="py-3 text-xs text-slate-500">{c.territory ?? '—'}</td>
                     )}
                     <td className="py-3">
@@ -705,7 +706,7 @@ export default function ProcessView() {
             </tbody>
           </table>
         </div>
-        {sectorId === 'manufacturing' && (
+        {isAWDemo && (
           <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-3">
             Orders #75123 and #75124 are large confirmed orders (Dec 2014) pending shipment — combined value $140K.
             Status sourced from ERP OrionSales · Joined with CRM for customer names via <span className="font-mono text-teal-600">customer_ref ↔ accountId</span>.
