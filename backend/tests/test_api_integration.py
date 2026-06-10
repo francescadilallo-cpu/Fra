@@ -741,3 +741,90 @@ def test_live_mode_hides_default_demo_sources(client):
     finally:
         registry.patch(probe_id, is_default=False)
         registry.remove(probe_id)
+
+
+@pytest.fixture(scope="module")
+def demo_mode_headers(client):
+    resp = client.post(
+        "/api/auth/token",
+        data={"username": "user_u", "password": "user_pw", "mode": "demo"},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+@pytest.fixture(scope="module")
+def live_mode_headers(client):
+    resp = client.post(
+        "/api/auth/token",
+        data={"username": "user_u", "password": "user_pw", "mode": "live"},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+def test_coverage_works_in_both_modes(client, demo_mode_headers, live_mode_headers):
+    # Regression: coverage used to call the status endpoint function directly,
+    # which broke when status started reading the authenticated user's mode.
+    for headers in (demo_mode_headers, live_mode_headers):
+        resp = client.get("/api/semantic/coverage", headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert "score" in resp.json()
+
+
+def test_dashboard_live_mode_is_empty(client, demo_mode_headers, live_mode_headers):
+    demo = client.get("/api/dashboard", headers=demo_mode_headers)
+    assert demo.status_code == 200, demo.text
+    assert demo.json()["total_orders"] > 0, "demo dashboard must show demo data"
+
+    live = client.get("/api/dashboard", headers=live_mode_headers)
+    assert live.status_code == 200, live.text
+    body = live.json()
+    assert body["total_orders"] == 0
+    assert body["total_customers"] == 0
+    assert body["recent_orders"] == []
+
+
+def test_ontology_graph_live_mode_is_empty(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/ontology/graph", headers=demo_mode_headers)
+    assert demo.status_code == 200, demo.text
+    assert len(demo.json()["nodes"]) > 0, "demo mode must show the demo ontology"
+
+    live = client.get("/api/ontology/graph", headers=live_mode_headers)
+    assert live.status_code == 200, live.text
+    assert live.json() == {"nodes": [], "edges": []}
+
+
+def test_ontology_mappings_live_mode_is_empty(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/ontology/mappings", headers=demo_mode_headers)
+    assert demo.status_code == 200, demo.text
+    assert len(demo.json()["mappings"]) > 0
+
+    live = client.get("/api/ontology/mappings", headers=live_mode_headers)
+    assert live.status_code == 200, live.text
+    assert live.json() == {"mappings": [], "raw": {}}
+
+
+def test_builtin_semantic_definitions_hidden_in_live_mode(
+    client, demo_mode_headers, live_mode_headers
+):
+    for endpoint in (
+        "/api/semantic/metrics",
+        "/api/semantic/hierarchies",
+        "/api/semantic/segments",
+    ):
+        demo = client.get(endpoint, headers=demo_mode_headers)
+        assert demo.status_code == 200, demo.text
+        assert any(d["is_builtin"] for d in demo.json()), (
+            f"demo mode must include builtin rows on {endpoint}"
+        )
+
+        live = client.get(endpoint, headers=live_mode_headers)
+        assert live.status_code == 200, live.text
+        assert not any(d["is_builtin"] for d in live.json()), (
+            f"live mode must hide builtin rows on {endpoint}"
+        )

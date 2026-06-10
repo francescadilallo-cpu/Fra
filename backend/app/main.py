@@ -1163,8 +1163,34 @@ def get_me(principal: UserPrincipal = Depends(require_roles("user", "admin"))) -
 
 @app.get("/api/dashboard", response_model=DashboardData)
 def dashboard(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> DashboardData:
+    if current_user.mode == "live":
+        # The dashboard KPIs come from the legacy demo database; live-mode
+        # users get a clean slate plus their own (non-default) sources.
+        from .connectors.source_registry import get_source_registry
+
+        live_sources = [
+            {
+                "name": src.label,
+                "type": src.connector_type,
+                "status": "connected" if src.status == "active" else src.status,
+                "tables": src.target_tables,
+                "row_counts": dict.fromkeys(src.target_tables, 0),
+            }
+            for src in get_source_registry().list()
+            if not src.is_default and src.connector_type != "context_doc"
+        ]
+        return DashboardData(
+            total_customers=0,
+            total_products=0,
+            total_quotes=0,
+            total_orders=0,
+            quote_conversion_rate=0.0,
+            open_quotes_value=0.0,
+            recent_orders=[],
+            data_sources=live_sources,
+        )
     conn = get_connection()
     try:
         counts = get_table_counts(conn)
@@ -1256,16 +1282,22 @@ def dashboard(
 
 @app.get("/api/ontology/graph")
 def ontology_graph(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
+    if current_user.mode == "live":
+        # The static ontology YAML describes the demo dataset only.
+        return {"nodes": [], "edges": []}
     onto = get_ontology()
     return onto.get_ontology_graph_data()
 
 
 @app.get("/api/ontology/mappings", response_model=MappingsResponse)
 def ontology_mappings(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> MappingsResponse:
+    if current_user.mode == "live":
+        # The static mapping YAML describes the demo dataset only.
+        return MappingsResponse(mappings=[], raw={})
     flat = get_flat_mappings()
     raw = get_mappings()
     return MappingsResponse(mappings=flat, raw=raw)
@@ -1335,11 +1367,12 @@ def get_table_data(
     table: Annotated[str, _ApiPath(max_length=256)],
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> PaginatedData:
     # Auto-discover available tables from DuckDB instead of hardcoded whitelist
     from .connectors.duckdb_source_manager import get_source_manager
 
+    hidden = _hidden_demo_tables(current_user)
     try:
         duckdb_conn = get_source_manager(_SCENARIO_PATH).get_connection()
         try:
@@ -1350,20 +1383,23 @@ def get_table_data(
             duckdb_conn.close()
     except Exception:
         available = set()
-    # Also include SQLite tables (the actual data backend for this endpoint)
-    try:
-        _sl = get_connection()
+    # Also include SQLite tables (the actual data backend for this endpoint) —
+    # but not for live-mode users: the legacy SQLite DB is entirely demo data.
+    if not hidden:
         try:
-            available |= {
-                row[0]
-                for row in _sl.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-            }
-        finally:
-            _sl.close()
-    except Exception:
-        pass
+            _sl = get_connection()
+            try:
+                available |= {
+                    row[0]
+                    for row in _sl.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+            finally:
+                _sl.close()
+        except Exception:
+            pass
+    available -= hidden
     if table not in available:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
@@ -1395,11 +1431,8 @@ def get_table_data(
 # ── Semantic Layer endpoints ────────────────────────────────────────────────────
 
 
-@app.get("/api/semantic/status")
-def semantic_status(
-    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
-) -> dict[str, Any]:
-    """Return the current status of the semantic layer (loaded/not loaded)."""
+def _semantic_status_payload(hidden: frozenset[str] = frozenset()) -> dict[str, Any]:
+    """Semantic layer status dict, excluding data from *hidden* demo tables."""
     if not _semantic_state["loaded"]:
         return {
             "loaded": False,
@@ -1412,7 +1445,6 @@ def semantic_status(
         }
     kg = _semantic_state["kg"]
     catalog = _semantic_state["catalog"]
-    hidden = _hidden_demo_tables(current_user)
     tables = (
         list(_mgr.describe().tables)
         if (_mgr := _semantic_state.get("mgr")) is not None
@@ -1442,6 +1474,14 @@ def semantic_status(
     }
 
 
+@app.get("/api/semantic/status")
+def semantic_status(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Return the current status of the semantic layer (loaded/not loaded)."""
+    return _semantic_status_payload(_hidden_demo_tables(current_user))
+
+
 @app.post("/api/semantic/ask")
 @limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def semantic_ask(
@@ -1459,6 +1499,22 @@ def semantic_ask(
     question = req.normalized_question()
     if not question:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    hidden = _hidden_demo_tables(_current_user)
+    if hidden:
+        _ensure_semantic_loaded()
+        catalog = _semantic_state.get("catalog")
+        draft_entities = catalog.get_draft_entities() if catalog else []
+        if not any(e["table"] not in hidden for e in draft_entities):
+            # Live workspace with no real sources: answering would silently
+            # use the demo dataset.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "No data sources connected. Add a data source before "
+                    "asking questions."
+                ),
+            )
 
     merged_context = {"session_id": req.session_id, **(req.context or {})}
     redis_client = _get_semantic_redis_client()
@@ -1557,7 +1613,7 @@ def semantic_ask(
 
 @app.post("/api/kg/build")
 def rebuild_knowledge_graph(
-    _: UserPrincipal = Depends(require_roles("admin")),
+    current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     """Rebuild KG + semantic stack. Admin-only because it mutates in-memory system state."""
     with _semantic_init_lock:
@@ -1582,12 +1638,14 @@ def rebuild_knowledge_graph(
         _ensure_semantic_loaded()
         kg = _semantic_state["kg"]
         catalog = _semantic_state["catalog"]
+        hidden = _hidden_demo_tables(current_user)
+        kg_nodes, kg_edges = _kg_counts_excluding(kg, hidden)
         return {
             "success": True,
-            "kg_nodes": kg.node_count,
-            "kg_edges": kg.edge_count,
+            "kg_nodes": kg_nodes,
+            "kg_edges": kg_edges,
             "metadata_rows": catalog.row_count(),
-            "dedup_count": kg.dedup_count,
+            "dedup_count": 0 if hidden else kg.dedup_count,
         }
 
 
@@ -1609,20 +1667,23 @@ def ask_legacy_alias(
 
 @app.get("/api/data/store/status")
 def data_store_status(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     """Return metadata about the unified DuckDB snapshot."""
     from .connectors.duckdb_source_manager import get_source_manager
 
+    hidden = _hidden_demo_tables(current_user)
     try:
         mgr = get_source_manager(_SCENARIO_PATH)
         meta = mgr.describe()
+        tables = [t for t in meta.tables if t not in hidden]
+        row_counts = {t: c for t, c in meta.record_counts.items() if t not in hidden}
         return {
             "source_type": meta.source_type,
             "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
-            "tables": meta.tables,
-            "row_counts": meta.record_counts,
-            "total_rows": sum(meta.record_counts.values()),
+            "tables": tables,
+            "row_counts": row_counts,
+            "total_rows": sum(row_counts.values()),
             "notes": meta.notes,
         }
     except Exception as exc:
@@ -1896,12 +1957,15 @@ def semantic_sources(
 @app.get("/api/semantic/metrics")
 def get_metrics(
     sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
+    # Live-mode users start from scratch: hide the demo-seeded builtin rows.
+    builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_metrics WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
+            f"SELECT * FROM sl_metrics WHERE sector_id = ?{builtin_filter} "
+            "ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []
@@ -1981,12 +2045,15 @@ def delete_metric(
 @app.get("/api/semantic/hierarchies")
 def get_hierarchies(
     sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
+    # Live-mode users start from scratch: hide the demo-seeded builtin rows.
+    builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_hierarchies WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
+            f"SELECT * FROM sl_hierarchies WHERE sector_id = ?{builtin_filter} "
+            "ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []
@@ -2053,12 +2120,15 @@ def delete_hierarchy(
 @app.get("/api/semantic/segments")
 def get_segments(
     sector_id: str = Query(default=DEFAULT_SECTOR, max_length=64),
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
+    # Live-mode users start from scratch: hide the demo-seeded builtin rows.
+    builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM sl_segments WHERE sector_id = ? ORDER BY is_builtin DESC, name LIMIT 1000",
+            f"SELECT * FROM sl_segments WHERE sector_id = ?{builtin_filter} "
+            "ORDER BY is_builtin DESC, name LIMIT 1000",
             (sector_id,),
         ).fetchall()
         result = []
@@ -2128,30 +2198,36 @@ def delete_segment(
 @app.get("/api/semantic/coverage")
 def semantic_coverage(
     sector_id: str = Query(default="manufacturing", max_length=64),
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
+    hidden = _hidden_demo_tables(current_user)
+    builtin_filter = " AND is_builtin = 0" if hidden else ""
     conn = get_connection()
     try:
         n_metrics = conn.execute(
-            "SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?", (sector_id,)
+            f"SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?{builtin_filter}",
+            (sector_id,),
         ).fetchone()[0]
         n_hierarchies = conn.execute(
-            "SELECT COUNT(*) FROM sl_hierarchies WHERE sector_id=?", (sector_id,)
+            f"SELECT COUNT(*) FROM sl_hierarchies WHERE sector_id=?{builtin_filter}",
+            (sector_id,),
         ).fetchone()[0]
         n_segments = conn.execute(
-            "SELECT COUNT(*) FROM sl_segments WHERE sector_id=?", (sector_id,)
+            f"SELECT COUNT(*) FROM sl_segments WHERE sector_id=?{builtin_filter}",
+            (sector_id,),
         ).fetchone()[0]
     finally:
         conn.close()
 
-    status = semantic_status()
+    status = _semantic_status_payload(hidden)
     n_entities = len(status.get("entities", []))
 
+    has_data = bool(status.get("loaded")) and (not hidden or n_entities > 0)
     breakdown = {
-        "sources": 100 if status.get("loaded") else 0,
+        "sources": 100 if has_data else 0,
         "entities": min(100, n_entities * 10),
-        "bridges": 100 if status.get("loaded") else 0,
-        "rules": 100 if status.get("loaded") else 0,
+        "bridges": 100 if has_data else 0,
+        "rules": 100 if has_data else 0,
         "metrics": min(100, n_metrics * 20),
         "hierarchies": min(100, n_hierarchies * 34),
         "segments": min(100, n_segments * 20),
@@ -2367,7 +2443,22 @@ def list_templates(
     catalog = _semantic_state.get("catalog")
     if catalog is None:
         raise HTTPException(status_code=503, detail="Semantic layer not loaded")
-    return catalog.list_templates()
+    templates = catalog.list_templates()
+    hidden = _hidden_demo_tables(_user)
+    if hidden:
+        draft_entities = (
+            catalog.get_draft_entities() if _semantic_state.get("loaded") else []
+        )
+        hidden_keys = set(hidden) | {
+            e["name"] for e in draft_entities if e["table"] in hidden
+        }
+        templates = [
+            t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
+        ]
+        if not any(e["table"] not in hidden for e in draft_entities):
+            # Live workspace with no real sources: every template targets demo.
+            templates = []
+    return templates
 
 
 @app.post("/api/semantic/templates", status_code=201, tags=["semantic"])
@@ -2427,13 +2518,35 @@ def delete_template(
     _hot_reload_templates()
 
 
+def _optional_user_mode(request: Request) -> Literal["demo", "live"]:
+    """Best-effort mode extraction for public endpoints: any decode failure
+    (missing/invalid/expired token) falls back to demo visibility."""
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return "demo"
+    try:
+        payload = _jwt_decode(auth[7:].strip(), _get_jwt_secret())
+    except Exception:
+        return "demo"
+    return "live" if payload.get("mode") == "live" else "demo"
+
+
 @app.get("/api/semantic/example-questions", tags=["semantic"])
-def list_example_questions() -> list[dict[str, str]]:
+def list_example_questions(request: Request) -> list[dict[str, str]]:
     """Return example questions derived from active query templates (public, no auth)."""
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
         return []
+    if _optional_user_mode(request) == "live":
+        # Templates are derived from the demo dataset; live users with real
+        # sources get questions regenerated from their own schema on build.
+        draft_entities = catalog.get_draft_entities()
+        hidden = _hidden_demo_tables(
+            UserPrincipal(username="_", role="user", mode="live")
+        )
+        if not any(e["table"] not in hidden for e in draft_entities):
+            return []
     templates = catalog.list_templates()
     active = [t for t in templates if t.get("is_active", True)]
     active_sorted = sorted(active, key=lambda t: t.get("name", ""))
@@ -2493,7 +2606,7 @@ def get_system_prompt() -> dict:
 
 
 @app.get("/api/semantic/mapping-defs", tags=["semantic"])
-def get_mapping_defs() -> dict:
+def get_mapping_defs(request: Request) -> dict:
     """Return semantic field definitions and disambiguation rules from YAML config.
 
     Frontend MappingView.tsx uses this to populate initial definitions rather than
@@ -2503,6 +2616,10 @@ def get_mapping_defs() -> dict:
     import pathlib as _pathlib  # noqa: PLC0415
 
     import yaml as _yaml  # noqa: PLC0415
+
+    if _optional_user_mode(request) == "live":
+        # The YAML definitions describe the demo dataset's fields only.
+        return {"definitions": [], "ambiguities": []}
 
     yaml_path = _pathlib.Path(__file__).parent / "metadata" / "mapping_defs.yaml"
     try:
