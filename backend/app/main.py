@@ -1488,6 +1488,12 @@ def get_table_data(
             )
             cols = [d[0] for d in cursor.description]
             data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        except Exception as exc:
+            # The table can disappear between the SHOW TABLES whitelist check
+            # and this query if a concurrent source removal rebuilds the
+            # snapshot — a 404 is accurate, a 500 is not.
+            logger.warning("get_table_data: DuckDB read failed for %s: %s", table, exc)
+            raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
         finally:
             dconn.close()
         return PaginatedData(
