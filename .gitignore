@@ -10,13 +10,15 @@ build/
 coverage.xml
 htmlcov/
 
-# Backend data — runtime-generated SQLite databases
+# Backend data — runtime-generated databases
 backend/data/context.db
 backend/data/agent_state.db
 backend/data/agent_state.db-wal
 backend/data/agent_state.db-shm
 backend/custom_agents.db
 backend/saved_queries.db
+backend/data/*.duckdb
+backend/data/*.duckdb.wal
 
 # Node
 frontend/node_modules/
