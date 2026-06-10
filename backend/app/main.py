@@ -13,6 +13,7 @@ import os
 import re
 import threading
 import uuid
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -154,7 +155,9 @@ _semantic_ns_lock = threading.Lock()
 # on it — see _semantic_cache_namespace_value()/_bump_semantic_cache_namespace().
 _SEMANTIC_CACHE_NS_REDIS_KEY = "semantic:ask:ns"
 _IN_PROCESS_CACHE_MAX = 256
-_in_process_cache: dict[str, str] = {}
+# LRU: hits move the entry to the back, eviction pops from the front — a hot
+# query stays cached under sustained load instead of being evicted FIFO-style.
+_in_process_cache: OrderedDict[str, str] = OrderedDict()
 _in_process_cache_lock = threading.Lock()
 
 
@@ -1621,6 +1624,8 @@ def semantic_ask(
     else:
         with _in_process_cache_lock:
             hit = _in_process_cache.get(cache_key)
+            if hit is not None:
+                _in_process_cache.move_to_end(cache_key)
         if hit:
             return SemanticAskResponse.model_validate_json(hit)
 
@@ -1675,9 +1680,13 @@ def semantic_ask(
                 pass
         else:
             with _in_process_cache_lock:
-                if len(_in_process_cache) >= _IN_PROCESS_CACHE_MAX:
-                    _in_process_cache.pop(next(iter(_in_process_cache)))
+                if (
+                    cache_key not in _in_process_cache
+                    and len(_in_process_cache) >= _IN_PROCESS_CACHE_MAX
+                ):
+                    _in_process_cache.popitem(last=False)
                 _in_process_cache[cache_key] = response_json
+                _in_process_cache.move_to_end(cache_key)
         return response_model
     except AmbiguityError as e:
         return SemanticAskResponse(
