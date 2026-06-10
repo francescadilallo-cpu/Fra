@@ -10,6 +10,7 @@ import math as _math
 import sqlite3 as _sqlite3
 import logging
 import os
+import re
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -775,9 +776,16 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     hidden_keys = set(hidden) | {
         e["name"] for e in all_entities if e["table"] in hidden
     }
-    if hidden and not entities:
-        # Live workspace with no real sources yet: metrics all come from demo.
-        metrics = []
+    if hidden:
+        # Drop any metric whose formula references a hidden (demo) table —
+        # not just when the workspace is empty, otherwise demo metrics
+        # reappear as soon as the first real source is connected.
+        _ref_re = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+        metrics = [
+            m
+            for m in metrics
+            if not (set(_ref_re.findall(m.get("formula") or "")) & hidden_keys)
+        ]
 
     relations: list[dict] = []
     if kg:
@@ -1742,13 +1750,16 @@ def data_store_status(
         meta = mgr.describe()
         tables = [t for t in meta.tables if t not in hidden]
         row_counts = {t: c for t, c in meta.record_counts.items() if t not in hidden}
+        # Strip the server filesystem path from the notes before returning
+        # them to clients — useful in logs, not in an API payload.
+        notes = re.sub(r"\s*\|\s*path=\S+", "", meta.notes or "")
         return {
             "source_type": meta.source_type,
             "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
             "tables": tables,
             "row_counts": row_counts,
             "total_rows": sum(row_counts.values()),
-            "notes": meta.notes,
+            "notes": notes,
         }
     except Exception as exc:
         return {"error": str(exc)}
