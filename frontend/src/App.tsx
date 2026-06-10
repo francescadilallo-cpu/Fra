@@ -171,7 +171,9 @@ export default function App() {
     return (
       <AccessGate onGrant={() => {
         sessionStorage.setItem(SESSION_KEY, '1')
-        setGranted(true)
+        // Full reload so all module-level constants (IS_DEMO_MODE, AGENTS, etc.)
+        // are re-evaluated against the newly-stored JWT.
+        window.location.reload()
       }} />
     )
   }

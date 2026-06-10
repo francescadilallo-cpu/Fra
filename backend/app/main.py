@@ -247,10 +247,13 @@ def _semantic_cache_namespace_value(redis_client: Any) -> int:
 
 
 def _semantic_cache_key(
-    question: str, context: dict[str, Any], redis_client: Any = None
+    question: str,
+    context: dict[str, Any],
+    redis_client: Any = None,
+    mode: str = "demo",
 ) -> str:
     payload = json.dumps(
-        {"q": question.strip(), "ctx": context},
+        {"q": question.strip(), "ctx": context, "mode": mode},
         sort_keys=True,
         ensure_ascii=False,
         default=str,
@@ -1518,7 +1521,9 @@ def semantic_ask(
 
     merged_context = {"session_id": req.session_id, **(req.context or {})}
     redis_client = _get_semantic_redis_client()
-    cache_key = _semantic_cache_key(question, merged_context, redis_client)
+    cache_key = _semantic_cache_key(
+        question, merged_context, redis_client, mode=_current_user.mode
+    )
     if redis_client is not None:
         try:
             cached_payload = redis_client.get(cache_key)
