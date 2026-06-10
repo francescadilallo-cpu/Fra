@@ -1620,13 +1620,21 @@ def _source_cfg_to_response(cfg) -> SourceResponse:
 
 @app.get("/api/sources", response_model=list[SourceResponse])
 def list_sources(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[SourceResponse]:
-    """List all configured data sources."""
+    """List configured data sources, filtered by the caller's mode.
+
+    Demo users see all sources including the pre-seeded scenario sources
+    (is_default=True). Live users see only manually-added sources so their
+    workspace starts clean even when demo sources exist in the shared registry.
+    """
     from .connectors.duckdb_source_manager import get_source_manager
 
     mgr = get_source_manager(_SCENARIO_PATH)
-    return [_source_cfg_to_response(s) for s in mgr.registry.list()]
+    sources = mgr.registry.list()
+    if current_user.mode == "live":
+        sources = [s for s in sources if not s.is_default]
+    return [_source_cfg_to_response(s) for s in sources]
 
 
 @app.post("/api/sources", response_model=SourceResponse, status_code=201)
