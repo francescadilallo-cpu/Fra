@@ -285,7 +285,7 @@ class MetadataCatalog:
         # attribute row plus JSON-parses sources on each call, so we memoise it
         # and invalidate only when the schema actually changes (populate /
         # populate_from_manager / prune_phantom_entities).
-        self._schema_ctx_cache: dict[int, str] = {}
+        self._schema_ctx_cache: dict[tuple[int, frozenset[str]], str] = {}
         self._schema_ctx_lock = threading.Lock()
 
     def _invalidate_schema_context_cache(self) -> None:
@@ -409,25 +409,32 @@ class MetadataCatalog:
             "populate_from_manager: upserted %d tables into catalog", len(schema)
         )
 
-    def get_schema_context(self, max_tables: int = 30) -> str:
+    def get_schema_context(
+        self, max_tables: int = 30, exclude_tables: frozenset[str] = frozenset()
+    ) -> str:
         """Return a compact LLM-ready description of all catalogued tables.
 
         Used in the LLM SQL-generation prompt so the model knows exactly which
         tables and columns are available in the DuckDB snapshot.
+        ``exclude_tables`` removes tables from the description (live-mode
+        users must not see demo tables).
 
-        The result is memoised per ``max_tables`` and invalidated whenever the
-        schema changes, so the hot query path does not rescan every entity and
-        attribute row on each request.
+        The result is memoised per ``(max_tables, exclude_tables)`` and
+        invalidated whenever the schema changes, so the hot query path does
+        not rescan every entity and attribute row on each request.
         """
+        cache_key = (max_tables, exclude_tables)
         with self._schema_ctx_lock:
-            cached = self._schema_ctx_cache.get(max_tables)
+            cached = self._schema_ctx_cache.get(cache_key)
             if cached is not None:
                 return cached
-            result = self._compute_schema_context(max_tables)
-            self._schema_ctx_cache[max_tables] = result
+            result = self._compute_schema_context(max_tables, exclude_tables)
+            self._schema_ctx_cache[cache_key] = result
         return result
 
-    def _compute_schema_context(self, max_tables: int) -> str:
+    def _compute_schema_context(
+        self, max_tables: int, exclude_tables: frozenset[str] = frozenset()
+    ) -> str:
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
             attr_rows = session.execute(select(AttributeMetaRow)).scalars().all()
@@ -453,7 +460,7 @@ class MetadataCatalog:
                 (s.get("table", row.name) for s in sources if isinstance(s, dict)),
                 row.name,
             )
-            if table in seen_tables:
+            if table in seen_tables or table in exclude_tables:
                 continue
             seen_tables.add(table)
             count += 1

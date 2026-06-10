@@ -210,9 +210,18 @@ _PROMPT_INJECTION_RE = re.compile(
 )
 _SQL_META_TOKENS_RE = re.compile(r";|--|/\*|\*/")
 _SQL_TABLE_ACCESS_RE = re.compile(
-    r"\b(?:from|join|into|update|table)\s+([a-zA-Z_][a-zA-Z0-9_\.]*)",
+    r"\b(?:from|join|into|update|table)\s+"
+    r'((?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)(?:\.(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*))*)',
     re.IGNORECASE,
 )
+
+
+def _split_table_ref(table_ref: str) -> list[str]:
+    """Split a possibly schema-qualified, possibly double-quoted table
+    reference into its lowercase unquoted parts."""
+    return [p.strip('"').lower() for p in re.findall(r'"[^"]+"|[^.]+', table_ref)]
+
+
 _SYSTEM_TABLE_MARKERS = {
     "sqlite_master",
     "sqlite_temp_master",
@@ -708,10 +717,19 @@ class SemanticLayer:
         return None
 
     def ask(
-        self, question: str, context=None, docs_override: SemanticDocs | None = None
+        self,
+        question: str,
+        context=None,
+        docs_override: SemanticDocs | None = None,
+        hidden_tables: frozenset[str] = frozenset(),
     ) -> Result:
-        """Resolve *question* and return a Result."""
+        """Resolve *question* and return a Result.
+
+        *hidden_tables* lists tables that must be invisible to this request
+        (live-mode users must never see demo tables in generated SQL).
+        """
         SemanticLayer._thread_local.docs = docs_override
+        SemanticLayer._thread_local.hidden_tables = hidden_tables
         t0 = time.perf_counter()
         try:
             result = self._resolve(question, context)
@@ -720,16 +738,23 @@ class SemanticLayer:
         except SemanticOntologyViolationError:
             raise
         except Exception as exc:
+            # Catch-all for the whole pipeline: the exception text can contain
+            # provider auth errors, file paths or other internals. Log it,
+            # return a generic message.
             logger.exception("SemanticLayer.ask error: %s", exc)
             result = Result(
-                answer=f"Internal error: {exc}",
+                answer=(
+                    "Something went wrong while answering this question — "
+                    "please try again or rephrase it."
+                ),
                 sources_touched=[],
-                notes=str(exc),
+                notes="internal_error",
             )
         finally:
-            # Always clear the thread-local so docs never bleed into the next
-            # request that runs on this thread without a docs_override.
+            # Always clear the thread-locals so docs and visibility never bleed
+            # into the next request that runs on this thread.
             SemanticLayer._thread_local.docs = None
+            SemanticLayer._thread_local.hidden_tables = frozenset()
         result.latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         return result
 
@@ -984,7 +1009,7 @@ class SemanticLayer:
                 )
 
             for table_ref in _SQL_TABLE_ACCESS_RE.findall(normalized):
-                parts = [p.lower() for p in table_ref.split(".")]
+                parts = _split_table_ref(table_ref)
                 table_name = parts[-1]
                 if any(p in _SYSTEM_TABLE_MARKERS for p in parts):
                     self._security_block(
@@ -1270,11 +1295,23 @@ class SemanticLayer:
             raise SemanticSecurityViolationError(
                 "Generated SQL contains semicolon (multi-statement blocked)"
             )
+        hidden: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
+        hidden_lower = {h.lower() for h in hidden}
         for table_ref in _SQL_TABLE_ACCESS_RE.findall(stripped):
-            parts = [p.lower() for p in table_ref.split(".")]
+            parts = _split_table_ref(table_ref)
             if any(p in _SYSTEM_TABLE_MARKERS for p in parts):
                 raise SemanticSecurityViolationError(
                     f"Generated SQL accesses system table: {table_ref}"
+                )
+            # Live-mode users must never touch demo tables, even if the model
+            # hallucinates one that was excluded from its schema context.
+            if hidden_lower and (
+                ".".join(parts) in hidden_lower or any(p in hidden_lower for p in parts)
+            ):
+                raise SemanticSecurityViolationError(
+                    f"Generated SQL accesses a table outside this workspace: {table_ref}"
                 )
 
     def _execute_llm_sql(self, intent: Intent) -> Result:
@@ -1306,9 +1343,14 @@ class SemanticLayer:
                 notes="no_manager",
             )
 
-        # Build schema context from catalog (populated from DuckDB snapshot)
+        # Build schema context from catalog (populated from DuckDB snapshot).
+        # Hidden tables (demo data for live-mode users) are excluded so the
+        # model can neither reference them nor reveal their existence.
+        _hidden: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
         schema_ctx = (
-            self._catalog.get_schema_context()
+            self._catalog.get_schema_context(exclude_tables=_hidden)
             if self._catalog
             else "No schema available."
         )
@@ -1358,9 +1400,14 @@ class SemanticLayer:
                 )
             payload = _extract_json_payload(raw_text)
         except Exception as exc:
+            # Provider exceptions can embed auth errors, request ids and other
+            # internals — log the detail but never surface it to the end user.
             logger.warning("_execute_llm_sql: LLM call failed: %s", exc)
             return Result(
-                answer=f"Could not generate SQL for this question: {exc}",
+                answer=(
+                    "The query service is temporarily unavailable — "
+                    "please try again in a moment."
+                ),
                 notes="llm_sql_generation_failed",
             )
 

@@ -194,6 +194,9 @@ def test_cache_namespace_is_bumped_on_kg_rebuild(
         def row_count(self) -> int:
             return 0
 
+        def list_entities(self) -> list[str]:
+            return []
+
     layer = DummyLayer()
     monkeypatch.setattr(app_module, "_semantic_cache_namespace", 0)
     monkeypatch.setitem(app_module._semantic_state, "loaded", True)
@@ -491,7 +494,11 @@ def test_semantic_ask_redis_cache_short_circuits_repeated_layer_execution(
 
     class DummyLayer:
         def ask(
-            self, question: str, context: dict[str, str], docs_override=None
+            self,
+            question: str,
+            context: dict[str, str],
+            docs_override=None,
+            hidden_tables=frozenset(),
         ) -> SimpleNamespace:
             calls["count"] += 1
             return SimpleNamespace(

@@ -1413,20 +1413,21 @@ def get_table_data(
     try:
         duckdb_conn = get_source_manager(_SCENARIO_PATH).get_connection()
         try:
-            available = {
+            duck_tables = {
                 row[0] for row in duckdb_conn.execute("SHOW TABLES").fetchall()
             }
         finally:
             duckdb_conn.close()
     except Exception:
-        available = set()
-    # Also include SQLite tables (the actual data backend for this endpoint) —
-    # but not for live-mode users: the legacy SQLite DB is entirely demo data.
+        duck_tables = set()
+    # The legacy SQLite DB is entirely demo data — never expose it to
+    # live-mode users.
+    sqlite_tables: set[str] = set()
     if not hidden:
         try:
             _sl = get_connection()
             try:
-                available |= {
+                sqlite_tables = {
                     row[0]
                     for row in _sl.execute(
                         "SELECT name FROM sqlite_master WHERE type='table'"
@@ -1436,7 +1437,7 @@ def get_table_data(
                 _sl.close()
         except Exception:
             pass
-    available -= hidden
+    available = (duck_tables | sqlite_tables) - hidden
     if table not in available:
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
 
@@ -1446,10 +1447,31 @@ def get_table_data(
     # server-controlled identifier; the quoting here is belt-and-suspenders
     # defence against unusual (but valid) identifier characters.
     table_id = '"' + table.replace('"', '""') + '"'
+    offset = (page - 1) * page_size
+
+    # Live-mode users always read from the DuckDB snapshot (their own data).
+    # Demo users keep reading legacy tables from SQLite, but tables that only
+    # exist in DuckDB (user-added sources) must be served from DuckDB too —
+    # name collisions resolve in favour of the user's data for live mode.
+    use_duckdb = table in duck_tables and (bool(hidden) or table not in sqlite_tables)
+    if use_duckdb:
+        dconn = get_source_manager(_SCENARIO_PATH).get_connection()
+        try:
+            total = dconn.execute(f"SELECT COUNT(*) FROM {table_id}").fetchone()[0]
+            cursor = dconn.execute(
+                f"SELECT * FROM {table_id} LIMIT {int(page_size)} OFFSET {int(offset)}"
+            )
+            cols = [d[0] for d in cursor.description]
+            data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        finally:
+            dconn.close()
+        return PaginatedData(
+            table=table, total=total, page=page, page_size=page_size, data=data
+        )
+
     conn = get_connection()
     try:
         total = conn.execute(f"SELECT COUNT(*) FROM {table_id}").fetchone()[0]
-        offset = (page - 1) * page_size
         rows = conn.execute(
             f"SELECT * FROM {table_id} LIMIT ? OFFSET ?", (page_size, offset)
         ).fetchall()
@@ -1595,7 +1617,12 @@ def semantic_ask(
         )
 
     try:
-        result = layer.ask(question, context=merged_context, docs_override=merged_docs)
+        result = layer.ask(
+            question,
+            context=merged_context,
+            docs_override=merged_docs,
+            hidden_tables=hidden,
+        )
         response_model = SemanticAskResponse(
             answer=result.answer,
             sql_used=result.sql_used,
@@ -1675,16 +1702,14 @@ def rebuild_knowledge_graph(
             }
         )
         _ensure_semantic_loaded()
-        kg = _semantic_state["kg"]
-        catalog = _semantic_state["catalog"]
         hidden = _hidden_demo_tables(current_user)
-        kg_nodes, kg_edges = _kg_counts_excluding(kg, hidden)
+        status = _semantic_status_payload(hidden)
         return {
             "success": True,
-            "kg_nodes": kg_nodes,
-            "kg_edges": kg_edges,
-            "metadata_rows": catalog.row_count(),
-            "dedup_count": 0 if hidden else kg.dedup_count,
+            "kg_nodes": status["kg_nodes"],
+            "kg_edges": status["kg_edges"],
+            "metadata_rows": status["metadata_rows"],
+            "dedup_count": status["dedup_count"],
         }
 
 
@@ -2577,16 +2602,23 @@ def list_example_questions(request: Request) -> list[dict[str, str]]:
     catalog = _semantic_state.get("catalog")
     if catalog is None:
         return []
+    templates = catalog.list_templates()
     if _optional_user_mode(request) == "live":
-        # Templates are derived from the demo dataset; live users with real
-        # sources get questions regenerated from their own schema on build.
+        # Templates derived from the demo dataset must never surface in a
+        # live workspace — filter by source the same way /api/semantic/templates
+        # does, instead of returning everything once one real source exists.
         draft_entities = catalog.get_draft_entities()
         hidden = _hidden_demo_tables(
             UserPrincipal(username="_", role="user", mode="live")
         )
         if not any(e["table"] not in hidden for e in draft_entities):
             return []
-    templates = catalog.list_templates()
+        hidden_keys = set(hidden) | {
+            e["name"] for e in draft_entities if e["table"] in hidden
+        }
+        templates = [
+            t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
+        ]
     active = [t for t in templates if t.get("is_active", True)]
     active_sorted = sorted(active, key=lambda t: t.get("name", ""))
     return [
@@ -2599,7 +2631,7 @@ def list_example_questions(request: Request) -> list[dict[str, str]]:
 
 
 @app.get("/api/semantic/system-prompt", tags=["semantic"])
-def get_system_prompt() -> dict:
+def get_system_prompt(request: Request) -> dict:
     """Return a dynamic LLM system prompt built from the live semantic catalog.
 
     Used by the frontend's direct-LLM mode (user-provided API key) so it always
@@ -2611,8 +2643,15 @@ def get_system_prompt() -> dict:
     catalog = _semantic_state.get("catalog")
     layer = _semantic_state.get("layer")
 
+    # Live-mode users must not see the demo schema in their prompt.
+    exclude: frozenset[str] = frozenset()
+    if _optional_user_mode(request) == "live":
+        exclude = _hidden_demo_tables(
+            UserPrincipal(username="_", role="user", mode="live")
+        )
+
     # Build the core schema/SQL prompt
-    base_prompt = _bsp(catalog=catalog, layer=layer)
+    base_prompt = _bsp(catalog=catalog, layer=layer, exclude_tables=exclude)
 
     # Append frontend-specific output format (richer than the backend format)
     frontend_format = (

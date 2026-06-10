@@ -40,12 +40,15 @@ def _get_client() -> anthropic.Anthropic:
 # ── System prompt ──────────────────────────────────────────────────────────────
 
 
-def build_system_prompt(catalog=None, layer=None) -> str:
+def build_system_prompt(
+    catalog=None, layer=None, exclude_tables: frozenset[str] = frozenset()
+) -> str:
     """Build a dynamic system prompt from semantic layer metadata.
 
     Uses catalog.get_schema_context() for the table schema section so the
     prompt automatically reflects the loaded dataset rather than any
-    hardcoded schema.
+    hardcoded schema. *exclude_tables* removes tables from the schema
+    section (demo tables must not appear for live-mode users).
     """
     parts = [
         "You are a data intelligence assistant. "
@@ -57,7 +60,7 @@ def build_system_prompt(catalog=None, layer=None) -> str:
     schema_ctx = ""
     if catalog is not None:
         try:
-            schema_ctx = catalog.get_schema_context()
+            schema_ctx = catalog.get_schema_context(exclude_tables=exclude_tables)
         except Exception:
             pass
 

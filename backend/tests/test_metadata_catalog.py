@@ -470,11 +470,23 @@ class TestSchemaContextCache:
         _seed_entity(cat, "Orders", "orders")
         a = cat.get_schema_context(max_tables=5)
         b = cat.get_schema_context(max_tables=10)
-        # Different max_tables → independent cache entries.
-        assert 5 in cat._schema_ctx_cache
-        assert 10 in cat._schema_ctx_cache
-        assert a is cat._schema_ctx_cache[5]
-        assert b is cat._schema_ctx_cache[10]
+        # Different max_tables → independent cache entries (keyed together
+        # with the exclude_tables frozenset).
+        assert (5, frozenset()) in cat._schema_ctx_cache
+        assert (10, frozenset()) in cat._schema_ctx_cache
+        assert a is cat._schema_ctx_cache[(5, frozenset())]
+        assert b is cat._schema_ctx_cache[(10, frozenset())]
+
+    def test_exclude_tables_removes_table_from_context(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        _seed_entity(cat, "Demo", "demo_table")
+        full = cat.get_schema_context()
+        assert "demo_table" in full
+        filtered = cat.get_schema_context(exclude_tables=frozenset({"demo_table"}))
+        assert "demo_table" not in filtered
+        assert "orders" in filtered
+        # Filtered and unfiltered entries are cached independently.
+        assert cat.get_schema_context() is full
 
     def test_prune_invalidates_cache(self, cat):
         _seed_entity(cat, "Ghost", "ghost_table")

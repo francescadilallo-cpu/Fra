@@ -148,6 +148,28 @@ def test_guardrail_blocks_system_table_access(layer):
         layer._validate_llm_payload_security(payload)
 
 
+def test_generated_sql_blocks_hidden_tables(layer):
+    from app.semantic.layer import SemanticLayer, SemanticSecurityViolationError
+
+    SemanticLayer._thread_local.hidden_tables = frozenset({"sales_order_header"})
+    try:
+        with pytest.raises(SemanticSecurityViolationError):
+            layer._validate_generated_sql("SELECT COUNT(*) FROM sales_order_header")
+        # Schema-qualified references to a hidden table are blocked too.
+        with pytest.raises(SemanticSecurityViolationError):
+            layer._validate_generated_sql(
+                'SELECT COUNT(*) FROM "erp"."sales_order_header"'
+            )
+        # Non-hidden tables still pass.
+        layer._validate_generated_sql("SELECT COUNT(*) FROM customers")
+    finally:
+        SemanticLayer._thread_local.hidden_tables = frozenset()
+
+
+def test_generated_sql_allows_all_tables_without_hidden_set(layer):
+    layer._validate_generated_sql("SELECT COUNT(*) FROM sales_order_header")
+
+
 def test_guardrail_allows_catalog_scoped_payload(layer):
     payload = {
         "intent_type": "count_orders",
