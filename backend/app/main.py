@@ -611,6 +611,10 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
     if catalog is not None:
         try:
             catalog.populate_from_manager(mgr)
+            # populate_from_manager only upserts — entities whose tables were
+            # just removed (source disconnect) would otherwise linger forever
+            # in the draft and in the LLM schema context.
+            catalog.prune_phantom_entities(frozenset(mgr.get_schema_info().keys()))
         except Exception as exc:
             logger.warning("catalog refresh after rebuild failed: %s", exc)
 
