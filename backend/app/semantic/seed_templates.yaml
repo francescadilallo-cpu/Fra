@@ -386,11 +386,14 @@ templates:
       - "account"
 
   - name: "Categoria con margine più alto"
-    description: "Quantità venduta per categoria di prodotto (base per calcolo margine)"
+    description: "Margine commerciale (qty × (listino − costo standard)) per categoria di prodotto, ERP × PIM"
     sql_query: |
-      SELECT product_ref, SUM(qty) AS total_qty
-      FROM sales_order_line
-      GROUP BY product_ref
+      SELECT split_part(p."categoryPath", '/', 1) AS category,
+             ROUND(SUM(l.qty * (p."listPrice" - p."standardCost")), 2) AS margin
+      FROM sales_order_line l
+      JOIN product_catalog_pim p ON l.product_ref = p.internal_id
+      GROUP BY 1
+      ORDER BY margin DESC
     keywords:
       - "categoria margine"
       - "top category by margin"
@@ -400,6 +403,7 @@ templates:
       - "margin by category"
     sources:
       - "sales_order_line"
+      - "product_catalog_pim"
 
   - name: "Ordini con sconto"
     description: "Numero di ordini che includono almeno una linea con offerta speciale"
@@ -542,6 +546,11 @@ templates:
       - "monthly revenue"
       - "revenue per mese"
       - "vendite mensili"
+      - "revenue by month"
+      - "fatturato per mese"
+      - "incassi mensili"
+      - "andamento fatturato"
+      - "revenue trend"
     sources:
       - "sales_order_header"
 

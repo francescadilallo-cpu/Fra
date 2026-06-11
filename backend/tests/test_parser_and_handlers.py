@@ -196,3 +196,45 @@ def test_parser_inactive_template_not_matched():
     ]
     intent = _parser().parse("Quanti ordini abbiamo nel 2014?", templates=templates)
     assert intent.intent_type == "unknown"
+
+
+# ── Template keyword matching: specificity and raw-question support ───────────
+
+
+def _tpl(name: str, keywords: list[str]) -> dict:
+    return {
+        "intent_type": f"template:{name}",
+        "keywords": keywords,
+        "is_active": True,
+    }
+
+
+def test_longest_keyword_wins_over_generic():
+    # "incassi" (generic) appears in the normalised question, but the monthly
+    # template's longer keyword must win — first-match-wins used to let
+    # whichever template came first shadow the specific one.
+    templates = [
+        _tpl("totali", ["incassi"]),
+        _tpl("mensile", ["fatturato mensile", "incassi mensili"]),
+    ]
+    intent = _parser().parse("mostra gli incassi mensili", templates)
+    assert intent.intent_type == "template:mensile"
+
+
+def test_english_keywords_match_raw_question():
+    # The term map rewrites "revenue" → "incassi" before matching; English
+    # keywords must still match against the raw question.
+    templates = [
+        _tpl("totali", ["incassi"]),
+        _tpl("mensile", ["revenue by month"]),
+    ]
+    intent = _parser().parse("show me revenue by month", templates)
+    assert intent.intent_type == "template:mensile"
+
+
+def test_inactive_template_never_matches():
+    templates = [
+        {"intent_type": "template:off", "keywords": ["dipendenti"], "is_active": False},
+    ]
+    intent = _parser().parse("quanti dipendenti abbiamo?", templates)
+    assert intent.intent_type != "template:off"

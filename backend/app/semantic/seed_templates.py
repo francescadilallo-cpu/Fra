@@ -27,3 +27,15 @@ def _load() -> list[dict]:
 
 
 SEED_TEMPLATES: list[dict] = _load()
+
+# Superseded seed SQL, by template name. When a deployed DB still holds one of
+# these exact queries under the same name, the seeder upgrades it in place to
+# the current YAML version. Templates the user has edited (SQL matches neither
+# the old nor the new seed) are never touched.
+SEED_SQL_MIGRATIONS: dict[str, list[str]] = {
+    "Categoria con margine più alto": [
+        # Pre-fix version: summed quantity per product_ref — neither margin
+        # nor category, despite the template name.
+        "SELECT product_ref, SUM(qty) AS total_qty\nFROM sales_order_line\nGROUP BY product_ref",
+    ],
+}

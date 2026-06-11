@@ -393,20 +393,34 @@ class _RuleParser:
         # ── Step 1: Template keyword matching — checked FIRST ─────────────────
         # Templates registered in the DB take priority over structural patterns
         # so user-defined overrides always win.
+        #
+        # Keywords are checked against BOTH the normalised question (Italian
+        # tokens) and the raw question: English keywords like "monthly
+        # revenue" would otherwise never match once the term map has rewritten
+        # "revenue" → "incassi". Among all matches the LONGEST keyword wins —
+        # a generic keyword like "incassi" must not shadow a more specific
+        # template ("fatturato mensile") just because it appears earlier.
         if templates:
             q_lower = q.lower()
+            raw_lower = question.lower()
+            best_len = -1
+            best_tpl: dict | None = None
             for tpl in templates:
                 if not tpl.get("is_active", True):
                     continue
                 for kw in tpl.get("keywords", []):
-                    if kw.lower() in q_lower:
-                        return Intent(
-                            intent_type=tpl["intent_type"],
-                            filters={"year": year} if year else {},
-                            limit=limit,
-                            year=year,
-                            raw_question=question,
-                        )
+                    k = kw.lower()
+                    if len(k) > best_len and (k in q_lower or k in raw_lower):
+                        best_len = len(k)
+                        best_tpl = tpl
+            if best_tpl is not None:
+                return Intent(
+                    intent_type=best_tpl["intent_type"],
+                    filters={"year": year} if year else {},
+                    limit=limit,
+                    year=year,
+                    raw_question=question,
+                )
 
         # ── Step 2: Structural intent patterns ────────────────────────────────
         # These return system info (no SQL). Keep these regardless of templates.

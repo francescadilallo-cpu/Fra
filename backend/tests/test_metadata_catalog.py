@@ -691,3 +691,62 @@ class TestGetAvailableTables:
         mgr.execute_all.side_effect = RuntimeError("boom")
 
         assert cat._get_available_tables(mgr=mgr) == set()
+
+
+# ── seed_default_templates: stale-seed migration ────────────────────────────────
+
+
+class TestSeedTemplateMigration:
+    _OLD_SQL = "SELECT product_ref, SUM(qty) AS total_qty\nFROM sales_order_line\nGROUP BY product_ref"
+    _NEW_SQL = "SELECT category, SUM(margin) AS margin FROM margins GROUP BY category"
+
+    def _seed(self) -> dict:
+        return {
+            "name": "Margine per categoria",
+            "description": "fixed",
+            "sql_query": self._NEW_SQL,
+            "keywords": ["margine per categoria"],
+            "sources": ["sales_order_line"],
+        }
+
+    def test_stale_seed_row_is_upgraded(self):
+        cat = MetadataCatalog()
+        # Deploy the OLD seed first (simulates an existing install).
+        cat.seed_default_templates(
+            [{**self._seed(), "sql_query": self._OLD_SQL, "description": "old"}]
+        )
+        n = cat.seed_default_templates(
+            [self._seed()],
+            sql_migrations={"Margine per categoria": [self._OLD_SQL]},
+        )
+        assert n == 0  # upgraded in place, not inserted
+        tpl = next(
+            t for t in cat.list_templates() if t["name"] == "Margine per categoria"
+        )
+        assert tpl["sql_query"].strip() == self._NEW_SQL
+        assert tpl["description"] == "fixed"
+
+    def test_user_edited_template_is_never_touched(self):
+        cat = MetadataCatalog()
+        user_sql = "SELECT 1 AS my_custom_version"
+        cat.seed_default_templates([{**self._seed(), "sql_query": user_sql}])
+        cat.seed_default_templates(
+            [self._seed()],
+            sql_migrations={"Margine per categoria": [self._OLD_SQL]},
+        )
+        tpl = next(
+            t for t in cat.list_templates() if t["name"] == "Margine per categoria"
+        )
+        assert tpl["sql_query"].strip() == user_sql
+
+    def test_fresh_install_gets_new_sql_directly(self):
+        cat = MetadataCatalog()
+        n = cat.seed_default_templates(
+            [self._seed()],
+            sql_migrations={"Margine per categoria": [self._OLD_SQL]},
+        )
+        assert n == 1
+        tpl = next(
+            t for t in cat.list_templates() if t["name"] == "Margine per categoria"
+        )
+        assert tpl["sql_query"].strip() == self._NEW_SQL

@@ -835,23 +835,41 @@ class MetadataCatalog:
             s.commit()
         return count
 
-    def seed_default_templates(self, templates: list[dict]) -> int:
+    def seed_default_templates(
+        self,
+        templates: list[dict],
+        sql_migrations: dict[str, list[str]] | None = None,
+    ) -> int:
         """Seed the DB with default templates on first install.
 
-        Only inserts templates that do not already exist by name.
-        Never overwrites existing templates (auto_generated or user-owned).
-        Returns count of inserted templates.
+        Only inserts templates that do not already exist by name. An existing
+        template is upgraded in place only when its SQL exactly matches a
+        superseded seed version listed in *sql_migrations* (i.e. the deployed
+        row is a stale copy of an old seed, not a user edit). User-modified
+        templates are never touched. Returns count of inserted templates.
         """
         import json
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc).isoformat()
+        migrations = sql_migrations or {}
         count = 0
         with self._Session() as s:
             for tpl in templates:
                 existing = s.query(QueryTemplateRow).filter_by(name=tpl["name"]).first()
                 if existing is not None:
-                    continue  # never overwrite
+                    superseded = [q.strip() for q in migrations.get(tpl["name"], [])]
+                    if superseded and (existing.sql_query or "").strip() in superseded:
+                        existing.sql_query = tpl["sql_query"]
+                        existing.description = tpl.get("description", "")
+                        existing.keywords_json = json.dumps(tpl.get("keywords", []))
+                        existing.sources_json = json.dumps(tpl.get("sources", []))
+                        existing.updated_at = now
+                        logger.info(
+                            "Upgraded stale seed template '%s' to current version",
+                            tpl["name"],
+                        )
+                    continue  # never overwrite user-modified templates
                 row = QueryTemplateRow(
                     name=tpl["name"],
                     description=tpl.get("description", ""),

@@ -575,10 +575,11 @@ def _ensure_semantic_loaded() -> None:
                 "hr_pim": hr_pim,
             }
         )
-        # Seed golden query templates on first install (never overwrites existing)
-        from app.semantic.seed_templates import SEED_TEMPLATES
+        # Seed golden query templates on first install (never overwrites existing,
+        # but upgrades rows still holding a superseded seed SQL verbatim)
+        from app.semantic.seed_templates import SEED_SQL_MIGRATIONS, SEED_TEMPLATES
 
-        n = catalog.seed_default_templates(SEED_TEMPLATES)
+        n = catalog.seed_default_templates(SEED_TEMPLATES, SEED_SQL_MIGRATIONS)
         if n:
             logger.info("Seeded %d default query templates", n)
         # Seed default glossary terms as context docs on first install
