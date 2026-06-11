@@ -2452,16 +2452,16 @@ async def build_semantic_layer(
     if force or not _semantic_state["loaded"]:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, reload_semantic)
-    # Auto-generate templates from the freshly-built schema (always from the
-    # full unfiltered draft — templates are shared system-wide)
-    catalog = _semantic_state.get("catalog")
-    layer = _semantic_state.get("layer")
-    if catalog is not None and layer is not None:
-        draft = _get_semantic_draft()
-        auto_tpls = generate_templates_from_draft(draft)
-        n = catalog.upsert_auto_templates(auto_tpls)
-        logger.info("Auto-generated %d query templates from semantic layer", n)
-        layer.set_templates(catalog.list_templates())
+        # Auto-generate templates from the freshly-built schema (always from
+        # the full unfiltered draft — templates are shared system-wide)
+        catalog = _semantic_state.get("catalog")
+        layer = _semantic_state.get("layer")
+        if catalog is not None and layer is not None:
+            draft = _get_semantic_draft()
+            auto_tpls = generate_templates_from_draft(draft)
+            n = catalog.upsert_auto_templates(auto_tpls)
+            logger.info("Auto-generated %d query templates from semantic layer", n)
+            layer.set_templates(catalog.list_templates())
     return _get_semantic_draft(_hidden_demo_tables(current_user))
 
 

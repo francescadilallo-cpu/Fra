@@ -230,14 +230,18 @@ def test_cache_namespace_is_bumped_on_full_semantic_rebuild(
     app_module,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """POST /api/semantic/build → reload_semantic() swaps in a brand-new
-    SemanticLayer instance (plus fresh ontology/catalog/KG/templates) — the
-    most thorough kind of semantic-stack mutation there is. Every answer
-    cached under the old generation reflects the OLD stack; it must stop
-    being served immediately, exactly like the narrower mutations
+    """POST /api/semantic/build?force=true → reload_semantic() swaps in a
+    brand-new SemanticLayer instance (plus fresh ontology/catalog/KG/
+    templates) — the most thorough kind of semantic-stack mutation there is.
+    Every answer cached under the old generation reflects the OLD stack; it
+    must stop being served immediately, exactly like the narrower mutations
     (mapping update, KG rebuild, metric/context-doc/template edits) already
     do — a full rebuild invalidating *less* than its own sub-parts would be
-    a regression, not an oversight worth tolerating."""
+    a regression, not an oversight worth tolerating.
+
+    Without force, a POST on an already-loaded stack is a fast no-op: the
+    layer instance and the cache namespace must stay untouched, because no
+    rebuild happened and cached answers are still valid."""
 
     class DummyLayer:
         def __init__(self) -> None:
@@ -284,7 +288,23 @@ def test_cache_namespace_is_bumped_on_full_semantic_rebuild(
     )
     monkeypatch.setattr(app_module, "generate_templates_from_draft", lambda draft: [])
 
+    # Already loaded + no force → fast path: no rebuild, no invalidation.
     response = client.post("/api/semantic/build", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert app_module._semantic_state["layer"] is old_layer, (
+        "without force, an already-loaded stack must not be rebuilt — the "
+        "fast path exists precisely to skip the expensive reload"
+    )
+    assert app_module._semantic_cache_namespace == 0, (
+        "no rebuild happened, so cached answers are still valid and the "
+        "namespace must not be bumped"
+    )
+
+    # force=true → full rebuild: layer swapped, cache invalidated.
+    response = client.post(
+        "/api/semantic/build", params={"force": "true"}, headers=auth_headers
+    )
 
     assert response.status_code == 200, response.text
     assert app_module._semantic_state["layer"] is new_layer, (
