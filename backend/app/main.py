@@ -536,7 +536,15 @@ def _ensure_semantic_loaded() -> None:
             # Fallback: schema-driven, works with any registered source.
             kg.build_from_schema(_mgr)
 
-        catalog = MetadataCatalog()
+        # Durable catalog: user-edited query templates, entity descriptions and
+        # context notes must survive restarts. The in-memory default would wipe
+        # them on every boot (and make SEED_SQL_MIGRATIONS pointless). Seeding
+        # and populate_*() are idempotent upserts, so reopening an existing
+        # file is safe.
+        metadata_db_url = os.getenv("METADATA_DB_URL", "").strip() or (
+            f"sqlite:///{Path(__file__).parent.parent / 'data' / 'metadata.db'}"
+        )
+        catalog = MetadataCatalog(metadata_db_url)
         # Schema-driven discovery first — source of truth for table/column
         # structure. populate_from_manager() must run before populate() so that
         # schema-discovered entries exist before business metadata is layered on.

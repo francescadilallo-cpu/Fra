@@ -275,6 +275,12 @@ class MetadataCatalog:
         if in_memory:
             engine_kwargs["connect_args"] = {"check_same_thread": False}
             engine_kwargs["poolclass"] = StaticPool
+        elif db_url.startswith("sqlite"):
+            # File-backed: FastAPI serves requests on a thread pool, so pooled
+            # connections cross threads (safe — one checkout at a time). The
+            # timeout maps to SQLite's busy handler, avoiding instant
+            # "database is locked" errors under concurrent writes.
+            engine_kwargs["connect_args"] = {"check_same_thread": False, "timeout": 5}
         self._engine = create_engine(db_url, **engine_kwargs)
         Base.metadata.create_all(self._engine)
         self._migrate_schema()
