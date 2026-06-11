@@ -3059,7 +3059,37 @@ def get_live_config(
 # persists user-defined agent definitions so they survive browser cache clears
 # and work across devices.
 
-_AGENTS_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "custom_agents.db"
+_DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data"
+
+
+def _user_db_path(filename: str) -> Path:
+    """Resolve a user-data SQLite file under DATA_DIR (default: backend/data).
+
+    Earlier versions defaulted DATA_DIR to the process CWD, so saved agents,
+    queries and ontology extensions ended up wherever uvicorn happened to be
+    launched from — and silently "disappeared" when the launch directory
+    changed. Anchor the default next to the other databases, and move a legacy
+    CWD copy into place (with its WAL sidecars) so existing data survives.
+    """
+    env = os.getenv("DATA_DIR", "").strip()
+    base = Path(env) if env else _DEFAULT_DATA_DIR
+    base.mkdir(parents=True, exist_ok=True)
+    target = base / filename
+    legacy = Path.cwd() / filename
+    target_empty = not target.exists() or target.stat().st_size == 0
+    if not env and target_empty and legacy.exists() and legacy != target:
+        try:
+            for suffix in ("", "-wal", "-shm"):
+                src = Path(str(legacy) + suffix)
+                if src.exists():
+                    src.replace(Path(str(target) + suffix))
+            logger.info("Migrated legacy %s from CWD into %s", filename, base)
+        except OSError as exc:
+            logger.warning("Could not migrate legacy %s: %s", filename, exc)
+    return target
+
+
+_AGENTS_DB_PATH = _user_db_path("custom_agents.db")
 
 
 def _agents_db() -> _sqlite3.Connection:
@@ -3254,7 +3284,7 @@ def delete_custom_agent(
 
 # ── Saved queries ─────────────────────────────────────────────────────────────
 
-_QUERIES_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "saved_queries.db"
+_QUERIES_DB_PATH = _user_db_path("saved_queries.db")
 
 
 def _queries_db() -> _sqlite3.Connection:
@@ -3338,7 +3368,7 @@ def delete_saved_query(
 # instant rendering; these endpoints make it durable so a user's hand-built
 # ontology survives a new browser, device, or cleared storage.
 
-_ONTOLOGY_EXT_DB_PATH = Path(os.getenv("DATA_DIR", ".")) / "ontology_extensions.db"
+_ONTOLOGY_EXT_DB_PATH = _user_db_path("ontology_extensions.db")
 _ONTOLOGY_EXT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB per workspace document
 
 
