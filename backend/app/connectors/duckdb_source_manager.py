@@ -415,7 +415,14 @@ class DuckDBSourceManager:
             gen = self._schema_gen
         conn = self.get_connection()
         try:
-            tables = [r[0] for r in conn.execute("SHOW TABLES").fetchall()]
+            # Underscore-prefixed tables (_build_meta, …) are internal snapshot
+            # bookkeeping: surfacing them here would leak them into the catalog,
+            # the semantic draft's entity list, LLM schema prompts and the KG.
+            tables = [
+                r[0]
+                for r in conn.execute("SHOW TABLES").fetchall()
+                if not str(r[0]).startswith("_")
+            ]
             result: dict[str, dict] = {}
             for table in tables:
                 safe = table.replace('"', '""')

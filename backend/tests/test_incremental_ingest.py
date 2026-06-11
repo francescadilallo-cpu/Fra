@@ -206,3 +206,24 @@ class TestConcurrentReadDuringIncrementalSync:
             f"not crash: {read_error[0]!r}"
         )
         assert read_rows[0]["n"] == 1
+
+
+def test_schema_info_excludes_internal_tables(snapshot_env):
+    """_build_meta (and any _-prefixed table) is snapshot bookkeeping: it must
+    not surface in get_schema_info(), which feeds the catalog, the semantic
+    draft's entity list, the LLM schema prompt and the KG."""
+    scenario, registry, db_path, tmp = snapshot_env
+
+    csv = tmp / "users.csv"
+    _write_csv(csv, ["id,name", "1,alice"])
+    registry.upsert(_make_csv_source("src", csv, "users"))
+
+    mgr = DuckDBSourceManager(scenario, db_path, registry)
+    mgr.rebuild()
+
+    schema = mgr.get_schema_info()
+    assert "users" in schema
+    assert not any(t.startswith("_") for t in schema), (
+        f"internal tables leaked into schema info: "
+        f"{[t for t in schema if t.startswith('_')]}"
+    )
