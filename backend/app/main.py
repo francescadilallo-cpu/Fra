@@ -1085,6 +1085,15 @@ async def lifespan(app: FastAPI):
 
     get_source_manager(_SCENARIO_PATH)
 
+    # Build the semantic stack eagerly so the first user request is instant.
+    # Running it here (before the server starts accepting traffic) means no
+    # request ever hits the cold-start code path that would block for 5–10 s
+    # and make the frontend show "Not built yet" or "Backend not connected".
+    try:
+        _ensure_semantic_loaded()
+    except Exception as _startup_exc:
+        logger.warning("Semantic stack warm-up failed at startup: %s", _startup_exc)
+
     yield
 
 

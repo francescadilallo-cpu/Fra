@@ -2287,9 +2287,11 @@ export default function SemanticLayerView() {
                 value={pgQuery}
                 onChange={e => setPgQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && runPlayground()}
-                placeholder={useBackendData
-                  ? 'Ask a question about your data…'
-                  : 'Connect the backend to use the live playground'}
+                placeholder={backendOnline === null
+                  ? 'Connecting to backend…'
+                  : useBackendData
+                    ? 'Ask a question about your data…'
+                    : 'Connect the backend to use the live playground'}
                 className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
                 disabled={!useBackendData}
               />
@@ -2427,7 +2429,14 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {!useBackendData && (
+            {backendOnline === null && (
+              <div className="text-center py-12 text-slate-400">
+                <div className="w-8 h-8 mx-auto mb-3 border-2 border-slate-200 border-t-teal-500 rounded-full animate-spin" />
+                <p className="text-sm font-semibold">Connecting…</p>
+                <p className="text-xs mt-1">Checking backend availability</p>
+              </div>
+            )}
+            {backendOnline === false && (
               <div className="text-center py-12 text-slate-400">
                 <Play className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm font-semibold">Backend not connected</p>

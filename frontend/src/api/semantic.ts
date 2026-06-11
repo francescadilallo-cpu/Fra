@@ -136,12 +136,15 @@ export interface AskResult {
 // ── Health ────────────────────────────────────────────────────────────────────
 
 export async function checkBackend(): Promise<boolean> {
-  try {
-    await http.get('/api/health', { timeout: 3_000 })
-    return true
-  } catch {
-    return false
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await http.get('/api/health', { timeout: 10_000 })
+      return true
+    } catch {
+      if (attempt === 0) await new Promise(r => setTimeout(r, 1_000))
+    }
   }
+  return false
 }
 
 // ── Status & Sources ──────────────────────────────────────────────────────────
