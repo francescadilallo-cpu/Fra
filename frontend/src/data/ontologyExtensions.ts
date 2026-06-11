@@ -46,12 +46,13 @@ const EMPTY: SavedExtension = {
 }
 // Demo and live workspaces must never share an ontology document: the same
 // browser can be used for both, and demo experiments must not leak into the
-// live workspace (or vice versa). Demo keeps the legacy un-prefixed key so
-// existing saved work survives.
+// live workspace (or vice versa). Both the localStorage key and the backend
+// workspace ID use the bare sectorId for demo (legacy, preserves existing data)
+// and a "live-" prefix for live mode.
 const STORAGE_KEY = (sectorId: string) =>
   IS_DEMO_MODE ? `ontology-builder-ext-${sectorId}` : `ontology-builder-ext-live-${sectorId}`
 const WORKSPACE_ID = (sectorId: string) =>
-  IS_DEMO_MODE ? `demo-${sectorId}` : `live-${sectorId}`
+  IS_DEMO_MODE ? sectorId : `live-${sectorId}`
 const STORAGE_EVENT = 'ontology-builder-changed'
 
 export function loadExtension(sectorId: string): SavedExtension {
