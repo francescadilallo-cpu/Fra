@@ -1585,6 +1585,10 @@ def semantic_status(
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     """Return the current status of the semantic layer (loaded/not loaded)."""
+    # Build the stack if this is the first semantic call after a restart —
+    # otherwise a freshly-booted backend answers loaded=false/0 entities and
+    # the dashboard shows "Not built yet" even though all the data is there.
+    _ensure_semantic_loaded()
     return _semantic_status_payload(_hidden_demo_tables(current_user))
 
 
@@ -2367,6 +2371,9 @@ def semantic_coverage(
     sector_id: str = Query(default="manufacturing", max_length=64),
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
+    # Coverage scores read _semantic_status_payload(); without this, a cold
+    # process reports zero entities/KG and a misleadingly low score.
+    _ensure_semantic_loaded()
     hidden = _hidden_demo_tables(current_user)
     builtin_filter = " AND is_builtin = 0" if hidden else ""
     conn = get_connection()

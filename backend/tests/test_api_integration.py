@@ -1143,6 +1143,10 @@ def test_semantic_status_live_mode_is_empty(
     # checks the endpoint works; the regression target is live-mode emptiness.
     demo = client.get("/api/semantic/status", headers=demo_mode_headers)
     assert demo.status_code == 200, demo.text
+    # Regression: status must build the semantic stack on a cold process
+    # instead of answering loaded=false — that made the dashboard show
+    # "Not built yet" right after every backend restart.
+    assert demo.json()["loaded"] is True
 
     live = client.get("/api/semantic/status", headers=live_mode_headers)
     assert live.status_code == 200, live.text
