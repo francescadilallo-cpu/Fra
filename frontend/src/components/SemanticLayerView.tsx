@@ -16,7 +16,12 @@ import {
   type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
-import { modeScopedSector } from '../lib/demoMode'
+import { modeScopedSector, IS_DEMO_MODE } from '../lib/demoMode'
+import {
+  DEMO_SOURCES, DEMO_SOURCE_FRESHNESS, DEMO_BRIDGES, DEMO_ENTITY_DETAIL,
+  DEMO_DISAMBIGUATION_RULES, DEMO_QUERY_EXAMPLES, DEMO_QUALITY_ISSUES,
+  type DemoSource, type DemoBridge, type DemoDisambiguationRule, type DemoQueryExample,
+} from '../data/demoSemanticLayer'
 import { SemanticDraftView } from './SemanticDraftView'
 import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
@@ -62,13 +67,13 @@ function loadUserRules(id: string): UserRule[] {
 }
 function saveUserRules(id: string, v: UserRule[]) { localStorage.setItem(RULES_KEY(id), JSON.stringify(v)) }
 
-// ── Live-data helpers (replaced hardcoded AdventureWorks stubs) ───────────────
-
-// AW_ENTITY_DETAIL: empty — entity details come from live draft entities
+// ── Demo workspace content ────────────────────────────────────────────────────
+// Curated entity field mappings for the demo scenario — only consulted when
+// IS_DEMO_MODE is true (live workspaces get details from the live draft).
 const AW_ENTITY_DETAIL: Record<string, {
   source: string; semanticAlias?: string
   fields: { semantic: string; physical: string; type: string; note?: string; bridge?: string }[]
-}> = {}
+}> = IS_DEMO_MODE ? DEMO_ENTITY_DETAIL : {}
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -1089,7 +1094,162 @@ function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' |
   return (
     <div className="text-right">
       <span className={`text-[10px] font-bold border rounded-full px-2 py-0.5 ${colors[status]}`}>{labels[status]}</span>
-      <p className="text-[10px] text-slate-400 mt-0.5">sync {lastSync.split(' ')[1]} · SLA {sla}</p>
+      <p className="text-[10px] text-slate-400 mt-0.5">sync {lastSync.split(' ')[1] ?? lastSync} · SLA {sla}</p>
+    </div>
+  )
+}
+
+// ── Demo workspace cards (shown only when IS_DEMO_MODE) ───────────────────────
+
+function DemoSourceCard({ source }: { source: DemoSource }) {
+  const fresh = DEMO_SOURCE_FRESHNESS[source.id]
+  return (
+    <div className={`border ${source.colorBorder} rounded-xl p-4 bg-white`}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{source.icon}</span>
+            <span className="font-semibold text-slate-900 text-sm">{source.name}</span>
+          </div>
+          <span className={`mt-1 inline-block text-[10px] font-mono px-2 py-0.5 rounded-full ${source.colorBg} ${source.colorText} font-medium`}>{source.type}</span>
+        </div>
+        <div className="text-right">
+          <p className="text-lg font-bold text-slate-800">{source.total.toLocaleString('en-US')}</p>
+          <p className="text-[11px] text-slate-400">total rows</p>
+          {fresh && <FreshnessBadge status={fresh.status} lastSync={fresh.lastSync} sla={fresh.sla} />}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {source.entities.map(e => (
+          <div key={e.name} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${source.colorDot}`} />
+              <span className="text-slate-600 font-mono">{e.name}</span>
+            </div>
+            <span className="text-slate-400">{e.rows.toLocaleString('en-US')}</span>
+          </div>
+        ))}
+      </div>
+      {source.warning && (
+        <div className="mt-3 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+          <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />{source.warning}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DemoBridgeCard({ bridge }: { bridge: DemoBridge }) {
+  const pct = bridge.matchRate
+  const color = pct === 100 ? 'bg-teal-500' : pct >= 95 ? 'bg-blue-500' : 'bg-amber-500'
+  const textColor = pct === 100 ? 'text-teal-700 bg-teal-100' : pct >= 95 ? 'text-blue-700 bg-blue-100' : 'text-amber-700 bg-amber-100'
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">From</p>
+          <p className="text-xs font-semibold text-slate-700 mt-0.5">{bridge.from.entity}</p>
+          <p className="text-[11px] font-mono text-slate-500">{bridge.from.source}</p>
+          <p className="text-[10px] font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.from.field}</p>
+        </div>
+        <div className="flex flex-col items-center gap-1.5 flex-shrink-0 px-2">
+          <span className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-3 py-1 whitespace-nowrap">⚡ {bridge.label}</span>
+          <span className="text-[10px] text-slate-400">{bridge.cardinality}</span>
+          <ArrowRight className="w-3.5 h-3.5 text-teal-500" />
+        </div>
+        <div className="flex-1 min-w-0 text-right">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">To</p>
+          <p className="text-xs font-semibold text-slate-700 mt-0.5">{bridge.to.entity}</p>
+          <p className="text-[11px] font-mono text-slate-500">{bridge.to.source}</p>
+          <p className="text-[10px] font-mono text-teal-600 bg-teal-50 rounded px-1.5 py-0.5 mt-1 inline-block">{bridge.to.field}</p>
+        </div>
+        <div className="flex flex-col items-center gap-1 flex-shrink-0 ml-3">
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${textColor}`}>{pct}%</span>
+          <p className="text-[10px] text-slate-400">match</p>
+        </div>
+      </div>
+      <div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-[10px] text-slate-500 mt-1.5 font-mono">{bridge.detail}</p>
+      </div>
+      <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-0.5">Enables</p>
+        <p className="text-[11px] text-slate-600">{bridge.impact}</p>
+      </div>
+    </div>
+  )
+}
+
+function DemoDisambiguationCard({ rule }: { rule: DemoDisambiguationRule }) {
+  return (
+    <div className="bg-white border border-amber-200 rounded-xl p-4">
+      <div className="flex items-start gap-3 mb-3">
+        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="text-sm font-semibold text-slate-900">{rule.term}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{rule.problem}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {rule.options.map((opt, i) => (
+          <div key={i} className={`border rounded-lg p-2.5 ${opt.recommended ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
+            <p className="text-[10px] font-mono font-bold text-slate-700">{opt.label}</p>
+            <p className="text-xs font-bold text-slate-900 mt-0.5">{opt.value}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</p>
+            <p className="text-[10px] font-mono text-violet-600 mt-1">{opt.semantic}</p>
+            {opt.recommended && <p className="text-[10px] text-teal-600 font-semibold mt-1">← recommended</p>}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-start gap-1.5 text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-2">
+        <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />{rule.resolution}
+      </div>
+    </div>
+  )
+}
+
+function DemoQueryExampleCard({ ex }: { ex: DemoQueryExample }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-slate-900">"{ex.question}"</p>
+          <div className="flex items-center gap-1 flex-wrap mt-2">
+            {ex.path.map((step, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${step.startsWith('⚡') ? 'bg-teal-100 text-teal-700 font-bold' : 'bg-slate-100 text-slate-600'}`}>{step}</span>
+                {i < ex.path.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-slate-300" />}
+              </span>
+            ))}
+          </div>
+          {ex.bridges.length > 0 && (
+            <div className="flex items-center gap-1 mt-2 flex-wrap">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mr-1">Bridges:</span>
+              {ex.bridges.map(b => <span key={b} className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5">⚡ {b}</span>)}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="text-right">
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-0.5">Result</p>
+            <p className="text-xs font-semibold text-teal-700 max-w-[160px] leading-snug">{ex.result}</p>
+          </div>
+          <button onClick={() => tryInQueryAI(ex.question)}
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors">
+            <Play className="w-3 h-3" />Try
+          </button>
+        </div>
+      </div>
+      <button onClick={() => setOpen(v => !v)} className="mt-2.5 flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600 transition-colors">
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}View SQL
+      </button>
+      {open && (
+        <pre className="mt-2 text-[10px] font-mono bg-slate-900 text-teal-300 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre leading-relaxed">{ex.sql}</pre>
+      )}
     </div>
   )
 }
@@ -1738,10 +1898,18 @@ export default function SemanticLayerView() {
   const totalRows = draftTotalRows > 0 ? draftTotalRows : ontology.nodes.reduce((sum, n) => sum + (n.data.row_count ?? 0), 0)
   const entityOptions = ontology.nodes.map(n => n.data.label)
 
-  // Source/bridge/rule counts — prefer live backend/draft counts
-  const sourcesCount = backendSources.length > 0 ? backendSources.length : userSources.length
-  const bridgesCount = userBridgesCount
-  const rulesCount = userRulesCount
+  // Curated demo content (bridges, quality issues, query examples, freshness)
+  // is shown only in the demo workspace on the demo sector
+  const isDemoWorkspace = IS_DEMO_MODE && sectorId === 'manufacturing'
+
+  // Source/bridge/rule counts — prefer live backend/draft counts; the demo
+  // workspace also counts its curated sources/bridges/rules so badges and
+  // coverage reflect what's actually shown in those sections
+  const sourcesCount = isDemoWorkspace
+    ? DEMO_SOURCES.length + userSources.length
+    : backendSources.length > 0 ? backendSources.length : userSources.length
+  const bridgesCount = userBridgesCount + (isDemoWorkspace ? DEMO_BRIDGES.length : 0)
+  const rulesCount = userRulesCount + (isDemoWorkspace ? DEMO_DISAMBIGUATION_RULES.length : 0)
 
   // Relations from draft — used by RelationsSection
   const liveRelationGroups = useMemo(
@@ -2161,8 +2329,28 @@ export default function SemanticLayerView() {
               </div>
             </div>
 
+            {/* Demo workspace: curated per-source freshness & quality cards */}
+            {isDemoWorkspace && (
+              <div className="grid grid-cols-4 gap-3">
+                {Object.values(DEMO_SOURCE_FRESHNESS).map(f => (
+                  <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <p className="text-xs font-bold text-slate-800">{f.label}</p>
+                      <FreshnessBadge status={f.status} lastSync={f.lastSync} sla={f.sla} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-1.5 flex-1 bg-slate-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${f.quality >= 95 ? 'bg-teal-400' : f.quality >= 90 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${f.quality}%` }} />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-600">{f.quality}% quality</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Live source freshness from backend */}
-            {backendSources.length > 0 && (
+            {!isDemoWorkspace && backendSources.length > 0 && (
               <div className="grid grid-cols-4 gap-3">
                 {backendSources.map(src => (
                   <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
@@ -2181,6 +2369,51 @@ export default function SemanticLayerView() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Demo workspace: data quality findings */}
+            {isDemoWorkspace && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-slate-400" /> Data Quality Issues
+                </h3>
+                <div className="space-y-2">
+                  {DEMO_QUALITY_ISSUES.map((issue, i) => {
+                    const isWarn = issue.severity === 'warning'
+                    return (
+                      <div key={i} className={`border rounded-xl p-4 ${isWarn ? 'bg-amber-50 border-amber-200' : 'bg-sky-50 border-sky-200'}`}>
+                        <div className="flex items-start gap-3">
+                          {isWarn ? <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" /> : <Info className="w-4 h-4 text-sky-500 mt-0.5 flex-shrink-0" />}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-xs font-semibold text-slate-700">{issue.entity}</span>
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${isWarn ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'}`}>{issue.severity}</span>
+                            </div>
+                            <p className="text-sm text-slate-700">{issue.issue}</p>
+                            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-teal-500 flex-shrink-0" />{issue.resolution}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Demo workspace: worked cross-source query examples */}
+            {isDemoWorkspace && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+                  <FileCode className="w-4 h-4 text-slate-400" /> Cross-source Query Examples
+                  <span className="text-xs text-slate-400 font-normal">— click "Try" to run in Query AI</span>
+                </h3>
+                <p className="text-xs text-slate-400 mb-3">Full resolution path: natural language → entities → bridges → SQL.</p>
+                <div className="space-y-3">
+                  {DEMO_QUERY_EXAMPLES.map((ex, i) => <DemoQueryExampleCard key={i} ex={ex} />)}
+                </div>
               </div>
             )}
 
@@ -2461,8 +2694,15 @@ export default function SemanticLayerView() {
               }
             />
 
+            {/* Demo workspace: curated source cards with entity row counts */}
+            {isDemoWorkspace && (
+              <div className="grid grid-cols-2 gap-4 pb-1">
+                {DEMO_SOURCES.map(src => <DemoSourceCard key={src.id} source={src} />)}
+              </div>
+            )}
+
             {/* Backend live freshness bar */}
-            {useBackendData && backendSources.length > 0 && (
+            {!isDemoWorkspace && useBackendData && backendSources.length > 0 && (
               <div className="grid grid-cols-3 gap-3 pb-1">
                 {backendSources.map(src => (
                   <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -2590,6 +2830,13 @@ export default function SemanticLayerView() {
               This enables a single query to pull data from multiple sources without knowing the underlying schema differences.
             </p>
 
+            {/* Demo workspace: curated cross-source bridges with match rates */}
+            {isDemoWorkspace && (
+              <div className="space-y-3">
+                {DEMO_BRIDGES.map(b => <DemoBridgeCard key={b.id} bridge={b} />)}
+              </div>
+            )}
+
             {/* User bridges */}
             <div>
               <BridgesBuilder sectorId={sectorId} entityOptions={entityOptions} />
@@ -2611,6 +2858,13 @@ export default function SemanticLayerView() {
               When a term like <em>"revenue"</em> maps to two different columns (e.g. net vs. gross), a rule makes the Query AI
               ask the right question upfront — instead of silently picking the wrong field and returning incorrect results.
             </p>
+
+            {/* Demo workspace: curated disambiguation rules */}
+            {isDemoWorkspace && (
+              <div className="space-y-3">
+                {DEMO_DISAMBIGUATION_RULES.map((rule, i) => <DemoDisambiguationCard key={i} rule={rule} />)}
+              </div>
+            )}
 
             {/* User rules (all sectors) */}
             <RulesBuilder sectorId={sectorId} />

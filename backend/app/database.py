@@ -442,6 +442,24 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
             "owner": "Sales",
             "tags_json": '["customers"]',
         },
+        {
+            "id": "online_rate",
+            "name": "Online Order Rate",
+            "description": "Share of orders placed online vs. via sales reps.",
+            "type": "ratio",
+            "entity": "SalesOrder",
+            "field": "",
+            "numerator": "Online orders",
+            "denominator": "Order Count",
+            "expression": "",
+            "filters_json": '["online_order_flag = 1 for numerator"]',
+            "time_dimension": "",
+            "grains_json": '["month","quarter"]',
+            "format": "percentage",
+            "status": "draft",
+            "owner": "Digital",
+            "tags_json": '["channel"]',
+        },
     ]
 
     for m in metrics:
@@ -546,6 +564,17 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
     # ── Segments ──────────────────────────────────────────────────────────────
     segments = [
         {
+            "id": "b2b",
+            "name": "B2B Customers",
+            "description": "Corporate accounts — resellers and retailers only.",
+            "entity": "Customer",
+            "conditions_json": json.dumps(
+                [{"field": "customer_type", "operator": "=", "value": "'Company'"}]
+            ),
+            "tags_json": '["channel"]',
+            "used_by_json": '["Revenue", "Unique Customers"]',
+        },
+        {
             "id": "online",
             "name": "Online Orders",
             "description": "Self-service orders via e-commerce.",
@@ -565,6 +594,40 @@ def _seed_semantic_definitions(conn: sqlite3.Connection) -> None:
                 [{"field": "subtotal_amount", "operator": ">=", "value": "1000"}]
             ),
             "tags_json": '["tier"]',
+            "used_by_json": '["Revenue"]',
+        },
+        {
+            "id": "north_america",
+            "name": "North America",
+            "description": "Orders from the North America territory group.",
+            "entity": "Territory",
+            "conditions_json": json.dumps(
+                [
+                    {
+                        "field": "region_group",
+                        "operator": "=",
+                        "value": "'North America'",
+                    }
+                ]
+            ),
+            "tags_json": '["geo"]',
+            "used_by_json": '["Revenue", "Order Count"]',
+        },
+        {
+            "id": "q4",
+            "name": "Q4 Orders",
+            "description": "Orders placed in the fourth quarter (October–December).",
+            "entity": "SalesOrder",
+            "conditions_json": json.dumps(
+                [
+                    {
+                        "field": "MONTH(order_date)",
+                        "operator": "IN",
+                        "value": "10, 11, 12",
+                    }
+                ]
+            ),
+            "tags_json": '["time"]',
             "used_by_json": '["Revenue"]',
         },
     ]
