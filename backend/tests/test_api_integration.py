@@ -1048,6 +1048,59 @@ def test_ontology_extension_rejects_oversized_payload(client, admin_headers):
     assert r.status_code == 422, r.text
 
 
+def test_ontology_extension_mode_isolation(
+    client, demo_mode_headers, live_mode_headers
+):
+    # Live sessions must not touch demo workspaces (bare sector ids) and
+    # demo sessions must not touch 'live-' workspaces — in either direction.
+    doc = {"payload": {"nodes": [], "edges": [], "addedProperties": []}}
+
+    # Live token → demo workspace: blocked
+    r = client.get(
+        "/api/ontology/extension",
+        params={"workspace_id": "manufacturing"},
+        headers=live_mode_headers,
+    )
+    assert r.status_code == 403, r.text
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": "manufacturing"},
+        json=doc,
+        headers=live_mode_headers,
+    )
+    assert r.status_code == 403, r.text
+
+    # Demo token → live workspace: blocked
+    r = client.get(
+        "/api/ontology/extension",
+        params={"workspace_id": "live-manufacturing"},
+        headers=demo_mode_headers,
+    )
+    assert r.status_code == 403, r.text
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": "live-manufacturing"},
+        json=doc,
+        headers=demo_mode_headers,
+    )
+    assert r.status_code == 403, r.text
+
+    # Matching mode still works in both directions
+    r = client.put(
+        "/api/ontology/extension",
+        params={"workspace_id": "live-manufacturing"},
+        json=doc,
+        headers=live_mode_headers,
+    )
+    assert r.status_code == 200, r.text
+    r = client.get(
+        "/api/ontology/extension",
+        params={"workspace_id": "manufacturing"},
+        headers=demo_mode_headers,
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_user_table_with_demo_name_is_not_hidden_in_live_mode():
     # Regression: "account"/"contact"/"offer" are normal business table names.
     # A live user who uploads a CSV with one of those names must still see

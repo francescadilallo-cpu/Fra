@@ -3369,11 +3369,33 @@ class OntologyExtensionPayload(BaseModel):
         return self
 
 
+def _check_workspace_mode(workspace_id: str, user: UserPrincipal) -> None:
+    """Enforce demo/live workspace isolation on the extension store.
+
+    The frontend derives workspace IDs from the JWT mode: bare sector ids in
+    demo, ``live-`` prefixed in live. Without a server-side check, any valid
+    token could read or overwrite the other mode's ontology document by simply
+    passing its workspace_id.
+    """
+    is_live_ws = workspace_id.startswith("live-")
+    if user.mode == "live" and not is_live_ws:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Live-mode sessions can only access 'live-' workspaces",
+        )
+    if user.mode != "live" and is_live_ws:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo-mode sessions cannot access 'live-' workspaces",
+        )
+
+
 @app.get("/api/ontology/extension", tags=["ontology"])
 def get_ontology_extension(
     workspace_id: str = Query(min_length=1, max_length=128),
     _user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
+    _check_workspace_mode(workspace_id, _user)
     conn = _ontology_ext_db()
     try:
         row = conn.execute(
@@ -3397,6 +3419,7 @@ def put_ontology_extension(
     workspace_id: str = Query(min_length=1, max_length=128),
     _user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
+    _check_workspace_mode(workspace_id, _user)
     now = datetime.now(timezone.utc).isoformat()
     conn = _ontology_ext_db()
     try:
