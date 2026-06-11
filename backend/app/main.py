@@ -2437,13 +2437,21 @@ def semantic_coverage(
     summary="Rebuild semantic layer and return draft config",
 )
 async def build_semantic_layer(
+    force: bool = Query(
+        default=False, description="Force rebuild even if already loaded"
+    ),
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
-    """Force a full rebuild of the KG + catalog, then return the draft config."""
+    """Rebuild the KG + catalog and return the draft config.
+
+    Skips the rebuild when already loaded and *force* is not set, so the demo
+    workspace responds instantly on subsequent visits.
+    """
     import asyncio
 
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, reload_semantic)
+    if force or not _semantic_state["loaded"]:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, reload_semantic)
     # Auto-generate templates from the freshly-built schema (always from the
     # full unfiltered draft — templates are shared system-wide)
     catalog = _semantic_state.get("catalog")
@@ -2465,7 +2473,18 @@ async def build_semantic_layer(
 def get_semantic_draft_endpoint(
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
-    _ensure_semantic_loaded()
+    # Return immediately if warmup is still running — the frontend polls until
+    # loaded=true rather than blocking the entire request for several seconds.
+    if not _semantic_state["loaded"]:
+        return {
+            "loaded": False,
+            "entities": [],
+            "relations": [],
+            "metrics": [],
+            "context_docs": [],
+            "templates": [],
+            "built_at": "",
+        }
     return _get_semantic_draft(_hidden_demo_tables(current_user))
 
 

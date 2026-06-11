@@ -234,3 +234,49 @@ export const DEMO_QUALITY_ISSUES: DemoQualityIssue[] = [
   { severity: 'info', entity: 'Employee — HR CSV', issue: 'Italian column names: matricolaDip, cognome, nome, ruolo, stipendio, repartoId', resolution: 'Mapped to semantic aliases in ontology: employeeId, lastName, firstName…' },
   { severity: 'info', entity: 'SalesOrderLine — product match', issue: '47 / 121,317 order lines have productId not in PIM catalog (0.04% unmatched)', resolution: 'Treated as unknown products — excluded from category analysis' },
 ]
+
+// ── Intra-source relations ────────────────────────────────────────────────────
+
+export interface DemoRelation {
+  from: string
+  to: string
+  via: string
+  cardinality: '1:N' | 'N:1'
+  fromRows: number
+  toRows: number
+  note: string
+  soft?: boolean
+}
+
+export interface DemoRelationGroup {
+  source: string
+  sourceKey: string
+  colorBorder: string
+  colorBg: string
+  colorText: string
+  colorDot: string
+  icon: string
+  relations: DemoRelation[]
+}
+
+export const DEMO_RELATIONS: DemoRelationGroup[] = [
+  {
+    source: 'ERP — OrionSales', sourceKey: 'erp',
+    colorBorder: 'border-blue-200', colorBg: 'bg-blue-50', colorText: 'text-blue-700', colorDot: 'bg-blue-500', icon: '🏭',
+    relations: [
+      { from: 'SalesOrder', to: 'SalesOrderLine', via: 'orderId', cardinality: '1:N', fromRows: 31465, toRows: 121317, note: 'order header → line items' },
+      { from: 'SalesOrder', to: 'SalesPerson', via: 'salesPersonId', cardinality: 'N:1', fromRows: 31465, toRows: 17, note: 'order placed by salesperson' },
+      { from: 'SalesOrder', to: 'Territory', via: 'territoryId', cardinality: 'N:1', fromRows: 31465, toRows: 10, note: 'order in sales territory' },
+      { from: 'SalesOrderLine', to: 'SpecialOffer', via: 'specialOfferId', cardinality: 'N:1', fromRows: 121317, toRows: 16, note: 'line uses promotional offer', soft: true },
+    ],
+  },
+  {
+    source: 'CRM — ClientHub', sourceKey: 'crm',
+    colorBorder: 'border-teal-200', colorBg: 'bg-teal-50', colorText: 'text-teal-700', colorDot: 'bg-teal-500', icon: '🤝',
+    relations: [
+      { from: 'accounts', to: 'contacts', via: 'accountId', cardinality: '1:N', fromRows: 19829, toRows: 19302, note: 'account has multiple contacts' },
+      { from: 'accounts', to: 'addresses', via: 'accountId', cardinality: '1:N', fromRows: 19829, toRows: 19614, note: 'account billing & shipping addresses' },
+      { from: 'accounts', to: 'territories', via: 'territoryId', cardinality: 'N:1', fromRows: 19829, toRows: 70, note: 'account belongs to CRM territory' },
+    ],
+  },
+]

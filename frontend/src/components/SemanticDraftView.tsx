@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Database, GitBranch, BarChart3, FileText, Layers, Zap,
   Edit2, Check, X, Plus, Trash2, Loader2, RefreshCw, Download, ArrowRight,
@@ -18,13 +18,23 @@ export function SemanticDraftView() {
   const [draft, setDraft] = useState<SemanticDraft | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<DraftTab>('entities')
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => { loadDraft() }, [])
+  useEffect(() => {
+    loadDraft()
+    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function loadDraft() {
     setLoading(true)
     try {
-      setDraft(await getDraft())
+      const d = await getDraft()
+      setDraft(d)
+      // Backend warmup may still be running; poll every 5 s until loaded=true
+      if (!d?.loaded) {
+        pollRef.current = setTimeout(loadDraft, 5_000)
+      }
     } catch {
       toast('Could not load semantic layer — backend may be offline', 'error')
     } finally {

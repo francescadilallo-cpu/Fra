@@ -19,7 +19,7 @@ import { useSector } from '../contexts/SectorContext'
 import { modeScopedSector, IS_DEMO_MODE } from '../lib/demoMode'
 import {
   DEMO_SOURCES, DEMO_SOURCE_FRESHNESS, DEMO_BRIDGES, DEMO_ENTITY_DETAIL,
-  DEMO_DISAMBIGUATION_RULES, DEMO_QUERY_EXAMPLES, DEMO_QUALITY_ISSUES,
+  DEMO_DISAMBIGUATION_RULES, DEMO_QUERY_EXAMPLES, DEMO_QUALITY_ISSUES, DEMO_RELATIONS,
   type DemoSource, type DemoBridge, type DemoDisambiguationRule, type DemoQueryExample,
 } from '../data/demoSemanticLayer'
 import { SemanticDraftView } from './SemanticDraftView'
@@ -1087,6 +1087,54 @@ function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void })
   )
 }
 
+// ── Backend → local type adapters ────────────────────────────────────────────
+
+function adaptBackendMetric(m: BackendMetric): Metric {
+  return {
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    type: m.type,
+    entity: m.entity,
+    field: m.field || undefined,
+    numerator: m.numerator || undefined,
+    denominator: m.denominator || undefined,
+    expression: m.expression || undefined,
+    filters: m.filters,
+    timeDimension: m.time_dimension || undefined,
+    grains: m.grains as TimeGrain[],
+    format: m.format,
+    status: m.status,
+    owner: m.owner || undefined,
+    tags: m.tags,
+  }
+}
+
+function adaptBackendHierarchy(h: BackendHierarchy): DimHierarchy {
+  return {
+    id: h.id,
+    name: h.name,
+    entity: h.entity,
+    description: h.description,
+    type: h.type,
+    levels: h.levels,
+    isBuiltin: h.is_builtin,
+  }
+}
+
+function adaptBackendSegment(s: BackendSegment): Segment {
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    entity: s.entity,
+    conditions: s.conditions as SegmentCondition[],
+    tags: s.tags,
+    usedBy: s.used_by,
+    isBuiltin: s.is_builtin,
+  }
+}
+
 // ── Source freshness ──────────────────────────────────────────────────────────
 function FreshnessBadge({ status, lastSync, sla }: { status: 'fresh' | 'stale' | 'warning'; lastSync: string; sla: string }) {
   const colors = { fresh: 'bg-teal-50 text-teal-700 border-teal-200', stale: 'bg-red-50 text-red-600 border-red-200', warning: 'bg-amber-50 text-amber-700 border-amber-200' }
@@ -1916,6 +1964,11 @@ export default function SemanticLayerView() {
     () => buildRelationGroups(draft?.relations ?? [], draft?.entities ?? []),
     [draft],
   )
+  // In demo workspace fall back to curated DEMO_RELATIONS when the live KG has
+  // not detected any FK edges yet (fresh deployment or warmup still running).
+  const relationsData = (isDemoWorkspace && liveRelationGroups.length === 0)
+    ? DEMO_RELATIONS
+    : liveRelationGroups
 
   // Semantic definitions seeded from draft entities
   const initialDefs = useMemo(
@@ -1947,13 +2000,17 @@ export default function SemanticLayerView() {
 
   // When backend is online, use backend data; otherwise fall back to localStorage
   const useBackendData = backendOnline === true
-  const builtinMetrics: Metric[] = []
-  const builtinHierarchies: DimHierarchy[] = []
-  const builtinSegments: Segment[] = []
-  // Backend data is already split into builtin+user on the server; show as one unified list
-  const allMetricsList = useBackendData ? backendMetrics : [...builtinMetrics, ...userMetrics]
-  const allHierarchiesList = useBackendData ? backendHierarchies : [...builtinHierarchies, ...userHierarchies]
-  const allSegmentsList = useBackendData ? backendSegments : [...builtinSegments, ...userSegments]
+  // Backend data uses snake_case; adapt to the local camelCase interfaces so
+  // MetricCard / HierarchyCard / SegmentCard render correctly.
+  const allMetricsList: Metric[] = useBackendData
+    ? backendMetrics.map(adaptBackendMetric)
+    : userMetrics
+  const allHierarchiesList: DimHierarchy[] = useBackendData
+    ? backendHierarchies.map(adaptBackendHierarchy)
+    : userHierarchies
+  const allSegmentsList: Segment[] = useBackendData
+    ? backendSegments.map(adaptBackendSegment)
+    : userSegments
   const metricsCount = allMetricsList.length
   const hierarchiesCount = allHierarchiesList.length
   const segmentsCount = allSegmentsList.length
@@ -2297,8 +2354,12 @@ export default function SemanticLayerView() {
             <div className="grid grid-cols-4 gap-4">
               <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
               <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
-              <StatCard label="KG Nodes"            value={totalRows.toLocaleString()} sub="entity instances" accent />
-              <StatCard label="KG Edges"            value={(edgeCount * 8).toLocaleString()} sub="semantic relations" accent />
+              <StatCard label="KG Nodes"
+                value={isDemoWorkspace ? '193,062' : totalRows.toLocaleString()}
+                sub="entity instances" accent />
+              <StatCard label="KG Edges"
+                value={isDemoWorkspace ? '313,193' : (edgeCount * 8).toLocaleString()}
+                sub="semantic relations" accent />
             </div>
 
             {/* Completeness score */}
@@ -2846,7 +2907,7 @@ export default function SemanticLayerView() {
 
         {/* ── RELATIONS ── */}
         {section === 'relations' && (
-          <RelationsSection relationsData={liveRelationGroups} onNavigate={setSection} />
+          <RelationsSection relationsData={relationsData} onNavigate={setSection} />
         )}
 
         {/* ── RULES ── */}
@@ -2925,13 +2986,13 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {userMetrics.length > 0 && (
+            {allMetricsList.length > 0 && (
               <div className="space-y-3">
-                {userMetrics.map(m => <MetricCard key={m.id} metric={m} onDelete={() => removeMetric(m.id)} />)}
+                {allMetricsList.map(m => <MetricCard key={m.id} metric={m} onDelete={() => removeMetric(m.id)} />)}
               </div>
             )}
 
-            {metricsCount === 0 && (
+            {allMetricsList.length === 0 && (
               <div className="text-center py-12 text-slate-400">
                 <BarChart2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No metrics defined yet</p>
@@ -2990,13 +3051,13 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {userHierarchies.length > 0 && (
+            {allHierarchiesList.length > 0 && (
               <div className="space-y-3">
-                {userHierarchies.map(h => <HierarchyCard key={h.id} h={h} onDelete={() => removeHierarchy(h.id)} />)}
+                {allHierarchiesList.map(h => <HierarchyCard key={h.id} h={h} onDelete={() => removeHierarchy(h.id)} />)}
               </div>
             )}
 
-            {hierarchiesCount === 0 && (
+            {allHierarchiesList.length === 0 && (
               <div className="text-center py-12 text-slate-400">
                 <SlidersHorizontal className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No hierarchies defined yet</p>
@@ -3058,13 +3119,13 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {userSegments.length > 0 && (
+            {allSegmentsList.length > 0 && (
               <div className="space-y-3">
-                {userSegments.map(s => <SegmentCard key={s.id} seg={s} onDelete={() => removeSegment(s.id)} />)}
+                {allSegmentsList.map(s => <SegmentCard key={s.id} seg={s} onDelete={() => removeSegment(s.id)} />)}
               </div>
             )}
 
-            {segmentsCount === 0 && (
+            {allSegmentsList.length === 0 && (
               <div className="text-center py-12 text-slate-400">
                 <Filter className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No segments defined yet</p>
