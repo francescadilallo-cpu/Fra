@@ -1153,7 +1153,27 @@ export default function AgentsView() {
   const [states, setStates] = useState<Record<string, AgentRunState>>(() =>
     Object.fromEntries(agents.map(a => [a.id, { status: 'idle' as AgentStatus, progress: 0, logLines: [] }]))
   )
-  const [log, setLog] = useState<LogEntry[]>([])
+  const [log, setLog] = useState<LogEntry[]>(() => {
+    if (!IS_DEMO_MODE || sectorId !== 'manufacturing') return []
+    const t = (minsAgo: number) => {
+      const d = new Date(Date.now() - minsAgo * 60_000)
+      return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`
+    }
+    return [
+      { ts: t(12), agentId: 'sales-performance',   agentName: 'Sales Performance',    text: 'READ erp:SalesPerson → 14 reps loaded (OrionSales)', kind: 'read' as const },
+      { ts: t(12), agentId: 'sales-performance',   agentName: 'Sales Performance',    text: 'JOIN salesPersonId ↔ matricolaDip — 14/14 matched (100%)', kind: 'process' as const },
+      { ts: t(11), agentId: 'sales-performance',   agentName: 'Sales Performance',    text: 'WRITE performance report → semantic layer', kind: 'write' as const },
+      { ts: t(10), agentId: 'crm-dedup',            agentName: 'CRM Data Quality',     text: 'READ crm:ClientHub_accounts → 20,201 records loaded', kind: 'read' as const },
+      { ts: t(10), agentId: 'crm-dedup',            agentName: 'CRM Data Quality',     text: '372 duplicates detected (accountId < 0) — ready for removal', kind: 'process' as const },
+      { ts: t(9),  agentId: 'crm-dedup',            agentName: 'CRM Data Quality',     text: 'WRITE dedup results + bridge map → semantic layer', kind: 'write' as const },
+      { ts: t(8),  agentId: 'revenue-disambiguator', agentName: 'Revenue Disambiguator', text: 'READ erp:SalesOrder → subtotalAmount=$20.1M, totalDue=$22.4M', kind: 'read' as const },
+      { ts: t(8),  agentId: 'revenue-disambiguator', agentName: 'Revenue Disambiguator', text: '⚠ "fatturato" ambiguity flagged — $2.3M delta (11.3% tax+freight)', kind: 'process' as const },
+      { ts: t(6),  agentId: 'bridge-validator',     agentName: 'Bridge Validator',     text: 'PLACED_BY: 18,484 / 19,829 matched (93.2%) — 1,345 unmatched', kind: 'process' as const },
+      { ts: t(6),  agentId: 'bridge-validator',     agentName: 'Bridge Validator',     text: 'SOLD_BY: 14/14 reps matched (100%) ✓', kind: 'done' as const },
+      { ts: t(6),  agentId: 'bridge-validator',     agentName: 'Bridge Validator',     text: '⚠ 47 PIM products not found in any ERP order line', kind: 'process' as const },
+      { ts: t(5),  agentId: 'bridge-validator',     agentName: 'Bridge Validator',     text: 'WRITE bridge health report → semantic layer', kind: 'write' as const },
+    ]
+  })
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const logRef = useRef<HTMLDivElement>(null)
   const statesRef = useRef(states)

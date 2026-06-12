@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { Table2, Pencil, Check, X, Search, GitBranch, ChevronDown, ChevronRight, BookOpen, AlertTriangle, Plus, Tag } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import { workspaceLabel } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
+import { DEMO_ENTITY_DETAIL, DEMO_DISAMBIGUATION_RULES } from '../data/demoSemanticLayer'
 import type { OntologyNode } from '../types'
 import { api } from '../api/client'
 
@@ -28,8 +29,32 @@ interface Ambiguity {
   resolution: string
 }
 
+const DEMO_DEFS: SemanticDef[] = IS_DEMO_MODE
+  ? Object.entries(DEMO_ENTITY_DETAIL).flatMap(([entity, detail]) =>
+      detail.fields.map(f => ({
+        entity,
+        field: f.semantic,
+        definition: (f.note?.replace(/⚠\s*/g, '').trim()) || f.physical,
+        status: (f.note?.includes('⚠') ? 'ambiguous' : 'todo') as SemanticDef['status'],
+      }))
+    )
+  : []
+
+const DEMO_AMBIGUITIES: Ambiguity[] = IS_DEMO_MODE
+  ? DEMO_DISAMBIGUATION_RULES.map(r => ({
+      term: r.term,
+      context: r.problem,
+      candidates: r.options.map(o => ({
+        label: o.label,
+        desc: `${o.desc} (${o.value})`,
+        recommended: o.recommended,
+      })),
+      resolution: r.resolution,
+    }))
+  : []
+
 function SemanticDefinitionsPanel() {
-  const [defs, setDefs] = useState<SemanticDef[]>([])
+  const [defs, setDefs] = useState<SemanticDef[]>(() => DEMO_DEFS)
   const [editing, setEditing] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [newForm, setNewForm] = useState({ entity: '', field: '', definition: '' })
@@ -38,7 +63,7 @@ function SemanticDefinitionsPanel() {
   useEffect(() => {
     api.get<{ definitions: SemanticDef[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.definitions?.length) setDefs(r.data.definitions) })
-      .catch(() => {})
+      .catch(() => { if (IS_DEMO_MODE) setDefs(DEMO_DEFS) })
   }, [])
 
   function startEdit(i: number) { setEditing(i); setEditText(defs[i].definition) }
@@ -135,12 +160,12 @@ function SemanticDefinitionsPanel() {
 }
 
 function AmbiguityLogPanel() {
-  const [ambiguities, setAmbiguities] = useState<Ambiguity[]>([])
+  const [ambiguities, setAmbiguities] = useState<Ambiguity[]>(() => DEMO_AMBIGUITIES)
 
   useEffect(() => {
     api.get<{ ambiguities: Ambiguity[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.ambiguities?.length) setAmbiguities(r.data.ambiguities) })
-      .catch(() => {})
+      .catch(() => { if (IS_DEMO_MODE) setAmbiguities(DEMO_AMBIGUITIES) })
   }, [])
 
   return (
