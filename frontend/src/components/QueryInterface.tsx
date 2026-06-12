@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw } from 'lucide-react'
-import type { EngineResult, ChartData } from '../data/queryEngine'
+import { executeQuery, type EngineResult, type ChartData } from '../data/queryEngine'
 import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
   PROVIDERS, type LLMProvider,
@@ -870,6 +870,9 @@ export default function QueryInterface() {
       } else if (isLLMActive) {
         // Browser LLM path — direct provider call (Groq/Gemini/Claude)
         result = await executeLLMQuery(question, creds.key, creds.provider)
+      } else if (IS_DEMO_MODE) {
+        // Demo fallback — local semantic engine over curated sector data
+        result = executeQuery(question, ontology.nodes, sectorId)
       } else {
         // No real data source available
         throw new Error('Backend offline — connect the backend or add an API key to query real data')
@@ -991,7 +994,7 @@ export default function QueryInterface() {
             </div>
 
             {/* Offline hint — backend confirmed offline and no LLM key configured */}
-            {backendOnline === false && !isLLMActive && (
+            {backendOnline === false && !isLLMActive && !IS_DEMO_MODE && (
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
                 <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
@@ -1000,6 +1003,17 @@ export default function QueryInterface() {
                     The backend is offline.{' '}
                     <button onClick={() => setShowApiPanel(true)} className="underline font-medium">Add an API key</button>
                     {' '}to query via LLM, or start the backend for real results.
+                  </p>
+                </div>
+              </div>
+            )}
+            {backendOnline === false && !isLLMActive && IS_DEMO_MODE && (
+              <div className="flex items-start gap-3 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
+                <Sparkles className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-teal-800">Demo engine active</p>
+                  <p className="text-xs text-teal-700 mt-0.5">
+                    Queries run on the local semantic engine over curated demo data. Try one of the suggested questions below.
                   </p>
                 </div>
               </div>
