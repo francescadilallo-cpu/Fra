@@ -9,7 +9,7 @@ import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQues
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
-import { workspaceLabel, modeScopedSector } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -758,6 +758,16 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+// ── Demo fallback example questions (shown when backend is offline in demo mode) ──
+
+const DEMO_EXAMPLE_QUESTIONS: ExampleQuestion[] = [
+  { question: 'Who is the top salesperson by revenue in 2014?',       description: 'ERP × HR cross-source join' },
+  { question: 'What is our total revenue — subtotal vs total due?',   description: 'Revenue disambiguation' },
+  { question: 'How many unique customers after CRM deduplication?',   description: 'CRM dedup analysis' },
+  { question: 'Show gross margin by product category',                description: 'ERP × PIM join' },
+  { question: 'What is the online vs in-store order channel split?',  description: 'Channel segmentation' },
+]
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function QueryInterface() {
@@ -792,7 +802,9 @@ export default function QueryInterface() {
   useEffect(() => {
     listExampleQuestions()
       .then(setExampleQuestions)
-      .catch(() => {}) // silent fail — examples are optional
+      .catch(() => {
+        if (IS_DEMO_MODE) setExampleQuestions(DEMO_EXAMPLE_QUESTIONS)
+      })
   }, [])
 
   // Refresh creds from localStorage when panel closes

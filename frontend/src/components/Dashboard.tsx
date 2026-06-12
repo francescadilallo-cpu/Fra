@@ -260,19 +260,7 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
             ))}
           </div>
         </div>
-      ) : !status?.loaded ? (
-        <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-5 text-center">
-          <Layers className="w-7 h-7 text-slate-300 mx-auto mb-2" />
-          <p className="text-xs text-slate-500 font-medium">Not built yet</p>
-          <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build the semantic layer</p>
-          <button
-            onClick={() => onNavigate?.('sources')}
-            className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
-          >
-            <Zap className="w-3 h-3 inline mr-1" />Build Semantic Layer
-          </button>
-        </div>
-      ) : (
+      ) : status?.loaded ? (
         <>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -298,6 +286,39 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
             )}
           </div>
         </>
+      ) : IS_DEMO_MODE ? (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Entities', value: '8',       color: 'text-teal-600',   bg: 'bg-teal-50' },
+              { label: 'KG Nodes', value: '193,062', color: 'text-blue-600',   bg: 'bg-blue-50' },
+              { label: 'KG Edges', value: '313,193', color: 'text-violet-600', bg: 'bg-violet-50' },
+              { label: 'Metadata', value: '212,113', color: 'text-amber-600',  bg: 'bg-amber-50' },
+            ].map(s => (
+              <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center`}>
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wide">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5 flex-wrap">
+            {['erp_sqldump', 'crm_sqlite', 'hr_csv', 'pim_json'].map(src => (
+              <span key={src} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">{src}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-5 text-center">
+          <Layers className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs text-slate-500 font-medium">Not built yet</p>
+          <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build the semantic layer</p>
+          <button
+            onClick={() => onNavigate?.('sources')}
+            className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+          >
+            <Zap className="w-3 h-3 inline mr-1" />Build Semantic Layer
+          </button>
+        </div>
       )}
     </div>
   )
