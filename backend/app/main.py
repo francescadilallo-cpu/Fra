@@ -61,6 +61,8 @@ from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
 from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
+from .audit.router import router as audit_router
+from .audit.store import get_audit_store
 from .context.store import default_store as _context_store
 
 load_dotenv()
@@ -1203,6 +1205,31 @@ app.include_router(
     context_router,
     dependencies=[Depends(require_roles("user", "admin"))],
 )
+app.include_router(
+    audit_router,
+    dependencies=[Depends(require_roles("user", "admin"))],
+)
+
+
+def _audit(
+    request: Request | None,
+    user: "UserPrincipal",
+    action: str,
+    resource: str = "",
+    category: str = "config",
+) -> None:
+    """Record an audit entry for a mutating action. Never raises."""
+    ip = ""
+    if request is not None and request.client is not None:
+        ip = request.client.host or ""
+    get_audit_store().log(
+        username=user.username,
+        action=action,
+        resource=resource,
+        ip=ip,
+        category=category,
+    )
+
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
@@ -1239,6 +1266,13 @@ def login_for_access_token(
         subject=user["username"],
         role=user["role"],
         mode=resolved_mode,
+    )
+    _audit(
+        request,
+        UserPrincipal(username=user["username"], role=user["role"], mode=resolved_mode),
+        "Logged in",
+        f"mode={resolved_mode}",
+        category="auth",
     )
     return TokenResponse(
         access_token=token,
@@ -1754,6 +1788,7 @@ def semantic_ask(
 
 @app.post("/api/kg/build")
 def rebuild_knowledge_graph(
+    request: Request,
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     """Rebuild KG + semantic stack. Admin-only because it mutates in-memory system state."""
@@ -1779,6 +1814,13 @@ def rebuild_knowledge_graph(
         _ensure_semantic_loaded()
         hidden = _hidden_demo_tables(current_user)
         status = _semantic_status_payload(hidden)
+        _audit(
+            request,
+            current_user,
+            "Rebuilt knowledge graph",
+            f"{status['kg_nodes']:,} nodes · {status['kg_edges']:,} edges",
+            category="data",
+        )
         return {
             "success": True,
             "kg_nodes": status["kg_nodes"],
@@ -1834,7 +1876,8 @@ def data_store_status(
 
 @app.post("/api/data/store/rebuild")
 def rebuild_data_store(
-    _: UserPrincipal = Depends(require_roles("admin")),
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     """Force full re-ingest of all sources into the DuckDB snapshot. Admin-only."""
     from .connectors.duckdb_source_manager import get_source_manager
@@ -1843,6 +1886,13 @@ def rebuild_data_store(
     row_counts = mgr.rebuild()
     meta = mgr.describe()
     _refresh_catalog_and_kg_after_rebuild(mgr)
+    _audit(
+        request,
+        current_user,
+        "Rebuilt data store",
+        f"{sum(row_counts.values()):,} rows across {len(row_counts)} tables",
+        category="data",
+    )
     return {
         "rebuilt": True,
         "built_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
@@ -1939,7 +1989,8 @@ def list_sources(
 @app.post("/api/sources", response_model=SourceResponse, status_code=201)
 def add_source(
     req: SourceAddRequest,
-    _: UserPrincipal = Depends(require_roles("admin")),
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> SourceResponse:
     """Register a new data source. Triggers a DuckDB rebuild for implemented types."""
     import uuid
@@ -2015,13 +2066,21 @@ def add_source(
             mgr.registry.patch(source_id, status="error", error_msg=str(exc))
             cfg = mgr.registry.get(source_id) or cfg
 
+    _audit(
+        request,
+        current_user,
+        "Added data source",
+        f"{req.label} ({req.connector_type})",
+        category="config",
+    )
     return _source_cfg_to_response(cfg)
 
 
 @app.delete("/api/sources/{source_id}", status_code=204)
 def remove_source(
     source_id: Annotated[str, _ApiPath(max_length=128)],
-    _: UserPrincipal = Depends(require_roles("admin")),
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     """Remove a source from the registry and trigger a DuckDB rebuild."""
     from .connectors.duckdb_source_manager import get_source_manager
@@ -2033,6 +2092,7 @@ def remove_source(
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    _audit(request, current_user, "Removed data source", source_id, category="config")
     try:
         mgr.rebuild()
         _refresh_catalog_and_kg_after_rebuild(mgr)
@@ -2046,7 +2106,8 @@ def remove_source(
 @app.post("/api/sources/{source_id}/sync", response_model=SourceResponse)
 def sync_source(
     source_id: Annotated[str, _ApiPath(max_length=128)],
-    _: UserPrincipal = Depends(require_roles("admin")),
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> SourceResponse:
     """Re-ingest a single source and rebuild the DuckDB snapshot."""
     from .connectors.duckdb_source_manager import get_source_manager
@@ -2061,6 +2122,7 @@ def sync_source(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     cfg = mgr.registry.get(source_id) or cfg
+    _audit(request, current_user, "Synced data source", source_id, category="data")
     return _source_cfg_to_response(cfg)
 
 
@@ -2675,6 +2737,7 @@ def list_templates(
 @app.post("/api/semantic/templates", status_code=201, tags=["semantic"])
 def create_template(
     payload: QueryTemplatePayload,
+    request: Request,
     _admin: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict:
     _ensure_semantic_loaded()
@@ -2689,6 +2752,7 @@ def create_template(
         sources=payload.sources,
     )
     _hot_reload_templates()
+    _audit(request, _admin, "Created query template", payload.name, category="config")
     return tpl
 
 
@@ -2696,6 +2760,7 @@ def create_template(
 def update_template(
     template_id: int,
     payload: QueryTemplateUpdatePayload,
+    request: Request,
     _admin: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict:
     _ensure_semantic_loaded()
@@ -2710,12 +2775,16 @@ def update_template(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _hot_reload_templates()
+    _audit(
+        request, _admin, "Updated query template", f"#{template_id}", category="config"
+    )
     return tpl
 
 
 @app.delete("/api/semantic/templates/{template_id}", status_code=204, tags=["semantic"])
 def delete_template(
     template_id: int,
+    request: Request,
     _admin: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     _ensure_semantic_loaded()
@@ -2727,6 +2796,9 @@ def delete_template(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _hot_reload_templates()
+    _audit(
+        request, _admin, "Deleted query template", f"#{template_id}", category="config"
+    )
 
 
 def _optional_user_mode(request: Request) -> Literal["demo", "live"]:

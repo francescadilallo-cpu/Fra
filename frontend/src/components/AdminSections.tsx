@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Users, UserPlus, Key, Plus, Bell, FileClock, MessageSquare, Mail, Webhook,
   Eye, EyeOff, Copy, Trash2, X, Loader2, CheckCircle2, Send, ShieldCheck,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getTokenSubject } from '../api/client'
+import { listAuditEntries, type BackendAuditEntry } from '../api/audit'
 
 // ── Users & Roles ────────────────────────────────────────────────────────────
 
@@ -786,12 +787,45 @@ const FILTERS: Array<{ key: AuditCategory | 'all'; label: string }> = [
   { key: 'reports', label: 'Reports' },
 ]
 
+const AVATAR_COLORS = ['bg-teal-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500']
+
+function backendToAuditEntry(e: BackendAuditEntry): AuditEntry {
+  const d = new Date(e.ts)
+  const secs = Math.round((Date.now() - d.getTime()) / 1000)
+  const ts = secs < 60 ? 'just now'
+    : secs < 3600 ? `${Math.round(secs / 60)}m ago`
+    : secs < 86400 ? `${Math.round(secs / 3600)}h ago`
+    : d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' })
+  const initials = e.username.slice(0, 2).toUpperCase()
+  // Stable colour per username so the same actor always gets the same avatar
+  const colorIdx = [...e.username].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length
+  return {
+    id: String(e.id),
+    ts,
+    user: e.username,
+    avatar: initials,
+    avatarColor: AVATAR_COLORS[colorIdx],
+    action: e.action,
+    resource: e.resource,
+    ip: e.ip || '—',
+    category: e.category,
+  }
+}
+
 export function AuditLogSection() {
   const [filter, setFilter] = useState<AuditCategory | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [liveEntries, setLiveEntries] = useState<AuditEntry[]>([])
 
   // Live audit trail comes from the backend; the curated entries are demo-only
-  const entries = IS_DEMO_MODE ? DEMO_AUDIT : []
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    listAuditEntries({ limit: 200 })
+      .then(rows => setLiveEntries(rows.map(backendToAuditEntry)))
+      .catch(() => {})
+  }, [])
+
+  const entries = IS_DEMO_MODE ? DEMO_AUDIT : liveEntries
   const filtered = entries.filter(e => {
     if (filter !== 'all' && e.category !== filter) return false
     if (search) {
