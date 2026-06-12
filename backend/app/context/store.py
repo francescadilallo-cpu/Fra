@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -65,10 +66,15 @@ class ContextStore:
         # glossary per request is pure waste. Invalidated on any mutation.
         self._docs_cache_lock = threading.Lock()
         self._docs_cache: object | None = None
-        try:
-            self.seed_demo_data()
-        except Exception as _seed_exc:
-            logger.warning("Context demo seed skipped: %s", _seed_exc)
+        if os.getenv("FRA_SEED_DEMO_SOURCES", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            try:
+                self.seed_demo_data()
+            except Exception as _seed_exc:
+                logger.warning("Context demo seed skipped: %s", _seed_exc)
 
     def _invalidate_docs_cache(self) -> None:
         with self._docs_cache_lock:
