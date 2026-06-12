@@ -1,6 +1,7 @@
 import type { SectorConfig, SectorId } from './sectors'
 import type { OntologyNode, OntologyEdge } from '../types'
 import type { AgentRunSummary } from './agentStore'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 
 export interface ReportInput {
   sectorId: SectorId
@@ -42,18 +43,21 @@ function recommendations(runs: AgentRunSummary[], sectorId: SectorId): string[] 
   if (warning > 0) {
     recs.push(`Review ${warning} warning${warning !== 1 ? 's' : ''} within this week to prevent them escalating to critical status.`)
   }
-  if (sectorId === 'manufacturing') {
-    recs.push('Verify that all open quotes with validUntil within 7 days have been actioned (converted or formally rejected).')
-    recs.push('Cross-check supplier reliability scores against current lead times to anticipate production delays.')
-  } else if (sectorId === 'retail') {
-    recs.push('Activate cart-recovery automation for abandoned carts older than 2 hours — conversion uplift typically 15-25%.')
-    recs.push('Reorder stock for all SKUs flagged below safety threshold before the next promotional period.')
-  } else if (sectorId === 'healthcare') {
-    recs.push('Follow up on all care gaps identified — patients without scheduled follow-up represent both a clinical and regulatory risk.')
-    recs.push('Resolve conflicting diagnoses through clinical review before the next billing cycle.')
-  } else if (sectorId === 'finance') {
-    recs.push('Complete KYC for all pending applicants within the 5-day SLA to avoid regulatory penalties.')
-    recs.push('High-risk profiles (score > 75) should be reviewed manually before disbursement approval.')
+  // Sector playbook recommendations reference the demo scenarios — demo only
+  if (IS_DEMO_MODE) {
+    if (sectorId === 'manufacturing') {
+      recs.push('Verify that all open quotes with validUntil within 7 days have been actioned (converted or formally rejected).')
+      recs.push('Cross-check supplier reliability scores against current lead times to anticipate production delays.')
+    } else if (sectorId === 'retail') {
+      recs.push('Activate cart-recovery automation for abandoned carts older than 2 hours — conversion uplift typically 15-25%.')
+      recs.push('Reorder stock for all SKUs flagged below safety threshold before the next promotional period.')
+    } else if (sectorId === 'healthcare') {
+      recs.push('Follow up on all care gaps identified — patients without scheduled follow-up represent both a clinical and regulatory risk.')
+      recs.push('Resolve conflicting diagnoses through clinical review before the next billing cycle.')
+    } else if (sectorId === 'finance') {
+      recs.push('Complete KYC for all pending applicants within the 5-day SLA to avoid regulatory penalties.')
+      recs.push('High-risk profiles (score > 75) should be reviewed manually before disbursement approval.')
+    }
   }
   recs.push('Run the semantic layer pipeline weekly to maintain data freshness across all connected sources.')
   recs.push('Review ontology mappings after any ERP schema change to prevent silent field mismatches.')
@@ -72,12 +76,15 @@ export function generateHtmlReport(input: ReportInput): string {
   const warnings = allFindings.filter(f => f.severity === 'warning')
   const info = allFindings.filter(f => f.severity === 'info')
 
-  const funnel = sector.funnel
+  // The sector funnel is curated demo data — a live report must never
+  // present it as customer KPIs. With no funnel the KPI section is omitted.
+  const funnel = IS_DEMO_MODE ? sector.funnel : []
   const totalFirst = funnel[0]?.count ?? 0
   const totalLast = funnel[funnel.length - 1]?.count ?? 0
   const conversion = totalFirst > 0 ? Math.round((totalLast / totalFirst) * 100) : 0
   const totalValue = funnel.reduce((s, f) => s + f.value, 0)
   const hasMonetary = funnel.some(f => f.value > 0)
+  const workspaceName = workspaceLabel(sector.name)
 
   const recs = recommendations(agentRuns, sectorId)
   const dateStr = generatedAt.toLocaleDateString('en-US', { day:'2-digit', month:'long', year:'numeric' })
@@ -151,7 +158,7 @@ export function generateHtmlReport(input: ReportInput): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>SemanticIntelligence — ${esc(sector.name)} Report — ${dateStr}</title>
+<title>SemanticIntelligence — ${esc(IS_DEMO_MODE ? sector.name : workspaceName)} Report — ${dateStr}</title>
 <style>
   * { box-sizing:border-box; margin:0; padding:0; }
   body { font-family:-apple-system,'Helvetica Neue',Arial,sans-serif; background:#f8fafc; color:#1e293b; }
@@ -196,13 +203,13 @@ export function generateHtmlReport(input: ReportInput): string {
     <p class="subtitle">AI Platform — Executive Report</p>
     <div class="meta">
       <div class="meta-item">
-        <div class="label">Sector</div>
-        <div class="value">${esc(sector.icon)} ${esc(sector.name)}</div>
+        <div class="label">${IS_DEMO_MODE ? 'Sector' : 'Workspace'}</div>
+        <div class="value">${IS_DEMO_MODE ? `${esc(sector.icon)} ${esc(sector.name)}` : esc(workspaceName)}</div>
       </div>
-      <div class="meta-item">
+      ${IS_DEMO_MODE ? `<div class="meta-item">
         <div class="label">Domain</div>
         <div class="value">${esc(sector.domain)}</div>
-      </div>
+      </div>` : ''}
       <div class="meta-item">
         <div class="label">Generated</div>
         <div class="value">${dateStr} · ${timeStr}</div>
@@ -217,7 +224,7 @@ export function generateHtmlReport(input: ReportInput): string {
   <!-- 1. Semantic Layer -->
   <div class="section">
     <h2>1. Semantic Layer Overview</h2>
-    <p class="section-sub">Ontology statistics for the ${esc(sector.name)} sector</p>
+    <p class="section-sub">Ontology statistics for ${IS_DEMO_MODE ? `the ${esc(sector.name)} sector` : esc(workspaceName)}</p>
     <div class="kpi-row">
       <div class="kpi"><div class="val">${entityCount}</div><div class="lbl">Entities</div></div>
       <div class="kpi"><div class="val">${relCount}</div><div class="lbl">Relations</div></div>
@@ -230,7 +237,8 @@ export function generateHtmlReport(input: ReportInput): string {
     </table>
   </div>
 
-  <!-- 2. KPIs -->
+  <!-- KPIs (demo only — live KPIs require backend funnel data) -->
+  ${funnel.length > 0 ? `
   <div class="section">
     <h2>2. Key Performance Indicators</h2>
     <p class="section-sub">Derived from the semantic layer — ${esc(sector.kpiLabels.quotes)} → ${esc(sector.kpiLabels.orders)}</p>
@@ -242,11 +250,11 @@ export function generateHtmlReport(input: ReportInput): string {
     </div>
     <h3 style="font-size:14px;font-weight:600;color:#334155;margin-bottom:12px;margin-top:8px;">Process Funnel</h3>
     ${funnelBars}
-  </div>
+  </div>` : ''}
 
-  <!-- 3. Agent Findings -->
+  <!-- Agent Findings -->
   <div class="section">
-    <h2>3. AI Agent Findings</h2>
+    <h2>${funnel.length > 0 ? '3' : '2'}. AI Agent Findings</h2>
     <p class="section-sub">${agentRuns.length} agent run${agentRuns.length !== 1 ? 's' : ''} · ${allFindings.length} finding${allFindings.length !== 1 ? 's' : ''} total</p>
     <div style="display:flex;gap:12px;margin-bottom:24px;">
       <span class="badge badge-critical">${critical.length} Critical</span>
@@ -256,17 +264,17 @@ export function generateHtmlReport(input: ReportInput): string {
     ${findingsHtml}
   </div>
 
-  <!-- 4. Agent Metrics -->
+  <!-- Agent Metrics -->
   ${agentRuns.length > 0 ? `
   <div class="section">
-    <h2>4. Agent Metrics</h2>
+    <h2>${funnel.length > 0 ? '4' : '3'}. Agent Metrics</h2>
     <p class="section-sub">Quantitative outputs from the last agent run</p>
     ${agentMetricsHtml}
   </div>` : ''}
 
-  <!-- 5. Recommendations -->
+  <!-- Recommendations -->
   <div class="section">
-    <h2>${agentRuns.length > 0 ? '5' : '4'}. AI Recommendations</h2>
+    <h2>${(funnel.length > 0 ? 3 : 2) + (agentRuns.length > 0 ? 2 : 1)}. AI Recommendations</h2>
     <p class="section-sub">Automatically generated based on current state of the semantic layer and agent findings</p>
     ${recsHtml}
   </div>
@@ -274,7 +282,7 @@ export function generateHtmlReport(input: ReportInput): string {
   <!-- Footer -->
   <div class="footer">
     <span>Generated by <strong>SemanticIntelligence Platform</strong> · ${dateStr} ${timeStr}</span>
-    <span>Sector: <strong>${esc(sector.name)}</strong> · Entities: <strong>${entityCount}</strong> · Findings: <strong>${allFindings.length}</strong></span>
+    <span>${IS_DEMO_MODE ? 'Sector' : 'Workspace'}: <strong>${esc(IS_DEMO_MODE ? sector.name : workspaceName)}</strong> · Entities: <strong>${entityCount}</strong> · Findings: <strong>${allFindings.length}</strong></span>
   </div>
 
 </div>
