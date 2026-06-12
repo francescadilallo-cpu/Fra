@@ -1971,10 +1971,19 @@ export default function SemanticLayerView() {
     : liveRelationGroups
 
   // Semantic definitions seeded from draft entities
-  const initialDefs = useMemo(
-    () => buildInitialDefs(draft?.entities ?? []),
-    [draft],
-  )
+  const initialDefs = useMemo(() => {
+    const fromDraft = buildInitialDefs(draft?.entities ?? [])
+    if (fromDraft.length > 0) return fromDraft
+    if (!isDemoWorkspace) return []
+    return Object.entries(AW_ENTITY_DETAIL).flatMap(([entity, detail]) =>
+      detail.fields.map(f => ({
+        entity,
+        field: f.semantic,
+        definition: f.note?.replace(/⚠\s*/g, '').trim() || f.physical,
+        status: (f.note?.includes('⚠') ? 'ambiguous' : 'todo') as SemanticDef['status'],
+      }))
+    )
+  }, [draft, isDemoWorkspace])
 
   const allMappings = useMemo(() => generateMappings(ontology.nodes), [ontology.nodes])
   const filteredMappings = useMemo(() => {

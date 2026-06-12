@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Trash2, Upload, FileText, Plus, BookOpen, Tag, BarChart2, X, Loader2 } from 'lucide-react'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import {
   listDocuments,
   uploadDocument,
@@ -20,6 +21,36 @@ import {
 } from '../api/context'
 
 type SubTab = 'documents' | 'entities' | 'metrics' | 'glossary'
+
+// Demo fallback data — shown when IS_DEMO_MODE and the backend is unreachable
+const DEMO_FALLBACK_DOCS: ContextDocumentMeta[] = [
+  { id: 1, filename: 'OrionSales_Process_Context.md', file_type: 'md', created_at: '2024-01-15T09:00:00Z' },
+  { id: 2, filename: 'Revenue_Disambiguation_Rules.md', file_type: 'md', created_at: '2024-01-15T09:01:00Z' },
+]
+const DEMO_FALLBACK_ENTITIES: ContextEntity[] = [
+  { id: 1, name: 'SalesOrder', display_name: 'Sales Order', synonyms: ['order', 'ordine', 'vendita'], description: 'Customer purchase order from ERP (sales_order_header + lines). Key fields: subtotalAmount (net revenue), totalDue (gross), onlineOrderFlag.', source: 'erp', created_at: '2024-01-15T09:00:00Z' },
+  { id: 2, name: 'Customer', display_name: 'Customer', synonyms: ['account', 'cliente', 'buyer', 'conto'], description: 'Legal entity or individual that places orders. Source: crm.accounts (ClientHub). Bridge: accountId ↔ ERP customer_ref.', source: 'crm', created_at: '2024-01-15T09:00:00Z' },
+  { id: 3, name: 'Salesperson', display_name: 'Salesperson', synonyms: ['rep', 'agent', 'venditore', 'agente commerciale'], description: 'Sales representative linked to HR employees via salesPersonId ↔ matricolaDip bridge. 14 active reps.', source: 'erp', created_at: '2024-01-15T09:00:00Z' },
+  { id: 4, name: 'Territory', display_name: 'Territory', synonyms: ['region', 'area', 'zona', 'distretto'], description: 'Sales territory grouping customers and reps by geography. 10 territories.', source: 'erp', created_at: '2024-01-15T09:00:00Z' },
+  { id: 5, name: 'Product', display_name: 'Product', synonyms: ['item', 'sku', 'articolo', 'prodotto'], description: 'Product catalogue from PIM (pim_products / product_catalog). 504 products, 98% revenue from Bikes category.', source: 'pim', created_at: '2024-01-15T09:00:00Z' },
+  { id: 6, name: 'Employee', display_name: 'Employee', synonyms: ['dipendente', 'worker', 'staff'], description: 'HR employee record with Italian schema (matricolaDip, cognome, nome, stipendio, ruolo). 290 employees.', source: 'hr', created_at: '2024-01-15T09:00:00Z' },
+]
+const DEMO_FALLBACK_METRICS: ContextMetric[] = [
+  { id: 1, name: 'total_revenue', display_name: 'Total Revenue', synonyms: ['fatturato', 'ricavi', 'revenue', 'entrate'], description: 'SUM of SubTotal from sales_order_header — pre-tax, pre-freight. The authoritative revenue metric. 2014 value: $20.1M.', unit: 'USD', certified: true, created_at: '2024-01-15T09:00:00Z' },
+  { id: 2, name: 'gross_revenue', display_name: 'Gross Revenue', synonyms: ['ricavi lordi', 'total_due', 'billed revenue'], description: 'SUM of TotalDue — includes tax and freight (~11.3% above net). Use for billing/AR, NOT for commercial KPIs.', unit: 'USD', certified: false, created_at: '2024-01-15T09:00:00Z' },
+  { id: 3, name: 'order_count', display_name: 'Order Count', synonyms: ['numero ordini', 'orders', 'transazioni'], description: 'COUNT(DISTINCT SalesOrderID) in a given time window. 31,465 total orders in the dataset.', unit: 'count', certified: true, created_at: '2024-01-15T09:00:00Z' },
+  { id: 4, name: 'active_customers', display_name: 'Active Customers', synonyms: ['clienti attivi', 'buyers'], description: 'Customers with at least one order in the period. Based on ERP↔CRM bridge (93.2% match rate = 18,484 matched accounts).', unit: 'count', certified: true, created_at: '2024-01-15T09:00:00Z' },
+  { id: 5, name: 'avg_order_value', display_name: 'Avg. Order Value', synonyms: ['valore medio ordine', 'AOV', 'ticket medio'], description: 'total_revenue / order_count. Calculated on SubTotal (net). Excludes tax and freight.', unit: 'USD', certified: false, created_at: '2024-01-15T09:00:00Z' },
+]
+const DEMO_FALLBACK_GLOSSARY: GlossaryTerm[] = [
+  { id: 1, term: 'fatturato', definition: 'Italian term for revenue. In OrionSales → subtotalAmount (SubTotal, pre-tax). NOT TotalDue. When asked for "fatturato" always use the total_revenue metric (SUM of SubTotal).', created_at: '2024-01-15T09:00:00Z' },
+  { id: 2, term: 'subtotal_amount', definition: 'ERP field SubTotal in sales_order_header. Pre-tax, pre-freight. The correct revenue figure for commercial reporting ($20.1M in 2014). Maps to total_revenue metric.', created_at: '2024-01-15T09:00:00Z' },
+  { id: 3, term: 'total_due', definition: 'ERP field TotalDue. Includes tax + freight (~11.3% above SubTotal). $22.4M in 2014. Use for billing/AR. Do NOT use for revenue KPIs unless explicitly requested.', created_at: '2024-01-15T09:00:00Z' },
+  { id: 4, term: 'bridge', definition: 'Cross-system join linking records across sources. E.g., ERP↔CRM: customer_ref ↔ accountId (93.2% match). ERP↔HR: salesPersonId ↔ matricolaDip (100%). ERP↔PIM: productId ↔ internal_id.', created_at: '2024-01-15T09:00:00Z' },
+  { id: 5, term: 'matricolaDip', definition: 'Italian HR primary key for employees ("employee ID"). Bridges to ERP salesPersonId. All 14 sales reps are matched (100% bridge health).', created_at: '2024-01-15T09:00:00Z' },
+  { id: 6, term: 'online_order_flag', definition: 'Boolean field in sales_order_header. 1 = online channel (87.9% of orders), 0 = in-store/offline (12.1%). Used for channel segmentation analysis.', created_at: '2024-01-15T09:00:00Z' },
+  { id: 7, term: 'knowledge_graph', definition: 'Unified in-memory graph of all entities across ERP/CRM/HR/PIM. 193,062 nodes, 313,193 edges. Deduplication removes 372 CRM duplicate accounts (accountId < 0).', created_at: '2024-01-15T09:00:00Z' },
+]
 
 const SUB_TABS: { id: SubTab; label: string; icon: typeof FileText }[] = [
   { id: 'documents', label: 'Documents', icon: FileText },
@@ -70,7 +101,11 @@ function DocumentsTab() {
     try {
       setDocs(await listDocuments())
     } catch {
-      setError('Unable to load documents.')
+      if (IS_DEMO_MODE) {
+        setDocs(DEMO_FALLBACK_DOCS)
+      } else {
+        setError('Unable to load documents.')
+      }
     } finally {
       setLoading(false)
     }
@@ -211,7 +246,11 @@ function EntitiesTab() {
     try {
       setEntities(await listEntities())
     } catch {
-      setError('Unable to load entities.')
+      if (IS_DEMO_MODE) {
+        setEntities(DEMO_FALLBACK_ENTITIES)
+      } else {
+        setError('Unable to load entities.')
+      }
     } finally {
       setLoading(false)
     }
@@ -401,7 +440,11 @@ function MetricsTab() {
     try {
       setMetrics(await listMetrics())
     } catch {
-      setError('Unable to load metrics.')
+      if (IS_DEMO_MODE) {
+        setMetrics(DEMO_FALLBACK_METRICS)
+      } else {
+        setError('Unable to load metrics.')
+      }
     } finally {
       setLoading(false)
     }
@@ -606,7 +649,11 @@ function GlossaryTab() {
     try {
       setTerms(await listGlossary())
     } catch {
-      setError('Unable to load the glossary.')
+      if (IS_DEMO_MODE) {
+        setTerms(DEMO_FALLBACK_GLOSSARY)
+      } else {
+        setError('Unable to load the glossary.')
+      }
     } finally {
       setLoading(false)
     }

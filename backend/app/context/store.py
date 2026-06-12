@@ -65,6 +65,10 @@ class ContextStore:
         # glossary per request is pure waste. Invalidated on any mutation.
         self._docs_cache_lock = threading.Lock()
         self._docs_cache: object | None = None
+        try:
+            self.seed_demo_data()
+        except Exception as _seed_exc:
+            logger.warning("Context demo seed skipped: %s", _seed_exc)
 
     def _invalidate_docs_cache(self) -> None:
         with self._docs_cache_lock:
@@ -309,6 +313,229 @@ class ContextStore:
         return cur.rowcount > 0
 
     # ── Semantic docs merge ────────────────────────────────────────────────────
+
+    def seed_demo_data(self) -> int:
+        """Seed AdventureWorks demo entities/metrics/glossary if the store is empty.
+
+        Idempotent — does nothing when records already exist.
+        Returns the number of rows inserted.
+        """
+        with self._conn() as conn:
+            if conn.execute("SELECT COUNT(*) FROM context_entities").fetchone()[0] > 0:
+                return 0
+
+        inserted = 0
+        now = self._now()
+
+        entities = [
+            (
+                "SalesOrder",
+                "Sales Order",
+                ["order", "ordine", "vendita"],
+                "Customer purchase order from ERP (sales_order_header + lines). "
+                "Key fields: subtotalAmount (net revenue), totalDue (gross), onlineOrderFlag.",
+                "erp",
+            ),
+            (
+                "Customer",
+                "Customer",
+                ["account", "cliente", "buyer", "conto"],
+                "Legal entity that places orders. Source: crm.accounts (ClientHub). "
+                "Bridge: accountId ↔ ERP customer_ref (93.2% match — 18,484 / 19,829).",
+                "crm",
+            ),
+            (
+                "Salesperson",
+                "Salesperson",
+                ["rep", "agent", "venditore", "agente commerciale"],
+                "Sales representative bridged to HR via salesPersonId ↔ matricolaDip. "
+                "14 active reps. Top performer: Linda Mitchell ($4.25M YTD).",
+                "erp",
+            ),
+            (
+                "Territory",
+                "Territory",
+                ["region", "area", "zona", "distretto"],
+                "Sales territory grouping customers and reps by geography. 10 territories.",
+                "erp",
+            ),
+            (
+                "Product",
+                "Product",
+                ["item", "sku", "articolo", "prodotto"],
+                "Product catalogue from PIM (product_catalog). 504 products. "
+                "Bikes category = 98% of revenue.",
+                "pim",
+            ),
+            (
+                "Employee",
+                "Employee",
+                ["dipendente", "worker", "staff"],
+                "HR record with Italian schema (matricolaDip, cognome, nome, stipendio, ruolo). "
+                "290 employees. Bridge: matricolaDip ↔ ERP salesPersonId.",
+                "hr",
+            ),
+            (
+                "SalesOrderLine",
+                "Sales Order Line",
+                ["order line", "riga ordine", "line item"],
+                "Line-level detail: orderId, productId (→ PIM), quantity, unitPrice, "
+                "unitPriceDiscount, lineTotal. 121,317 rows.",
+                "erp",
+            ),
+        ]
+        for name, display_name, synonyms, description, source in entities:
+            self.add_entity(name, display_name, synonyms, description, source)
+            inserted += 1
+
+        metrics = [
+            (
+                "total_revenue",
+                "Total Revenue",
+                ["fatturato", "ricavi", "revenue", "entrate"],
+                "SUM of SubTotal from sales_order_header — pre-tax, pre-freight. "
+                "Authoritative revenue metric. 2014: $20.1M.",
+                "USD",
+                True,
+            ),
+            (
+                "gross_revenue",
+                "Gross Revenue",
+                ["ricavi lordi", "total_due", "billed revenue", "fatturato lordo"],
+                "SUM of TotalDue — includes tax + freight (~11.3% above net). "
+                "$22.4M in 2014. Use for billing/AR, NOT commercial KPIs.",
+                "USD",
+                False,
+            ),
+            (
+                "order_count",
+                "Order Count",
+                ["numero ordini", "orders", "transazioni"],
+                "COUNT(DISTINCT SalesOrderID). 31,465 total orders in dataset.",
+                "count",
+                True,
+            ),
+            (
+                "active_customers",
+                "Active Customers",
+                ["clienti attivi", "buyers"],
+                "Customers with ≥1 order in the period. Based on ERP↔CRM bridge "
+                "(93.2% match rate = 18,484 matched accounts).",
+                "count",
+                True,
+            ),
+            (
+                "avg_order_value",
+                "Avg. Order Value",
+                ["valore medio ordine", "AOV", "ticket medio"],
+                "total_revenue / order_count. Calculated on SubTotal (net). "
+                "Excludes tax and freight.",
+                "USD",
+                False,
+            ),
+        ]
+        for name, display_name, synonyms, description, unit, certified in metrics:
+            self.add_metric(name, display_name, synonyms, description, unit, certified)
+            inserted += 1
+
+        glossary = [
+            (
+                "fatturato",
+                "Italian term for revenue. In OrionSales → subtotalAmount (SubTotal, pre-tax). "
+                "NOT TotalDue. Always use total_revenue metric (SUM of SubTotal) when asked for fatturato.",
+            ),
+            (
+                "subtotal_amount",
+                "ERP field SubTotal in sales_order_header. Pre-tax, pre-freight. "
+                "Correct revenue figure for commercial reporting ($20.1M in 2014). "
+                "Maps to total_revenue metric.",
+            ),
+            (
+                "total_due",
+                "ERP field TotalDue. Includes tax + freight (~11.3% above SubTotal). "
+                "$22.4M in 2014. Use for billing/AR. Do NOT use for revenue KPIs unless explicitly requested.",
+            ),
+            (
+                "bridge",
+                "Cross-system join linking records across sources. "
+                "ERP↔CRM: customer_ref ↔ accountId (93.2% match). "
+                "ERP↔HR: salesPersonId ↔ matricolaDip (100%). "
+                "ERP↔PIM: productId ↔ internal_id.",
+            ),
+            (
+                "matricoladip",
+                "Italian HR primary key for employees (employee ID). "
+                "Bridges to ERP salesPersonId. 14/14 reps matched (100% bridge health).",
+            ),
+            (
+                "online_order_flag",
+                "Boolean in sales_order_header. 1 = online channel (87.9% of orders), "
+                "0 = in-store/offline (12.1%). Use for channel segmentation.",
+            ),
+            (
+                "knowledge_graph",
+                "Unified in-memory graph of all entities across ERP/CRM/HR/PIM. "
+                "193,062 nodes, 313,193 edges. "
+                "Deduplication removes 372 CRM duplicate accounts (accountId < 0).",
+            ),
+        ]
+        for term, definition in glossary:
+            self.add_glossary_term(term, definition)
+            inserted += 1
+
+        # Seed a process context document
+        _ORION_CONTEXT_DOC = """\
+# OrionSales Process Context
+
+## Overview
+OrionSales is a B2B sales management platform integrating four data sources:
+ERP (OrionSales PostgreSQL), CRM (ClientHub SQLite), HR (CSV, Italian schema),
+and PIM (JSON product catalog). The semantic layer unifies these into a single
+queryable knowledge graph.
+
+## Data Sources
+- **ERP (erp)**: sales_order_header (31,465 orders), sales_order_line (121,317 lines),
+  salesperson (17 reps), territory (10), special_offer (16).
+- **CRM (crm)**: accounts/contacts/addresses (20,201 raw → 19,829 clean after dedup).
+  Warning: 372 duplicate accounts with accountId < 0 from legacy migration.
+- **HR (hr)**: dipendenti_hr (290 employees, Italian schema — matricolaDip, cognome,
+  nome, stipendio, ruolo, repartoId).
+- **PIM (pim)**: product_catalog (504 products; Bikes = 98% of revenue).
+
+## Revenue Disambiguation
+The most important semantic rule: "revenue" / "fatturato" maps to TWO columns:
+- **subtotalAmount** (SubTotal) = $20.1M (2014) — pre-tax, pre-freight. Use for commercial KPIs.
+- **totalDue** = $22.4M (2014) — includes tax and freight. Use for billing/AR.
+Default: always use **subtotalAmount** unless "gross" or "total_due" is explicitly requested.
+
+## Cross-Source Bridges
+1. **ERP↔CRM (PLACED_BY)**: customer_ref ↔ accountId — 18,484/19,829 matched (93.2%).
+   Unmatched 1,345 accounts are CRM-only prospects (never placed an order).
+2. **ERP↔HR (SOLD_BY)**: salesPersonId ↔ matricolaDip — 14/14 matched (100%).
+3. **ERP↔PIM (OF_PRODUCT)**: productId ↔ internal_id — 47 orphan order lines (no PIM match).
+
+## Order Lifecycle
+Lead → Opportunity → Quote → SalesOrder → SalesOrderLine → Invoice (TotalDue).
+Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
+
+## Key Metrics (2014)
+- Total orders: 31,465 | Net revenue: $20.1M | Gross revenue: $22.4M
+- Active customers: 18,484 | Knowledge Graph: 193,062 nodes, 313,193 edges
+- Top rep: Linda Mitchell ($4.25M YTD) | Territory count: 10
+"""
+        with self._conn() as conn:
+            if (
+                conn.execute("SELECT COUNT(*) FROM context_documents").fetchone()[0]
+                == 0
+            ):
+                conn.execute(
+                    "INSERT INTO context_documents (filename, content, file_type, created_at) VALUES (?,?,?,?)",
+                    ("OrionSales_Process_Context.md", _ORION_CONTEXT_DOC, "md", now),
+                )
+                inserted += 1
+
+        self._invalidate_docs_cache()
+        return inserted
 
     def to_semantic_docs_override(self):
         from app.semantic.doc_schema import (
