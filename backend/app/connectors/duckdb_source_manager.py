@@ -54,6 +54,38 @@ logger = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
+_ORION_CONTEXT_DOC = """\
+OrionSales — Business Context for AI SQL Generation
+
+Revenue disambiguation:
+- "fatturato" / "revenue" maps to two ERP fields — always clarify:
+  - subtotal_amount (SalesOrderHeader.SubTotal): net commercial revenue ~$20.1M. Use for board KPIs and product analysis.
+  - total_due (SalesOrderHeader.TotalDue): gross billed amount including tax and freight ~$22.4M. Use for customer billing totals.
+- The $2.3M gap is tax + freight. Default to subtotal_amount unless the user explicitly requests gross/total_due.
+
+CRM deduplication:
+- The CRM accounts table has 372 duplicate records with accountId < 0 (legacy migration artifacts).
+- Always filter: WHERE accountId > 0 for real customer counts.
+- True unique customer count: 19,829 (raw: 20,201).
+
+Cross-source bridges (semantic joins):
+- PLACED_BY: ERP SalesOrderHeader.CustomerID → CRM accounts.accountId (customer resolution)
+- SOLD_BY: ERP SalesOrderHeader.SalesPersonID → HR dipendenti_hr.MatricolaDip (Italian schema)
+- OF_PRODUCT: ERP SalesOrderLine.ProductID → PIM product_catalog_pim.internal_id
+
+HR schema — Italian column names:
+- MatricolaDip = employee_id, cognome = surname, nome = first name
+- DataAssunzione = hire_date, ruolo = role, stipendio = salary, repartoId = department_id
+- Sales quotas and YTD figures are in the ERP salesperson table, NOT in the HR table.
+
+Key benchmark figures (2014):
+- Top salesperson: Linda Mitchell (SalesPersonID 276), salesYTD $4,251,368
+- Net revenue 2014: $20,127,627 (subtotal_amount)
+- Gross revenue 2014: $22,380,124 (total_due)
+- Unique customers: 19,829 (post-dedup)
+- Orders: 31,465 (SalesOrderHeader), 121,317 line items (SalesOrderLine)
+"""
+
 # Paths at or under these roots are never opened as data sources (defence-in-depth).
 _BLOCKED_PATH_ROOTS = ("/etc", "/proc", "/sys", "/dev", "/run", "/boot")
 
@@ -533,6 +565,24 @@ class DuckDBSourceManager:
             for cfg in defaults:
                 self._registry.upsert(cfg)
             logger.info("Seeded %d default sources into registry", len(defaults))
+
+        # Seed a context_doc source if none exists yet — injects business
+        # context (revenue disambiguation, CRM dedup rules, cross-source
+        # bridges) into LLM SQL generation prompts.
+        has_context_doc = any(
+            c.connector_type == "context_doc" for c in self._registry.list()
+        )
+        if not has_context_doc:
+            self._registry.upsert(
+                SourceConfig(
+                    id="context_orion",
+                    connector_type="context_doc",
+                    label="OrionSales — Business Context",
+                    params={"content": _ORION_CONTEXT_DOC},
+                    is_default=True,
+                )
+            )
+            logger.info("Seeded default context document into registry")
 
         # Auto-discover any additional files not yet registered
         discovered = self._auto_discover_files(self._scenario_path)

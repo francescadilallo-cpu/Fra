@@ -1614,9 +1614,17 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
   )
 }
 
-function AmbiguityLogPanel() {
-  // DEF_AMBIGUITIES is now always empty — users define disambiguation via RulesBuilder
-  if (DEF_AMBIGUITIES.length === 0) {
+function AmbiguityLogPanel({ isDemoWorkspace }: { isDemoWorkspace: boolean }) {
+  const demoAmbiguities = isDemoWorkspace
+    ? DEMO_DISAMBIGUATION_RULES.map(r => ({
+        term: r.term,
+        context: r.problem,
+        candidates: r.options.map(o => ({ label: o.label, desc: `${o.desc} (${o.value})`, recommended: o.recommended })),
+        resolution: r.resolution,
+      }))
+    : []
+  const ambiguities = demoAmbiguities.length > 0 ? demoAmbiguities : DEF_AMBIGUITIES
+  if (ambiguities.length === 0) {
     return (
       <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
         <AlertTriangle className="w-6 h-6 mx-auto mb-2 opacity-30" />
@@ -1627,8 +1635,8 @@ function AmbiguityLogPanel() {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500">{DEF_AMBIGUITIES.length} documented ambiguities — resolved at query time by the semantic layer</p>
-      {DEF_AMBIGUITIES.map((amb, i) => (
+      <p className="text-xs text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time by the semantic layer</p>
+      {ambiguities.map((amb, i) => (
         <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
@@ -3201,7 +3209,7 @@ export default function SemanticLayerView() {
             {defTab === 'definitions' && <SemanticDefsPanel initialDefs={initialDefs} />}
 
             {/* Ambiguity Log tab */}
-            {defTab === 'ambiguity' && <AmbiguityLogPanel />}
+            {defTab === 'ambiguity' && <AmbiguityLogPanel isDemoWorkspace={isDemoWorkspace} />}
           </div>
         )}
 

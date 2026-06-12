@@ -11,6 +11,7 @@ import {
   type QueryTemplate, type QueryTemplateCreate,
 } from '../api/semantic'
 import { toast } from './Toast'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 type DraftTab = 'entities' | 'relations' | 'metrics' | 'context' | 'templates'
 
@@ -488,7 +489,36 @@ function MetricCard({ metric, onSaved }: { metric: DraftMetric; onSaved: () => v
 
 // ── Context docs tab ──────────────────────────────────────────────────────────
 
+const DEMO_CONTEXT_DOCS: ContextDoc[] = IS_DEMO_MODE ? [
+  {
+    id: '__demo_orion__',
+    title: 'OrionSales — Business Context',
+    created_at: '',
+    content: [
+      'Revenue disambiguation:',
+      '• "fatturato" / "revenue" = subtotal_amount (~$20.1M net, excl. tax & freight). Use for board-level KPIs.',
+      '• "total_due" = SubTotal + TaxAmt + Freight (~$22.4M). Use for customer billing totals.',
+      '',
+      'CRM deduplication:',
+      '• 372 accounts with accountId < 0 are legacy duplicates — always filter WHERE accountId > 0.',
+      '• True unique customer count: 19,829 (not 20,201 raw).',
+      '',
+      'Cross-source bridges:',
+      '• ERP ↔ CRM: SalesOrderHeader.CustomerID → account.accountId (PLACED_BY)',
+      '• ERP ↔ HR: SalesPersonID → dipendenti_hr.MatricolaDip (SOLD_BY, Italian schema)',
+      '• ERP ↔ PIM: SalesOrderLine.ProductID → product_catalog_pim.internal_id (OF_PRODUCT)',
+      '',
+      'Key figures:',
+      '• Top salesperson: Linda Mitchell (ID 276), salesYTD $4,251,368',
+      '• Total net revenue 2014: $20,127,627 (subtotal_amount)',
+      '• Total gross revenue 2014: $22,380,124 (total_due)',
+    ].join('\n'),
+  },
+] : []
+
 function ContextDocsTab({ docs, onUpdate }: { docs: ContextDoc[]; onUpdate: () => void }) {
+  const effectiveDocs = IS_DEMO_MODE && docs.length === 0 ? DEMO_CONTEXT_DOCS : docs
+  const isDemoFallback = IS_DEMO_MODE && docs.length === 0
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newContent, setNewContent] = useState('')
@@ -527,19 +557,24 @@ function ContextDocsTab({ docs, onUpdate }: { docs: ContextDoc[]; onUpdate: () =
         Context documents are injected into LLM prompts when generating SQL. Add business rules, glossary definitions, or domain constraints.
       </p>
 
-      {docs.map(d => (
-        <div key={d.id} className="rounded-lg border border-slate-200 p-3">
+      {effectiveDocs.map(d => (
+        <div key={d.id} className={`rounded-lg border p-3 ${isDemoFallback ? 'border-teal-200 bg-teal-50/30' : 'border-slate-200'}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800">{d.title}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-800">{d.title}</p>
+                {isDemoFallback && <span className="text-[10px] font-semibold text-teal-600 bg-teal-100 rounded px-1.5 py-0.5">demo</span>}
+              </div>
               <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{d.content}</p>
             </div>
-            <button
-              onClick={() => handleDelete(d.id, d.title)}
-              className="text-slate-400 hover:text-red-500 p-1 flex-shrink-0 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {!isDemoFallback && (
+              <button
+                onClick={() => handleDelete(d.id, d.title)}
+                className="text-slate-400 hover:text-red-500 p-1 flex-shrink-0 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       ))}
