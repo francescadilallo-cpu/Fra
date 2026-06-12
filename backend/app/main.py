@@ -63,6 +63,8 @@ from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
 from .audit.router import router as audit_router
 from .audit.store import get_audit_store
+from .users.router import router as users_router
+from .notifications.router import router as notifications_router
 from .context.store import default_store as _context_store
 
 load_dotenv()
@@ -1208,6 +1210,14 @@ app.include_router(
 app.include_router(
     audit_router,
     dependencies=[Depends(require_roles("user", "admin"))],
+)
+app.include_router(
+    users_router,
+    dependencies=[Depends(require_roles("admin"))],
+)
+app.include_router(
+    notifications_router,
+    dependencies=[Depends(require_roles("admin"))],
 )
 
 

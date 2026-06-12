@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Users, UserPlus, Key, Plus, Bell, FileClock, MessageSquare, Mail, Webhook,
   Eye, EyeOff, Copy, Trash2, X, Loader2, CheckCircle2, Send, ShieldCheck,
@@ -7,6 +7,14 @@ import {
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getTokenSubject } from '../api/client'
 import { listAuditEntries, type BackendAuditEntry } from '../api/audit'
+import {
+  listMembers, inviteMember, updateMemberRole, removeMember, type BackendMember,
+} from '../api/users'
+import {
+  listChannels, addChannel as apiAddChannel, updateChannel as apiUpdateChannel,
+  removeChannel as apiRemoveChannel, getRouting, saveRouting,
+  type BackendChannel,
+} from '../api/notifications'
 
 // ── Users & Roles ────────────────────────────────────────────────────────────
 
@@ -137,19 +145,56 @@ function InviteUserModal({ onClose, onInvite }: { onClose: () => void; onInvite:
   )
 }
 
+function backendMemberToUser(m: BackendMember): User {
+  const name = m.username.replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  const initials = name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || m.username.slice(0, 2).toUpperCase()
+  const COLORS = ['bg-blue-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500']
+  const color = COLORS[[...m.email].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length]
+  return {
+    id: m.id, name, email: m.email, role: m.role,
+    status: m.status, twoFA: false, lastSeen: '—', avatar: initials, color,
+  }
+}
+
 export function UsersSection() {
   const [users, setUsers] = useState<User[]>(initialUsers)
   const [showInvite, setShowInvite] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
+  // Live mode: load persisted members from backend and merge with JWT owner
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    listMembers()
+      .then(members => {
+        const base = initialUsers()
+        const converted = members.map(backendMemberToUser)
+        // deduplicate by id — base has the JWT owner
+        const seen = new Set(base.map(u => u.id))
+        setUsers([...base, ...converted.filter(u => !seen.has(u.id))])
+      })
+      .catch(() => {})
+  }, [])
+
   function changeRole(id: string, role: UserRole) {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u))
+    if (!IS_DEMO_MODE) {
+      updateMemberRole(id, role).catch(() => {})
+    }
   }
   function removeUser(id: string) {
     setUsers(prev => prev.filter(u => u.id !== id))
     setOpenMenu(null)
+    if (!IS_DEMO_MODE) {
+      removeMember(id).catch(() => {})
+    }
   }
   function invite(email: string, role: UserRole) {
+    if (!IS_DEMO_MODE) {
+      inviteMember(email, role)
+        .then(m => setUsers(prev => [...prev, backendMemberToUser(m)]))
+        .catch(() => {})
+      return
+    }
     const name = email.split('@')[0].replace(/[.]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
     setUsers(prev => [
@@ -587,13 +632,121 @@ const INITIAL_ROUTING: Record<Severity, string[]> = IS_DEMO_MODE
 
 type ChannelTest = { state: 'idle' | 'testing' | 'ok'; latency?: number }
 
+function backendChannelToLocal(c: BackendChannel): Channel {
+  return { id: c.id, name: c.name, type: c.type, destination: c.destination, enabled: c.enabled }
+}
+
+function AddChannelModal({ onClose, onAdd }: {
+  onClose: () => void
+  onAdd: (name: string, type: ChannelType, destination: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [type, setType] = useState<ChannelType>('webhook')
+  const [dest, setDest] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function handleAdd() {
+    if (!name.trim() || !dest.trim()) return
+    setSaving(true)
+    setTimeout(() => { onAdd(name.trim(), type, dest.trim()); onClose() }, 400)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-teal-600" />
+            <h3 className="font-semibold text-slate-900">Add notification channel</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-xs font-medium text-slate-700 block mb-1">Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. #ops-alerts"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-teal-500 outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700 block mb-1">Type</label>
+            <select value={type} onChange={e => setType(e.target.value as ChannelType)}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-teal-500">
+              <option value="slack">Slack</option>
+              <option value="email">Email</option>
+              <option value="teams">Microsoft Teams</option>
+              <option value="webhook">Webhook</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-700 block mb-1">
+              {type === 'email' ? 'Email address *' : type === 'slack' ? 'Webhook URL *' : type === 'teams' ? 'Incoming Webhook URL *' : 'Endpoint URL *'}
+            </label>
+            <input value={dest} onChange={e => setDest(e.target.value)}
+              placeholder={type === 'email' ? 'ops@company.com' : 'https://…'}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-teal-500 outline-none font-mono" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
+          <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+          <button onClick={handleAdd} disabled={!name.trim() || !dest.trim() || saving}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            {saving ? 'Adding…' : 'Add channel'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function NotificationsSection() {
   const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS)
   const [routing, setRouting] = useState<Record<Severity, string[]>>(INITIAL_ROUTING)
   const [tests, setTests] = useState<Record<string, ChannelTest>>({})
+  const [showAdd, setShowAdd] = useState(false)
+  const routingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Live mode: load persisted channels + routing from backend
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    listChannels().then(chs => setChannels(chs.map(backendChannelToLocal))).catch(() => {})
+    getRouting().then(r => setRouting(r as Record<Severity, string[]>)).catch(() => {})
+  }, [])
+
+  const persistRouting = useCallback((next: Record<Severity, string[]>) => {
+    if (IS_DEMO_MODE) return
+    if (routingTimerRef.current) clearTimeout(routingTimerRef.current)
+    routingTimerRef.current = setTimeout(() => {
+      saveRouting(next).catch(() => {})
+    }, 500)
+  }, [])
 
   function toggleChannel(id: string) {
-    setChannels(prev => prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c))
+    setChannels(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c)
+      if (!IS_DEMO_MODE) {
+        const ch = next.find(c => c.id === id)
+        if (ch) apiUpdateChannel(id, { enabled: ch.enabled }).catch(() => {})
+      }
+      return next
+    })
+  }
+
+  function deleteChannel(id: string) {
+    setChannels(prev => prev.filter(c => c.id !== id))
+    if (!IS_DEMO_MODE) apiRemoveChannel(id).catch(() => {})
+  }
+
+  function addChannel(name: string, type: ChannelType, destination: string) {
+    if (!IS_DEMO_MODE) {
+      apiAddChannel(name, type, destination)
+        .then(ch => setChannels(prev => [...prev, backendChannelToLocal(ch)]))
+        .catch(() => {})
+      return
+    }
+    setChannels(prev => [...prev, { id: `c-${Date.now()}`, name, type, destination, enabled: true }])
   }
 
   function testChannel(id: string) {
@@ -605,14 +758,19 @@ export function NotificationsSection() {
   }
 
   function toggleRoute(sev: Severity, channelId: string) {
-    setRouting(prev => ({
-      ...prev,
-      [sev]: prev[sev].includes(channelId) ? prev[sev].filter(c => c !== channelId) : [...prev[sev], channelId],
-    }))
+    setRouting(prev => {
+      const next = {
+        ...prev,
+        [sev]: prev[sev].includes(channelId) ? prev[sev].filter(c => c !== channelId) : [...prev[sev], channelId],
+      }
+      persistRouting(next)
+      return next
+    })
   }
 
   return (
     <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      {showAdd && <AddChannelModal onClose={() => setShowAdd(false)} onAdd={addChannel} />}
       <div className="flex items-start justify-between mb-1">
         <div>
           <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -621,9 +779,18 @@ export function NotificationsSection() {
           </h2>
           <p className="text-xs text-slate-500 mt-1">Where agent findings, pipeline events and governance alerts are delivered.</p>
         </div>
-        <span className="text-xs bg-slate-100 text-slate-600 font-medium px-2 py-1 rounded-full">
-          {channels.filter(c => c.enabled).length}/{channels.length} active
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs bg-slate-100 text-slate-600 font-medium px-2 py-1 rounded-full">
+            {channels.filter(c => c.enabled).length}/{channels.length} active
+          </span>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add channel
+          </button>
+        </div>
       </div>
 
       {channels.length === 0 && (
@@ -652,12 +819,21 @@ export function NotificationsSection() {
                   </div>
                   <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">{c.destination}</p>
                 </div>
-                <button
-                  onClick={() => toggleChannel(c.id)}
-                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${c.enabled ? 'bg-teal-500' : 'bg-slate-200'}`}
-                >
-                  <div className={`absolute top-0.5 ${c.enabled ? 'right-0.5' : 'left-0.5'} w-4 h-4 bg-white rounded-full shadow-sm transition-all`} />
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => deleteChannel(c.id)}
+                    className="p-1 text-slate-300 hover:text-red-500 transition-colors rounded"
+                    title="Remove channel"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => toggleChannel(c.id)}
+                    className={`relative w-9 h-5 rounded-full transition-colors ${c.enabled ? 'bg-teal-500' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-0.5 ${c.enabled ? 'right-0.5' : 'left-0.5'} w-4 h-4 bg-white rounded-full shadow-sm transition-all`} />
+                  </button>
+                </div>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                 {test.state === 'ok' ? (
