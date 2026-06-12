@@ -15,6 +15,7 @@ import {
   removeChannel as apiRemoveChannel, getRouting, saveRouting,
   type BackendChannel,
 } from '../api/notifications'
+import { listTokens, createToken as apiCreateToken, revokeToken as apiRevokeToken, type BackendToken } from '../api/tokens'
 
 // ── Users & Roles ────────────────────────────────────────────────────────────
 
@@ -360,6 +361,32 @@ function randomToken(): string {
   return s
 }
 
+function backendTokenToLocal(t: BackendToken, fullToken?: string): ApiToken {
+  const full = fullToken ?? t.token_preview
+  const preview = fullToken
+    ? `${fullToken.slice(0, 12)}••••••${fullToken.slice(-4)}`
+    : t.token_preview
+  const d = new Date(t.created_at)
+  const lastUsed = t.last_used_at
+    ? (() => {
+        const secs = Math.round((Date.now() - new Date(t.last_used_at!).getTime()) / 1000)
+        return secs < 3600 ? `${Math.round(secs / 60)}m ago`
+          : secs < 86400 ? `${Math.round(secs / 3600)}h ago`
+          : new Date(t.last_used_at!).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })
+      })()
+    : 'never'
+  return {
+    id: t.id,
+    name: t.name,
+    fullToken: full,
+    tokenPreview: preview,
+    scopes: t.scopes,
+    createdAt: d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }),
+    lastUsed,
+    status: t.status,
+  }
+}
+
 function GenerateTokenModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string, scopes: string[]) => void }) {
   const [name, setName] = useState('')
   const [scopes, setScopes] = useState<string[]>(['read:ontology'])
@@ -441,6 +468,14 @@ export function ApiTokensSection() {
   const [showModal, setShowModal] = useState(false)
   const [newToken, setNewToken] = useState<ApiToken | null>(null)
 
+  // Live mode: load persisted token metadata from backend
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    listTokens()
+      .then(toks => setTokens(toks.map(t => backendTokenToLocal(t))))
+      .catch(() => {})
+  }, [])
+
   function toggleReveal(id: string) {
     setRevealed(prev => {
       const next = new Set(prev)
@@ -457,9 +492,21 @@ export function ApiTokensSection() {
 
   function revokeToken(id: string) {
     setTokens(prev => prev.filter(t => t.id !== id))
+    if (!IS_DEMO_MODE) apiRevokeToken(id).catch(() => {})
   }
 
   function createToken(name: string, scopes: string[]) {
+    if (!IS_DEMO_MODE) {
+      apiCreateToken(name, scopes)
+        .then(t => {
+          const tok = backendTokenToLocal(t, t.full_token)
+          setTokens(prev => [tok, ...prev])
+          setNewToken(tok)
+          setRevealed(prev => new Set([...prev, tok.id]))
+        })
+        .catch(() => {})
+      return
+    }
     const full = randomToken()
     const preview = `${full.slice(0, 8)}••••••${full.slice(-4)}`
     const id = `t-${Date.now()}`
