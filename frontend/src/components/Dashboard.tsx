@@ -421,7 +421,41 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     openValue: sector.kpiLabels.openValue,
   }
 
-  const kpis = [
+  // Live: KPI cards derive from real backend data — funnel stage names
+  // (status breakdown of the user's order table) and draft entity totals.
+  const totalRecords = draft?.entities.reduce((s, e) => s + (e.record_count || 0), 0) ?? 0
+  const liveKpis = [
+    {
+      label: funnel[0]?.stage ?? 'Records ingested',
+      value: `${(funnel[0]?.count ?? totalRecords).toLocaleString('en-US')}`,
+      icon: FileText,
+      color: 'text-blue-600', bg: 'bg-blue-50',
+      spark: [] as number[], sparkColor: '#3b82f6', trend: 0,
+    },
+    ...(funnel.length > 1 ? [{
+      label: funnel[1].stage,
+      value: funnel[1].count.toLocaleString('en-US'),
+      icon: ShoppingCart,
+      color: 'text-purple-600', bg: 'bg-purple-50',
+      spark: [] as number[], sparkColor: '#a855f7', trend: 0,
+    }] : []),
+    ...(funnel.length > 2 ? [{
+      label: funnel[2].stage,
+      value: funnel[2].count.toLocaleString('en-US'),
+      icon: TrendingUp,
+      color: 'text-teal-600', bg: 'bg-teal-50',
+      spark: [] as number[], sparkColor: '#0d9488', trend: 0,
+    }] : []),
+    {
+      label: 'Entities in semantic layer',
+      value: `${draft?.entities.length ?? 0}`,
+      icon: Users,
+      color: 'text-amber-600', bg: 'bg-amber-50',
+      spark: [] as number[], sparkColor: '#d97706', trend: 0,
+    },
+  ]
+
+  const demoKpis = [
     {
       label: kpiLabels.quotes,
       value: `${totalQuotes}`,
@@ -459,6 +493,8 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       trend: -5,
     },
   ]
+
+  const kpis = IS_DEMO_MODE ? demoKpis : liveKpis
 
   // Data sources from live config connectors
   const sources = liveConfig?.connectors.map(name => ({

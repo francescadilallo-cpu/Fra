@@ -2970,10 +2970,28 @@ def _auto_layout_positions(
     return positions
 
 
-def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
-    """Try to build a process funnel from order/transaction table row counts.
+_FUNNEL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-    Returns None if no suitable table found.
+# Column names that typically hold an order/transaction lifecycle state
+_FUNNEL_STATUS_COLUMNS = {
+    "status",
+    "stato",
+    "state",
+    "order_status",
+    "orderstatus",
+    "stage",
+    "phase",
+    "status_code",
+}
+
+
+def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
+    """Build a process funnel from the user's real order/transaction data.
+
+    Every count is real: the total row count plus, when the table has a
+    status-like column, the actual per-status breakdown from DuckDB. No
+    stage is ever fabricated — if there is no status column the funnel is
+    just the single true total. Returns None if no suitable table exists.
     """
     order_keywords = {"order", "ordine", "transaction", "sale", "invoice", "fattura"}
     order_entity = None
@@ -2990,11 +3008,47 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
     if total == 0:
         return None
 
-    return [
-        {"stage": "Received", "count": total, "value": 0},
-        {"stage": "Processed", "count": int(total * 0.85), "value": 0},
-        {"stage": "Completed", "count": int(total * 0.70), "value": 0},
-    ]
+    table = order_entity.get("table", "")
+    label = order_entity.get("name") or table
+    stages: list[dict] = [{"stage": f"{label} — total", "count": total, "value": 0}]
+
+    status_col = next(
+        (
+            c
+            for c in order_entity.get("columns", [])
+            if isinstance(c, str) and c.lower() in _FUNNEL_STATUS_COLUMNS
+        ),
+        None,
+    )
+    if (
+        status_col
+        and _FUNNEL_IDENT_RE.match(table)
+        and _FUNNEL_IDENT_RE.match(status_col)
+    ):
+        try:
+            from .connectors.duckdb_source_manager import get_source_manager
+
+            mgr = get_source_manager(_SCENARIO_PATH)
+            conn = mgr.get_connection()
+            try:
+                rows = conn.execute(
+                    f'SELECT "{status_col}" AS s, COUNT(*) AS n '  # noqa: S608
+                    f'FROM "{table}" GROUP BY 1 ORDER BY 2 DESC LIMIT 5'
+                ).fetchall()
+            finally:
+                conn.close()
+            for val, cnt in rows:
+                stages.append(
+                    {
+                        "stage": str(val) if val is not None else "(no status)",
+                        "count": int(cnt),
+                        "value": 0,
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Live funnel status breakdown skipped: %s", exc)
+
+    return stages
 
 
 def _build_process_stages(entities: list[dict]) -> list[dict]:
