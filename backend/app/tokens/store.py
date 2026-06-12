@@ -13,6 +13,7 @@ from pathlib import Path
 _TOKEN_PREFIX = "si_"
 _TOKEN_BYTES = 32  # 256 bits of entropy → 43 base64url chars after prefix
 _DEFAULT_TTL_DAYS = 90
+_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "tokens.db"
 
 
 @dataclass
@@ -28,7 +29,7 @@ class ApiTokenRecord:
 
 
 class TokensStore:
-    def __init__(self, db_path: Path | str = "data/tokens.db") -> None:
+    def __init__(self, db_path: Path | str = _DEFAULT_DB) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()

@@ -14,6 +14,7 @@ UserRole = Literal["admin", "editor", "viewer"]
 UserStatus = Literal["active", "pending"]
 
 _VALID_ROLES: frozenset[str] = frozenset({"admin", "editor", "viewer"})
+_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "users.db"
 
 
 @dataclass
@@ -27,7 +28,7 @@ class WorkspaceMember:
 
 
 class UsersStore:
-    def __init__(self, db_path: Path | str = "data/users.db") -> None:
+    def __init__(self, db_path: Path | str = _DEFAULT_DB) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()

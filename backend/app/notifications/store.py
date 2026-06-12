@@ -11,6 +11,7 @@ from pathlib import Path
 
 _VALID_TYPES: frozenset[str] = frozenset({"slack", "email", "teams", "webhook"})
 _VALID_SEVERITIES: tuple[str, ...] = ("critical", "warning", "info")
+_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "notifications.db"
 
 
 @dataclass
@@ -23,7 +24,7 @@ class Channel:
 
 
 class NotificationsStore:
-    def __init__(self, db_path: Path | str = "data/notifications.db") -> None:
+    def __init__(self, db_path: Path | str = _DEFAULT_DB) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()

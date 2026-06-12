@@ -1,0 +1,19 @@
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+tests/
+*.egg-info
+.env
+.env.*
+# runtime DBs that get re-created on startup
+data/context.db
+data/source_registry.db
+data/tokens.db
+data/users.db
+data/notifications.db
+data/audit.db
