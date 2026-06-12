@@ -353,16 +353,22 @@ export default function ConfigurationView() {
     setCustomConnectors(prev => [...prev, { name: form.name, cat: form.type }])
   }
 
+  // "Connected" status and traffic figures are demo narrative; a live
+  // workspace shows the library as available-to-connect with no fake stats.
   const connectors = GENERIC_CONNECTORS.map(c => ({
     ...c,
-    connected: c.sectors.includes(sectorId) || c.cat === 'AI' || c.cat === 'DWH' || c.cat === 'Database',
+    connected: IS_DEMO_MODE && (c.sectors.includes(sectorId) || c.cat === 'AI' || c.cat === 'DWH' || c.cat === 'Database'),
   }))
 
-  const agents = [
+  const agents = IS_DEMO_MODE ? [
     { name: 'Interface Agent',   icon: Bot,      desc: 'Receives natural language requests and routes them to the right specialist', model: 'claude-sonnet-4', traffic: '1.2k req/day' },
     { name: 'Operational Agent', icon: Workflow, desc: 'Coordinates multiple specialized agents for end-to-end multi-step tasks',    model: 'claude-sonnet-4', traffic: '340 req/day'  },
     { ...AGENT_SECTOR[sectorId], icon: Wrench },
     { name: 'Compliance Agent',  icon: Shield,   desc: 'Verifies every decision against EU AI Act policies before release',          model: 'claude-haiku-4',  traffic: '1.2k checks/day' },
+  ] : [
+    { name: 'Interface Agent',   icon: Bot,      desc: 'Receives natural language requests and routes them to the right specialist', model: 'claude-sonnet-4', traffic: 'idle' },
+    { name: 'Operational Agent', icon: Workflow, desc: 'Coordinates multiple specialized agents for end-to-end multi-step tasks',    model: 'claude-sonnet-4', traffic: 'idle' },
+    { name: 'Compliance Agent',  icon: Shield,   desc: 'Verifies every decision against EU AI Act policies before release',          model: 'claude-haiku-4',  traffic: 'idle' },
   ]
 
   const activeConnectors = connectors.filter(c => c.connected).length

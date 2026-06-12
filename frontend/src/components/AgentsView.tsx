@@ -1130,7 +1130,9 @@ function ExecutiveActionsPanel() {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AgentsView() {
   const { sectorId } = useSector()
-  const agents = AGENTS[sectorId]
+  // Built-in agents carry curated AdventureWorks results — demo only.
+  // Live workspaces build their own agents on their real ontology.
+  const agents = IS_DEMO_MODE ? AGENTS[sectorId] : []
   const isAdmin = !IS_DEMO_MODE && getRole() === 'admin'
 
   // ── Custom agents ──────────────────────────────────────────────────────────
@@ -1235,7 +1237,7 @@ export default function AgentsView() {
 
   // Reset when sector changes
   useEffect(() => {
-    const newAgents = AGENTS[sectorId]
+    const newAgents = IS_DEMO_MODE ? AGENTS[sectorId] : []
     setStates(Object.fromEntries(newAgents.map(a => [a.id, { status: 'idle' as AgentStatus, progress: 0, logLines: [] }])))
     setLog([])
     setExpanded({})
@@ -1361,10 +1363,11 @@ export default function AgentsView() {
   }, [simulateAgent])
 
   const [runningWorkflows, setRunningWorkflows] = useState<Set<string>>(new Set())
-  const workflows = WORKFLOWS[sectorId] ?? []
+  // Workflows chain built-in demo agents — demo only
+  const workflows = IS_DEMO_MODE ? (WORKFLOWS[sectorId] ?? []) : []
 
   const runWorkflow = useCallback((wf: WorkflowDef) => {
-    const currentAgents = AGENTS[sectorId]
+    const currentAgents = IS_DEMO_MODE ? AGENTS[sectorId] : []
     const stepDefs = wf.steps
       .map(s => ({ step: s, def: currentAgents.find(a => a.id === s.agentId) }))
       .filter((x): x is { step: typeof wf.steps[number]; def: AgentDef } => !!x.def)
@@ -1422,7 +1425,8 @@ export default function AgentsView() {
     (states[agentId]?.status ?? 'idle') as StepStatus
 
   const runAll = useCallback(() => {
-    const currentAgents = AGENTS[sectorId]
+    const builtin = IS_DEMO_MODE ? AGENTS[sectorId] : []
+    const currentAgents = [...builtin, ...customAgentsDefsRef.current.map(customToAgentDef)]
     // Mark all as queued
     setStates(prev => {
       const next = { ...prev }
@@ -1440,9 +1444,10 @@ export default function AgentsView() {
     })
   }, [sectorId, simulateAgent])
 
-  const completedCount = agents.filter(a => states[a.id]?.status === 'completed').length
-  const runningCount = agents.filter(a => states[a.id]?.status === 'running').length
-  const completedAgents = agents.filter(a => states[a.id]?.status === 'completed')
+  const allAgents = useMemo(() => [...agents, ...customAgents], [agents, customAgents])
+  const completedCount = allAgents.filter(a => states[a.id]?.status === 'completed').length
+  const runningCount = allAgents.filter(a => states[a.id]?.status === 'running').length
+  const completedAgents = allAgents.filter(a => states[a.id]?.status === 'completed')
   const totalFindings = completedAgents.flatMap(a => a.findings).length
   const criticalFindings = completedAgents.flatMap(a => a.findings).filter(f => f.severity === 'critical').length
 
@@ -1490,7 +1495,7 @@ export default function AgentsView() {
             Operational agents connected to the semantic layer · executing in parallel
             {completedCount > 0 && (
               <span className="ml-2 text-slate-400">
-                · {completedCount}/{agents.length} completed · {totalFindings} findings
+                · {completedCount}/{allAgents.length} completed · {totalFindings} findings
                 {criticalFindings > 0 && (
                   <span className="ml-1 text-red-500 font-medium">{criticalFindings} critical</span>
                 )}
@@ -1559,27 +1564,29 @@ export default function AgentsView() {
             </section>
           )}
 
-          {/* Agent grid */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Agents</h2>
-              <span className="text-xs text-slate-400">· {agents.length} available · run individually or via workflow</span>
-            </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {agents.map(def => (
-                <AgentCard
-                  key={def.id}
-                  def={def}
-                  state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
-                  onRun={() => runAgent(def)}
-                  expanded={!!expanded[def.id]}
-                  onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
-                  onAction={handleAction}
-                />
-              ))}
-            </div>
-          </section>
+          {/* Agent grid (built-in demo agents) */}
+          {agents.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Bot className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Agents</h2>
+                <span className="text-xs text-slate-400">· {agents.length} available · run individually or via workflow</span>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {agents.map(def => (
+                  <AgentCard
+                    key={def.id}
+                    def={def}
+                    state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
+                    onRun={() => runAgent(def)}
+                    expanded={!!expanded[def.id]}
+                    onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
+                    onAction={handleAction}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Custom agents (user-defined) */}
           {customAgents.length > 0 && (

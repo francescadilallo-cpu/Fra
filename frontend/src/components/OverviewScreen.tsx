@@ -80,6 +80,8 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const edgeCount = semStatus?.loaded ? semStatus.kg_edges : ontology.edges.length
   const kgNodes = semStatus?.kg_nodes ?? 0
   const isAW = IS_DEMO_MODE && sectorId === 'manufacturing'
+  // Sector connectors are demo content; live shows only what the backend reports
+  const connectors = liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])
 
   // Derive journey step completion from real system state
   const semBuilt = semStatus?.loaded === true
@@ -120,10 +122,12 @@ export default function OverviewScreen({ onNavigate }: Props) {
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-teal-400 rounded-full" />
+            <span className={`w-2 h-2 rounded-full ${connectors.length > 0 ? 'bg-teal-400' : 'bg-slate-500'}`} />
             <span className="text-xs text-slate-300">Sources</span>
             <span className="text-xs font-semibold text-white ml-1">
-              {(liveConfig?.connectors ?? sector.connectors).slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — {(liveConfig?.connectors ?? sector.connectors).length} connected
+              {connectors.length > 0
+                ? `${connectors.slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — ${connectors.length} connected`
+                : 'none connected yet'}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -184,10 +188,12 @@ export default function OverviewScreen({ onNavigate }: Props) {
             </div>
           ) : (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Active sector — {sector.name}</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                {IS_DEMO_MODE ? `Active sector — ${sector.name}` : 'Workspace status'}
+              </p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String((liveConfig?.connectors ?? sector.connectors).length),  sub: sector.domain },
+                  { label: 'Data Sources',    value: String(connectors.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : 'Connect your first source') },
                   { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
                   { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
                 ].map(s => (
@@ -271,9 +277,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
-              <p className="text-3xl font-extrabold text-red-500 mb-2">{(liveConfig?.connectors ?? sector.connectors).length}</p>
+              <p className="text-3xl font-extrabold text-red-500 mb-2">{connectors.length > 0 ? connectors.length : 'N'}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
-              <p className="text-xs text-slate-500">{liveConfig?.domain ?? sector.domain} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+              <p className="text-xs text-slate-500">{liveConfig?.domain ?? (IS_DEMO_MODE ? sector.domain : 'Your data landscape')} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
@@ -355,15 +361,24 @@ export default function OverviewScreen({ onNavigate }: Props) {
       <section className="px-4 md:px-8 lg:px-12 py-16 bg-slate-900">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold text-white leading-snug mb-6">
-            Ready to explore the demo?
+            {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your semantic layer?'}
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
-            {[
-              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${(liveConfig?.connectors ?? sector.connectors).length} connected systems`,
+            {(IS_DEMO_MODE ? [
+              `${sector.name} demo data — ${sector.funnel[0]?.count.toLocaleString('en-US') ?? '—'} records, ${connectors.length} connected systems`,
               ...(isAW ? [`Knowledge Graph with ${kgNodes > 0 ? kgNodes.toLocaleString('en-US') : '193k'} nodes and ${edgeCount > 0 ? edgeCount.toLocaleString('en-US') : '313k'} edges`] : []),
               'Natural language Query AI — ask questions in plain English',
               'Download CSV for each entity from the Data Explorer',
-            ].map(item => (
+            ] : [
+              connectors.length > 0
+                ? `${connectors.length} data source${connectors.length !== 1 ? 's' : ''} connected — ${connectors.slice(0, 3).join(', ')}`
+                : 'Connect your data sources — databases, files, SaaS connectors',
+              semBuilt
+                ? `Semantic layer built — ${kgNodes.toLocaleString('en-US')} knowledge graph nodes`
+                : 'Build the semantic layer — entities, relations, and metrics auto-extracted',
+              'Natural language Query AI — ask questions in plain English',
+              'Define agents to monitor data quality and business KPIs',
+            ]).map(item => (
               <li key={item} className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0 mt-0.5" />
                 {item}

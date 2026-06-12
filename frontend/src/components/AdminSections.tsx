@@ -4,6 +4,8 @@ import {
   Eye, EyeOff, Copy, Trash2, X, Loader2, CheckCircle2, Send, ShieldCheck,
   AlertCircle, MoreHorizontal, Globe, Filter, Lock, Sparkles, History,
 } from 'lucide-react'
+import { IS_DEMO_MODE } from '../lib/demoMode'
+import { getTokenSubject } from '../api/client'
 
 // ── Users & Roles ────────────────────────────────────────────────────────────
 
@@ -33,13 +35,26 @@ const ROLE_DESC: Record<UserRole, string> = {
   viewer: 'Read-only access to dashboards and ontology',
 }
 
-const INITIAL_USERS: User[] = [
+const DEMO_USERS: User[] = [
   { id:'u1', name:'Francesca Di Lallo',  email:'francesca@semint.ai',     role:'admin',  status:'active',  twoFA:true,  lastSeen:'active now', avatar:'FD', color:'bg-teal-500' },
   { id:'u2', name:'Marco Rossi',          email:'marco.rossi@semint.ai',   role:'editor', status:'active',  twoFA:true,  lastSeen:'2h ago',     avatar:'MR', color:'bg-blue-500' },
   { id:'u3', name:'Giulia Ferrari',       email:'giulia.f@semint.ai',      role:'viewer', status:'active',  twoFA:false, lastSeen:'yesterday',  avatar:'GF', color:'bg-purple-500' },
   { id:'u4', name:'Luca Bianchi',         email:'luca.b@semint.ai',        role:'editor', status:'active',  twoFA:true,  lastSeen:'1 week ago', avatar:'LB', color:'bg-amber-500' },
   { id:'u5', name:'Alessandro Conti',     email:'alessandro.c@semint.ai',  role:'editor', status:'pending', twoFA:false, lastSeen:'—',          avatar:'AC', color:'bg-slate-400' },
 ]
+
+// Live workspaces show the real logged-in account, not a fabricated team
+function initialUsers(): User[] {
+  if (IS_DEMO_MODE) return DEMO_USERS
+  const sub = getTokenSubject()
+  if (!sub) return []
+  const initials = sub.slice(0, 2).toUpperCase()
+  return [{
+    id: 'me', name: sub, email: sub.includes('@') ? sub : '',
+    role: 'admin', status: 'active', twoFA: false,
+    lastSeen: 'active now', avatar: initials, color: 'bg-teal-500',
+  }]
+}
 
 function InviteUserModal({ onClose, onInvite }: { onClose: () => void; onInvite: (email: string, role: UserRole) => void }) {
   const [email, setEmail] = useState('')
@@ -122,7 +137,7 @@ function InviteUserModal({ onClose, onInvite }: { onClose: () => void; onInvite:
 }
 
 export function UsersSection() {
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS)
+  const [users, setUsers] = useState<User[]>(initialUsers)
   const [showInvite, setShowInvite] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
@@ -551,18 +566,23 @@ const SEVERITY_META: Record<Severity, { label: string; color: string; bg: string
   info:     { label: 'Info',     color: 'text-slate-600',  bg: 'bg-slate-50 border-slate-200',   dot: 'bg-slate-400'  },
 }
 
-const INITIAL_CHANNELS: Channel[] = [
+const DEMO_CHANNELS: Channel[] = [
   { id:'c1', name:'#ops-alerts',         type:'slack',   destination:'semint.slack.com / #ops-alerts',    enabled:true  },
   { id:'c2', name:'Ops Email Group',     type:'email',   destination:'ops@semint.ai',                      enabled:true  },
   { id:'c3', name:'Compliance Channel',  type:'teams',   destination:'Teams · Compliance',                 enabled:false },
   { id:'c4', name:'PagerDuty webhook',   type:'webhook', destination:'events.pagerduty.com/v2/enqueue',    enabled:true  },
 ]
 
-const INITIAL_ROUTING: Record<Severity, string[]> = {
+const DEMO_ROUTING: Record<Severity, string[]> = {
   critical: ['c1','c2','c4'],
   warning:  ['c1','c2'],
   info:     [],
 }
+
+const INITIAL_CHANNELS: Channel[] = IS_DEMO_MODE ? DEMO_CHANNELS : []
+const INITIAL_ROUTING: Record<Severity, string[]> = IS_DEMO_MODE
+  ? DEMO_ROUTING
+  : { critical: [], warning: [], info: [] }
 
 type ChannelTest = { state: 'idle' | 'testing' | 'ok'; latency?: number }
 
@@ -604,6 +624,14 @@ export function NotificationsSection() {
           {channels.filter(c => c.enabled).length}/{channels.length} active
         </span>
       </div>
+
+      {channels.length === 0 && (
+        <div className="mt-5 border-2 border-dashed border-slate-200 rounded-xl py-8 text-center">
+          <Bell className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+          <p className="text-sm font-medium text-slate-500">No notification channels configured</p>
+          <p className="text-xs text-slate-400 mt-1">Connect Slack, email, Teams, or a webhook to receive agent findings and alerts.</p>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
         {channels.map(c => {
@@ -732,7 +760,7 @@ const CATEGORY_META: Record<AuditCategory, { label: string; color: string; bg: s
   reports: { label: 'Reports', color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200',   dot: 'bg-amber-500'  },
 }
 
-const INITIAL_AUDIT: AuditEntry[] = [
+const DEMO_AUDIT: AuditEntry[] = [
   { id:'a1',  ts:'just now',   user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Generated executive report', resource:'manufacturing · 20 May 2026', ip:'94.32.118.4',  category:'reports' },
   { id:'a2',  ts:'2m ago',     user:'Marco Rossi',         avatar:'MR', avatarColor:'bg-blue-500',   action:'Triggered pipeline run',     resource:'pipeline · manufacturing',     ip:'94.32.118.7',  category:'data'    },
   { id:'a3',  ts:'12m ago',    user:'Francesca Di Lallo', avatar:'FD', avatarColor:'bg-teal-500',   action:'Updated governance rule',    resource:'Human-in-the-loop · enabled',  ip:'94.32.118.4',  category:'config'  },
@@ -762,7 +790,9 @@ export function AuditLogSection() {
   const [filter, setFilter] = useState<AuditCategory | 'all'>('all')
   const [search, setSearch] = useState('')
 
-  const filtered = INITIAL_AUDIT.filter(e => {
+  // Live audit trail comes from the backend; the curated entries are demo-only
+  const entries = IS_DEMO_MODE ? DEMO_AUDIT : []
+  const filtered = entries.filter(e => {
     if (filter !== 'all' && e.category !== filter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -826,7 +856,11 @@ export function AuditLogSection() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">No audit entries match your filter.</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">
+                  {entries.length === 0
+                    ? 'No audit events recorded yet — admin and API actions will appear here.'
+                    : 'No audit entries match your filter.'}
+                </td>
               </tr>
             ) : filtered.map(e => {
               const cat = CATEGORY_META[e.category]

@@ -36,6 +36,20 @@ export const clearAuthToken = (): void => {
   }
 }
 
+/** Username (JWT `sub`) of the logged-in user, or null when not available. */
+export const getTokenSubject = (): string | null => {
+  const token = getAuthToken()
+  if (!token) return null
+  try {
+    const b64 = token.split('.')[1]?.replace(/-/g, '+').replace(/_/g, '/')
+    if (!b64) return null
+    const payload = JSON.parse(atob(b64)) as Record<string, unknown>
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
+
 api.interceptors.request.use((config) => {
   const token = getAuthToken()
   if (token) {

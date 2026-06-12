@@ -389,12 +389,16 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     setReporting(false)
   }
 
-  const funnel = liveConfig?.funnel ?? sector.funnel
-  const totalQuotes = liveConfig?.funnel?.[0]?.count ?? sector.funnel[0]?.count ?? 0
-  const totalOrders = liveConfig?.funnel?.[2]?.count ?? sector.funnel[Math.min(3, sector.funnel.length - 1)]?.count ?? 0
+  // Live workspaces only show numbers that come from the backend config;
+  // the sector funnel is curated demo data and must never appear as real.
+  const funnel = liveConfig?.funnel ?? (IS_DEMO_MODE ? sector.funnel : [])
+  const totalQuotes = liveConfig?.funnel?.[0]?.count ?? (IS_DEMO_MODE ? sector.funnel[0]?.count ?? 0 : 0)
+  const totalOrders = liveConfig?.funnel?.[2]?.count ?? (IS_DEMO_MODE ? sector.funnel[Math.min(3, sector.funnel.length - 1)]?.count ?? 0 : 0)
   const conversion = totalQuotes > 0 ? Math.round((totalOrders / totalQuotes) * 100) : 0
   const openValue = funnel.reduce((s, f) => s + f.value, 0)
   const hasMonetary = funnel.some(f => f.value > 0)
+  // Synthetic sparklines/trend deltas are illustrative — demo only
+  const showSynthetic = IS_DEMO_MODE
 
   // Trend chart config derived from live metric or generic fallback
   const trendMetric = draft?.metrics[0]
@@ -569,21 +573,23 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                 <div className={`${kpi.bg} rounded-lg p-2.5`}>
                   <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
                 </div>
-                <Sparkline values={kpi.spark} color={kpi.sparkColor} />
+                {showSynthetic && <Sparkline values={kpi.spark} color={kpi.sparkColor} />}
               </div>
               <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>
               <p className="text-xs text-slate-500 font-medium mt-0.5">{kpi.label}</p>
-              <div className={`flex items-center gap-1 mt-2 text-xs ${trendColor}`}>
-                <TrendIcon className="w-3 h-3" />
-                <span>{Math.abs(kpi.trend)}% vs prev. month</span>
-              </div>
+              {showSynthetic && (
+                <div className={`flex items-center gap-1 mt-2 text-xs ${trendColor}`}>
+                  <TrendIcon className="w-3 h-3" />
+                  <span>{Math.abs(kpi.trend)}% vs prev. month</span>
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
-      {/* Trend chart */}
-      <TrendChart values={trendSeries} label={tc.label} unit={tc.unit} />
+      {/* Trend chart — synthetic series, demo only */}
+      {showSynthetic && <TrendChart values={trendSeries} label={tc.label} unit={tc.unit} />}
 
       {/* Agent + Semantic Layer */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -592,6 +598,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       </div>
 
       {/* Process Funnel */}
+      {funnel.length > 0 && (
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -617,6 +624,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           })}
         </div>
       </div>
+      )}
 
       {/* Bottom row: activities | recent records | data sources */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
