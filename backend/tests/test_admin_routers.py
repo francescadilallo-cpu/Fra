@@ -187,6 +187,34 @@ def test_users_remove_oversized_id_422(client, admin_headers):
     assert resp.status_code == 422
 
 
+def test_users_role_update(client, admin_headers):
+    resp = client.post(
+        "/api/users",
+        json={"email": "roletest@example.com", "role": "viewer"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    mid = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/users/{mid}/role", json={"role": "editor"}, headers=admin_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    resp = client.patch(
+        f"/api/users/{mid}/role", json={"role": "superuser"}, headers=admin_headers
+    )
+    assert resp.status_code == 422
+
+    resp = client.patch(
+        "/api/users/does-not-exist/role", json={"role": "editor"}, headers=admin_headers
+    )
+    assert resp.status_code == 404
+
+    client.delete(f"/api/users/{mid}", headers=admin_headers)
+
+
 # ── Tokens ────────────────────────────────────────────────────────────────────
 
 
