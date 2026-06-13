@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, field_validator
 
 from .store import WorkspaceMember, get_users_store
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
 class InviteRequest(BaseModel):
@@ -18,8 +22,8 @@ class InviteRequest(BaseModel):
     @classmethod
     def validate_email(cls, v: str) -> str:
         v = v.strip()
-        if "@" not in v or len(v) > 200:
-            raise ValueError("invalid email")
+        if not _EMAIL_RE.match(v) or len(v) > 200:
+            raise ValueError("invalid email address")
         return v
 
     @field_validator("role")

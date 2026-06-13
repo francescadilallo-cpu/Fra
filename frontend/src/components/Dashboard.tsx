@@ -348,8 +348,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const [reporting, setReporting] = useState(false)
 
   useEffect(() => {
-    getLiveConfig().then(setLiveConfig).catch(() => {})
-    getDraft().then(setDraft).catch(() => {})
+    Promise.all([
+      getLiveConfig().catch(() => null),
+      getDraft().catch(() => null),
+    ]).then(([config, draft]) => {
+      if (config) setLiveConfig(config)
+      if (draft) setDraft(draft)
+    })
   }, [])
 
   const [pipelineLastRun, setPipelineLastRun] = useState<Date | null>(() => {

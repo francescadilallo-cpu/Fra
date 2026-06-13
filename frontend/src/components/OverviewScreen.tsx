@@ -67,13 +67,19 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    semanticStatus().then(setSemStatus).catch(() => {})
-    getLiveConfig().then(setLiveConfig).catch(() => {})
-    semanticSources().then(srcs => {
-      const counts: Record<string, number> = {}
-      srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
-      setTableCounts(counts)
-    }).catch(() => {})
+    Promise.all([
+      semanticStatus().catch(() => null),
+      getLiveConfig().catch(() => null),
+      semanticSources().catch(() => null),
+    ]).then(([status, config, srcs]) => {
+      if (status) setSemStatus(status)
+      if (config) setLiveConfig(config)
+      if (srcs) {
+        const counts: Record<string, number> = {}
+        srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
+        setTableCounts(counts)
+      }
+    })
   }, [])
 
   const entityCount = semStatus?.loaded ? semStatus.entities.length : ontology.nodes.length

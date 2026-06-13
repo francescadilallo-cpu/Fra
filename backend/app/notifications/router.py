@@ -46,6 +46,13 @@ class RoutingUpdate(BaseModel):
     warning: list[str] = []
     info: list[str] = []
 
+    @field_validator("critical", "warning", "info")
+    @classmethod
+    def validate_ids(cls, v: list[str]) -> list[str]:
+        if len(v) > 50:
+            raise ValueError("too many channel IDs (max 50)")
+        return [s[:64] for s in v if isinstance(s, str)]
+
 
 def _channel_dict(c: Channel) -> dict:
     return {

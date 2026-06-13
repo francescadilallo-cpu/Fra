@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getTokenSubject } from '../api/client'
+import { toast } from './Toast'
 import { listAuditEntries, type BackendAuditEntry } from '../api/audit'
 import {
   listMembers, inviteMember, updateMemberRole, removeMember, type BackendMember,
@@ -162,6 +163,7 @@ export function UsersSection() {
   const [users, setUsers] = useState<User[]>(initialUsers)
   const [showInvite, setShowInvite] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [loadingUsers, setLoadingUsers] = useState(!IS_DEMO_MODE)
 
   // Live mode: load persisted members from backend and merge with JWT owner
   useEffect(() => {
@@ -170,31 +172,42 @@ export function UsersSection() {
       .then(members => {
         const base = initialUsers()
         const converted = members.map(backendMemberToUser)
-        // deduplicate by id — base has the JWT owner
         const seen = new Set(base.map(u => u.id))
         setUsers([...base, ...converted.filter(u => !seen.has(u.id))])
       })
-      .catch(() => {})
+      .catch(() => { toast('Could not load team members', 'error') })
+      .finally(() => setLoadingUsers(false))
   }, [])
 
   function changeRole(id: string, role: UserRole) {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u))
+    const prev = users
+    setUsers(u => u.map(m => m.id === id ? { ...m, role } : m))
     if (!IS_DEMO_MODE) {
-      updateMemberRole(id, role).catch(() => {})
+      updateMemberRole(id, role).catch(() => {
+        setUsers(prev)
+        toast('Could not update role — please try again', 'error')
+      })
     }
   }
   function removeUser(id: string) {
-    setUsers(prev => prev.filter(u => u.id !== id))
+    const prev = users
+    setUsers(u => u.filter(m => m.id !== id))
     setOpenMenu(null)
     if (!IS_DEMO_MODE) {
-      removeMember(id).catch(() => {})
+      removeMember(id).catch(() => {
+        setUsers(prev)
+        toast('Could not remove member — please try again', 'error')
+      })
     }
   }
   function invite(email: string, role: UserRole) {
     if (!IS_DEMO_MODE) {
       inviteMember(email, role)
-        .then(m => setUsers(prev => [...prev, backendMemberToUser(m)]))
-        .catch(() => {})
+        .then(m => {
+          setUsers(u => [...u, backendMemberToUser(m)])
+          toast(`Invitation sent to ${email}`, 'success')
+        })
+        .catch(() => { toast('Could not send invitation — please try again', 'error') })
       return
     }
     const name = email.split('@')[0].replace(/[.]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
@@ -245,7 +258,13 @@ export function UsersSection() {
         </div>
       </div>
 
-      <div className="mt-5 border border-slate-100 rounded-xl overflow-hidden">
+      {loadingUsers && (
+        <div className="mt-5 flex items-center justify-center py-10 text-slate-400">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          <span className="text-sm">Loading team members…</span>
+        </div>
+      )}
+      {!loadingUsers && <div className="mt-5 border border-slate-100 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100">
@@ -326,7 +345,7 @@ export function UsersSection() {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
     </section>
   )
 }
@@ -468,13 +487,15 @@ export function ApiTokensSection() {
   const [copied, setCopied] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [newToken, setNewToken] = useState<ApiToken | null>(null)
+  const [loadingTokens, setLoadingTokens] = useState(!IS_DEMO_MODE)
 
   // Live mode: load persisted token metadata from backend
   useEffect(() => {
     if (IS_DEMO_MODE) return
     listTokens()
       .then(toks => setTokens(toks.map(t => backendTokenToLocal(t))))
-      .catch(() => {})
+      .catch(() => { toast('Could not load API tokens', 'error') })
+      .finally(() => setLoadingTokens(false))
   }, [])
 
   function toggleReveal(id: string) {
@@ -492,8 +513,14 @@ export function ApiTokensSection() {
   }
 
   function revokeToken(id: string) {
-    setTokens(prev => prev.filter(t => t.id !== id))
-    if (!IS_DEMO_MODE) apiRevokeToken(id).catch(() => {})
+    const prev = tokens
+    setTokens(t => t.filter(tok => tok.id !== id))
+    if (!IS_DEMO_MODE) {
+      apiRevokeToken(id).catch(() => {
+        setTokens(prev)
+        toast('Could not revoke token — please try again', 'error')
+      })
+    }
   }
 
   function createToken(name: string, scopes: string[]) {
@@ -505,7 +532,7 @@ export function ApiTokensSection() {
           setNewToken(tok)
           setRevealed(prev => new Set([...prev, tok.id]))
         })
-        .catch(() => {})
+        .catch(() => { toast('Could not create token — please try again', 'error') })
       return
     }
     const full = randomToken()
@@ -570,7 +597,13 @@ export function ApiTokensSection() {
         </div>
       )}
 
-      <div className="mt-5 space-y-2">
+      {loadingTokens && (
+        <div className="mt-5 flex items-center justify-center py-10 text-slate-400">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" />
+          <span className="text-sm">Loading tokens…</span>
+        </div>
+      )}
+      <div className={`mt-5 space-y-2 ${loadingTokens ? 'hidden' : ''}`}>
         {tokens.map(t => {
           const isRevealed = revealed.has(t.id)
           const display = isRevealed ? t.fullToken : t.tokenPreview
@@ -756,42 +789,61 @@ export function NotificationsSection() {
   const [showAdd, setShowAdd] = useState(false)
   const routingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Live mode: load persisted channels + routing from backend
+  // Live mode: load persisted channels + routing from backend (parallel)
   useEffect(() => {
     if (IS_DEMO_MODE) return
-    listChannels().then(chs => setChannels(chs.map(backendChannelToLocal))).catch(() => {})
-    getRouting().then(r => setRouting(r as Record<Severity, string[]>)).catch(() => {})
+    Promise.all([listChannels(), getRouting()])
+      .then(([chs, r]) => {
+        setChannels(chs.map(backendChannelToLocal))
+        setRouting(r as Record<Severity, string[]>)
+      })
+      .catch(() => { toast('Could not load notification settings', 'error') })
   }, [])
 
   const persistRouting = useCallback((next: Record<Severity, string[]>) => {
     if (IS_DEMO_MODE) return
     if (routingTimerRef.current) clearTimeout(routingTimerRef.current)
     routingTimerRef.current = setTimeout(() => {
-      saveRouting(next).catch(() => {})
+      saveRouting(next).catch(() => { toast('Could not save routing — changes may be lost', 'error') })
     }, 500)
   }, [])
 
   function toggleChannel(id: string) {
-    setChannels(prev => {
-      const next = prev.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c)
+    const prev = channels
+    setChannels(c => {
+      const next = c.map(ch => ch.id === id ? { ...ch, enabled: !ch.enabled } : ch)
       if (!IS_DEMO_MODE) {
         const ch = next.find(c => c.id === id)
-        if (ch) apiUpdateChannel(id, { enabled: ch.enabled }).catch(() => {})
+        if (ch) {
+          apiUpdateChannel(id, { enabled: ch.enabled }).catch(() => {
+            setChannels(prev)
+            toast('Could not update channel — please try again', 'error')
+          })
+        }
       }
       return next
     })
   }
 
   function deleteChannel(id: string) {
-    setChannels(prev => prev.filter(c => c.id !== id))
-    if (!IS_DEMO_MODE) apiRemoveChannel(id).catch(() => {})
+    const prev = channels
+    setChannels(c => c.filter(ch => ch.id !== id))
+    if (!IS_DEMO_MODE) {
+      apiRemoveChannel(id).catch(() => {
+        setChannels(prev)
+        toast('Could not delete channel — please try again', 'error')
+      })
+    }
   }
 
   function addChannel(name: string, type: ChannelType, destination: string) {
     if (!IS_DEMO_MODE) {
       apiAddChannel(name, type, destination)
-        .then(ch => setChannels(prev => [...prev, backendChannelToLocal(ch)]))
-        .catch(() => {})
+        .then(ch => {
+          setChannels(prev => [...prev, backendChannelToLocal(ch)])
+          toast(`Channel "${name}" added`, 'success')
+        })
+        .catch(() => { toast('Could not add channel — please try again', 'error') })
       return
     }
     setChannels(prev => [...prev, { id: `c-${Date.now()}`, name, type, destination, enabled: true }])
