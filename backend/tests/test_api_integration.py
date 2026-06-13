@@ -532,6 +532,23 @@ def test_context_delete_nonexistent_document_404(client, user_headers):
     assert resp.status_code == 404
 
 
+def test_context_create_entity_db_error_returns_503(client, user_headers, monkeypatch):
+    import sqlite3
+
+    from app.context import store as context_store_mod
+
+    def _boom(*_a, **_k):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(context_store_mod.default_store, "add_entity", _boom)
+    resp = client.post(
+        "/api/context/entities",
+        json={"name": "locked", "display_name": "Locked"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 503
+
+
 # ── Input validation edge cases ────────────────────────────────────────────────
 
 
