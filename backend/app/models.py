@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,15 +41,15 @@ class OntologyNode(BaseModel):
     id: str
     data: dict[str, Any]
     position: dict[str, float]
-    type: Optional[str] = "default"
+    type: str | None = "default"
 
 
 class OntologyEdge(BaseModel):
     id: str
     source: str
     target: str
-    label: Optional[str] = None
-    type: Optional[str] = "smoothstep"
+    label: str | None = None
+    type: str | None = "smoothstep"
 
 
 class OntologyGraphData(BaseModel):
@@ -143,7 +143,7 @@ class AskRequest(BaseModel):
 class AskResult(BaseModel):
     question: str
     interpreted_as: str
-    sql_used: Optional[str] = None
+    sql_used: str | None = None
     rows: list[dict[str, Any]] = []
     total_rows: int = 0
     summary: str = ""
@@ -153,4 +153,4 @@ class AskResult(BaseModel):
     disambiguation_required: bool = False
     candidates: list[str] = []
     ambiguity_error: bool = False
-    chart_hint: Optional[dict[str, Any]] = None
+    chart_hint: dict[str, Any] | None = None

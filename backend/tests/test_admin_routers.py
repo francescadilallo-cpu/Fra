@@ -317,6 +317,16 @@ def test_notifications_channel_lifecycle(client, admin_headers):
     )
     assert resp.status_code == 422
 
+    # Rename and read back
+    resp = client.patch(
+        f"/api/notifications/channels/{cid}",
+        json={"name": "renamed-channel"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    channels = client.get("/api/notifications/channels", headers=admin_headers).json()
+    assert any(ch["name"] == "renamed-channel" for ch in channels)
+
     resp = client.delete(f"/api/notifications/channels/{cid}", headers=admin_headers)
     assert resp.status_code == 204
 
