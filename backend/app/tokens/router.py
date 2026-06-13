@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
@@ -73,7 +74,13 @@ def list_tokens() -> list[dict]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_token(body: TokenCreate) -> dict:
-    record, plaintext = get_tokens_store().generate(body.name, body.scopes)
+    try:
+        record, plaintext = get_tokens_store().generate(body.name, body.scopes)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     result = _record_dict(record)
     result["full_token"] = plaintext  # exposed exactly once
     return result
@@ -81,7 +88,13 @@ def create_token(body: TokenCreate) -> dict:
 
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_token(token_id: Annotated[str, Path(max_length=64)]) -> None:
-    ok = get_tokens_store().revoke(token_id)
+    try:
+        ok = get_tokens_store().revoke(token_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Token not found"

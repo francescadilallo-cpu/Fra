@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
@@ -86,9 +87,15 @@ def list_channels() -> list[dict]:
 
 @router.post("/channels", status_code=status.HTTP_201_CREATED)
 def add_channel(body: ChannelCreate) -> dict:
-    ch = get_notifications_store().add_channel(
-        body.name, body.channel_type, body.destination
-    )
+    try:
+        ch = get_notifications_store().add_channel(
+            body.name, body.channel_type, body.destination
+        )
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return _channel_dict(ch)
 
 
@@ -96,9 +103,15 @@ def add_channel(body: ChannelCreate) -> dict:
 def update_channel(
     channel_id: Annotated[str, Path(max_length=64)], body: ChannelUpdate
 ) -> dict:
-    ok = get_notifications_store().update_channel(
-        channel_id, enabled=body.enabled, name=body.name
-    )
+    try:
+        ok = get_notifications_store().update_channel(
+            channel_id, enabled=body.enabled, name=body.name
+        )
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
@@ -108,7 +121,13 @@ def update_channel(
 
 @router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_channel(channel_id: Annotated[str, Path(max_length=64)]) -> None:
-    ok = get_notifications_store().remove_channel(channel_id)
+    try:
+        ok = get_notifications_store().remove_channel(channel_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
@@ -122,7 +141,13 @@ def get_routing() -> dict:
 
 @router.put("/routing")
 def update_routing(body: RoutingUpdate) -> dict:
-    get_notifications_store().update_routing(
-        {"critical": body.critical, "warning": body.warning, "info": body.info}
-    )
+    try:
+        get_notifications_store().update_routing(
+            {"critical": body.critical, "warning": body.warning, "info": body.info}
+        )
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return {"ok": True}

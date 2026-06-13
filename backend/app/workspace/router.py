@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 from .store import get_workspace_store
@@ -49,5 +50,11 @@ def get_workspace() -> WorkspaceSettings:
 @router.put("/api/workspace", response_model=WorkspaceSettings)
 def update_workspace(body: WorkspaceUpdate) -> WorkspaceSettings:
     store = get_workspace_store()
-    store.update(name=body.name, sector_id=body.sector_id)
+    try:
+        store.update(name=body.name, sector_id=body.sector_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return WorkspaceSettings(name=store.get_name(), sector_id=store.get_sector())

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
@@ -65,7 +65,13 @@ def list_users() -> list[dict]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def invite_user(body: InviteRequest) -> dict:
-    member = get_users_store().add_member(email=body.email, role=body.role)
+    try:
+        member = get_users_store().add_member(email=body.email, role=body.role)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return _member_dict(member)
 
 
@@ -73,7 +79,13 @@ def invite_user(body: InviteRequest) -> dict:
 def update_role(
     member_id: Annotated[str, Path(max_length=64)], body: RoleUpdateRequest
 ) -> dict:
-    ok = get_users_store().update_role(member_id, body.role)
+    try:
+        ok = get_users_store().update_role(member_id, body.role)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
@@ -83,7 +95,13 @@ def update_role(
 
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_user(member_id: Annotated[str, Path(max_length=64)]) -> None:
-    ok = get_users_store().remove_member(member_id)
+    try:
+        ok = get_users_store().remove_member(member_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
