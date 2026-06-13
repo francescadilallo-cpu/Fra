@@ -1220,7 +1220,7 @@ export function WorkspaceSection() {
     if (!IS_DEMO_MODE) {
       getWorkspace().then(ws => {
         if (ws.name) setName(ws.name)
-      }).catch(() => {})
+      }).catch(() => { toast('Could not load workspace settings', 'error') })
     }
   }, [])
 
