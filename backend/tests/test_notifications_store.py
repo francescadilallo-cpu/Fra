@@ -68,6 +68,27 @@ class TestChannels:
     def test_remove_nonexistent_returns_false(self, store):
         assert not store.remove_channel("no-such-id")
 
+    def test_multiple_channels_all_listed(self, store):
+        store.add_channel("a", "slack", "#a")
+        store.add_channel("b", "email", "b@x.com")
+        store.add_channel("c", "webhook", "https://c.com")
+        assert len(store.list_channels()) == 3
+
+    def test_remove_one_leaves_others(self, store):
+        ch1 = store.add_channel("keep", "slack", "#keep")
+        ch2 = store.add_channel("gone", "email", "gone@x.com")
+        store.remove_channel(ch2.id)
+        remaining = store.list_channels()
+        assert len(remaining) == 1
+        assert remaining[0].id == ch1.id
+
+    def test_update_name_does_not_change_enabled(self, store):
+        ch = store.add_channel("orig", "webhook", "https://x.com")
+        store.update_channel(ch.id, name="renamed")
+        updated = store.list_channels()[0]
+        assert updated.name == "renamed"
+        assert updated.enabled is True  # unchanged
+
 
 class TestRouting:
     def test_default_routing_empty(self, store):

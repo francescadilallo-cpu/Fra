@@ -90,3 +90,20 @@ class TestTokensStore:
     def test_name_truncated(self, store):
         store.generate("x" * 200, ["read:ontology"])
         assert len(store.list_tokens()[0].name) <= 100
+
+    def test_verify_expired_token_returns_none(self, store):
+        record, plaintext = store.generate("expiring", ["read:ontology"], ttl_days=-1)
+        assert store.verify(plaintext) is None
+
+    def test_revoke_already_revoked_returns_false(self, store):
+        record, _ = store.generate("tok", ["read:ontology"])
+        store.revoke(record.id)
+        assert not store.revoke(record.id)
+
+    def test_remove_one_token_leaves_others(self, store):
+        r1, _ = store.generate("keep", ["read:ontology"])
+        r2, _ = store.generate("revoke", ["read:ontology"])
+        store.revoke(r2.id)
+        remaining = store.list_tokens()
+        assert len(remaining) == 1
+        assert remaining[0].id == r1.id
