@@ -28,7 +28,7 @@ class WorkspaceUpdate(BaseModel):
         if v is None:
             return v
         v = _TAG_RE.sub("", v).strip()
-        return v[:200] if v else None
+        return v or None
 
     @field_validator("sector_id")
     @classmethod
