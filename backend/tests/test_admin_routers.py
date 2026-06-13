@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import secrets
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -404,3 +405,65 @@ def test_notifications_routing_persists_after_update(client, admin_headers):
     assert "ch-persist" in data["critical"]
     assert "ch-w" in data["warning"]
     assert data["info"] == []
+
+
+# ── Database-unavailable (503) handling ───────────────────────────────────────
+#
+# Each mutation endpoint wraps its store write in a try/except that maps
+# sqlite3.OperationalError (e.g. "database is locked") to HTTP 503 instead of
+# leaking an unhandled 500. We simulate the locked DB by monkeypatching the
+# relevant store method to raise OperationalError, then assert the 503.
+
+
+def _raise_locked(*_args, **_kwargs):
+    raise sqlite3.OperationalError("database is locked")
+
+
+def test_users_invite_db_error_returns_503(client, admin_headers, monkeypatch):
+    from app.users.store import get_users_store
+
+    monkeypatch.setattr(get_users_store(), "add_member", _raise_locked)
+    resp = client.post(
+        "/api/users",
+        json={"email": "locked@example.com", "role": "viewer"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 503
+
+
+def test_tokens_create_db_error_returns_503(client, admin_headers, monkeypatch):
+    from app.tokens.store import get_tokens_store
+
+    monkeypatch.setattr(get_tokens_store(), "generate", _raise_locked)
+    resp = client.post(
+        "/api/tokens",
+        json={"name": "locked-token", "scopes": ["read:ontology"]},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 503
+
+
+def test_notifications_add_channel_db_error_returns_503(
+    client, admin_headers, monkeypatch
+):
+    from app.notifications.store import get_notifications_store
+
+    monkeypatch.setattr(get_notifications_store(), "add_channel", _raise_locked)
+    resp = client.post(
+        "/api/notifications/channels",
+        json={"name": "locked", "channel_type": "slack", "destination": "#x"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 503
+
+
+def test_workspace_update_db_error_returns_503(client, admin_headers, monkeypatch):
+    from app.workspace.store import get_workspace_store
+
+    monkeypatch.setattr(get_workspace_store(), "update", _raise_locked)
+    resp = client.put(
+        "/api/workspace",
+        json={"name": "Locked Co", "sector_id": None},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 503
