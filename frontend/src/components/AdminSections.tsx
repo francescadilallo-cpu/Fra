@@ -1098,7 +1098,7 @@ export function AuditLogSection() {
     if (IS_DEMO_MODE) return
     listAuditEntries({ limit: 200 })
       .then(rows => setLiveEntries(rows.map(backendToAuditEntry)))
-      .catch(() => {})
+      .catch(() => { toast('Could not load audit log', 'error') })
   }, [])
 
   const entries = IS_DEMO_MODE ? DEMO_AUDIT : liveEntries
@@ -1234,6 +1234,8 @@ export function WorkspaceSection() {
       window.dispatchEvent(new CustomEvent('company-name-changed'))
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
+    } catch {
+      toast('Could not save workspace name — please try again', 'error')
     } finally {
       setLoading(false)
     }
