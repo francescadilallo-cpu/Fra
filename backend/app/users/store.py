@@ -53,6 +53,10 @@ class UsersStore:
                 )
                 """
             )
+            c.execute(
+                "CREATE INDEX IF NOT EXISTS idx_members_created_at"
+                " ON members (created_at DESC)"
+            )
 
     @staticmethod
     def _row_to_member(row: sqlite3.Row) -> WorkspaceMember:

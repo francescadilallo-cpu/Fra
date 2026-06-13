@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel, field_validator
 
 from .store import ApiTokenRecord, get_tokens_store
@@ -81,7 +83,7 @@ def create_token(body: TokenCreate) -> dict:
 
 
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_token(token_id: str) -> None:
+def revoke_token(token_id: Annotated[str, Path(max_length=64)]) -> None:
     ok = get_tokens_store().revoke(token_id)
     if not ok:
         raise HTTPException(

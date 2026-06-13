@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel, Field, field_validator
 
 from .store import Channel, get_notifications_store
@@ -78,7 +80,9 @@ def add_channel(body: ChannelCreate) -> dict:
 
 
 @router.patch("/channels/{channel_id}")
-def update_channel(channel_id: str, body: ChannelUpdate) -> dict:
+def update_channel(
+    channel_id: Annotated[str, Path(max_length=64)], body: ChannelUpdate
+) -> dict:
     ok = get_notifications_store().update_channel(
         channel_id, enabled=body.enabled, name=body.name
     )
@@ -90,7 +94,7 @@ def update_channel(channel_id: str, body: ChannelUpdate) -> dict:
 
 
 @router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_channel(channel_id: str) -> None:
+def remove_channel(channel_id: Annotated[str, Path(max_length=64)]) -> None:
     ok = get_notifications_store().remove_channel(channel_id)
     if not ok:
         raise HTTPException(

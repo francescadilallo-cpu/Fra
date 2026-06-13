@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel, field_validator
 
 from .store import WorkspaceMember, get_users_store
@@ -68,7 +70,9 @@ def invite_user(body: InviteRequest) -> dict:
 
 
 @router.patch("/{member_id}/role")
-def update_role(member_id: str, body: RoleUpdateRequest) -> dict:
+def update_role(
+    member_id: Annotated[str, Path(max_length=64)], body: RoleUpdateRequest
+) -> dict:
     ok = get_users_store().update_role(member_id, body.role)
     if not ok:
         raise HTTPException(
@@ -78,7 +82,7 @@ def update_role(member_id: str, body: RoleUpdateRequest) -> dict:
 
 
 @router.delete("/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_user(member_id: str) -> None:
+def remove_user(member_id: Annotated[str, Path(max_length=64)]) -> None:
     ok = get_users_store().remove_member(member_id)
     if not ok:
         raise HTTPException(

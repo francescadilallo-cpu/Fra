@@ -123,6 +123,12 @@ class ContextStore:
                     definition TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_ctx_docs_created_at
+                    ON context_documents (created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_ctx_entities_created_at
+                    ON context_entities (created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_ctx_metrics_created_at
+                    ON context_metrics (created_at DESC);
             """)
 
     def _now(self) -> str:
