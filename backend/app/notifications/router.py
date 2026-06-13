@@ -13,9 +13,9 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
 class ChannelCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     channel_type: str
-    destination: str
+    destination: str = Field(min_length=1, max_length=500)
 
     @field_validator("name")
     @classmethod
@@ -23,7 +23,7 @@ class ChannelCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("name is required")
-        return v[:100]
+        return v
 
     @field_validator("channel_type")
     @classmethod
@@ -38,7 +38,7 @@ class ChannelCreate(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("destination is required")
-        return v[:500]
+        return v
 
 
 class ChannelUpdate(BaseModel):

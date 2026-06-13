@@ -81,9 +81,9 @@ def test_channel_create_empty_destination() -> None:
         ChannelCreate(name="valid", channel_type="webhook", destination="")
 
 
-def test_channel_create_destination_truncated() -> None:
-    c = ChannelCreate(name="x", channel_type="webhook", destination="h" * 600)
-    assert len(c.destination) == 500
+def test_channel_create_destination_too_long() -> None:
+    with pytest.raises(ValidationError):
+        ChannelCreate(name="x", channel_type="webhook", destination="h" * 501)
 
 
 # ── Notifications: channel update name length ────────────────────────────────
