@@ -493,6 +493,26 @@ def test_context_upload_valid_txt(client, user_headers):
     assert resp.status_code == 204
 
 
+def test_context_delete_nonexistent_entity_404(client, user_headers):
+    resp = client.delete("/api/context/entities/99999999", headers=user_headers)
+    assert resp.status_code == 404
+
+
+def test_context_delete_nonexistent_metric_404(client, user_headers):
+    resp = client.delete("/api/context/metrics/99999999", headers=user_headers)
+    assert resp.status_code == 404
+
+
+def test_context_delete_nonexistent_glossary_term_404(client, user_headers):
+    resp = client.delete("/api/context/glossary/99999999", headers=user_headers)
+    assert resp.status_code == 404
+
+
+def test_context_delete_nonexistent_document_404(client, user_headers):
+    resp = client.delete("/api/context/documents/99999999", headers=user_headers)
+    assert resp.status_code == 404
+
+
 # ── Input validation edge cases ────────────────────────────────────────────────
 
 
