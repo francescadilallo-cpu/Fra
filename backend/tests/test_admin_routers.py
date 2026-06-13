@@ -390,3 +390,17 @@ def test_notifications_routing_get_returns_shape(client, admin_headers):
     assert set(data.keys()) == {"critical", "warning", "info"}
     for key in ("critical", "warning", "info"):
         assert isinstance(data[key], list)
+
+
+def test_notifications_routing_persists_after_update(client, admin_headers):
+    resp = client.put(
+        "/api/notifications/routing",
+        json={"critical": ["ch-persist"], "warning": ["ch-w"], "info": []},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+
+    data = client.get("/api/notifications/routing", headers=admin_headers).json()
+    assert "ch-persist" in data["critical"]
+    assert "ch-w" in data["warning"]
+    assert data["info"] == []
