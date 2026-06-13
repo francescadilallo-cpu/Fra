@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Database, GitBranch, BarChart3, FileText, Layers, Zap,
   Edit2, Check, X, Plus, Trash2, Loader2, RefreshCw, Download, ArrowRight,
@@ -21,13 +21,7 @@ export function SemanticDraftView() {
   const [activeTab, setActiveTab] = useState<DraftTab>('entities')
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
-    loadDraft()
-    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function loadDraft() {
+  const loadDraft = useCallback(async () => {
     setLoading(true)
     try {
       const d = await getDraft()
@@ -41,7 +35,12 @@ export function SemanticDraftView() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadDraft()
+    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
+  }, [loadDraft])
 
   if (loading) return <LoadingSkeleton />
 

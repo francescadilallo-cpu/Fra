@@ -60,6 +60,8 @@ class AuditStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_audit_ts
                     ON audit_entries (ts DESC);
+                CREATE INDEX IF NOT EXISTS idx_audit_category
+                    ON audit_entries (category, id DESC);
             """)
 
     def log(
