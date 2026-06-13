@@ -256,8 +256,11 @@ def run_aw_query(
     rows: list[dict[str, Any]] = []
     sql_error: str | None = None
 
-    unified = _get_unified_conn()
+    # unified is initialised to None so the finally guard is safe even if
+    # _get_unified_conn() raises before a connection object is created.
+    unified = None
     try:
+        unified = _get_unified_conn()
         if not sql.strip().upper().startswith("SELECT"):
             raise ValueError("Only SELECT queries are allowed")
         # Fetch directly from the cursor instead of materialising the full
@@ -267,16 +270,18 @@ def run_aw_query(
         # hands back SQL NULLs as native None (DataFrame.where(.notna(), None)
         # does not actually convert NaN to None in numeric columns).
         cur = unified.execute(sql)
-        columns = [d[0] for d in cur.description]
-        rows = [dict(zip(columns, row)) for row in cur.fetchmany(100)]
+        if cur.description:
+            columns = [d[0] for d in cur.description]
+            rows = [dict(zip(columns, row)) for row in cur.fetchmany(100)]
     except Exception as exc:
         sql_error = str(exc)
         logger.error("SQL execution error: %s\nSQL: %s", exc, sql)
     finally:
-        try:
-            unified.close()
-        except Exception:
-            pass
+        if unified is not None:
+            try:
+                unified.close()
+            except Exception:
+                pass
 
     total_rows = len(rows)
 
