@@ -426,6 +426,25 @@ def test_context_entity_crud(client, user_headers):
     assert resp.status_code == 204
 
 
+def test_context_metric_crud(client, user_headers):
+    # Create
+    resp = client.post(
+        "/api/context/metrics",
+        json={"name": "test_revenue", "display_name": "Test Revenue", "unit": "EUR"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    mid = resp.json()["id"]
+
+    # List
+    resp = client.get("/api/context/metrics", headers=user_headers)
+    assert mid in [m["id"] for m in resp.json()]
+
+    # Delete
+    resp = client.delete(f"/api/context/metrics/{mid}", headers=user_headers)
+    assert resp.status_code == 204
+
+
 def test_context_glossary_crud(client, user_headers):
     # Create
     resp = client.post(
