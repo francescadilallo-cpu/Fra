@@ -45,6 +45,17 @@ class TestChannels:
         store.update_channel(ch.id, name="new")
         assert store.list_channels()[0].name == "new"
 
+    def test_update_name_and_enabled_together(self, store):
+        ch = store.add_channel("orig", "slack", "https://s.com")
+        store.update_channel(ch.id, name="renamed", enabled=False)
+        updated = store.list_channels()[0]
+        assert updated.name == "renamed"
+        assert updated.enabled is False
+
+    def test_update_no_fields_returns_true(self, store):
+        ch = store.add_channel("x", "webhook", "https://x.com")
+        assert store.update_channel(ch.id) is True
+
     def test_update_nonexistent_returns_false(self, store):
         assert not store.update_channel("does-not-exist", enabled=True)
 
