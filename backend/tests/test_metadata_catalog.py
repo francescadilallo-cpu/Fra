@@ -584,6 +584,42 @@ class TestQueryTemplates:
         templates = cat.list_templates()
         assert templates[0]["sql_query"] == "SELECT 1"
 
+    def test_create_duplicate_name_raises_value_error(self, cat):
+        cat.create_template(
+            name="tpl_dupe",
+            description="",
+            sql_query="SELECT 1",
+            keywords=[],
+            sources=[],
+        )
+        with pytest.raises(ValueError, match="already exists"):
+            cat.create_template(
+                name="tpl_dupe",
+                description="",
+                sql_query="SELECT 2",
+                keywords=[],
+                sources=[],
+            )
+
+    def test_create_duplicate_of_soft_deleted_raises_value_error(self, cat):
+        # A soft-deleted template still blocks name re-use.
+        created = cat.create_template(
+            name="tpl_gone",
+            description="",
+            sql_query="SELECT 1",
+            keywords=[],
+            sources=[],
+        )
+        cat.delete_template(created["id"])  # soft-delete (is_active=0)
+        with pytest.raises(ValueError, match="already exists"):
+            cat.create_template(
+                name="tpl_gone",
+                description="",
+                sql_query="SELECT 2",
+                keywords=[],
+                sources=[],
+            )
+
     def test_row_count(self, cat):
         assert cat.row_count() == 0
         with cat._Session() as s:

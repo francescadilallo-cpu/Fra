@@ -744,17 +744,19 @@ class MetadataCatalog:
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc).isoformat()
-        row = QueryTemplateRow(
-            name=name,
-            description=description,
-            sql_query=sql_query,
-            keywords_json=json.dumps(keywords),
-            sources_json=json.dumps(sources),
-            created_at=now,
-            updated_at=now,
-            is_active=1,
-        )
         with self._Session() as s:
+            if s.query(QueryTemplateRow).filter_by(name=name).first() is not None:
+                raise ValueError(f"A template named '{name}' already exists")
+            row = QueryTemplateRow(
+                name=name,
+                description=description,
+                sql_query=sql_query,
+                keywords_json=json.dumps(keywords),
+                sources_json=json.dumps(sources),
+                created_at=now,
+                updated_at=now,
+                is_active=1,
+            )
             s.add(row)
             s.flush()
             result = self._template_to_dict(row)

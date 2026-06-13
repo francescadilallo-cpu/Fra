@@ -2764,13 +2764,16 @@ def create_template(
     catalog = _semantic_state.get("catalog")
     if catalog is None:
         raise HTTPException(status_code=503, detail="Semantic layer not loaded")
-    tpl = catalog.create_template(
-        name=payload.name,
-        description=payload.description,
-        sql_query=payload.sql_query,
-        keywords=payload.keywords,
-        sources=payload.sources,
-    )
+    try:
+        tpl = catalog.create_template(
+            name=payload.name,
+            description=payload.description,
+            sql_query=payload.sql_query,
+            keywords=payload.keywords,
+            sources=payload.sources,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     _hot_reload_templates()
     _audit(request, _admin, "Created query template", payload.name, category="config")
     return tpl
