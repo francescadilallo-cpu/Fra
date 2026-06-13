@@ -8,6 +8,7 @@ import { useAgentStore, countFindings } from '../data/agentStore'
 import CommandPalette from './CommandPalette'
 import { showConfirm } from './ConfirmDialog'
 import { IS_DEMO_MODE } from '../lib/demoMode'
+import { getWorkspace } from '../api/workspace'
 
 interface Props {
   activeTab: NavTab
@@ -259,6 +260,17 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
     const refresh = () => setCompanyName(localStorage.getItem('si-company-name'))
     window.addEventListener('company-name-changed', refresh)
     return () => window.removeEventListener('company-name-changed', refresh)
+  }, [])
+
+  useEffect(() => {
+    if (!IS_DEMO_MODE && !companyName) {
+      getWorkspace().then(ws => {
+        if (ws.name) {
+          localStorage.setItem('si-company-name', ws.name)
+          setCompanyName(ws.name)
+        }
+      }).catch(() => {})
+    }
   }, [])
 
   return (

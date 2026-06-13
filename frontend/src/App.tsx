@@ -14,6 +14,7 @@ import { Toaster } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { IS_DEMO_MODE } from './lib/demoMode'
+import { saveWorkspace } from './api/workspace'
 
 // Lazy-load heavy tabs to split the JS bundle and speed up initial paint
 const OntologyGraph = lazy(() => import('./components/OntologyGraph'))
@@ -191,6 +192,9 @@ export default function App() {
             if (customEntity) addCustomEntityToOntology(newSectorId, customEntity)
             setSector(newSectorId)
             setShowOnboarding(false)
+            if (!IS_DEMO_MODE) {
+              saveWorkspace(companyName, newSectorId).catch(() => {})
+            }
             window.dispatchEvent(new CustomEvent('company-name-changed'))
             window.location.reload()
           }}

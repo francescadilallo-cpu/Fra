@@ -66,6 +66,7 @@ from .audit.store import get_audit_store
 from .users.router import router as users_router
 from .notifications.router import router as notifications_router
 from .tokens.router import router as tokens_router
+from .workspace.router import router as workspace_router
 from .context.store import default_store as _context_store
 
 load_dotenv()
@@ -1223,6 +1224,10 @@ app.include_router(
 app.include_router(
     tokens_router,
     dependencies=[Depends(require_roles("admin"))],
+)
+app.include_router(
+    workspace_router,
+    dependencies=[Depends(require_roles("user", "admin"))],
 )
 
 
