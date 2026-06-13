@@ -33,6 +33,9 @@ class NotificationsStore:
     def _connect(self) -> sqlite3.Connection:
         c = sqlite3.connect(str(self._db_path))
         c.row_factory = sqlite3.Row
+        c.execute("PRAGMA journal_mode = WAL")
+        c.execute("PRAGMA synchronous = NORMAL")
+        c.execute("PRAGMA busy_timeout = 5000")
         return c
 
     def _init(self) -> None:
