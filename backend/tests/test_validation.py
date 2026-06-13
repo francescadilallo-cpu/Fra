@@ -11,7 +11,7 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.users.router import InviteRequest, RoleUpdateRequest
-from app.notifications.router import ChannelUpdate, RoutingUpdate
+from app.notifications.router import ChannelCreate, ChannelUpdate, RoutingUpdate
 from app.workspace.router import WorkspaceUpdate
 
 
@@ -55,6 +55,35 @@ def test_invalid_role_rejected() -> None:
 def test_role_update_invalid() -> None:
     with pytest.raises(ValidationError):
         RoleUpdateRequest(role="god")
+
+
+# ── Notifications: channel create validation ─────────────────────────────────
+
+
+def test_channel_create_valid() -> None:
+    c = ChannelCreate(name="ops-alerts", channel_type="slack", destination="#alerts")
+    assert c.name == "ops-alerts"
+    assert c.channel_type == "slack"
+
+
+def test_channel_create_invalid_type() -> None:
+    with pytest.raises(ValidationError):
+        ChannelCreate(name="x", channel_type="telegram", destination="#x")
+
+
+def test_channel_create_empty_name() -> None:
+    with pytest.raises(ValidationError):
+        ChannelCreate(name="", channel_type="email", destination="ops@x.com")
+
+
+def test_channel_create_empty_destination() -> None:
+    with pytest.raises(ValidationError):
+        ChannelCreate(name="valid", channel_type="webhook", destination="")
+
+
+def test_channel_create_destination_truncated() -> None:
+    c = ChannelCreate(name="x", channel_type="webhook", destination="h" * 600)
+    assert len(c.destination) == 500
 
 
 # ── Notifications: channel update name length ────────────────────────────────

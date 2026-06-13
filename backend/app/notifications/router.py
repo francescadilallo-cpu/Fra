@@ -35,7 +35,10 @@ class ChannelCreate(BaseModel):
     @field_validator("destination")
     @classmethod
     def validate_dest(cls, v: str) -> str:
-        return v.strip()[:500]
+        v = v.strip()
+        if not v:
+            raise ValueError("destination is required")
+        return v[:500]
 
 
 class ChannelUpdate(BaseModel):
