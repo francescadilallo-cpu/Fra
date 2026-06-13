@@ -371,3 +371,12 @@ def test_notifications_routing_too_many_ids_422(client, admin_headers):
         headers=admin_headers,
     )
     assert resp.status_code == 422
+
+
+def test_notifications_routing_get_returns_shape(client, admin_headers):
+    resp = client.get("/api/notifications/routing", headers=admin_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data.keys()) == {"critical", "warning", "info"}
+    for key in ("critical", "warning", "info"):
+        assert isinstance(data[key], list)
