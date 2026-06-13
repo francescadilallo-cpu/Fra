@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -129,7 +130,13 @@ async def upload_document(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File appears to be empty or unreadable.",
         )
-    doc = store.add_document(file.filename or "upload", content, ext.lstrip("."))
+    try:
+        doc = store.add_document(file.filename or "upload", content, ext.lstrip("."))
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return DocumentMeta(
         id=doc.id,
         filename=doc.filename,
@@ -150,7 +157,14 @@ def list_documents(store: ContextStore = Depends(_get_store)):
 
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(doc_id: int, store: ContextStore = Depends(_get_store)):
-    if not store.delete_document(doc_id):
+    try:
+        ok = store.delete_document(doc_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
+    if not ok:
         raise HTTPException(status_code=404, detail="Document not found")
 
 
@@ -173,15 +187,28 @@ def list_entities(store: ContextStore = Depends(_get_store)):
 
 @router.post("/entities", response_model=EntityOut, status_code=status.HTTP_201_CREATED)
 def create_entity(body: EntityIn, store: ContextStore = Depends(_get_store)):
-    e = store.add_entity(
-        body.name, body.display_name, body.synonyms, body.description, body.source
-    )
+    try:
+        e = store.add_entity(
+            body.name, body.display_name, body.synonyms, body.description, body.source
+        )
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return EntityOut(**e.__dict__)
 
 
 @router.delete("/entities/{entity_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_entity(entity_id: int, store: ContextStore = Depends(_get_store)):
-    if not store.delete_entity(entity_id):
+    try:
+        ok = store.delete_entity(entity_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
+    if not ok:
         raise HTTPException(status_code=404, detail="Entity not found")
 
 
@@ -195,20 +222,33 @@ def list_metrics(store: ContextStore = Depends(_get_store)):
 
 @router.post("/metrics", response_model=MetricOut, status_code=status.HTTP_201_CREATED)
 def create_metric(body: MetricIn, store: ContextStore = Depends(_get_store)):
-    m = store.add_metric(
-        body.name,
-        body.display_name,
-        body.synonyms,
-        body.description,
-        body.unit,
-        body.certified,
-    )
+    try:
+        m = store.add_metric(
+            body.name,
+            body.display_name,
+            body.synonyms,
+            body.description,
+            body.unit,
+            body.certified,
+        )
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return MetricOut(**m.__dict__)
 
 
 @router.delete("/metrics/{metric_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_metric(metric_id: int, store: ContextStore = Depends(_get_store)):
-    if not store.delete_metric(metric_id):
+    try:
+        ok = store.delete_metric(metric_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
+    if not ok:
         raise HTTPException(status_code=404, detail="Metric not found")
 
 
@@ -224,11 +264,24 @@ def list_glossary(store: ContextStore = Depends(_get_store)):
     "/glossary", response_model=GlossaryOut, status_code=status.HTTP_201_CREATED
 )
 def create_glossary_term(body: GlossaryIn, store: ContextStore = Depends(_get_store)):
-    g = store.add_glossary_term(body.term, body.definition)
+    try:
+        g = store.add_glossary_term(body.term, body.definition)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
     return GlossaryOut(**g.__dict__)
 
 
 @router.delete("/glossary/{term_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_glossary_term(term_id: int, store: ContextStore = Depends(_get_store)):
-    if not store.delete_glossary_term(term_id):
+    try:
+        ok = store.delete_glossary_term(term_id)
+    except sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database temporarily unavailable",
+        ) from exc
+    if not ok:
         raise HTTPException(status_code=404, detail="Term not found")
