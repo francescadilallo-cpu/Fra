@@ -65,6 +65,18 @@ class TestDocuments:
         store.add_document("note.txt", "Something else entirely.", "txt")
         assert store.search_documents(["revenue"]) == []
 
+    def test_search_multiple_keywords_returns_matching_docs(self, store):
+        store.add_document("a.txt", "Revenue increased in Q3.", "txt")
+        store.add_document("b.txt", "Customer count grew.", "txt")
+        results = store.search_documents(["Revenue", "Q3"])
+        assert len(results) == 1
+        assert "Revenue" in results[0]
+
+    def test_delete_document_removed_from_search(self, store):
+        doc = store.add_document("report.txt", "Quarterly revenue report.", "txt")
+        store.delete_document(doc.id)
+        assert store.search_documents(["revenue"]) == []
+
     def test_list_document_meta_omits_content(self, store):
         store.add_document("report.txt", "A" * 10_000, "txt")
         metas = store.list_document_meta()
@@ -147,6 +159,9 @@ class TestMetrics:
         metrics = {m.name: m for m in store.list_metrics()}
         assert metrics["m1"].certified is True
         assert metrics["m2"].certified is False
+
+    def test_delete_metric_missing_returns_false(self, store):
+        assert store.delete_metric(9999) is False
 
 
 # ── Glossary ──────────────────────────────────────────────────────────────────
