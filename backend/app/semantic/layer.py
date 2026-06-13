@@ -1593,7 +1593,7 @@ class SemanticLayer:
                 if entry.term.lower() == raw_term:
                     definition = entry.definition
                     break
-            if definition is None:
+            if definition is None and raw_term:
                 for entry in self._effective_docs.glossary:
                     if raw_term in entry.term.lower() or entry.term.lower() in raw_term:
                         definition = entry.definition
@@ -1626,7 +1626,7 @@ class SemanticLayer:
                     if term_key == raw_term:
                         definition = doc["content"]
                         break
-                if definition is None:
+                if definition is None and raw_term:
                     for doc in glossary_docs:
                         term_key = doc["title"][len("Glossary: ") :].lower()
                         if raw_term in term_key or term_key in raw_term:
@@ -1649,7 +1649,7 @@ class SemanticLayer:
 
         # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs)
         definition = self._GLOSSARY.get(raw_term)
-        if definition is None:
+        if definition is None and raw_term:
             for key, val in self._GLOSSARY.items():
                 if raw_term in key or key in raw_term:
                     definition = val

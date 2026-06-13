@@ -68,6 +68,20 @@ def test_glossary_lookup_unknown_term_returns_available_list():
     assert "revenue" in result.answer  # available terms listed
 
 
+def test_glossary_lookup_empty_term_does_not_fuzzy_match():
+    # An empty term must NOT fuzzy-match the first glossary entry (an empty
+    # string is a substring of everything); it should report "not present".
+    layer = _make_layer()
+    result = layer._q_glossary_lookup(_intent("glossary_lookup", filters={"term": ""}))
+    assert "not present" in result.answer
+
+
+def test_glossary_lookup_missing_term_filter_does_not_fuzzy_match():
+    layer = _make_layer()
+    result = layer._q_glossary_lookup(_intent("glossary_lookup", filters={}))
+    assert "not present" in result.answer
+
+
 # ── _q_disambiguation_rules ──────────────────────────────────────────────────
 
 
