@@ -72,3 +72,24 @@ class TestUsersStore:
         store.add_member(email="a" * 300 + "@b.com")
         m = store.list_members()[0]
         assert len(m.email) <= 200
+
+    def test_multiple_members_all_listed(self, store):
+        store.add_member(email="m1@ex.com", role="editor")
+        store.add_member(email="m2@ex.com", role="viewer")
+        store.add_member(email="m3@ex.com", role="admin")
+        members = store.list_members()
+        assert len(members) == 3
+        emails = {m.email for m in members}
+        assert emails == {"m1@ex.com", "m2@ex.com", "m3@ex.com"}
+
+    def test_remove_one_leaves_others(self, store):
+        m1 = store.add_member(email="keep@ex.com")
+        m2 = store.add_member(email="gone@ex.com")
+        store.remove_member(m2.id)
+        remaining = store.list_members()
+        assert len(remaining) == 1
+        assert remaining[0].id == m1.id
+
+    def test_update_role_unknown_id_returns_false(self, store):
+        ok = store.update_role("totally-unknown-id", "editor")
+        assert not ok

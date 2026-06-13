@@ -67,3 +67,28 @@ def test_none_args_dont_clear(store: WorkspaceStore) -> None:
     store.update(name=None, sector_id=None)
     assert store.get_name() == "Keep this"
     assert store.get_sector() == "retail"
+
+
+def test_sector_update_does_not_affect_name(store: WorkspaceStore) -> None:
+    store.update(name="Stable Name", sector_id=None)
+    store.update(name=None, sector_id="finance")
+    assert store.get_name() == "Stable Name"
+    assert store.get_sector() == "finance"
+
+
+def test_sector_overwritten_on_second_valid_update(store: WorkspaceStore) -> None:
+    store.update(name=None, sector_id="retail")
+    store.update(name=None, sector_id="healthcare")
+    assert store.get_sector() == "healthcare"
+
+
+def test_empty_string_name_stored(store: WorkspaceStore) -> None:
+    # Store accepts empty string (router layer sanitizes to None before calling store)
+    store.update(name="", sector_id=None)
+    assert store.get_name() == ""
+
+
+def test_invalid_sector_does_not_overwrite_valid_sector(store: WorkspaceStore) -> None:
+    store.update(name=None, sector_id="manufacturing")
+    store.update(name=None, sector_id="bogus")
+    assert store.get_sector() == "manufacturing"
