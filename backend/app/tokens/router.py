@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from .store import ApiTokenRecord, get_tokens_store
 
@@ -24,16 +24,13 @@ _VALID_SCOPES: frozenset[str] = frozenset(
 
 
 class TokenCreate(BaseModel):
-    name: str
-    scopes: list[str] = ["read:ontology"]
+    name: str = Field(min_length=1, max_length=100)
+    scopes: list[str] = Field(default_factory=lambda: ["read:ontology"])
 
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("name is required")
-        return v[:100]
+        return v.strip()
 
     @field_validator("scopes")
     @classmethod
