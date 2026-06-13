@@ -182,6 +182,11 @@ def test_users_remove_unknown_404(client, admin_headers):
     assert resp.status_code == 404
 
 
+def test_users_remove_oversized_id_422(client, admin_headers):
+    resp = client.delete(f"/api/users/{'x' * 65}", headers=admin_headers)
+    assert resp.status_code == 422
+
+
 # ── Tokens ────────────────────────────────────────────────────────────────────
 
 
@@ -266,6 +271,13 @@ def test_notifications_channel_not_found_404(client, admin_headers):
         "/api/notifications/channels/does-not-exist", headers=admin_headers
     )
     assert resp.status_code == 404
+
+
+def test_notifications_channel_oversized_id_422(client, admin_headers):
+    resp = client.delete(
+        f"/api/notifications/channels/{'x' * 65}", headers=admin_headers
+    )
+    assert resp.status_code == 422
 
 
 def test_notifications_routing_update(client, admin_headers):
