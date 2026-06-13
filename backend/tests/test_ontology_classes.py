@@ -319,6 +319,63 @@ class TestOntologyLoad:
         r = repr(o)
         assert "Ontology" in r
 
+    def test_to_rdf_emits_canonical_classes(self, ontology_yaml):
+        rdflib = pytest.importorskip("rdflib")
+        from rdflib.namespace import OWL, RDF
+
+        o = Ontology.load(ontology_yaml)
+        g = o.to_rdf()
+        fra = rdflib.Namespace("https://fra.example/ontology#")
+        assert (fra["Customer"], RDF.type, OWL.Class) in g
+        assert (fra["SalesOrder"], RDF.type, OWL.Class) in g
+
+    def test_to_rdf_emits_relation_with_range(self, ontology_yaml):
+        rdflib = pytest.importorskip("rdflib")
+        from rdflib.namespace import OWL, RDF, RDFS
+
+        o = Ontology.load(ontology_yaml)
+        g = o.to_rdf()
+        fra = rdflib.Namespace("https://fra.example/ontology#")
+        rel_uri = fra["SalesOrder.customer"]
+        assert (rel_uri, RDF.type, OWL.ObjectProperty) in g
+        assert (rel_uri, RDFS.range, fra["Customer"]) in g
+
+    def test_to_rdf_emits_custom_entity_and_relation_range(self, tmp_path):
+        rdflib = pytest.importorskip("rdflib")
+        from rdflib.namespace import OWL, RDF, RDFS
+
+        data = {
+            "ontology_version": "1.0",
+            "entities": {
+                "Supplier": {
+                    "description": "A supplier company",
+                    "sources": [{"source": "erp", "table": "vendors"}],
+                },
+                "Product": {
+                    "sources": [{"source": "erp", "table": "products"}],
+                    "attributes": {
+                        "supplied_by": {
+                            "relation": "many_to_one",
+                            "target": "Supplier",
+                            "via": "supplier_id",
+                        }
+                    },
+                },
+            },
+        }
+        p = tmp_path / "custom.yaml"
+        p.write_text(yaml.dump(data), encoding="utf-8")
+
+        o = Ontology.load(p)
+        g = o.to_rdf()
+        fra = rdflib.Namespace("https://fra.example/ontology#")
+        # The custom entity is emitted as an OWL class...
+        assert (fra["Supplier"], RDF.type, OWL.Class) in g
+        # ...and a relation targeting it carries a proper RDFS range.
+        rel_uri = fra["Product.supplied_by"]
+        assert (rel_uri, RDF.type, OWL.ObjectProperty) in g
+        assert (rel_uri, RDFS.range, fra["Supplier"]) in g
+
 
 # ── ManufacturingOntology ──────────────────────────────────────────────────────
 

@@ -375,26 +375,34 @@ class Ontology:
         g = rdflib.Graph()
         g.bind("fra", FRA)
 
-        for entity_name, model_cls in _ENTITY_REGISTRY.items():
-            cls_uri = FRA[entity_name]
+        # Export canonical entities and any custom entity declared in the YAML
+        # (e.g. Supplier, Vendor) so the RDF graph matches entity_names().
+        all_entities = self.entity_names()
+        entity_uris = {name: FRA[name] for name in all_entities}
+
+        for entity_name in all_entities:
+            cls_uri = entity_uris[entity_name]
             g.add((cls_uri, RDF.type, OWL.Class))
             desc = self.entity_description(entity_name)
             if desc:
                 g.add((cls_uri, RDFS.comment, rdflib.Literal(desc)))
 
-            # Properties from Pydantic fields
-            for field_name in model_cls.model_fields:
-                prop_uri = FRA[f"{entity_name}.{field_name}"]
-                g.add((prop_uri, RDF.type, OWL.DatatypeProperty))
-                g.add((prop_uri, RDFS.domain, cls_uri))
+            # Datatype properties from the canonical Pydantic model, if any.
+            model_cls = _ENTITY_REGISTRY.get(entity_name)
+            if model_cls is not None:
+                for field_name in model_cls.model_fields:
+                    prop_uri = FRA[f"{entity_name}.{field_name}"]
+                    g.add((prop_uri, RDF.type, OWL.DatatypeProperty))
+                    g.add((prop_uri, RDFS.domain, cls_uri))
 
-            # Relations from YAML
+            # Relations from YAML (canonical and custom entities alike).
             for rel in self.relations_of(entity_name):
                 prop_uri = FRA[f"{entity_name}.{rel['name']}"]
                 g.add((prop_uri, RDF.type, OWL.ObjectProperty))
                 g.add((prop_uri, RDFS.domain, cls_uri))
-                if rel.get("target") and rel["target"] in _ENTITY_REGISTRY:
-                    g.add((prop_uri, RDFS.range, FRA[rel["target"]]))
+                target = rel.get("target")
+                if target and target in entity_uris:
+                    g.add((prop_uri, RDFS.range, entity_uris[target]))
 
         # Salesperson subClassOf Employee
         g.add((FRA["Salesperson"], RDFS.subClassOf, FRA["Employee"]))
