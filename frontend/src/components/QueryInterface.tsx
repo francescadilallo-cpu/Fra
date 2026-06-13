@@ -1065,7 +1065,9 @@ export default function QueryInterface() {
                       const toDelete = [...favorites]
                       localStorage.removeItem(`query-favorites-${sectorId}`)
                       setFavorites([])
-                      toDelete.forEach(q => deleteSavedQueryRemote(stableQueryId(sectorId, q)).catch(() => {}))
+                      void Promise.allSettled(
+                        toDelete.map(q => deleteSavedQueryRemote(stableQueryId(sectorId, q)))
+                      )
                     }}
                     className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
                   >

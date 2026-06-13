@@ -92,9 +92,7 @@ interface Intent {
   changes: Omit<PendingChange, 'status'>[]
 }
 
-function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
-  const has = (l: string) => existingLabels.includes(l)
-
+function buildIntents(sectorId: string): Intent[] {
   // Sector-specific suggestions
   if (sectorId === 'manufacturing') {
     return [
@@ -361,13 +359,14 @@ function buildIntents(sectorId: string, existingLabels: string[]): Intent[] {
       ],
     },
   ]
-  void has // unused — silences linter
 }
 
 // ── Custom node ─────────────────────────────────────────────────────────────
 interface BuilderNodeData extends OntologyNodeData {
   state?: 'existing' | 'pending' | 'approved'
 }
+
+function nd(n: Node): BuilderNodeData { return n.data as unknown as BuilderNodeData }
 
 function BuilderNode({ data, selected }: NodeProps) {
   const d = data as unknown as BuilderNodeData
@@ -951,7 +950,7 @@ export default function OntologyBuilder() {
   // demo-only; in live mode every prompt goes through the dynamic parser.
   const intents = useMemo(
     () => IS_DEMO_MODE
-      ? buildIntents(sectorId, nodes.map((n) => (n.data as unknown as BuilderNodeData).label))
+      ? buildIntents(sectorId)
       : [],
     [sectorId, nodes],
   )
@@ -973,7 +972,7 @@ export default function OntologyBuilder() {
       // 2) Dynamic NLP parser fallback
       const existingForParser = nodes.map((n) => ({
         id: n.id,
-        label: (n.data as unknown as BuilderNodeData).label,
+        label: nd(n).label,
       }))
       const parsed = cannedMatch
         ? { reply: cannedMatch.reply, changes: cannedMatch.changes }
@@ -1036,9 +1035,9 @@ export default function OntologyBuilder() {
                     ? {
                         ...n,
                         data: {
-                          ...(n.data as unknown as BuilderNodeData),
+                          ...nd(n),
                           properties: [
-                            ...(n.data as unknown as BuilderNodeData).properties,
+                            ...nd(n).properties,
                             c.addPropertyTo!.property,
                           ],
                           state: 'pending',
@@ -1089,7 +1088,7 @@ export default function OntologyBuilder() {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === change.newNode!.id
-            ? { ...n, data: { ...(n.data as unknown as BuilderNodeData), state: 'approved' } }
+            ? { ...n, data: { ...nd(n), state: 'approved' } }
             : n,
         ),
       )
@@ -1107,7 +1106,7 @@ export default function OntologyBuilder() {
       setNodes((nds) =>
         nds.map((n) =>
           n.id === change.addPropertyTo!.nodeId
-            ? { ...n, data: { ...(n.data as unknown as BuilderNodeData), state: 'existing' } }
+            ? { ...n, data: { ...nd(n), state: 'existing' } }
             : n,
         ),
       )
@@ -1174,8 +1173,8 @@ export default function OntologyBuilder() {
             ? {
                 ...n,
                 data: {
-                  ...(n.data as unknown as BuilderNodeData),
-                  properties: (n.data as unknown as BuilderNodeData).properties.filter(
+                  ...nd(n),
+                  properties: nd(n).properties.filter(
                     (p) => p.name !== change.addPropertyTo!.property.name,
                   ),
                   state: 'existing',
@@ -1213,7 +1212,7 @@ export default function OntologyBuilder() {
 
   const onNodeClickCanvas = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      const data = node.data as unknown as BuilderNodeData
+      const data = nd(node)
       // Don't open editor for pending nodes — those go through the change card flow
       if (data.state === 'pending') return
       const isBaseNode = SECTORS[sectorId].ontology.nodes.some((n) => n.id === node.id)
@@ -1550,7 +1549,7 @@ export default function OntologyBuilder() {
       {editingChange && (
         <EditChangeModal
           change={editingChange}
-          existing={nodes.map((n) => ({ id: n.id, label: (n.data as unknown as BuilderNodeData).label }))}
+          existing={nodes.map((n) => ({ id: n.id, label: nd(n).label }))}
           onSave={(updated) => {
             updateChange(updated)
             setEditingChange(null)

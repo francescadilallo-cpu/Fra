@@ -10,24 +10,31 @@ from backend.app.workspace.router import WorkspaceUpdate
 
 # ── Users: email validation ───────────────────────────────────────────────────
 
-@pytest.mark.parametrize("email", [
-    "alice@example.com",
-    "user.name+tag@sub.domain.org",
-    "test@company.io",
-])
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "alice@example.com",
+        "user.name+tag@sub.domain.org",
+        "test@company.io",
+    ],
+)
 def test_valid_emails_accepted(email: str) -> None:
     r = InviteRequest(email=email, role="editor")
     assert r.email == email
 
 
-@pytest.mark.parametrize("email", [
-    "not-an-email",
-    "missing-at-sign.com",
-    "@nodomain.com",
-    "a@",
-    "",
-    "x" * 201,
-])
+@pytest.mark.parametrize(
+    "email",
+    [
+        "not-an-email",
+        "missing-at-sign.com",
+        "@nodomain.com",
+        "a@",
+        "",
+        "x" * 201,
+    ],
+)
 def test_invalid_emails_rejected(email: str) -> None:
     with pytest.raises(ValidationError):
         InviteRequest(email=email, role="editor")
@@ -44,6 +51,7 @@ def test_role_update_invalid() -> None:
 
 
 # ── Notifications: routing list size limit ────────────────────────────────────
+
 
 def test_routing_update_within_limit() -> None:
     ids = [f"chan-{i}" for i in range(10)]
@@ -64,6 +72,7 @@ def test_routing_ids_truncated_to_64_chars() -> None:
 
 
 # ── Workspace: name sanitization and sector validation ────────────────────────
+
 
 def test_workspace_name_strips_html_tags() -> None:
     u = WorkspaceUpdate(name="<script>alert(1)</script>Acme", sector_id=None)
