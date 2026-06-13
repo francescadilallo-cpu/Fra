@@ -3420,6 +3420,10 @@ def create_custom_agent(
             "SELECT * FROM custom_agents WHERE id=?", (body.id,)
         ).fetchone()
         return _row_to_agent(row)
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
 
@@ -3463,6 +3467,10 @@ def update_custom_agent(
             "SELECT * FROM custom_agents WHERE id=?", (agent_id,)
         ).fetchone()
         return _row_to_agent(updated)
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
 
@@ -3476,6 +3484,10 @@ def delete_custom_agent(
     try:
         conn.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
         conn.commit()
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
 
@@ -3544,6 +3556,10 @@ def save_query(
                 "SELECT * FROM saved_queries WHERE id=?", (body.id,)
             ).fetchone()
         )
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
 
@@ -3557,6 +3573,10 @@ def delete_saved_query(
     try:
         conn.execute("DELETE FROM saved_queries WHERE id=?", (query_id,))
         conn.commit()
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
 
@@ -3658,5 +3678,9 @@ def put_ontology_extension(
         )
         conn.commit()
         return {"ok": True, "updated_at": now}
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
     finally:
         conn.close()
