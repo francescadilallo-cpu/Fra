@@ -294,6 +294,24 @@ def test_notifications_channel_lifecycle(client, admin_headers):
     assert resp.status_code == 204
 
 
+def test_notifications_channel_invalid_type_422(client, admin_headers):
+    resp = client.post(
+        "/api/notifications/channels",
+        json={"name": "bad", "channel_type": "telegram", "destination": "#x"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_notifications_channel_empty_destination_422(client, admin_headers):
+    resp = client.post(
+        "/api/notifications/channels",
+        json={"name": "ok", "channel_type": "email", "destination": ""},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+
+
 def test_notifications_channel_not_found_404(client, admin_headers):
     resp = client.delete(
         "/api/notifications/channels/does-not-exist", headers=admin_headers
