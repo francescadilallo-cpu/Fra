@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.users.router import InviteRequest, RoleUpdateRequest
 from app.notifications.router import ChannelCreate, ChannelUpdate, RoutingUpdate
+from app.tokens.router import TokenCreate
 from app.workspace.router import WorkspaceUpdate
 
 
@@ -159,3 +160,43 @@ def test_workspace_invalid_sector_becomes_none() -> None:
 def test_workspace_name_none_stays_none() -> None:
     u = WorkspaceUpdate(name=None, sector_id=None)
     assert u.name is None
+
+
+# ── Tokens: name and scope validation ────────────────────────────────────────
+
+
+def test_token_create_valid() -> None:
+    t = TokenCreate(name="CI pipeline", scopes=["read:ontology"])
+    assert t.name == "CI pipeline"
+    assert t.scopes == ["read:ontology"]
+
+
+def test_token_create_default_scopes() -> None:
+    t = TokenCreate(name="my-token")
+    assert t.scopes == ["read:ontology"]
+
+
+def test_token_create_name_too_long() -> None:
+    with pytest.raises(ValidationError):
+        TokenCreate(name="x" * 101, scopes=["read:ontology"])
+
+
+def test_token_create_empty_name() -> None:
+    with pytest.raises(ValidationError):
+        TokenCreate(name="", scopes=["read:ontology"])
+
+
+def test_token_create_invalid_scope_rejected() -> None:
+    with pytest.raises(ValidationError):
+        TokenCreate(name="tok", scopes=["invalid:scope"])
+
+
+def test_token_create_mixed_scopes_filters_invalid() -> None:
+    t = TokenCreate(name="tok", scopes=["read:ontology", "bad:scope", "admin"])
+    assert "bad:scope" not in t.scopes
+    assert set(t.scopes) == {"read:ontology", "admin"}
+
+
+def test_token_create_whitespace_name_stripped() -> None:
+    t = TokenCreate(name="  my token  ", scopes=["read:ontology"])
+    assert t.name == "my token"
