@@ -58,6 +58,10 @@ class TokensStore:
                 )
                 """
             )
+            c.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tokens_active"
+                " ON tokens(revoked, expires_at)"
+            )
 
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> ApiTokenRecord:
