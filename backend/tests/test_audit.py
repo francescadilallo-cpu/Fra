@@ -141,3 +141,20 @@ class TestAuditEndpoint:
                 "ip",
                 "category",
             }
+
+    def test_q_filter_returns_matching_entries(self, client, headers):
+        resp = client.get("/api/audit", headers=headers, params={"q": "audit_admin"})
+        assert resp.status_code == 200
+        entries = resp.json()
+        assert all(
+            "audit_admin" in (e["username"] + e["action"] + e["resource"]).lower()
+            for e in entries
+        )
+
+    def test_limit_out_of_range_422(self, client, headers):
+        resp = client.get("/api/audit", headers=headers, params={"limit": 9999})
+        assert resp.status_code == 422
+
+    def test_q_too_long_422(self, client, headers):
+        resp = client.get("/api/audit", headers=headers, params={"q": "x" * 121})
+        assert resp.status_code == 422
