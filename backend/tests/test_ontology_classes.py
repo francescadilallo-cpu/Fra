@@ -162,6 +162,47 @@ class TestValidateYamlSchema:
         }
         _validate_yaml_schema(data)  # must not raise
 
+    def test_relation_to_declared_custom_entity_allowed(self):
+        # A relation may target a custom entity that is declared in this YAML,
+        # not only canonical-registry entities (e.g. Supplier, Vendor).
+        data = {
+            "entities": {
+                "Supplier": {
+                    "description": "A supplier company",
+                    "sources": [{"source": "erp", "table": "vendors"}],
+                },
+                "Product": {
+                    "attributes": {
+                        "supplied_by": {
+                            "relation": "many_to_one",
+                            "target": "Supplier",
+                            "via": "supplier_id",
+                        }
+                    }
+                },
+            }
+        }
+        _validate_yaml_schema(data)  # must not raise
+
+    def test_relation_to_unknown_target_still_raises(self):
+        # Regression guard: a target that is neither canonical nor declared
+        # must still fail, even after custom-entity targets are allowed.
+        data = {
+            "entities": {
+                "Product": {
+                    "attributes": {
+                        "supplied_by": {
+                            "relation": "many_to_one",
+                            "target": "GhostEntity",
+                            "via": "supplier_id",
+                        }
+                    }
+                }
+            }
+        }
+        with pytest.raises(OntologyValidationError, match="invalid target"):
+            _validate_yaml_schema(data)
+
 
 # ── Ontology class ─────────────────────────────────────────────────────────────
 

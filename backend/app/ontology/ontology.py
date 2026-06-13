@@ -183,6 +183,10 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
 
     known_entities = set(_ENTITY_REGISTRY.keys())
     declared_entities = set(entities.keys())
+    # A relation may target any canonical entity or any custom entity declared
+    # in this YAML (e.g. Supplier, Vendor). Only targets that are neither are
+    # treated as structurally invalid.
+    recognizable_entities = known_entities | declared_entities
 
     for entity_name, entity_cfg in entities.items():
         if entity_name not in known_entities:
@@ -212,7 +216,7 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
             target = attr_cfg.get("target")
             via = attr_cfg.get("via")
 
-            if not target or target not in known_entities:
+            if not target or target not in recognizable_entities:
                 raise OntologyValidationError(
                     f"Relation '{entity_name}.{attr_name}' has invalid target '{target}'"
                 )
