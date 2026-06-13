@@ -45,7 +45,7 @@ function buildManufacturingLogs(
   const dedup   = dedupCount || (IS_DEMO_MODE ? 372 : 0)
   const customers = accts - dedup
   const erpSmall  = sp + terr + offer
-  const crmOther  = (counts.contact ?? 19302) + (counts.address ?? 19614) + (counts.state_province ?? 70)
+  const crmOther  = (counts.contact ?? (IS_DEMO_MODE ? 19302 : 0)) + (counts.address ?? (IS_DEMO_MODE ? 19614 : 0)) + (counts.state_province ?? (IS_DEMO_MODE ? 70 : 0))
   const total     = orders + lines + erpSmall + accts + crmOther + hr + pim
   const nodes     = kgNodes || (IS_DEMO_MODE ? 193062 : 0)
   const edges     = kgEdges || (IS_DEMO_MODE ? 313193 : 0)

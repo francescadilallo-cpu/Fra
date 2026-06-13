@@ -419,7 +419,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
   onToggle: (col: string) => void
   onClear: () => void
   onIngest: () => void
-  onLoadSample: () => void
+  onLoadSample?: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -444,9 +444,11 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
           <p className="text-xs text-slate-400 mt-1">Supports .csv (commas or semicolons), up to 10 MB</p>
           <input ref={inputRef} type="file" accept=".csv,text/csv" onChange={e => handleFiles(e.target.files)} className="hidden" />
         </div>
-        <button onClick={onLoadSample} className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-600 transition-colors mx-auto">
-          <Download className="w-3 h-3" />Or load a sample dataset for this sector
-        </button>
+        {onLoadSample && (
+          <button onClick={onLoadSample} className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 hover:text-teal-600 transition-colors mx-auto">
+            <Download className="w-3 h-3" />Or load a sample dataset for this sector
+          </button>
+        )}
       </div>
     )
   }
@@ -885,7 +887,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           </div>
           <UploadPanel
             upload={upload} onUpload={handleFile} onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
-            onClear={() => setUpload(null)} onIngest={ingestCsv} onLoadSample={loadSample}
+            onClear={() => setUpload(null)} onIngest={ingestCsv} onLoadSample={IS_DEMO_MODE ? loadSample : undefined}
           />
         </section>
       </div>
