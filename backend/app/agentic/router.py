@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from typing import Annotated, Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -98,6 +99,12 @@ def build_agent_router(
                     "message": str(exc),
                 },
             ) from exc
+        except sqlite3.OperationalError as exc:
+            logger.error("agent.execute db_error actor=%s: %s", actor, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
+            ) from exc
 
     @router.post("/approve/{action_id}", response_model=AgentActionResponse)
     def approve_action(
@@ -138,6 +145,12 @@ def build_agent_router(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"error": "AGENT_ACTION_EXECUTION_FAILED", "message": str(exc)},
+            ) from exc
+        except sqlite3.OperationalError as exc:
+            logger.error("agent.approve db_error action_id=%s: %s", action_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
             ) from exc
 
     @router.get("/list", response_model=list[AgentActionResponse])
