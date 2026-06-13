@@ -251,7 +251,25 @@ def test_tokens_create_and_revoke(client, admin_headers):
 def test_tokens_create_name_too_long_422(client, admin_headers):
     resp = client.post(
         "/api/tokens",
-        json={"name": "x" * 101, "scopes": ["read"]},
+        json={"name": "x" * 101, "scopes": ["read:ontology"]},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_tokens_create_empty_name_422(client, admin_headers):
+    resp = client.post(
+        "/api/tokens",
+        json={"name": "", "scopes": ["read:ontology"]},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_tokens_create_invalid_scope_422(client, admin_headers):
+    resp = client.post(
+        "/api/tokens",
+        json={"name": "test", "scopes": ["invalid:scope"]},
         headers=admin_headers,
     )
     assert resp.status_code == 422
