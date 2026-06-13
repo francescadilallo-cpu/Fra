@@ -45,6 +45,16 @@ class ChannelUpdate(BaseModel):
     enabled: bool | None = None
     name: str | None = Field(default=None, max_length=100)
 
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("name cannot be blank")
+        return v
+
 
 class RoutingUpdate(BaseModel):
     critical: list[str] = []

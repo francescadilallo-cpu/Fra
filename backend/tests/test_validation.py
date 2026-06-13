@@ -104,6 +104,11 @@ def test_channel_update_name_none_allowed() -> None:
     assert u.name is None
 
 
+def test_channel_update_blank_name_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ChannelUpdate(name="   ")
+
+
 # ── Notifications: routing list size limit ────────────────────────────────────
 
 
