@@ -1,8 +1,15 @@
 """Tests for WorkspaceStore."""
 
-import pytest
+from __future__ import annotations
+
+import sys
 from pathlib import Path
-from backend.app.workspace.store import WorkspaceStore
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.workspace.store import WorkspaceStore
 
 
 @pytest.fixture

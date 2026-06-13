@@ -1,11 +1,18 @@
 """Tests for input validation on users, notifications, and workspace routers."""
 
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
-from backend.app.users.router import InviteRequest, RoleUpdateRequest
-from backend.app.notifications.router import ChannelUpdate, RoutingUpdate
-from backend.app.workspace.router import WorkspaceUpdate
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.users.router import InviteRequest, RoleUpdateRequest
+from app.notifications.router import ChannelUpdate, RoutingUpdate
+from app.workspace.router import WorkspaceUpdate
 
 
 # ── Users: email validation ───────────────────────────────────────────────────
