@@ -7,7 +7,7 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from .store import WorkspaceMember, get_users_store
 
@@ -17,14 +17,14 @@ _EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 
 class InviteRequest(BaseModel):
-    email: str
+    email: str = Field(max_length=200)
     role: str = "editor"
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
         v = v.strip()
-        if not _EMAIL_RE.match(v) or len(v) > 200:
+        if not v or not _EMAIL_RE.match(v):
             raise ValueError("invalid email address")
         return v
 
