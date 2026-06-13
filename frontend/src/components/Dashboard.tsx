@@ -740,7 +740,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
             <span>
               Last sync:{' '}
               <strong className={pipelineLastRun ? 'text-teal-600' : 'text-slate-600'}>
-                {pipelineLastRun ? relativeTime(pipelineLastRun) : `today, 0${trendPct > 0 ? '9' : '8'}:14`}
+                {pipelineLastRun
+                  ? relativeTime(pipelineLastRun)
+                  : IS_DEMO_MODE ? `today, 0${trendPct > 0 ? '9' : '8'}:14` : 'Never'}
               </strong>
             </span>
             {pipelineLastRun && (
