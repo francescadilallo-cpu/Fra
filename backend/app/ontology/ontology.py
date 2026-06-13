@@ -267,10 +267,10 @@ class Ontology:
 
     def __init__(self, yaml_data: dict[str, Any]) -> None:
         self._data = yaml_data
-        self._entities_cfg: dict[str, Any] = yaml_data.get("entities", {})
-        self._metrics_cfg: dict[str, Any] = yaml_data.get("metrics", {})
-        self._dimensions_cfg: dict[str, Any] = yaml_data.get("dimensions", {})
-        self._ambiguities: list[dict] = yaml_data.get("known_ambiguities", [])
+        self._entities_cfg: dict[str, Any] = yaml_data.get("entities") or {}
+        self._metrics_cfg: dict[str, Any] = yaml_data.get("metrics") or {}
+        self._dimensions_cfg: dict[str, Any] = yaml_data.get("dimensions") or {}
+        self._ambiguities: list[dict] = yaml_data.get("known_ambiguities") or []
 
     # ── class methods ────────────────────────────────────────────────────────
 

@@ -1876,7 +1876,13 @@ class SemanticLayer:
         sql = tpl["sql_query"]
 
         # Safe substitution of {year}
-        year_val = intent.filters.get("year")
+        # Prefer filters["year"] (rule parser path); fall back to intent.year
+        # (set by LLM mapping when the rule parser didn't extract a year).
+        year_val = (
+            intent.filters.get("year")
+            if intent.filters.get("year") is not None
+            else intent.year
+        )
         if year_val is not None:
             try:
                 y = int(year_val)
@@ -1889,7 +1895,12 @@ class SemanticLayer:
             sql = sql.replace("{year}", "2024")
 
         # Safe substitution of {limit}
-        limit_val = intent.filters.get("limit")
+        # Prefer filters["limit"]; fall back to intent.limit (set by rule parser).
+        limit_val = (
+            intent.filters.get("limit")
+            if intent.filters.get("limit") is not None
+            else intent.limit
+        )
         if limit_val is not None:
             try:
                 lim = int(limit_val)

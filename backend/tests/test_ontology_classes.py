@@ -150,6 +150,18 @@ class TestValidateYamlSchema:
         with pytest.raises(OntologyValidationError, match="must be a list"):
             _validate_yaml_schema(data)
 
+    def test_null_metrics_allowed_by_validator(self):
+        # The validator explicitly permits metrics: null (only non-null non-dict is invalid)
+        _validate_yaml_schema({"entities": {}, "metrics": None})  # must not raise
+
+    def test_null_dimensions_allowed_by_validator(self):
+        _validate_yaml_schema({"entities": {}, "dimensions": None})  # must not raise
+
+    def test_null_ambiguities_allowed_by_validator(self):
+        _validate_yaml_schema(
+            {"entities": {}, "known_ambiguities": None}
+        )  # must not raise
+
     def test_custom_entity_allowed(self):
         # Custom (non-registry) entities should pass without error
         data = {
@@ -293,6 +305,19 @@ class TestOntologyLoad:
         o = Ontology.load(ontology_yaml)
         m = o.metric("revenue")
         assert m["description"] == "Net revenue"
+
+    def test_null_metrics_does_not_crash_metric_names(self):
+        # metrics: null in YAML must not cause AttributeError in metric_names()
+        o = Ontology({"entities": {}, "metrics": None})
+        assert o.metric_names() == []
+
+    def test_null_dimensions_does_not_crash_dimension_names(self):
+        o = Ontology({"entities": {}, "dimensions": None})
+        assert o.dimension_names() == []
+
+    def test_null_ambiguities_does_not_crash_known_ambiguities(self):
+        o = Ontology({"entities": {}, "known_ambiguities": None})
+        assert o.known_ambiguities() == []
 
     def test_dimension_names(self, ontology_yaml):
         o = Ontology.load(ontology_yaml)

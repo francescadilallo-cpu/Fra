@@ -2,7 +2,7 @@
 
 SQL-based golden-question handlers have been removed. This file now covers
 the structural handlers: _q_glossary_lookup, _q_disambiguation_rules,
-and _q_certified_metrics.
+_q_certified_metrics, and _execute_template_query.
 """
 
 from __future__ import annotations
@@ -109,3 +109,54 @@ def test_certified_metrics_returns_hardcoded_list():
     assert "revenue" in names
     assert "margin" in names
     assert all(m["status"] == "certified" for m in result.answer)
+
+
+# ── _execute_template_query ───────────────────────────────────────────────────
+
+
+def _tpl(sql: str, intent_type: str = "tpl_1", id: int = 1) -> dict:
+    return {
+        "id": id,
+        "name": "test_template",
+        "intent_type": intent_type,
+        "sql_query": sql,
+        "keywords": ["test"],
+        "is_active": True,
+        "sources": [],
+    }
+
+
+def test_template_year_from_intent_year_when_not_in_filters():
+    # Regression: when year is in intent.year but NOT in intent.filters,
+    # the template handler must still substitute {year} correctly.
+    layer = _make_layer()
+    layer._templates = [_tpl("SELECT * FROM t WHERE yr = {year}")]
+    layer._mgr.execute.return_value = [{"x": 1}]
+    intent = _intent("tpl_1", filters={}, year=2023)
+    result = layer._execute_template_query(intent)
+    assert result.sql_used is not None
+    assert "2023" in result.sql_used
+
+
+def test_template_limit_from_intent_limit_when_not_in_filters():
+    # Regression: when limit is in intent.limit but NOT in intent.filters,
+    # the template handler must still substitute {limit} correctly.
+    layer = _make_layer()
+    layer._templates = [_tpl("SELECT * FROM t LIMIT {limit}")]
+    layer._mgr.execute.return_value = [{"x": 1}]
+    intent = _intent("tpl_1", filters={}, limit=7)
+    result = layer._execute_template_query(intent)
+    assert result.sql_used is not None
+    assert "7" in result.sql_used
+
+
+def test_template_year_from_filters_takes_precedence_over_intent_year():
+    # When both filters["year"] and intent.year are set, filters["year"] wins.
+    layer = _make_layer()
+    layer._templates = [_tpl("SELECT * FROM t WHERE yr = {year}")]
+    layer._mgr.execute.return_value = []
+    intent = _intent("tpl_1", filters={"year": 2022}, year=2019)
+    result = layer._execute_template_query(intent)
+    assert result.sql_used is not None
+    assert "2022" in result.sql_used
+    assert "2019" not in result.sql_used
