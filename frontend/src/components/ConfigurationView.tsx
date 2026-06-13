@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Loader2, CheckCircle2, XCircle, Plus, AlertTriangle } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
-import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection } from './AdminSections'
+import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection, WorkspaceSection } from './AdminSections'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 
 // ── Connectors ────────────────────────────────────────────────────────────────
@@ -565,16 +565,19 @@ export default function ConfigurationView() {
         </div>
       </section>
 
-      {/* Section 5: Users & Roles */}
+      {/* Section 5: Workspace */}
+      <WorkspaceSection />
+
+      {/* Section 6: Users & Roles */}
       <UsersSection />
 
-      {/* Section 6: API Tokens */}
+      {/* Section 7: API Tokens */}
       <ApiTokensSection />
 
-      {/* Section 7: Notification Channels */}
+      {/* Section 8: Notification Channels */}
       <NotificationsSection />
 
-      {/* Section 8: Audit Log */}
+      {/* Section 9: Audit Log */}
       <AuditLogSection />
     </div>
   )

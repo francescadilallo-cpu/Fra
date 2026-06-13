@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Users, UserPlus, Key, Plus, Bell, FileClock, MessageSquare, Mail, Webhook,
   Eye, EyeOff, Copy, Trash2, X, Loader2, CheckCircle2, Send, ShieldCheck,
-  AlertCircle, MoreHorizontal, Globe, Filter, Lock, Sparkles, History,
+  AlertCircle, MoreHorizontal, Globe, Filter, Lock, Sparkles, History, Building2,
 } from 'lucide-react'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getTokenSubject } from '../api/client'
@@ -16,6 +16,7 @@ import {
   type BackendChannel,
 } from '../api/notifications'
 import { listTokens, createToken as apiCreateToken, revokeToken as apiRevokeToken, type BackendToken } from '../api/tokens'
+import { getWorkspace, saveWorkspace } from '../api/workspace'
 
 // ── Users & Roles ────────────────────────────────────────────────────────────
 
@@ -1151,6 +1152,64 @@ export function AuditLogSection() {
             })}
           </tbody>
         </table>
+      </div>
+    </section>
+  )
+}
+
+// ── Workspace Settings ────────────────────────────────────────────────────────
+
+export function WorkspaceSection() {
+  const [name, setName] = useState(() => localStorage.getItem('si-company-name') ?? '')
+  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!IS_DEMO_MODE) {
+      getWorkspace().then(ws => {
+        if (ws.name) setName(ws.name)
+      }).catch(() => {})
+    }
+  }, [])
+
+  const handleSave = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setLoading(true)
+    try {
+      if (!IS_DEMO_MODE) await saveWorkspace(trimmed, null)
+      localStorage.setItem('si-company-name', trimmed)
+      window.dispatchEvent(new CustomEvent('company-name-changed'))
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
+        <Building2 className="w-4 h-4 text-teal-600" />
+        Workspace
+      </h2>
+      <p className="text-xs text-slate-500 mb-5">Your workspace name appears in the header and all exports.</p>
+      <div className="flex items-center gap-3 max-w-sm">
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && void handleSave()}
+          placeholder="Company name"
+          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+        />
+        <button
+          onClick={() => void handleSave()}
+          disabled={loading || !name.trim()}
+          className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
+          {saved ? 'Saved' : 'Save'}
+        </button>
       </div>
     </section>
   )

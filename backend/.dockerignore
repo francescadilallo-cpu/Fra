@@ -17,3 +17,4 @@ data/tokens.db
 data/users.db
 data/notifications.db
 data/audit.db
+data/workspace.db
