@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from .store import Channel, get_notifications_store
 
@@ -38,7 +38,7 @@ class ChannelCreate(BaseModel):
 
 class ChannelUpdate(BaseModel):
     enabled: bool | None = None
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=100)
 
 
 class RoutingUpdate(BaseModel):

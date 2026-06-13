@@ -952,7 +952,7 @@ export default function OntologyBuilder() {
     () => IS_DEMO_MODE
       ? buildIntents(sectorId)
       : [],
-    [sectorId, nodes],
+    [sectorId],
   )
 
   const send = useCallback(

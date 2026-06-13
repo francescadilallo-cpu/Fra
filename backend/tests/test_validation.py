@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.app.users.router import InviteRequest, RoleUpdateRequest
-from backend.app.notifications.router import RoutingUpdate
+from backend.app.notifications.router import ChannelUpdate, RoutingUpdate
 from backend.app.workspace.router import WorkspaceUpdate
 
 
@@ -48,6 +48,24 @@ def test_invalid_role_rejected() -> None:
 def test_role_update_invalid() -> None:
     with pytest.raises(ValidationError):
         RoleUpdateRequest(role="god")
+
+
+# ── Notifications: channel update name length ────────────────────────────────
+
+
+def test_channel_update_name_within_limit() -> None:
+    u = ChannelUpdate(name="My Channel", enabled=True)
+    assert u.name == "My Channel"
+
+
+def test_channel_update_name_too_long() -> None:
+    with pytest.raises(ValidationError):
+        ChannelUpdate(name="x" * 101)
+
+
+def test_channel_update_name_none_allowed() -> None:
+    u = ChannelUpdate(enabled=False)
+    assert u.name is None
 
 
 # ── Notifications: routing list size limit ────────────────────────────────────
