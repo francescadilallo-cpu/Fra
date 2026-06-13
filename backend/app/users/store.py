@@ -87,28 +87,25 @@ class UsersStore:
         email = email.strip()[:200]
         username = email.split("@")[0][:120]
         safe_role = role if role in _VALID_ROLES else "editor"
-        member = WorkspaceMember(
-            id=str(uuid.uuid4()),
-            username=username,
-            email=email,
-            role=safe_role,
-            status="pending",
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
+        new_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
         with self._lock, self._connect() as c:
-            c.execute(
+            cur = c.execute(
                 "INSERT OR IGNORE INTO members (id, username, email, role, status, created_at)"
                 " VALUES (?,?,?,?,?,?)",
-                (
-                    member.id,
-                    member.username,
-                    member.email,
-                    member.role,
-                    member.status,
-                    member.created_at,
-                ),
+                (new_id, username, email, safe_role, "pending", now),
             )
-        return member
+            if cur.rowcount > 0:
+                return WorkspaceMember(
+                    id=new_id,
+                    username=username,
+                    email=email,
+                    role=safe_role,
+                    status="pending",
+                    created_at=now,
+                )
+            row = c.execute("SELECT * FROM members WHERE email=?", (email,)).fetchone()
+        return self._row_to_member(row)
 
     def update_role(self, member_id: str, role: str) -> bool:
         if role not in _VALID_ROLES:

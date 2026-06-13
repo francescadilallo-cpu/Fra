@@ -43,6 +43,11 @@ class TestUsersStore:
         store.add_member(email="dup@ex.com")
         assert len(store.list_members()) == 1
 
+    def test_duplicate_email_returns_existing_record(self, store):
+        m1 = store.add_member(email="dup2@ex.com")
+        m2 = store.add_member(email="dup2@ex.com")
+        assert m1.id == m2.id  # same record, not a phantom new id
+
     def test_update_role(self, store):
         m = store.add_member(email="b@ex.com", role="viewer")
         ok = store.update_role(m.id, "admin")
