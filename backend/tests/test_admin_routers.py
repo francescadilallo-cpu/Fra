@@ -125,6 +125,15 @@ def test_workspace_put_strips_html_tags(client, admin_headers):
     assert resp.json()["name"] == "Bold Corp"
 
 
+def test_workspace_put_allowed_for_user_role(client, user_headers):
+    resp = client.put(
+        "/api/workspace",
+        json={"name": "User Update", "sector_id": None},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+
+
 def test_workspace_requires_auth(client):
     resp = client.get("/api/workspace")
     assert resp.status_code == 401
