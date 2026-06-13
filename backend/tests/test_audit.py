@@ -70,6 +70,35 @@ class TestAuditStore:
         assert len(e.resource) == 300
         assert len(e.ip) == 64
 
+    def test_search_matches_resource(self, store):
+        store.log("alice", "Sync", resource="Snowflake DWH", category="data")
+        store.log("bob", "Login", resource="", category="auth")
+        hits = store.list(q="snowflake")
+        assert len(hits) == 1
+        assert hits[0].username == "alice"
+
+    def test_category_and_q_combined(self, store):
+        store.log("alice", "Synced data", resource="ERP", category="data")
+        store.log("alice", "Logged in", resource="", category="auth")
+        store.log("bob", "Synced config", resource="", category="data")
+        # Only the data-category entry whose fields contain "ERP"
+        hits = store.list(category="data", q="ERP")
+        assert len(hits) == 1
+        assert hits[0].resource == "ERP"
+
+    def test_invalid_category_filter_ignored(self, store):
+        store.log("alice", "action", category="auth")
+        # Invalid category filter → behaves as if no filter
+        all_results = store.list()
+        filtered = store.list(category="bogus")
+        assert len(filtered) == len(all_results)
+
+    def test_limit_min_one(self, store):
+        for i in range(5):
+            store.log("alice", f"a{i}")
+        assert len(store.list(limit=0)) == 1  # clamped to 1
+        assert len(store.list(limit=-5)) == 1  # clamped to 1
+
 
 class TestAuditEndpoint:
     """Endpoint smoke tests reuse the integration-test app fixtures."""
