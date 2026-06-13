@@ -51,9 +51,12 @@ function toXsd(type: PropertyType): string {
   }
 }
 
+type GraphNodeData = OntologyNodeData & { isUserNode?: boolean }
+function gnd(n: Node): GraphNodeData { return n.data as unknown as GraphNodeData }
+
 // ── Custom node ─────────────────────────────────────────────────────────────
 function OntologyClassNode({ data, selected }: NodeProps) {
-  const d = data as unknown as OntologyNodeData & { isUserNode?: boolean }
+  const d = data as unknown as GraphNodeData
   const srcKey = getSourceKey(d.db_table ?? null, d.isUserNode)
   const src = SOURCE_COLORS[srcKey]
   return (
@@ -602,7 +605,7 @@ export default function OntologyGraph() {
   }, [])
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    setSelectedNode(node.data as unknown as OntologyNodeData)
+    setSelectedNode(gnd(node))
   }, [])
 
   const tabs: { id: SubTab; label: string; icon: typeof GitBranch }[] = [
@@ -711,7 +714,7 @@ export default function OntologyGraph() {
               <Background color="#CBD5E1" gap={24} size={1} />
               <Controls />
               <MiniMap nodeColor={(n) => {
-                const d = n.data as unknown as OntologyNodeData
+                const d = gnd(n)
                 const srcKey = getSourceKey(d?.db_table ?? null)
                 const colors: Record<SourceKey, string> = { erp: '#93c5fd', crm: '#c4b5fd', hr: '#fdba74', pim: '#86efac', custom: '#94a3b8', user: '#a78bfa' }
                 return colors[srcKey] ?? '#e2e8f0'
