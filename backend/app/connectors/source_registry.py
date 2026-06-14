@@ -245,14 +245,17 @@ class SourceRegistry:
         return cfg
 
     def remove(self, source_id: str) -> None:
-        cfg = self.get(source_id)
-        if cfg is None:
-            raise KeyError(f"Source '{source_id}' not found")
-        if cfg.is_default:
-            raise ValueError(f"Cannot remove default source '{source_id}'")
         with self._lock:
             conn = self._open()
             try:
+                row = conn.execute(
+                    "SELECT * FROM sources WHERE id = ?", (source_id,)
+                ).fetchone()
+                if row is None:
+                    raise KeyError(f"Source '{source_id}' not found")
+                cfg = self._from_row(row)
+                if cfg.is_default:
+                    raise ValueError(f"Cannot remove default source '{source_id}'")
                 conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
                 conn.commit()
             finally:
