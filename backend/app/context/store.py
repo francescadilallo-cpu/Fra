@@ -560,41 +560,41 @@ Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
         with self._docs_cache_lock:
             if self._docs_cache is not None:
                 return self._docs_cache
-
-        entities = [
-            EntityDoc(
-                name=e.name,
-                display_name=e.display_name,
-                synonyms=e.synonyms,
-                description=e.description,
-                source=e.source,
+            # Build inside the lock so a concurrent _invalidate_docs_cache()
+            # cannot be overwritten by a stale computation that started before
+            # the invalidation but stores after it.
+            entities = [
+                EntityDoc(
+                    name=e.name,
+                    display_name=e.display_name,
+                    synonyms=e.synonyms,
+                    description=e.description,
+                    source=e.source,
+                )
+                for e in self.list_entities()
+            ]
+            metrics = [
+                MetricDoc(
+                    name=m.name,
+                    display_name=m.display_name,
+                    synonyms=m.synonyms,
+                    description=m.description,
+                    unit=m.unit or None,
+                    certified=m.certified,
+                )
+                for m in self.list_metrics()
+            ]
+            glossary = [
+                GlossaryTerm(term=g.term, definition=g.definition)
+                for g in self.list_glossary()
+            ]
+            self._docs_cache = SemanticDocs(
+                entities=entities,
+                metrics=metrics,
+                glossary=glossary,
+                disambiguation_rules=[],
             )
-            for e in self.list_entities()
-        ]
-        metrics = [
-            MetricDoc(
-                name=m.name,
-                display_name=m.display_name,
-                synonyms=m.synonyms,
-                description=m.description,
-                unit=m.unit or None,
-                certified=m.certified,
-            )
-            for m in self.list_metrics()
-        ]
-        glossary = [
-            GlossaryTerm(term=g.term, definition=g.definition)
-            for g in self.list_glossary()
-        ]
-        docs = SemanticDocs(
-            entities=entities,
-            metrics=metrics,
-            glossary=glossary,
-            disambiguation_rules=[],
-        )
-        with self._docs_cache_lock:
-            self._docs_cache = docs
-        return docs
+            return self._docs_cache
 
 
 # Module-level singleton — import this instead of constructing a new instance
