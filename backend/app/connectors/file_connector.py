@@ -169,8 +169,11 @@ class FileConnector(BaseConnector):
         product_catalog_pim = pd.DataFrame(pim)  # noqa: F841
 
         con = duckdb.connect(database=":memory:")
-        con.register("dipendenti_hr", dipendenti_hr)
-        con.register("product_catalog_pim", product_catalog_pim)
-        rel = con.execute(sql, list(params) if params else [])
-        columns = [desc[0] for desc in rel.description]
-        return [dict(zip(columns, row)) for row in rel.fetchall()]
+        try:
+            con.register("dipendenti_hr", dipendenti_hr)
+            con.register("product_catalog_pim", product_catalog_pim)
+            rel = con.execute(sql, list(params) if params else [])
+            columns = [desc[0] for desc in rel.description]
+            return [dict(zip(columns, row)) for row in rel.fetchall()]
+        finally:
+            con.close()
