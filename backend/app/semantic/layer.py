@@ -619,7 +619,7 @@ def _load_term_map() -> list[tuple[re.Pattern[str], str]]:
             (re.compile(pattern), replacement)
             for pattern, replacement in data.get("mappings", [])
         ]
-    except (FileNotFoundError, KeyError, ValueError):
+    except (FileNotFoundError, KeyError, ValueError, re.error):
         return []
 
 

@@ -160,6 +160,51 @@ class TestNormalizeEnglishTerms:
         assert result == ""
 
 
+# ── _load_term_map ────────────────────────────────────────────────────────────
+
+
+class TestLoadTermMap:
+    def test_invalid_regex_in_json_returns_empty_list(self, tmp_path, monkeypatch):
+        """A bad regex pattern in term_map.json must not crash the import."""
+        import json
+        from app.semantic import layer as _layer
+
+        bad_json = tmp_path / "term_map.json"
+        bad_json.write_text(
+            json.dumps({"mappings": [["[invalid_regex(", "replacement"]]}),
+            encoding="utf-8",
+        )
+        # Monkeypath __file__ parent so _load_term_map reads our bad file
+        import pathlib
+
+        monkeypatch.setattr(
+            pathlib.Path,
+            "__truediv__",
+            lambda self, other: (
+                bad_json if str(other) == "term_map.json" else self._old_truediv(other)
+            ),
+        )
+        # Call directly — must return [] rather than raising re.error
+        result = _layer._load_term_map()
+        assert result == []
+
+    def test_missing_file_returns_empty_list(self, tmp_path, monkeypatch):
+        """A missing term_map.json must return [] not raise."""
+        from app.semantic import layer as _layer
+        import pathlib
+
+        missing = tmp_path / "no_such_file.json"
+        monkeypatch.setattr(
+            pathlib.Path,
+            "__truediv__",
+            lambda self, other: (
+                missing if str(other) == "term_map.json" else self._old_truediv(other)
+            ),
+        )
+        result = _layer._load_term_map()
+        assert result == []
+
+
 # ── _RuleParser.parse() ───────────────────────────────────────────────────────
 
 
