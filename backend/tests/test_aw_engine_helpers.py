@@ -160,3 +160,26 @@ class TestBuildTableSourceMap:
         catalog.get_entity.return_value = None
         result = _build_table_source_map(catalog)
         assert "MissingEntity" not in result
+
+    def test_multiple_entities_each_mapped(self):
+        catalog = MagicMock()
+        catalog.list_entities.return_value = ["SalesOrder", "Customer"]
+
+        def _get(name):
+            e = MagicMock()
+            e.sources = [{"source": "erp" if name == "SalesOrder" else "crm"}]
+            return e
+
+        catalog.get_entity.side_effect = _get
+        result = _build_table_source_map(catalog)
+        assert result["SalesOrder"] == "erp"
+        assert result["Customer"] == "crm"
+
+    def test_only_first_source_used_when_multiple(self):
+        catalog = MagicMock()
+        catalog.list_entities.return_value = ["Multi"]
+        entity = MagicMock()
+        entity.sources = [{"source": "primary"}, {"source": "secondary"}]
+        catalog.get_entity.return_value = entity
+        result = _build_table_source_map(catalog)
+        assert result["Multi"] == "primary"
