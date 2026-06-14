@@ -1240,8 +1240,14 @@ def _audit(
 ) -> None:
     """Record an audit entry for a mutating action. Never raises."""
     ip = ""
-    if request is not None and request.client is not None:
-        ip = request.client.host or ""
+    if request is not None:
+        # Prefer the real-client IP forwarded by a trusted reverse proxy (nginx
+        # sets X-Real-IP; other proxies may use X-Forwarded-For instead).
+        ip = (
+            request.headers.get("X-Real-IP")
+            or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+            or (request.client.host if request.client else "")
+        )
     get_audit_store().log(
         username=user.username,
         action=action,
