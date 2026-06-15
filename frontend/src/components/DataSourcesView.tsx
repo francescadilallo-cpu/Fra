@@ -810,7 +810,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                         ? <Loader2 className="w-4 h-4 animate-spin text-teal-500 flex-shrink-0" />
                         : <div className="w-4 h-4 rounded-full border-2 border-slate-200 flex-shrink-0" />
                       }
-                      <span dangerouslySetInnerHTML={{ __html: step }} />
+                      <span>{step}</span>
                     </div>
                   )
                 })}
