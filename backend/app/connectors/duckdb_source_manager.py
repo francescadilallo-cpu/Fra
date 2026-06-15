@@ -1098,7 +1098,8 @@ class DuckDBSourceManager:
             # Fallback: try DuckDB postgres_scanner
             safe_schema = schema.replace('"', '""')
             conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
-            conn.execute(f"ATTACH '{dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
+            safe_dsn = dsn.replace("'", "''")
+            conn.execute(f"ATTACH '{safe_dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
             for table in tables:
                 safe_table = table.replace('"', '""')
                 conn.execute(
