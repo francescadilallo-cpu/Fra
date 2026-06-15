@@ -92,17 +92,26 @@ SEMANTIC_RATE_LIMIT = os.getenv("SEMANTIC_RATE_LIMIT", "").strip() or "60/minute
 DEFAULT_SECTOR = os.getenv("DEFAULT_SECTOR", "manufacturing")
 
 
+def _real_ip(request: Request) -> str:
+    """Extract the real client IP, honouring reverse-proxy forwarding headers."""
+    return (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or get_remote_address(request)
+    )
+
+
 def _login_limit_key(request: Request) -> str:
-    return f"ip:{get_remote_address(request)}"
+    return f"ip:{_real_ip(request)}"
 
 
 def _semantic_limit_key(request: Request) -> str:
-    # Prefer token fingerprint as user key; fallback to remote IP.
+    # Prefer token fingerprint as user key; fallback to real client IP.
     auth = (request.headers.get("authorization") or "").strip()
     if auth.lower().startswith("bearer "):
         token_fingerprint = hashlib.sha256(auth.encode("utf-8")).hexdigest()[:20]
         return f"token:{token_fingerprint}"
-    return f"ip:{get_remote_address(request)}"
+    return f"ip:{_real_ip(request)}"
 
 
 def _rate_limit_storage_uri() -> str | None:
