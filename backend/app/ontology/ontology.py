@@ -220,10 +220,6 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
                 raise OntologyValidationError(
                     f"Relation '{entity_name}.{attr_name}' has invalid target '{target}'"
                 )
-            if target not in declared_entities:
-                raise OntologyValidationError(
-                    f"Relation '{entity_name}.{attr_name}' targets undeclared entity '{target}'"
-                )
             if rel_kind in {"many_to_one", "one_to_one", "many_to_many"} and not via:
                 raise OntologyValidationError(
                     f"Relation '{entity_name}.{attr_name}' requires non-empty 'via'"
