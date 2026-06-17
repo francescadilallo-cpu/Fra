@@ -655,7 +655,7 @@ export default function ProcessView() {
                     <Icon className={`w-6 h-6 ${style.color}`} />
                   </div>
                   <p className={`text-sm font-bold ${style.color}`}>{stage.label}</p>
-                  <p className="text-2xl font-bold text-slate-900 mt-1">{funnelItem?.count.toLocaleString('en-US') ?? 0}</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{(funnelItem?.count ?? ('count' in stage ? (stage as {count: number}).count : 0)).toLocaleString('en-US')}</p>
                   {funnelItem?.value ? (
                     <p className="text-xs text-slate-500 mt-0.5">{fmt(funnelItem.value)}</p>
                   ) : (
