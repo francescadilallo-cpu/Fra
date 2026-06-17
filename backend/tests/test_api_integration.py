@@ -1404,3 +1404,81 @@ def test_system_prompt_live_mode_excludes_demo_tables(client, live_mode_headers)
     assert len(live_prompt) <= len(demo_prompt), (
         "live prompt must not be longer than demo prompt (demo schema leaked)"
     )
+
+
+# ── Live onboarding end-to-end ─────────────────────────────────────────────────
+
+
+def test_live_onboarding_add_csv_and_verify(client, admin_headers, live_mode_headers):
+    """Full live-mode onboarding: add CSV source → verify it appears in status
+    and live-config → delete → verify it disappears."""
+    import uuid
+
+    source_id = f"live-onboard-{uuid.uuid4().hex[:10]}"
+    table_name = f"onboard_{uuid.uuid4().hex[:8]}"
+    inline_csv = "order_id,amount,status\n1,100,shipped\n2,200,pending\n3,50,shipped"
+
+    # 1. Add the CSV source as admin — triggers auto-rebuild.
+    add_resp = client.post(
+        "/api/sources",
+        json={
+            "connector_type": "csv",
+            "label": "Onboarding Test CSV",
+            "params": {
+                "id": source_id,
+                "table_name": table_name,
+                "inline_csv": inline_csv,
+            },
+        },
+        headers=admin_headers,
+    )
+    assert add_resp.status_code == 201, add_resp.text
+    body = add_resp.json()
+    assert body["id"] == source_id
+    assert body["connector_type"] == "csv"
+
+    try:
+        # 2. Source must appear in the listing (both admin and live-mode user).
+        sources_resp = client.get("/api/sources", headers=live_mode_headers)
+        assert sources_resp.status_code == 200, sources_resp.text
+        ids = [s["id"] for s in sources_resp.json()]
+        assert source_id in ids, "newly added source must appear in /api/sources"
+
+        # 3. After auto-rebuild, the semantic status must list the new entity.
+        # DuckDB namespaces tables as "{source_id}.{table_name}"; the entity name
+        # is the bare table_name. Either form confirms the source was ingested.
+        status_resp = client.get("/api/semantic/status", headers=live_mode_headers)
+        assert status_resp.status_code == 200, status_resp.text
+        status_body = status_resp.json()
+        assert status_body["loaded"] is True
+        assert table_name in status_body.get("entities", []), (
+            f"entity '{table_name}' must appear in semantic status after CSV ingest"
+        )
+
+        # 4. The live-config ontology nodes must include the new table.
+        lc_resp = client.get("/api/semantic/live-config", headers=live_mode_headers)
+        assert lc_resp.status_code == 200, lc_resp.text
+        db_tables = [n["data"]["db_table"] for n in lc_resp.json()["ontology"]["nodes"]]
+        assert table_name in db_tables, (
+            "live-config ontology nodes must include the newly added table"
+        )
+
+        # 5. The live ask must NOT return 409 now that we have a real source.
+        ask_resp = client.post(
+            "/api/semantic/ask",
+            json={"question": "How many orders?"},
+            headers=live_mode_headers,
+        )
+        assert ask_resp.status_code != 409, (
+            "ask must not return 409 after a real source is connected"
+        )
+
+    finally:
+        # 6. Cleanup: delete the source (also triggers a rebuild).
+        del_resp = client.delete(f"/api/sources/{source_id}", headers=admin_headers)
+        assert del_resp.status_code == 204, del_resp.text
+        # Verify the source is gone.
+        ids_after = [
+            s["id"] for s in client.get("/api/sources", headers=admin_headers).json()
+        ]
+        assert source_id not in ids_after
