@@ -676,6 +676,9 @@ class MetadataCatalog:
                             row.name.lower(),
                         ),
                         "columns": [a.attribute for a in attrs],
+                        "column_types": {
+                            a.attribute: a.data_type or "unknown" for a in attrs
+                        },
                         "description": row.description or "",
                         "user_description": getattr(row, "user_description", "") or "",
                         "context_notes": getattr(row, "context_notes", "") or "",

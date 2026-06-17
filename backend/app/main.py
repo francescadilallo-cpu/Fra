@@ -3517,7 +3517,10 @@ def get_live_config(
                     "db_table": e["table"],
                     "row_count": e.get("record_count", 0),
                     "properties": [
-                        {"name": col, "type": "string"}
+                        {
+                            "name": col,
+                            "type": e.get("column_types", {}).get(col, "string"),
+                        }
                         for col in e.get("columns", [])[:15]
                     ],
                 },
