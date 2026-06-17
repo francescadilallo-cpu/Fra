@@ -9,7 +9,7 @@ import { useAgentStore, countFindings } from '../data/agentStore'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
-import { semanticStatus, getLiveConfig, getDraft, type SemanticStatus, type LiveConfig, type SemanticDraft } from '../api/semantic'
+import { semanticStatus, getLiveConfig, getDraft, getDataStoreStatus, type SemanticStatus, type LiveConfig, type SemanticDraft, type DataStoreStatus } from '../api/semantic'
 import type { NavTab } from '../types'
 import type { SectorId } from '../data/sectors'
 
@@ -345,15 +345,18 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
 
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   const [draft, setDraft] = useState<SemanticDraft | null>(null)
+  const [storeStatus, setStoreStatus] = useState<DataStoreStatus | null>(null)
   const [reporting, setReporting] = useState(false)
 
   useEffect(() => {
     Promise.all([
       getLiveConfig().catch(() => null),
       getDraft().catch(() => null),
-    ]).then(([config, draft]) => {
+      IS_DEMO_MODE ? Promise.resolve(null) : getDataStoreStatus().catch(() => null),
+    ]).then(([config, draftData, status]) => {
       if (config) setLiveConfig(config)
-      if (draft) setDraft(draft)
+      if (draftData) setDraft(draftData)
+      if (status && !status.error) setStoreStatus(status)
     })
   }, [])
 
@@ -517,13 +520,22 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
 
   const kpis = IS_DEMO_MODE ? demoKpis : liveKpis
 
-  // Data sources from live config connectors
-  const sources = liveConfig?.connectors.map(name => ({
-    name,
-    type: 'Database',
-    tables: 0,
-    rows: '—',
-  })) ?? []
+  // Data sources from live config connectors, enriched with real counts from storeStatus
+  const sources = (liveConfig?.connectors ?? []).map(name => {
+    if (!storeStatus) return { name, type: 'Database', tables: 0, rows: '—' }
+    const pfx = name.toLowerCase()
+    const matchedTables = storeStatus.tables.filter(t => t.toLowerCase().startsWith(pfx + '_') || t.toLowerCase() === pfx)
+    const tableCount = matchedTables.length > 0 ? matchedTables.length : storeStatus.tables.length
+    const rowSum = matchedTables.length > 0
+      ? matchedTables.reduce((s, t) => s + (storeStatus.row_counts[t] ?? 0), 0)
+      : storeStatus.total_rows
+    const rowLabel = rowSum >= 1_000_000
+      ? `${(rowSum / 1_000_000).toFixed(1)}M`
+      : rowSum >= 1_000
+        ? `${(rowSum / 1_000).toFixed(1)}K`
+        : rowSum.toLocaleString('en-US')
+    return { name, type: 'Database', tables: tableCount, rows: rowLabel }
+  })
 
   // Recent records from draft entities
   const records: RecordItem[] = draft?.entities.slice(0, 5).map((e, i) => ({
@@ -763,7 +775,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
               <strong className={pipelineLastRun ? 'text-teal-600' : 'text-slate-600'}>
                 {pipelineLastRun
                   ? relativeTime(pipelineLastRun)
-                  : IS_DEMO_MODE ? `today, 0${trendPct > 0 ? '9' : '8'}:14` : 'Never'}
+                  : !IS_DEMO_MODE && liveConfig?.built_at
+                    ? relativeTime(new Date(liveConfig.built_at))
+                    : IS_DEMO_MODE ? `today, 0${trendPct > 0 ? '9' : '8'}:14` : 'Never'}
               </strong>
             </span>
             {pipelineLastRun && (

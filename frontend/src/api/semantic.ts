@@ -459,6 +459,19 @@ export interface LiveConfig {
 export const getLiveConfig = (): Promise<LiveConfig> =>
   http.get<LiveConfig>('/api/semantic/live-config').then(r => r.data)
 
+export interface DataStoreStatus {
+  source_type: string
+  built_at: string | null
+  tables: string[]
+  row_counts: Record<string, number>
+  total_rows: number
+  notes: string
+  error?: string
+}
+
+export const getDataStoreStatus = (): Promise<DataStoreStatus> =>
+  http.get<DataStoreStatus>('/api/data/store/status').then(r => r.data)
+
 // ── Example Questions ─────────────────────────────────────────────────────────
 
 export interface ExampleQuestion {
