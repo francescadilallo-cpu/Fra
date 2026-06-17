@@ -1338,3 +1338,69 @@ def test_live_config_shows_user_source_connector(client, live_mode_headers):
         )
     finally:
         registry.remove(probe_id)
+
+
+# ── /api/semantic/example-questions ───────────────────────────────────────────
+
+
+def test_example_questions_is_public(client):
+    # This endpoint has no auth — the frontend uses it on the landing screen.
+    resp = client.get("/api/semantic/example-questions")
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
+def test_example_questions_structure(client):
+    resp = client.get("/api/semantic/example-questions")
+    assert resp.status_code == 200, resp.text
+    for item in resp.json():
+        assert "question" in item
+        assert "description" in item
+        assert isinstance(item["question"], str)
+
+
+def test_example_questions_live_mode_is_empty(client, live_mode_headers):
+    # Live workspace with no user data must return [] so the UI shows a
+    # clean "connect your data" prompt instead of demo questions.
+    resp = client.get(
+        "/api/semantic/example-questions",
+        headers=live_mode_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [], (
+        "example-questions must be empty for a live workspace with no sources"
+    )
+
+
+# ── /api/semantic/system-prompt ───────────────────────────────────────────────
+
+
+def test_system_prompt_is_public(client):
+    resp = client.get("/api/semantic/system-prompt")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "prompt" in body
+    assert isinstance(body["prompt"], str)
+    assert len(body["prompt"]) > 0
+
+
+def test_system_prompt_live_mode_excludes_demo_tables(client, live_mode_headers):
+    # The system prompt fed to the LLM in direct mode must not expose demo
+    # table names to live-mode users (information leakage + confusing schema).
+    demo_resp = client.get("/api/semantic/system-prompt")
+    live_resp = client.get(
+        "/api/semantic/system-prompt",
+        headers=live_mode_headers,
+    )
+    assert live_resp.status_code == 200, live_resp.text
+    live_prompt = live_resp.json()["prompt"]
+    # Key demo table names must not appear in the live prompt.
+    for demo_table in ("sales_order_header", "dipendenti_hr", "product_catalog_pim"):
+        assert demo_table not in live_prompt, (
+            f"demo table '{demo_table}' must not appear in live-mode system prompt"
+        )
+    # Ensure the live prompt is shorter / simpler than the demo one.
+    demo_prompt = demo_resp.json()["prompt"]
+    assert len(live_prompt) <= len(demo_prompt), (
+        "live prompt must not be longer than demo prompt (demo schema leaked)"
+    )
