@@ -3365,12 +3365,21 @@ def _build_process_stages(entities: list[dict]) -> list[dict]:
     seen_keys: set[str] = set()
     stages = []
     for e in entities:
-        tbl = e.get("table", "").lower()
+        raw = e.get("table", "").lower()
+        # Strip DWH prefixes/suffixes so "fact_orders" matches "order", etc.
+        tbl = (
+            raw.removeprefix("fact_")
+            .removeprefix("dim_")
+            .removeprefix("stg_")
+            .removesuffix("_fact")
+            .removesuffix("_detail")
+            .removesuffix("_line")
+        )
         for kw, label in stage_keywords.items():
             if kw in tbl and kw not in seen_keys:
                 seen_keys.add(kw)
                 stages.append(
-                    {"key": kw, "label": label, "count": e.get("record_count", 0)}
+                    {"key": kw, "label": label, "count": e.get("record_count") or 0}
                 )
                 break
     return stages[:5]
