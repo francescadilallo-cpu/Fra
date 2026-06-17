@@ -1699,19 +1699,28 @@ def semantic_ask(
 
     hidden = _hidden_demo_tables(_current_user)
     if hidden:
-        _ensure_semantic_loaded()
-        catalog = _semantic_state.get("catalog")
-        draft_entities = catalog.get_draft_entities() if catalog else []
-        if not any(e["table"] not in hidden for e in draft_entities):
-            # Live workspace with no real sources: answering would silently
-            # use the demo dataset.
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "No data sources connected. Add a data source before "
-                    "asking questions."
-                ),
-            )
+        from .connectors.source_registry import get_source_registry
+
+        # A registered non-default source counts as "connected" even before a
+        # reindex — the hidden-tables guard will prevent demo data leakage, and
+        # the ask can fail gracefully if the schema isn't indexed yet.
+        has_live_source = any(
+            not cfg.is_default for cfg in get_source_registry().list()
+        )
+        if not has_live_source:
+            _ensure_semantic_loaded()
+            catalog = _semantic_state.get("catalog")
+            draft_entities = catalog.get_draft_entities() if catalog else []
+            if not any(e["table"] not in hidden for e in draft_entities):
+                # Live workspace with no real sources: answering would silently
+                # use the demo dataset.
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "No data sources connected. Add a data source before "
+                        "asking questions."
+                    ),
+                )
 
     merged_context = {"session_id": req.session_id, **(req.context or {})}
     redis_client = _get_semantic_redis_client()

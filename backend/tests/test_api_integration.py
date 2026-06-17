@@ -1223,3 +1223,47 @@ def test_semantic_sources_live_mode_is_empty(
     live = client.get("/api/semantic/sources", headers=live_mode_headers)
     assert live.status_code == 200, live.text
     assert live.json() == []
+
+
+def test_live_ask_returns_409_when_no_real_sources(client, live_mode_headers):
+    # A live-mode user with no user-added sources must get 409 — silently
+    # using the demo dataset would produce nonsense business answers.
+    resp = client.post(
+        "/api/semantic/ask",
+        json={"question": "How many orders do we have?"},
+        headers=live_mode_headers,
+    )
+    assert resp.status_code == 409, resp.text
+    assert "data source" in resp.json().get("detail", "").lower()
+
+
+def test_live_ask_bypasses_409_when_user_source_registered(client, live_mode_headers):
+    import uuid
+
+    from app.connectors.source_registry import SourceConfig, get_source_registry
+
+    registry = get_source_registry()
+    probe_id = f"csv-live-ask-probe-{uuid.uuid4().hex[:12]}"
+    registry.upsert(
+        SourceConfig(
+            id=probe_id,
+            connector_type="csv",
+            label="orders.csv",
+            params={"table_name": "my_orders", "inline_csv": "id,amount\n1,100"},
+            is_default=False,
+        )
+    )
+    try:
+        resp = client.post(
+            "/api/semantic/ask",
+            json={"question": "How many orders do we have?"},
+            headers=live_mode_headers,
+        )
+        # 409 must NOT fire — user has a real connected source.
+        # The ask may fail for other reasons (no LLM key, unknown intent, etc.)
+        # but not with the "no data sources" guard.
+        assert resp.status_code != 409, (
+            "live ask must not return 409 when a user source is registered"
+        )
+    finally:
+        registry.remove(probe_id)
