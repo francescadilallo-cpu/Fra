@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   TrendingUp, ShoppingCart, FileText, Users, Database,
   CheckCircle, Activity, Package, BotMessageSquare,
-  Zap, ArrowUp, ArrowDown, Download, Sparkles, X, Layers, RefreshCw,
+  Zap, ArrowUp, ArrowDown, Download, Sparkles, X, Layers, RefreshCw, Calendar,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useAgentStore, countFindings } from '../data/agentStore'
@@ -448,6 +448,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       color: 'text-emerald-600', bg: 'bg-emerald-50',
       spark: [] as number[], sparkColor: '#10b981', trend: 0,
     }))
+  const dateRangeStat = (liveConfig?.kpi_stats ?? []).find(k => k.type === 'date_range')
   const liveKpis = [
     {
       label: funnel[0]?.stage ?? 'Records ingested',
@@ -470,7 +471,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       color: 'text-teal-600', bg: 'bg-teal-50',
       spark: [] as number[], sparkColor: '#0d9488', trend: 0,
     }] : kpiStatCards.length > 1 ? [kpiStatCards[1]] : []),
-    {
+    dateRangeStat ? {
+      label: dateRangeStat.label,
+      value: String(dateRangeStat.value),
+      icon: Calendar,
+      color: 'text-amber-600', bg: 'bg-amber-50',
+      spark: [] as number[], sparkColor: '#d97706', trend: 0,
+    } : {
       label: 'Entities in semantic layer',
       value: `${draft?.entities.length ?? 0}`,
       icon: Users,
@@ -574,6 +581,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       dot: 'bg-teal-500',
       message: `${liveConfig.connectors.length} data source${liveConfig.connectors.length !== 1 ? 's' : ''} connected: ${liveConfig.connectors.join(', ')}`,
       time: 'connected',
+      status: 'Active',
+    } : null,
+    storeStatus && !storeStatus.error ? {
+      id: 5,
+      dot: 'bg-indigo-500',
+      message: `Data store: ${storeStatus.total_rows.toLocaleString('en-US')} rows across ${storeStatus.tables.length} table${storeStatus.tables.length !== 1 ? 's' : ''}`,
+      time: storeStatus.built_at ? new Date(storeStatus.built_at).toLocaleDateString() : 'loaded',
       status: 'Active',
     } : null,
   ].filter((a): a is ActivityItem => a !== null)
@@ -720,11 +734,13 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           </div>
         </div>
 
-        {/* Recent Records */}
+        {/* Recent Records / Data Entities */}
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-4">
-            <ShoppingCart className="w-4 h-4 text-purple-600" />
-            Recent Records
+            {IS_DEMO_MODE
+              ? <ShoppingCart className="w-4 h-4 text-purple-600" />
+              : <Database className="w-4 h-4 text-teal-600" />}
+            {IS_DEMO_MODE ? 'Recent Records' : 'Data Entities'}
           </h2>
           <div className="space-y-3">
             {records.map(r => (
@@ -734,7 +750,11 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                   <p className="text-xs text-slate-400 mt-0.5">{r.sub}</p>
                 </div>
                 <div className="text-right ml-3 flex-shrink-0">
-                  {r.value !== undefined && <p className="text-sm font-semibold text-slate-900">{fmt(r.value)}</p>}
+                  {r.value !== undefined && (
+                    IS_DEMO_MODE
+                      ? <p className="text-sm font-semibold text-slate-900">{fmt(r.value)}</p>
+                      : <p className="text-sm font-semibold text-slate-900">{r.value.toLocaleString('en-US')} <span className="text-[10px] font-normal text-slate-400">rows</span></p>
+                  )}
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${STATUS_COLORS[r.status] ?? 'bg-slate-100 text-slate-600 border border-slate-200'}`}>{r.status}</span>
                 </div>
               </div>
