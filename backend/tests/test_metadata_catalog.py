@@ -538,13 +538,13 @@ class TestQueryTemplates:
         assert templates[0]["description"] == "new desc"
         assert templates[0]["sql_query"] == "SELECT 2"
 
-    def test_delete_template_soft_deletes(self, cat):
+    def test_delete_template_removes_it(self, cat):
         created = cat.create_template(
             name="q2", description="", sql_query="SELECT 1", keywords=[], sources=[]
         )
         cat.delete_template(created["id"])
         assert cat.list_templates(active_only=True) == []
-        assert len(cat.list_templates(active_only=False)) == 1
+        assert cat.list_templates(active_only=False) == []
 
     def test_upsert_auto_template(self, cat):
         count = cat.upsert_auto_templates(
@@ -601,8 +601,8 @@ class TestQueryTemplates:
                 sources=[],
             )
 
-    def test_create_duplicate_of_soft_deleted_raises_value_error(self, cat):
-        # A soft-deleted template still blocks name re-use.
+    def test_create_after_delete_succeeds(self, cat):
+        # Hard delete frees the name so it can be reused immediately.
         created = cat.create_template(
             name="tpl_gone",
             description="",
@@ -610,15 +610,15 @@ class TestQueryTemplates:
             keywords=[],
             sources=[],
         )
-        cat.delete_template(created["id"])  # soft-delete (is_active=0)
-        with pytest.raises(ValueError, match="already exists"):
-            cat.create_template(
-                name="tpl_gone",
-                description="",
-                sql_query="SELECT 2",
-                keywords=[],
-                sources=[],
-            )
+        cat.delete_template(created["id"])
+        recreated = cat.create_template(
+            name="tpl_gone",
+            description="",
+            sql_query="SELECT 2",
+            keywords=[],
+            sources=[],
+        )
+        assert recreated["name"] == "tpl_gone"
 
     def test_row_count(self, cat):
         assert cat.row_count() == 0

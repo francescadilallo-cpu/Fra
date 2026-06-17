@@ -1673,3 +1673,418 @@ def test_sync_source_succeeds_for_existing(client, admin_headers):
     body = resp.json()
     assert body["id"] == source_id
     assert body["connector_type"] == defaults[0]["connector_type"]
+
+
+# ── /api/agents/custom ────────────────────────────────────────────────────────
+
+_AGENT_PAYLOAD = {
+    "id": "test-agent-001",
+    "sector_id": "test-sector",
+    "name": "Test Monitor Agent",
+    "description": "Created by integration test suite",
+    "template": "monitor",
+    "entities": ["Customer", "Order"],
+    "findings": [],
+    "actions": [],
+    "trigger": {"kind": "manual"},
+    "created_at": "2025-01-01T00:00:00+00:00",
+    "last_run_at": None,
+}
+
+
+def test_agents_list_requires_auth(client):
+    resp = client.get("/api/agents/custom")
+    assert resp.status_code == 401
+
+
+def test_agents_list_returns_list(client, user_headers):
+    resp = client.get(
+        "/api/agents/custom",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
+def test_agents_create_requires_auth(client):
+    resp = client.post("/api/agents/custom", json=_AGENT_PAYLOAD)
+    assert resp.status_code == 401
+
+
+def test_agents_create_succeeds(client, user_headers):
+    resp = client.post("/api/agents/custom", json=_AGENT_PAYLOAD, headers=user_headers)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["id"] == _AGENT_PAYLOAD["id"]
+    assert body["name"] == _AGENT_PAYLOAD["name"]
+    assert "created_at" in body
+    assert "updated_at" in body
+
+
+def test_agents_create_appears_in_list(client, user_headers):
+    resp = client.get(
+        "/api/agents/custom",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    ids = [a["id"] for a in resp.json()]
+    assert _AGENT_PAYLOAD["id"] in ids
+
+
+def test_agents_update_requires_auth(client):
+    resp = client.put(f"/api/agents/custom/{_AGENT_PAYLOAD['id']}", json=_AGENT_PAYLOAD)
+    assert resp.status_code == 401
+
+
+def test_agents_update_succeeds(client, user_headers):
+    updated = {**_AGENT_PAYLOAD, "name": "Updated Agent Name"}
+    resp = client.put(
+        f"/api/agents/custom/{_AGENT_PAYLOAD['id']}",
+        json=updated,
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "Updated Agent Name"
+
+
+def test_agents_update_unknown_404(client, user_headers):
+    resp = client.put(
+        "/api/agents/custom/nonexistent-agent-xyz",
+        json=_AGENT_PAYLOAD,
+        headers=user_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_agents_delete_requires_auth(client):
+    resp = client.delete(f"/api/agents/custom/{_AGENT_PAYLOAD['id']}")
+    assert resp.status_code == 401
+
+
+def test_agents_delete_succeeds(client, user_headers):
+    resp = client.delete(
+        f"/api/agents/custom/{_AGENT_PAYLOAD['id']}", headers=user_headers
+    )
+    assert resp.status_code == 204
+
+
+def test_agents_delete_removes_from_list(client, user_headers):
+    resp = client.get(
+        "/api/agents/custom",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    ids = [a["id"] for a in resp.json()]
+    assert _AGENT_PAYLOAD["id"] not in ids
+
+
+# ── /api/queries/saved ────────────────────────────────────────────────────────
+
+_QUERY_PAYLOAD = {
+    "id": "test-query-001",
+    "sector_id": "test-sector",
+    "query": "SELECT * FROM orders LIMIT 10",
+    "created_at": "2025-01-01T00:00:00+00:00",
+}
+
+
+def test_saved_queries_list_requires_auth(client):
+    resp = client.get("/api/queries/saved", params={"sector_id": "test-sector"})
+    assert resp.status_code == 401
+
+
+def test_saved_queries_list_returns_list(client, user_headers):
+    resp = client.get(
+        "/api/queries/saved",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
+def test_saved_queries_save_requires_auth(client):
+    resp = client.post("/api/queries/saved", json=_QUERY_PAYLOAD)
+    assert resp.status_code == 401
+
+
+def test_saved_queries_save_succeeds(client, user_headers):
+    resp = client.post("/api/queries/saved", json=_QUERY_PAYLOAD, headers=user_headers)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["id"] == _QUERY_PAYLOAD["id"]
+    assert body["query"] == _QUERY_PAYLOAD["query"]
+
+
+def test_saved_queries_save_appears_in_list(client, user_headers):
+    resp = client.get(
+        "/api/queries/saved",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    ids = [q["id"] for q in resp.json()]
+    assert _QUERY_PAYLOAD["id"] in ids
+
+
+def test_saved_queries_delete_requires_auth(client):
+    resp = client.delete(f"/api/queries/saved/{_QUERY_PAYLOAD['id']}")
+    assert resp.status_code == 401
+
+
+def test_saved_queries_delete_succeeds(client, user_headers):
+    resp = client.delete(
+        f"/api/queries/saved/{_QUERY_PAYLOAD['id']}", headers=user_headers
+    )
+    assert resp.status_code == 204
+
+
+def test_saved_queries_delete_removes_from_list(client, user_headers):
+    resp = client.get(
+        "/api/queries/saved",
+        params={"sector_id": "test-sector"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    ids = [q["id"] for q in resp.json()]
+    assert _QUERY_PAYLOAD["id"] not in ids
+
+
+# ── /api/semantic/templates ───────────────────────────────────────────────────
+
+_TEMPLATE_PAYLOAD = {
+    "name": "Integration Test Template",
+    "description": "Created by the integration test suite",
+    "sql_query": "SELECT id, total FROM orders LIMIT {limit}",
+    "keywords": ["orders", "total"],
+    "sources": ["SalesOrder"],
+}
+
+
+def test_templates_list_requires_auth(client):
+    resp = client.get("/api/semantic/templates")
+    assert resp.status_code == 401
+
+
+def test_templates_list_returns_list(client, user_headers):
+    resp = client.get("/api/semantic/templates", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
+def test_templates_create_requires_admin(client, user_headers):
+    resp = client.post(
+        "/api/semantic/templates", json=_TEMPLATE_PAYLOAD, headers=user_headers
+    )
+    assert resp.status_code == 403
+
+
+def test_templates_create_admin_succeeds(client, admin_headers):
+    resp = client.post(
+        "/api/semantic/templates", json=_TEMPLATE_PAYLOAD, headers=admin_headers
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["name"] == _TEMPLATE_PAYLOAD["name"]
+    assert "id" in body
+
+
+def test_templates_create_invalid_token_422(client, admin_headers):
+    bad = {**_TEMPLATE_PAYLOAD, "sql_query": "SELECT {bad_token} FROM orders"}
+    resp = client.post("/api/semantic/templates", json=bad, headers=admin_headers)
+    assert resp.status_code == 422
+
+
+def test_templates_update_requires_admin(client, user_headers, admin_headers):
+    templates = client.get("/api/semantic/templates", headers=admin_headers).json()
+    test_tpl = next(
+        (t for t in templates if t["name"] == _TEMPLATE_PAYLOAD["name"]), None
+    )
+    if test_tpl is None:
+        import pytest
+
+        pytest.skip("test template not found")
+    resp = client.patch(
+        f"/api/semantic/templates/{test_tpl['id']}",
+        json={"description": "updated desc"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 403
+
+
+def test_templates_update_admin_succeeds(client, admin_headers):
+    templates = client.get("/api/semantic/templates", headers=admin_headers).json()
+    test_tpl = next(
+        (t for t in templates if t["name"] == _TEMPLATE_PAYLOAD["name"]), None
+    )
+    if test_tpl is None:
+        import pytest
+
+        pytest.skip("test template not found")
+    resp = client.patch(
+        f"/api/semantic/templates/{test_tpl['id']}",
+        json={"description": "Updated by integration test"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["description"] == "Updated by integration test"
+
+
+def test_templates_update_unknown_404(client, admin_headers):
+    resp = client.patch(
+        "/api/semantic/templates/999999",
+        json={"description": "ghost"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_templates_delete_requires_admin(client, user_headers, admin_headers):
+    templates = client.get("/api/semantic/templates", headers=admin_headers).json()
+    test_tpl = next(
+        (t for t in templates if t["name"] == _TEMPLATE_PAYLOAD["name"]), None
+    )
+    if test_tpl is None:
+        import pytest
+
+        pytest.skip("test template not found")
+    resp = client.delete(
+        f"/api/semantic/templates/{test_tpl['id']}", headers=user_headers
+    )
+    assert resp.status_code == 403
+
+
+def test_templates_delete_admin_succeeds(client, admin_headers):
+    templates = client.get("/api/semantic/templates", headers=admin_headers).json()
+    test_tpl = next(
+        (t for t in templates if t["name"] == _TEMPLATE_PAYLOAD["name"]), None
+    )
+    if test_tpl is None:
+        import pytest
+
+        pytest.skip("test template not found")
+    resp = client.delete(
+        f"/api/semantic/templates/{test_tpl['id']}", headers=admin_headers
+    )
+    assert resp.status_code == 204
+
+
+# ── /api/semantic/draft/context ───────────────────────────────────────────────
+
+
+def test_context_docs_list_requires_auth(client):
+    resp = client.get("/api/semantic/draft/context")
+    assert resp.status_code == 401
+
+
+def test_context_docs_list_returns_list(client, user_headers):
+    resp = client.get("/api/semantic/draft/context", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    assert isinstance(resp.json(), list)
+
+
+def test_context_docs_add_requires_auth(client):
+    resp = client.post(
+        "/api/semantic/draft/context",
+        json={"title": "Test Doc", "content": "Test business context"},
+    )
+    assert resp.status_code == 401
+
+
+def test_context_docs_add_succeeds(client, user_headers):
+    resp = client.post(
+        "/api/semantic/draft/context",
+        json={
+            "title": "Integration Test Doc",
+            "content": "This is test business context for the integration test suite.",
+        },
+        headers=user_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["title"] == "Integration Test Doc"
+    assert "id" in body
+    assert "created_at" in body
+
+
+def test_context_docs_add_appears_in_list(client, user_headers):
+    resp = client.get("/api/semantic/draft/context", headers=user_headers)
+    assert resp.status_code == 200
+    titles = [d["title"] for d in resp.json()]
+    assert "Integration Test Doc" in titles
+
+
+def test_context_docs_delete_requires_auth(client, user_headers):
+    docs = client.get("/api/semantic/draft/context", headers=user_headers).json()
+    test_doc = next((d for d in docs if d["title"] == "Integration Test Doc"), None)
+    if test_doc is None:
+        import pytest
+
+        pytest.skip("test context doc not found")
+    resp = client.delete(f"/api/semantic/draft/context/{test_doc['id']}")
+    assert resp.status_code == 401
+
+
+def test_context_docs_delete_unknown_404(client, user_headers):
+    resp = client.delete(
+        "/api/semantic/draft/context/nonexistent-doc-id-xyz", headers=user_headers
+    )
+    assert resp.status_code == 404
+
+
+def test_context_docs_delete_succeeds(client, user_headers):
+    docs = client.get("/api/semantic/draft/context", headers=user_headers).json()
+    test_doc = next((d for d in docs if d["title"] == "Integration Test Doc"), None)
+    if test_doc is None:
+        import pytest
+
+        pytest.skip("test context doc not found")
+    resp = client.delete(
+        f"/api/semantic/draft/context/{test_doc['id']}", headers=user_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
+
+
+# ── PATCH /api/semantic/draft/metrics/{name} ──────────────────────────────────
+
+
+def test_patch_draft_metric_requires_auth(client):
+    resp = client.patch(
+        "/api/semantic/draft/metrics/revenue",
+        json={"description": "test"},
+    )
+    assert resp.status_code == 401
+
+
+def test_patch_draft_metric_unknown_404(client, user_headers):
+    resp = client.patch(
+        "/api/semantic/draft/metrics/NonExistentMetric999",
+        json={"description": "ghost metric"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_patch_draft_metric_updates_description(client, user_headers):
+    draft = client.get("/api/semantic/draft", headers=user_headers).json()
+    if not draft["metrics"]:
+        import pytest
+
+        pytest.skip("no metrics in demo catalog")
+    metric_name = draft["metrics"][0]["name"]
+    new_desc = "Integration-test metric description — set by test suite"
+    resp = client.patch(
+        f"/api/semantic/draft/metrics/{metric_name}",
+        json={"description": new_desc},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
+    updated = client.get("/api/semantic/draft", headers=user_headers).json()
+    match = next((m for m in updated["metrics"] if m["name"] == metric_name), None)
+    assert match is not None
+    assert match["description"] == new_desc

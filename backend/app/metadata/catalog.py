@@ -789,15 +789,11 @@ class MetadataCatalog:
         return result
 
     def delete_template(self, template_id: int) -> None:
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc).isoformat()
         with self._Session() as s:
             row = s.query(QueryTemplateRow).filter_by(id=template_id).first()
             if row is None:
                 raise KeyError(f"Template {template_id} not found")
-            row.is_active = 0
-            row.updated_at = now
+            s.delete(row)
             s.commit()
 
     def upsert_auto_templates(self, templates: list[dict]) -> int:
