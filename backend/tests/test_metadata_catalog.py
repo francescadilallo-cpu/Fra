@@ -538,13 +538,14 @@ class TestQueryTemplates:
         assert templates[0]["description"] == "new desc"
         assert templates[0]["sql_query"] == "SELECT 2"
 
-    def test_delete_template_removes_it(self, cat):
+    def test_delete_template_soft_deletes(self, cat):
         created = cat.create_template(
             name="q2", description="", sql_query="SELECT 1", keywords=[], sources=[]
         )
         cat.delete_template(created["id"])
         assert cat.list_templates(active_only=True) == []
-        assert cat.list_templates(active_only=False) == []
+        # Tombstone row still exists (is_active=0) so name stays reserved.
+        assert len(cat.list_templates(active_only=False)) == 1
 
     def test_upsert_auto_template(self, cat):
         count = cat.upsert_auto_templates(
@@ -601,8 +602,9 @@ class TestQueryTemplates:
                 sources=[],
             )
 
-    def test_create_after_delete_succeeds(self, cat):
-        # Hard delete frees the name so it can be reused immediately.
+    def test_create_after_delete_reactivates_tombstone(self, cat):
+        # Soft-delete leaves a tombstone; re-creating with the same name
+        # reactivates the row rather than inserting a new one.
         created = cat.create_template(
             name="tpl_gone",
             description="",
@@ -611,14 +613,46 @@ class TestQueryTemplates:
             sources=[],
         )
         cat.delete_template(created["id"])
+        assert cat.list_templates(active_only=True) == []
         recreated = cat.create_template(
             name="tpl_gone",
-            description="",
+            description="reborn",
             sql_query="SELECT 2",
             keywords=[],
             sources=[],
         )
         assert recreated["name"] == "tpl_gone"
+        assert recreated["sql_query"] == "SELECT 2"
+        # Only one row — tombstone reactivated, not a new duplicate.
+        assert len(cat.list_templates(active_only=False)) == 1
+
+    def test_upsert_auto_respects_tombstone(self, cat):
+        # A soft-deleted auto template must not be resurrected by upsert.
+        auto = cat.upsert_auto_templates(
+            [
+                {
+                    "name": "to_delete",
+                    "sql_query": "SELECT 1",
+                    "keywords": [],
+                    "sources": [],
+                }
+            ]
+        )
+        assert auto == 1
+        tpl_id = cat.list_templates()[0]["id"]
+        cat.delete_template(tpl_id)
+        count = cat.upsert_auto_templates(
+            [
+                {
+                    "name": "to_delete",
+                    "sql_query": "SELECT 2",
+                    "keywords": [],
+                    "sources": [],
+                }
+            ]
+        )
+        assert count == 0  # tombstone respected — not resurrected
+        assert cat.list_templates(active_only=True) == []
 
     def test_row_count(self, cat):
         assert cat.row_count() == 0

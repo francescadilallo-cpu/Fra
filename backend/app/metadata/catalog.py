@@ -745,8 +745,21 @@ class MetadataCatalog:
 
         now = datetime.now(timezone.utc).isoformat()
         with self._Session() as s:
-            if s.query(QueryTemplateRow).filter_by(name=name).first() is not None:
-                raise ValueError(f"A template named '{name}' already exists")
+            existing = s.query(QueryTemplateRow).filter_by(name=name).first()
+            if existing is not None:
+                if existing.is_active:
+                    raise ValueError(f"A template named '{name}' already exists")
+                # Reactivate a soft-deleted tombstone with the new content.
+                existing.description = description
+                existing.sql_query = sql_query
+                existing.keywords_json = json.dumps(keywords)
+                existing.sources_json = json.dumps(sources)
+                existing.updated_at = now
+                existing.is_active = 1
+                existing.auto_generated = 0
+                result = self._template_to_dict(existing)
+                s.commit()
+                return result
             row = QueryTemplateRow(
                 name=name,
                 description=description,
@@ -789,11 +802,17 @@ class MetadataCatalog:
         return result
 
     def delete_template(self, template_id: int) -> None:
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
         with self._Session() as s:
             row = s.query(QueryTemplateRow).filter_by(id=template_id).first()
-            if row is None:
+            if row is None or not row.is_active:
                 raise KeyError(f"Template {template_id} not found")
-            s.delete(row)
+            # Soft-delete: leave a tombstone so upsert_auto_templates and
+            # seed_default_templates cannot silently resurrect the name.
+            row.is_active = 0
+            row.updated_at = now
             s.commit()
 
     def upsert_auto_templates(self, templates: list[dict]) -> int:
@@ -814,6 +833,8 @@ class MetadataCatalog:
             for tpl in templates:
                 existing = s.query(QueryTemplateRow).filter_by(name=tpl["name"]).first()
                 if existing is not None:
+                    if not existing.is_active:
+                        continue  # soft-deleted tombstone — user explicitly removed it
                     if not existing.auto_generated:
                         continue  # user-owned — do not overwrite
                     existing.sql_query = tpl["sql_query"]
@@ -862,6 +883,8 @@ class MetadataCatalog:
             for tpl in templates:
                 existing = s.query(QueryTemplateRow).filter_by(name=tpl["name"]).first()
                 if existing is not None:
+                    if not existing.is_active:
+                        continue  # soft-deleted tombstone — user explicitly removed it
                     superseded = [q.strip() for q in migrations.get(tpl["name"], [])]
                     if superseded and (existing.sql_query or "").strip() in superseded:
                         existing.sql_query = tpl["sql_query"]
