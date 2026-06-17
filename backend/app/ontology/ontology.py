@@ -183,9 +183,9 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
 
     known_entities = set(_ENTITY_REGISTRY.keys())
     declared_entities = set(entities.keys())
-    # A relation may target any canonical entity or any custom entity declared
-    # in this YAML (e.g. Supplier, Vendor). Only targets that are neither are
-    # treated as structurally invalid.
+    # recognizable_entities is used for the first-pass "completely unknown entity"
+    # check; a separate guard enforces that all targets must be explicitly
+    # declared in this YAML (registry presence alone is not sufficient).
     recognizable_entities = known_entities | declared_entities
 
     for entity_name, entity_cfg in entities.items():
@@ -219,6 +219,10 @@ def _validate_yaml_schema(data: dict[str, Any]) -> None:
             if not target or target not in recognizable_entities:
                 raise OntologyValidationError(
                     f"Relation '{entity_name}.{attr_name}' has invalid target '{target}'"
+                )
+            if target not in declared_entities:
+                raise OntologyValidationError(
+                    f"Relation '{entity_name}.{attr_name}' targets undeclared entity '{target}'"
                 )
             if rel_kind in {"many_to_one", "one_to_one", "many_to_many"} and not via:
                 raise OntologyValidationError(
