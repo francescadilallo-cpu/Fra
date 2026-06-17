@@ -3133,106 +3133,111 @@ def _build_live_kpi_stats(entities: list[dict]) -> list[dict]:
     mgr = get_source_manager(_SCENARIO_PATH)
     cards: list[dict] = []
 
-    for entity in entities[:8]:
-        if len(cards) >= 6:
-            break
-        table = entity.get("table", "")
-        label = entity.get("name") or table
-        record_count = entity.get("record_count", 0)
-        if not table or not _FUNNEL_IDENT_RE.match(table) or record_count == 0:
-            continue
+    # One shared connection for all queries — avoids repeated open/close overhead.
+    conn = None
+    try:
+        conn = mgr.get_connection()
+    except Exception as exc:
+        logger.debug("KPI stats: could not open DuckDB connection: %s", exc)
+        return []
 
-        columns = [c for c in entity.get("columns", []) if isinstance(c, str)]
+    try:
+        for entity in entities[:8]:
+            if len(cards) >= 6:
+                break
+            table = entity.get("table", "")
+            label = entity.get("name") or table
+            record_count = entity.get("record_count", 0)
+            if not table or not _FUNNEL_IDENT_RE.match(table) or record_count == 0:
+                continue
 
-        # -- Row-count card (always available) --------------------------------
-        cards.append(
-            {
-                "label": f"{label} rows",
-                "value": record_count,
-                "unit": "rows",
-                "type": "count",
-            }
-        )
+            columns = [c for c in entity.get("columns", []) if isinstance(c, str)]
 
-        # -- Revenue/amount SUM card ------------------------------------------
-        amount_col = next(
-            (
-                c
-                for c in columns
-                if any(sub in c.lower() for sub in _KPI_AMOUNT_SUBSTRINGS)
-            ),
-            None,
-        )
-        if amount_col and _FUNNEL_IDENT_RE.match(amount_col):
-            try:
-                conn = mgr.get_connection()
+            # -- Row-count card (always available) --------------------------------
+            cards.append(
+                {
+                    "label": f"{label} rows",
+                    "value": record_count,
+                    "unit": "rows",
+                    "type": "count",
+                }
+            )
+
+            # -- Revenue/amount SUM card ------------------------------------------
+            amount_col = next(
+                (
+                    c
+                    for c in columns
+                    if any(sub in c.lower() for sub in _KPI_AMOUNT_SUBSTRINGS)
+                ),
+                None,
+            )
+            if amount_col and _FUNNEL_IDENT_RE.match(amount_col) and len(cards) < 6:
                 try:
                     result = conn.execute(
                         f'SELECT SUM(CAST("{amount_col}" AS DOUBLE)) FROM "{table}"'  # noqa: S608
                     ).fetchone()
-                finally:
-                    conn.close()
-                if result and result[0] is not None:
-                    val = float(result[0])
-                    cards.append(
-                        {
-                            "label": f"Total {amount_col.replace('_', ' ').title()}",
-                            "value": round(val, 2),
-                            "unit": "",
-                            "type": "sum",
-                        }
+                    if result and result[0] is not None:
+                        val = float(result[0])
+                        cards.append(
+                            {
+                                "label": f"Total {amount_col.replace('_', ' ').title()}",
+                                "value": round(val, 2),
+                                "unit": "",
+                                "type": "sum",
+                            }
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "KPI sum skipped for %s.%s: %s", table, amount_col, exc
                     )
-            except Exception as exc:
-                logger.debug("KPI sum skipped for %s.%s: %s", table, amount_col, exc)
 
-        # -- Date range card --------------------------------------------------
-        date_col = next(
-            (
-                c
-                for c in columns
-                if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
-                and c.lower()
-                not in {
-                    "updated_at",
-                    "created_at",
-                    "deleted_at",
-                    "updated",
-                    "created",
-                    "deleted",
-                }
-            ),
-            None,
-        ) or next(
-            (
-                c
-                for c in columns
-                if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
-            ),
-            None,
-        )
-        if date_col and _FUNNEL_IDENT_RE.match(date_col) and len(cards) < 6:
-            try:
-                conn = mgr.get_connection()
+            # -- Date range card --------------------------------------------------
+            date_col = next(
+                (
+                    c
+                    for c in columns
+                    if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
+                    and c.lower()
+                    not in {
+                        "updated_at",
+                        "created_at",
+                        "deleted_at",
+                        "updated",
+                        "created",
+                        "deleted",
+                    }
+                ),
+                None,
+            ) or next(
+                (
+                    c
+                    for c in columns
+                    if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
+                ),
+                None,
+            )
+            if date_col and _FUNNEL_IDENT_RE.match(date_col) and len(cards) < 6:
                 try:
                     result = conn.execute(
                         f'SELECT MIN("{date_col}"::VARCHAR), MAX("{date_col}"::VARCHAR) '  # noqa: S608
                         f'FROM "{table}" WHERE "{date_col}" IS NOT NULL LIMIT 1'
                     ).fetchone()
-                finally:
-                    conn.close()
-                if result and result[0] and result[1]:
-                    cards.append(
-                        {
-                            "label": f"{label} date range",
-                            "value": f"{result[0][:10]} – {result[1][:10]}",
-                            "unit": "",
-                            "type": "date_range",
-                        }
+                    if result and result[0] and result[1]:
+                        cards.append(
+                            {
+                                "label": f"{label} date range",
+                                "value": f"{result[0][:10]} – {result[1][:10]}",
+                                "unit": "",
+                                "type": "date_range",
+                            }
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "KPI date range skipped for %s.%s: %s", table, date_col, exc
                     )
-            except Exception as exc:
-                logger.debug(
-                    "KPI date range skipped for %s.%s: %s", table, date_col, exc
-                )
+    finally:
+        conn.close()
 
     return cards
 
