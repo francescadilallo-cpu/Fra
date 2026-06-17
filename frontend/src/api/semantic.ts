@@ -280,8 +280,8 @@ export function adaptAskResult(result: AskResult): EngineResult {
   // always sees a message rather than an empty response.
   const finalSummary =
     summary ||
-    (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : '') ||
-    (typeof result.notes === 'string' ? result.notes : '')
+    (typeof result.notes === 'string' && result.notes ? result.notes : '') ||
+    (result.ambiguity_error ? `Ambiguity: ${(result.candidates ?? []).join(', ')}` : '')
 
   return {
     sql: result.sql_used ?? '-- no SQL generated',
@@ -291,6 +291,7 @@ export function adaptAskResult(result: AskResult): EngineResult {
     chartData: result.chart_hint ? mapChartHint(result.chart_hint, rows) : undefined,
     sources,
     isDisambiguation: result.disambiguation_required || result.ambiguity_error,
+    candidates: result.candidates ?? [],
     followUps: [],
     steps: touched.length > 0
       ? [`Queried: ${touched.join(', ')} — ${totalRows} rows in ${result.latency_ms?.toFixed(0) ?? '?'}ms`]

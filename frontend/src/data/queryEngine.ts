@@ -42,6 +42,7 @@ export interface EngineResult {
   chartData?: ChartData
   followUps?: string[]
   isDisambiguation?: boolean
+  candidates?: string[]
   sources?: SourceBadge[]
   steps?: string[]
 }

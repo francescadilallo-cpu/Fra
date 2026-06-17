@@ -398,7 +398,53 @@ function ResultTable({ rows }: { rows: Record<string, unknown>[] }) {
 
 // ── Disambiguation card ────────────────────────────────────────────────────────
 
-function DisambiguationCard({ onChoose }: { onChoose: (q: string) => void }) {
+function DisambiguationCard({ candidates, onChoose }: { candidates?: string[]; onChoose: (q: string) => void }) {
+  // Data-driven path: the backend returned the real candidate definitions for
+  // this ambiguity (any term, any sector). Render them as choosable options so
+  // live users see their own metrics — not the curated AdventureWorks scenario.
+  if (candidates && candidates.length > 0) {
+    return (
+      <div className="mt-1 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-amber-800">Disambiguation required — choose a definition</span>
+        </div>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Your question maps to more than one metric in the semantic layer. Pick the definition you mean and the query will re-run using it:
+        </p>
+        <div className={`grid gap-3 ${candidates.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
+          {candidates.map((c, i) => {
+            const m = c.match(/^([^([（]+)[([（]?\s*([^)）\]]*)/)
+            const name = (m?.[1] ?? c).trim()
+            const detail = (m?.[2] ?? '').trim()
+            const palette = i === 0
+              ? 'border-teal-200 hover:border-teal-500'
+              : i === 1
+                ? 'border-blue-200 hover:border-blue-500'
+                : 'border-violet-200 hover:border-violet-500'
+            const cta = i === 0 ? 'text-teal-600' : i === 1 ? 'text-blue-600' : 'text-violet-600'
+            return (
+              <button
+                key={c}
+                onClick={() => onChoose(c)}
+                className={`bg-white border-2 rounded-xl p-3 text-left transition-all shadow-sm hover:shadow-md ${palette}`}
+              >
+                <p className="text-xs font-semibold text-slate-800 break-words">{name}</p>
+                {detail && <p className="text-[10px] font-mono text-slate-500 mt-0.5 break-words">{detail}</p>}
+                <p className={`text-[10px] font-medium mt-2 ${cta}`}>Use this →</p>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-[10px] text-slate-400 italic">
+          ⚡ Selecting an option runs a follow-up query using that definition.
+        </p>
+      </div>
+    )
+  }
+
+  // Demo fallback: curated AdventureWorks revenue disambiguation (local engine
+  // path sets isDisambiguation without structured candidates).
   return (
     <div className="mt-1 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -597,7 +643,7 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
 
         {/* Disambiguation card */}
         {r.isDisambiguation && onFollowUp && (
-          <DisambiguationCard onChoose={onFollowUp} />
+          <DisambiguationCard candidates={r.candidates} onChoose={onFollowUp} />
         )}
 
         {/* Inline chart */}
