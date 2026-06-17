@@ -429,6 +429,22 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   // Live: KPI cards derive from real backend data — funnel stage names
   // (status breakdown of the user's order table) and draft entity totals.
   const totalRecords = draft?.entities.reduce((s, e) => s + (e.record_count || 0), 0) ?? 0
+  const kpiStatCards = (liveConfig?.kpi_stats ?? [])
+    .filter(k => k.type === 'sum')
+    .slice(0, 2)
+    .map(k => ({
+      label: k.label,
+      value: typeof k.value === 'number'
+        ? k.value >= 1_000_000
+          ? `${(k.value / 1_000_000).toFixed(1)}M`
+          : k.value >= 1_000
+            ? `${(k.value / 1_000).toFixed(1)}K`
+            : k.value.toLocaleString('en-US')
+        : String(k.value),
+      icon: TrendingUp,
+      color: 'text-emerald-600', bg: 'bg-emerald-50',
+      spark: [] as number[], sparkColor: '#10b981', trend: 0,
+    }))
   const liveKpis = [
     {
       label: funnel[0]?.stage ?? 'Records ingested',
@@ -443,14 +459,14 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       icon: ShoppingCart,
       color: 'text-purple-600', bg: 'bg-purple-50',
       spark: [] as number[], sparkColor: '#a855f7', trend: 0,
-    }] : []),
+    }] : kpiStatCards.length > 0 ? [kpiStatCards[0]] : []),
     ...(funnel.length > 2 ? [{
       label: funnel[2].stage,
       value: funnel[2].count.toLocaleString('en-US'),
       icon: TrendingUp,
       color: 'text-teal-600', bg: 'bg-teal-50',
       spark: [] as number[], sparkColor: '#0d9488', trend: 0,
-    }] : []),
+    }] : kpiStatCards.length > 1 ? [kpiStatCards[1]] : []),
     {
       label: 'Entities in semantic layer',
       value: `${draft?.entities.length ?? 0}`,

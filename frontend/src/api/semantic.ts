@@ -434,6 +434,13 @@ export interface LiveOntologyEdge {
   label: string
 }
 
+export interface LiveKpiStat {
+  label: string
+  value: number | string
+  unit: string
+  type: 'count' | 'sum' | 'date_range'
+}
+
 export interface LiveConfig {
   name: string
   domain: string
@@ -444,7 +451,8 @@ export interface LiveConfig {
   }
   metrics: { name: string; label: string; formula: string; unit: string }[]
   funnel: { stage: string; count: number; value: number }[] | null
-  process_stages: { key: string; label: string }[]
+  process_stages: { key: string; label: string; count: number }[]
+  kpi_stats: LiveKpiStat[]
   built_at: string
 }
 
