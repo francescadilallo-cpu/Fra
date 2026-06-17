@@ -3192,6 +3192,34 @@ def _build_live_kpi_stats(entities: list[dict]) -> list[dict]:
                         "KPI sum skipped for %s.%s: %s", table, amount_col, exc
                     )
 
+            # -- Quantity SUM card ------------------------------------------------
+            qty_col = next(
+                (
+                    c
+                    for c in columns
+                    if any(sub in c.lower() for sub in _KPI_QTY_SUBSTRINGS)
+                    and c != amount_col
+                ),
+                None,
+            )
+            if qty_col and _FUNNEL_IDENT_RE.match(qty_col) and len(cards) < 6:
+                try:
+                    result = conn.execute(
+                        f'SELECT SUM(CAST("{qty_col}" AS DOUBLE)) FROM "{table}"'  # noqa: S608
+                    ).fetchone()
+                    if result and result[0] is not None:
+                        val = float(result[0])
+                        cards.append(
+                            {
+                                "label": f"Total {qty_col.replace('_', ' ').title()}",
+                                "value": round(val, 0),
+                                "unit": "units",
+                                "type": "sum",
+                            }
+                        )
+                except Exception as exc:
+                    logger.debug("KPI qty skipped for %s.%s: %s", table, qty_col, exc)
+
             # -- Date range card --------------------------------------------------
             date_col = next(
                 (
@@ -3294,7 +3322,7 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
 
     table = order_entity.get("table", "")
     label = order_entity.get("name") or table
-    stages: list[dict] = [{"stage": f"{label} — total", "count": total, "value": 0}]
+    stages: list[dict] = [{"stage": f"{label} — total", "count": total, "value": 100}]
 
     # Match status column by exact name OR by substring (handles compound names
     # like "order_status_code", "delivery_status_flag", "stato_ordine_attuale").
@@ -3328,11 +3356,12 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
             finally:
                 conn.close()
             for val, cnt in rows:
+                pct = round(100 * int(cnt) / total) if total else 0
                 stages.append(
                     {
                         "stage": str(val) if val is not None else "(no status)",
                         "count": int(cnt),
-                        "value": 0,
+                        "value": pct,
                     }
                 )
         except Exception as exc:
