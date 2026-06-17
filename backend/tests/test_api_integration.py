@@ -2088,3 +2088,81 @@ def test_patch_draft_metric_updates_description(client, user_headers):
     match = next((m for m in updated["metrics"] if m["name"] == metric_name), None)
     assert match is not None
     assert match["description"] == new_desc
+
+
+# ── /api/auth/me ──────────────────────────────────────────────────────────────
+
+
+def test_auth_me_requires_auth(client):
+    resp = client.get("/api/auth/me")
+    assert resp.status_code == 401
+
+
+def test_auth_me_returns_user_info(client, user_headers):
+    resp = client.get("/api/auth/me", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["username"] == "user_u"
+    assert body["role"] == "user"
+    assert "mode" in body
+
+
+def test_auth_me_admin_returns_admin_role(client, admin_headers):
+    resp = client.get("/api/auth/me", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["username"] == "admin_u"
+    assert body["role"] == "admin"
+
+
+def test_auth_me_live_mode_reflects_mode(client, live_mode_headers):
+    resp = client.get("/api/auth/me", headers=live_mode_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mode"] == "live"
+
+
+# ── /api/kg/build ─────────────────────────────────────────────────────────────
+
+
+def test_kg_build_requires_admin(client, user_headers):
+    resp = client.post("/api/kg/build", headers=user_headers)
+    assert resp.status_code == 403
+
+
+def test_kg_build_admin_succeeds(client, admin_headers):
+    resp = client.post("/api/kg/build", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["success"] is True
+    assert "kg_nodes" in body
+    assert "kg_edges" in body
+    assert "metadata_rows" in body
+
+
+# ── /api/semantic/mapping-defs ────────────────────────────────────────────────
+
+
+def test_mapping_defs_is_public(client):
+    resp = client.get("/api/semantic/mapping-defs")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "definitions" in body
+    assert "ambiguities" in body
+    assert isinstance(body["definitions"], list)
+
+
+def test_mapping_defs_demo_mode_has_content(client, demo_mode_headers):
+    resp = client.get("/api/semantic/mapping-defs", headers=demo_mode_headers)
+    assert resp.status_code == 200, resp.text
+    # Demo mode should return the YAML definitions (non-empty).
+    body = resp.json()
+    assert isinstance(body["definitions"], list)
+
+
+def test_mapping_defs_live_mode_is_empty(client, live_mode_headers):
+    resp = client.get("/api/semantic/mapping-defs", headers=live_mode_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Live mode returns empty lists — definitions describe demo fields only.
+    assert body["definitions"] == []
+    assert body["ambiguities"] == []
