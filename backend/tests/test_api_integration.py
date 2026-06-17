@@ -1267,3 +1267,74 @@ def test_live_ask_bypasses_409_when_user_source_registered(client, live_mode_hea
         )
     finally:
         registry.remove(probe_id)
+
+
+# ── /api/semantic/live-config ──────────────────────────────────────────────────
+
+
+def test_live_config_requires_auth(client):
+    resp = client.get("/api/semantic/live-config")
+    assert resp.status_code == 401
+
+
+def test_live_config_returns_required_fields(client, user_headers):
+    resp = client.get("/api/semantic/live-config", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    for field in (
+        "name",
+        "domain",
+        "connectors",
+        "ontology",
+        "metrics",
+        "funnel",
+        "process_stages",
+        "built_at",
+    ):
+        assert field in body, f"live-config missing field: {field}"
+    assert isinstance(body["connectors"], list)
+    assert isinstance(body["ontology"]["nodes"], list)
+    assert isinstance(body["ontology"]["edges"], list)
+    assert isinstance(body["metrics"], list)
+    assert isinstance(body["process_stages"], list)
+
+
+def test_live_config_live_mode_is_empty(client, live_mode_headers):
+    # A fresh live workspace with no user-added sources must return an
+    # empty ontology graph and no metrics so the frontend starts clean.
+    resp = client.get("/api/semantic/live-config", headers=live_mode_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ontology"]["nodes"] == [], "live-config must have no ontology nodes"
+    assert body["ontology"]["edges"] == [], "live-config must have no ontology edges"
+    assert body["metrics"] == [], "live-config must have no metrics"
+    assert body["connectors"] == [], "live-config must have no connectors"
+    assert body["name"] == "Your Dataset"
+
+
+def test_live_config_shows_user_source_connector(client, live_mode_headers):
+    import uuid
+
+    from app.connectors.source_registry import SourceConfig, get_source_registry
+
+    registry = get_source_registry()
+    probe_id = f"csv-lc-probe-{uuid.uuid4().hex[:12]}"
+    probe_label = f"My Sales Data {probe_id[:8]}"
+    registry.upsert(
+        SourceConfig(
+            id=probe_id,
+            connector_type="csv",
+            label=probe_label,
+            params={"table_name": "live_sales", "inline_csv": "id,amount\n1,500"},
+            is_default=False,
+        )
+    )
+    try:
+        resp = client.get("/api/semantic/live-config", headers=live_mode_headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert probe_label in body["connectors"], (
+            "user-added source must appear in live-config connectors"
+        )
+    finally:
+        registry.remove(probe_id)
