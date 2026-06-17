@@ -3021,15 +3021,183 @@ _FUNNEL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # Column names that typically hold an order/transaction lifecycle state
 _FUNNEL_STATUS_COLUMNS = {
+    # English
     "status",
-    "stato",
     "state",
-    "order_status",
-    "orderstatus",
     "stage",
     "phase",
+    "step",
     "status_code",
+    "order_status",
+    "orderstatus",
+    "delivery_status",
+    "fulfillment_status",
+    "payment_status",
+    "shipment_status",
+    "workflow_state",
+    "current_step",
+    "step_name",
+    "phase_code",
+    "action_status",
+    # Italian
+    "stato",
+    "fase",
+    "stadio",
+    "stato_ordine",
+    "stato_spedizione",
+    "stato_pagamento",
 }
+
+# Substrings that identify a column as status-like when the full name
+# doesn't appear in _FUNNEL_STATUS_COLUMNS.
+_FUNNEL_STATUS_SUBSTRINGS = ("status", "state", "stage", "stato", "phase", "fase")
+
+# Revenue/amount column name substrings used by _build_live_kpi_stats.
+_KPI_AMOUNT_SUBSTRINGS = (
+    "amount",
+    "revenue",
+    "total",
+    "price",
+    "subtotal",
+    "value",
+    "sales",
+    "turnover",
+    "gross",
+    "net",
+    "cost",
+    "income",
+    # Italian
+    "importo",
+    "ricavo",
+    "totale",
+    "fatturato",
+    "prezzo",
+    "valore",
+)
+# Quantity column substrings.
+_KPI_QTY_SUBSTRINGS = ("qty", "quantity", "units", "items", "count", "volume")
+# Date column substrings.
+_KPI_DATE_SUBSTRINGS = ("date", "at", "time", "created", "updated", "data", "giorno")
+
+
+def _build_live_kpi_stats(entities: list[dict]) -> list[dict]:
+    """Compute basic live KPI cards from the user's real data.
+
+    Queries each visible entity table for:
+    - SUM of the first detected revenue/amount column → "Total <ColName>"
+    - MIN/MAX of the first detected date column → date range card
+    Falls back gracefully on any DuckDB error. Returns up to 6 cards.
+    """
+    if not entities:
+        return []
+
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    cards: list[dict] = []
+
+    for entity in entities[:8]:
+        if len(cards) >= 6:
+            break
+        table = entity.get("table", "")
+        label = entity.get("name") or table
+        record_count = entity.get("record_count", 0)
+        if not table or not _FUNNEL_IDENT_RE.match(table) or record_count == 0:
+            continue
+
+        columns = [c for c in entity.get("columns", []) if isinstance(c, str)]
+
+        # -- Row-count card (always available) --------------------------------
+        cards.append(
+            {
+                "label": f"{label} rows",
+                "value": record_count,
+                "unit": "rows",
+                "type": "count",
+            }
+        )
+
+        # -- Revenue/amount SUM card ------------------------------------------
+        amount_col = next(
+            (
+                c
+                for c in columns
+                if any(sub in c.lower() for sub in _KPI_AMOUNT_SUBSTRINGS)
+            ),
+            None,
+        )
+        if amount_col and _FUNNEL_IDENT_RE.match(amount_col):
+            try:
+                conn = mgr.get_connection()
+                try:
+                    result = conn.execute(
+                        f'SELECT SUM(CAST("{amount_col}" AS DOUBLE)) FROM "{table}"'  # noqa: S608
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if result and result[0] is not None:
+                    val = float(result[0])
+                    cards.append(
+                        {
+                            "label": f"Total {amount_col.replace('_', ' ').title()}",
+                            "value": round(val, 2),
+                            "unit": "",
+                            "type": "sum",
+                        }
+                    )
+            except Exception as exc:
+                logger.debug("KPI sum skipped for %s.%s: %s", table, amount_col, exc)
+
+        # -- Date range card --------------------------------------------------
+        date_col = next(
+            (
+                c
+                for c in columns
+                if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
+                and c.lower()
+                not in {
+                    "updated_at",
+                    "created_at",
+                    "deleted_at",
+                    "updated",
+                    "created",
+                    "deleted",
+                }
+            ),
+            None,
+        ) or next(
+            (
+                c
+                for c in columns
+                if any(sub in c.lower() for sub in _KPI_DATE_SUBSTRINGS)
+            ),
+            None,
+        )
+        if date_col and _FUNNEL_IDENT_RE.match(date_col) and len(cards) < 6:
+            try:
+                conn = mgr.get_connection()
+                try:
+                    result = conn.execute(
+                        f'SELECT MIN("{date_col}"::VARCHAR), MAX("{date_col}"::VARCHAR) '  # noqa: S608
+                        f'FROM "{table}" WHERE "{date_col}" IS NOT NULL LIMIT 1'
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if result and result[0] and result[1]:
+                    cards.append(
+                        {
+                            "label": f"{label} date range",
+                            "value": f"{result[0][:10]} – {result[1][:10]}",
+                            "unit": "",
+                            "type": "date_range",
+                        }
+                    )
+            except Exception as exc:
+                logger.debug(
+                    "KPI date range skipped for %s.%s: %s", table, date_col, exc
+                )
+
+    return cards
 
 
 def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
@@ -3040,11 +3208,38 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
     stage is ever fabricated — if there is no status column the funnel is
     just the single true total. Returns None if no suitable table exists.
     """
-    order_keywords = {"order", "ordine", "transaction", "sale", "invoice", "fattura"}
+    order_keywords = {
+        "order",
+        "ordine",
+        "ordini",
+        "transaction",
+        "sale",
+        "vendita",
+        "vendite",
+        "invoice",
+        "fattura",
+        "fatture",
+        "purchase",
+        "booking",
+        "contract",
+        "deal",
+        "shipment",
+        "delivery",
+        "consegna",
+    }
     order_entity = None
     for e in entities:
         tbl = e.get("table", "").lower()
-        if any(kw in tbl for kw in order_keywords):
+        # Strip common DWH prefixes/suffixes before matching (fact_, dim_, _fact, _detail)
+        tbl_stripped = (
+            tbl.removeprefix("fact_")
+            .removeprefix("dim_")
+            .removeprefix("stg_")
+            .removesuffix("_fact")
+            .removesuffix("_detail")
+            .removesuffix("_line")
+        )
+        if any(kw in tbl_stripped for kw in order_keywords):
             order_entity = e
             break
 
@@ -3059,11 +3254,17 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
     label = order_entity.get("name") or table
     stages: list[dict] = [{"stage": f"{label} — total", "count": total, "value": 0}]
 
+    # Match status column by exact name OR by substring (handles compound names
+    # like "order_status_code", "delivery_status_flag", "stato_ordine_attuale").
     status_col = next(
         (
             c
             for c in order_entity.get("columns", [])
-            if isinstance(c, str) and c.lower() in _FUNNEL_STATUS_COLUMNS
+            if isinstance(c, str)
+            and (
+                c.lower() in _FUNNEL_STATUS_COLUMNS
+                or any(sub in c.lower() for sub in _FUNNEL_STATUS_SUBSTRINGS)
+            )
         ),
         None,
     )
@@ -3101,25 +3302,34 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
 def _build_process_stages(entities: list[dict]) -> list[dict]:
     """Infer process stage labels from entity names."""
     stage_keywords = {
-        "order": "Order",
-        "ordine": "Ordine",
         "quote": "Quote",
         "preventivo": "Preventivo",
+        "order": "Order",
+        "ordine": "Ordine",
+        "ordini": "Ordini",
+        "purchase": "Purchase",
         "invoice": "Invoice",
         "fattura": "Fattura",
+        "fatture": "Fatture",
         "shipment": "Shipment",
         "spedizione": "Spedizione",
         "delivery": "Delivery",
         "consegna": "Consegna",
         "payment": "Payment",
         "pagamento": "Pagamento",
+        "return": "Return",
+        "reso": "Reso",
     }
+    seen_keys: set[str] = set()
     stages = []
     for e in entities:
         tbl = e.get("table", "").lower()
         for kw, label in stage_keywords.items():
-            if kw in tbl:
-                stages.append({"key": kw, "label": label})
+            if kw in tbl and kw not in seen_keys:
+                seen_keys.add(kw)
+                stages.append(
+                    {"key": kw, "label": label, "count": e.get("record_count", 0)}
+                )
                 break
     return stages[:5]
 
@@ -3140,6 +3350,7 @@ def get_live_config(
             "metrics": [],
             "funnel": None,
             "process_stages": [],
+            "kpi_stats": [],
             "built_at": datetime.utcnow().isoformat(),
         }
 
@@ -3274,6 +3485,7 @@ def get_live_config(
         "metrics": metrics,
         "funnel": _build_live_funnel(entities),
         "process_stages": _build_process_stages(entities),
+        "kpi_stats": _build_live_kpi_stats(entities),
         "built_at": datetime.utcnow().isoformat(),
     }
 

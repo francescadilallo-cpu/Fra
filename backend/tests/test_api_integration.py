@@ -1289,6 +1289,7 @@ def test_live_config_returns_required_fields(client, user_headers):
         "metrics",
         "funnel",
         "process_stages",
+        "kpi_stats",
         "built_at",
     ):
         assert field in body, f"live-config missing field: {field}"
@@ -1297,6 +1298,7 @@ def test_live_config_returns_required_fields(client, user_headers):
     assert isinstance(body["ontology"]["edges"], list)
     assert isinstance(body["metrics"], list)
     assert isinstance(body["process_stages"], list)
+    assert isinstance(body["kpi_stats"], list)
 
 
 def test_live_config_live_mode_is_empty(client, live_mode_headers):
@@ -1309,6 +1311,7 @@ def test_live_config_live_mode_is_empty(client, live_mode_headers):
     assert body["ontology"]["edges"] == [], "live-config must have no ontology edges"
     assert body["metrics"] == [], "live-config must have no metrics"
     assert body["connectors"] == [], "live-config must have no connectors"
+    assert body["kpi_stats"] == [], "live-config must have no kpi_stats for empty workspace"
     assert body["name"] == "Your Dataset"
 
 
