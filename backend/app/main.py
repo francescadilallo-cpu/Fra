@@ -1331,26 +1331,34 @@ def dashboard(
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> DashboardData:
     if current_user.mode == "live":
-        # The dashboard KPIs come from the legacy demo database; live-mode
-        # users get a clean slate plus their own (non-default) sources.
+        from .connectors.duckdb_source_manager import get_source_manager
         from .connectors.source_registry import get_source_registry
 
+        # Fetch real per-table row counts from DuckDB.
+        try:
+            mgr = get_source_manager(_SCENARIO_PATH)
+            all_row_counts: dict[str, int] = mgr.describe().record_counts
+        except Exception:
+            all_row_counts = {}
+
+        registry = get_source_registry()
         live_sources = [
             {
                 "name": src.label,
                 "type": src.connector_type,
                 "status": "connected" if src.status == "active" else src.status,
                 "tables": src.target_tables,
-                "row_counts": dict.fromkeys(src.target_tables, 0),
+                "row_counts": {t: all_row_counts.get(t, 0) for t in src.target_tables},
             }
-            for src in get_source_registry().list()
+            for src in registry.list()
             if not src.is_default and src.connector_type != "context_doc"
         ]
+        total_live_rows = sum(all_row_counts.values())
         return DashboardData(
             total_customers=0,
             total_products=0,
             total_quotes=0,
-            total_orders=0,
+            total_orders=total_live_rows,
             quote_conversion_rate=0.0,
             open_quotes_value=0.0,
             recent_orders=[],
@@ -2877,13 +2885,42 @@ def list_example_questions(request: Request) -> list[dict[str, str]]:
         hidden = _hidden_demo_tables(
             UserPrincipal(username="_", role="user", mode="live")
         )
-        if not any(e["table"] not in hidden for e in draft_entities):
+        live_entities = [e for e in draft_entities if e["table"] not in hidden]
+        if not live_entities:
             return []
         hidden_keys = set(hidden) | {
             e["name"] for e in draft_entities if e["table"] in hidden
         }
         templates = [
             t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
+        ]
+        active = [t for t in templates if t.get("is_active", True)]
+        if not active:
+            # No user-created templates yet — generate generic exploratory
+            # questions from the discovered entity names so the UI isn't blank.
+            generated: list[dict[str, str]] = []
+            for entity in live_entities[:4]:
+                ename = entity.get("name") or entity.get("table", "")
+                generated.append(
+                    {
+                        "question": f"How many records are in {ename}?",
+                        "description": f"Total row count for {ename}",
+                    }
+                )
+                cols = entity.get("columns", [])
+                if cols:
+                    col_sample = ", ".join(cols[:3])
+                    generated.append(
+                        {
+                            "question": f"Show me the first 10 rows from {ename}",
+                            "description": f"Sample data — columns: {col_sample}…",
+                        }
+                    )
+            return generated[:12]
+        active_sorted = sorted(active, key=lambda t: t.get("name", ""))
+        return [
+            {"question": t["name"], "description": t.get("description", "")}
+            for t in active_sorted[:12]
         ]
     active = [t for t in templates if t.get("is_active", True)]
     active_sorted = sorted(active, key=lambda t: t.get("name", ""))

@@ -836,8 +836,11 @@ def test_dashboard_live_mode_is_empty(client, demo_mode_headers, live_mode_heade
     live = client.get("/api/dashboard", headers=live_mode_headers)
     assert live.status_code == 200, live.text
     body = live.json()
-    assert body["total_orders"] == 0
+    # Live mode uses total_orders to surface total DuckDB row count; demo-domain
+    # fields (customers, products, quotes) must always be 0 in live mode.
+    assert isinstance(body["total_orders"], int)
     assert body["total_customers"] == 0
+    assert body["total_quotes"] == 0
     assert body["recent_orders"] == []
 
 
@@ -1311,7 +1314,9 @@ def test_live_config_live_mode_is_empty(client, live_mode_headers):
     assert body["ontology"]["edges"] == [], "live-config must have no ontology edges"
     assert body["metrics"] == [], "live-config must have no metrics"
     assert body["connectors"] == [], "live-config must have no connectors"
-    assert body["kpi_stats"] == [], "live-config must have no kpi_stats for empty workspace"
+    assert body["kpi_stats"] == [], (
+        "live-config must have no kpi_stats for empty workspace"
+    )
     assert body["name"] == "Your Dataset"
 
 
