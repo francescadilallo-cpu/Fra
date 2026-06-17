@@ -1482,3 +1482,194 @@ def test_live_onboarding_add_csv_and_verify(client, admin_headers, live_mode_hea
             s["id"] for s in client.get("/api/sources", headers=admin_headers).json()
         ]
         assert source_id not in ids_after
+
+
+# ── /api/data/store/status ────────────────────────────────────────────────────
+
+
+def test_data_store_status_requires_auth(client):
+    resp = client.get("/api/data/store/status")
+    assert resp.status_code == 401
+
+
+def test_data_store_status_demo_mode(client, user_headers):
+    resp = client.get("/api/data/store/status", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "tables" in body
+    assert "row_counts" in body
+    assert "total_rows" in body
+    assert isinstance(body["tables"], list)
+    assert isinstance(body["row_counts"], dict)
+    assert body["total_rows"] >= 0
+
+
+def test_data_store_status_live_mode_hides_demo_tables(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/data/store/status", headers=demo_mode_headers)
+    live = client.get("/api/data/store/status", headers=live_mode_headers)
+    assert demo.status_code == 200
+    assert live.status_code == 200
+    demo_tables = set(demo.json()["tables"])
+    live_tables = set(live.json()["tables"])
+    # Demo tables the live user must never see.
+    for t in ("sales_order_header", "dipendenti_hr", "account", "product_catalog_pim"):
+        if t in demo_tables:
+            assert t not in live_tables, (
+                f"demo table '{t}' must be hidden from live-mode users"
+            )
+    # Live mode has fewer (or equal) tables than demo mode.
+    assert len(live_tables) <= len(demo_tables)
+
+
+# ── /api/data/store/rebuild ───────────────────────────────────────────────────
+
+
+def test_data_store_rebuild_requires_admin(client, user_headers):
+    resp = client.post("/api/data/store/rebuild", headers=user_headers)
+    assert resp.status_code == 403
+
+
+def test_data_store_rebuild_admin_succeeds(client, admin_headers):
+    resp = client.post("/api/data/store/rebuild", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["rebuilt"] is True
+    assert "row_counts" in body
+    assert "total_rows" in body
+
+
+# ── /api/semantic/draft ───────────────────────────────────────────────────────
+
+
+def test_semantic_draft_requires_auth(client):
+    resp = client.get("/api/semantic/draft")
+    assert resp.status_code == 401
+
+
+def test_semantic_draft_returns_structure(client, user_headers):
+    resp = client.get("/api/semantic/draft", headers=user_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "entities" in body
+    assert "relations" in body
+    assert "metrics" in body
+    assert isinstance(body["entities"], list)
+    assert isinstance(body["relations"], list)
+    assert isinstance(body["metrics"], list)
+
+
+def test_semantic_draft_live_mode_hides_demo_entities(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/semantic/draft", headers=demo_mode_headers)
+    live = client.get("/api/semantic/draft", headers=live_mode_headers)
+    assert demo.status_code == 200
+    assert live.status_code == 200
+    demo_entity_names = {e["name"] for e in demo.json()["entities"]}
+    live_entity_names = {e["name"] for e in live.json()["entities"]}
+    # Live mode must show a strict subset — demo data must be hidden.
+    assert live_entity_names <= demo_entity_names, (
+        "live-mode draft must not introduce entities absent from demo"
+    )
+    # Critically, the live workspace has no user sources so ALL demo entities
+    # must be hidden, resulting in an empty entities list.
+    assert live_entity_names == set(), (
+        "live-mode draft must have empty entities when no user sources are connected"
+    )
+    assert live.json()["metrics"] == [], "live draft must have no metrics"
+    assert live.json()["relations"] == [], "live draft must have no relations"
+
+
+# ── PATCH /api/semantic/draft/entities/{name} ─────────────────────────────────
+
+
+def test_patch_draft_entity_requires_auth(client):
+    resp = client.patch(
+        "/api/semantic/draft/entities/SalesOrder",
+        json={"user_description": "test"},
+    )
+    assert resp.status_code == 401
+
+
+def test_patch_draft_entity_unknown_404(client, user_headers):
+    resp = client.patch(
+        "/api/semantic/draft/entities/NonExistentEntity999",
+        json={"user_description": "This entity does not exist"},
+        headers=user_headers,
+    )
+    assert resp.status_code == 404
+
+
+def test_patch_draft_entity_updates_description(client, user_headers):
+    # Pick a real entity from the demo catalog.
+    draft = client.get("/api/semantic/draft", headers=user_headers).json()
+    if not draft["entities"]:
+        import pytest
+
+        pytest.skip("no entities in demo catalog")
+    entity_name = draft["entities"][0]["name"]
+    new_desc = "Integration-test description — updated by test suite"
+    resp = client.patch(
+        f"/api/semantic/draft/entities/{entity_name}",
+        json={"user_description": new_desc},
+        headers=user_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
+    # Verify the change is reflected in the draft.
+    updated = client.get("/api/semantic/draft", headers=user_headers).json()
+    match = next((e for e in updated["entities"] if e["name"] == entity_name), None)
+    assert match is not None
+    assert match["user_description"] == new_desc
+
+
+# ── /api/semantic/coverage live-mode ─────────────────────────────────────────
+
+
+def test_semantic_coverage_live_mode_excludes_builtins(
+    client, demo_mode_headers, live_mode_headers
+):
+    demo = client.get("/api/semantic/coverage", headers=demo_mode_headers)
+    live = client.get("/api/semantic/coverage", headers=live_mode_headers)
+    assert demo.status_code == 200
+    assert live.status_code == 200
+    # Demo mode sees the builtin definitions; live mode hides them.
+    # The live score must therefore be <= demo score (fewer definitions = lower coverage).
+    demo_score = demo.json()["score"]
+    live_score = live.json()["score"]
+    # Live score should be 0 or very low (no user data = no coverage).
+    # At minimum it must not exceed demo (we have MORE demo definitions than live ones).
+    assert live_score <= demo_score, (
+        f"live coverage score ({live_score}) must not exceed demo score ({demo_score})"
+    )
+
+
+# ── /api/sources/{id}/sync ────────────────────────────────────────────────────
+
+
+def test_sync_source_requires_admin(client, user_headers):
+    resp = client.post("/api/sources/erp/sync", headers=user_headers)
+    assert resp.status_code == 403
+
+
+def test_sync_source_not_found_404(client, admin_headers):
+    resp = client.post("/api/sources/does-not-exist-xyz/sync", headers=admin_headers)
+    assert resp.status_code == 404
+
+
+def test_sync_source_succeeds_for_existing(client, admin_headers):
+    # Use the first default source (guaranteed to exist).
+    sources = client.get("/api/sources", headers=admin_headers).json()
+    defaults = [s for s in sources if s.get("is_default")]
+    if not defaults:
+        import pytest
+
+        pytest.skip("no default sources seeded")
+    source_id = defaults[0]["id"]
+    resp = client.post(f"/api/sources/{source_id}/sync", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == source_id
+    assert body["connector_type"] == defaults[0]["connector_type"]
