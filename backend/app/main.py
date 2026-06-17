@@ -3147,7 +3147,7 @@ def _build_live_kpi_stats(entities: list[dict]) -> list[dict]:
                 break
             table = entity.get("table", "")
             label = entity.get("name") or table
-            record_count = entity.get("record_count", 0)
+            record_count = entity.get("record_count") or 0
             if not table or not _FUNNEL_IDENT_RE.match(table) or record_count == 0:
                 continue
 
@@ -3288,7 +3288,7 @@ def _build_live_funnel(entities: list[dict]) -> list[dict] | None:
     if order_entity is None:
         return None
 
-    total = order_entity.get("record_count", 0)
+    total = order_entity.get("record_count") or 0
     if total == 0:
         return None
 
