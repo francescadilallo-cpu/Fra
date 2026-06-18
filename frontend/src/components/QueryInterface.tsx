@@ -443,6 +443,23 @@ function DisambiguationCard({ candidates, onChoose }: { candidates?: string[]; o
     )
   }
 
+  // Live-mode generic fallback: no structured candidates returned, just prompt
+  // the user to rephrase with more specificity.
+  if (!IS_DEMO_MODE) {
+    return (
+      <div className="mt-1 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+          <span className="text-sm font-semibold text-amber-800">Ambiguous term — can you be more specific?</span>
+        </div>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Your question contains a term that maps to more than one metric or field in your semantic layer.
+          Try rephrasing with the exact field name, or define the term in <strong>Semantic Layer → Definitions</strong> to avoid this in future queries.
+        </p>
+      </div>
+    )
+  }
+
   // Demo fallback: curated AdventureWorks revenue disambiguation (local engine
   // path sets isDisambiguation without structured candidates).
   return (

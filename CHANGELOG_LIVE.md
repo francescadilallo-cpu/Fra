@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### QueryInterface: guard AW-specific disambiguation fallback from live users
+- `frontend/src/components/QueryInterface.tsx`
+  - `DisambiguationCard` had a demo-only fallback (hardcoded "fatturato" / revenue disambiguation from AdventureWorks) that was not guarded against live mode. A live user running a query via the LLM path that triggered `isDisambiguation:true` without structured candidates would have seen AW-specific content in their workspace.
+  - Now: for live users with no structured candidates, shows a generic "Ambiguous term — can you be more specific?" message with a link to the Semantic Layer Definitions tab. The AW-specific fallback is retained under the `IS_DEMO_MODE` guard.
+
 ### DataExplorer: clear empty state for live users instead of empty table
 - `frontend/src/components/DataExplorer.tsx`
   - When a live user selects an entity, the DataTable previously rendered a table header with 0 rows and a broken "Download CSV" button (empty file). Live users can't load row-level data in the browser.
