@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18 (continued)
 
+### Backend: improve 503 error messages for "layer not ready" cases
+- `backend/app/main.py`
+  - `POST /api/semantic/ask` (line ~1769): Changed `"Semantic layer is not loaded — check server logs"` to `"The semantic layer is not ready yet. Connect a data source and build the pipeline to enable querying."` This message is passed through `backendErrorMessage()` on the frontend (string detail bypasses the generic 503 fallback) and shown directly in the query error bubble — the previous message included an internal "check server logs" instruction that users cannot act on.
+  - Six edit/template management endpoints (lines ~2681–2911): Changed `"Semantic layer not loaded"` to `"Semantic layer not ready — build it from Data Sources first"`. These endpoints are hit when users try to edit entities/metrics/templates before the pipeline has been run; the new message explains what to do.
+
 ### Frontend: live users can now choose their industry sector during onboarding
 - `frontend/src/components/OnboardingWizard.tsx`
   - **Before**: live users were silently defaulted to `manufacturing` sector (`selectedSector = 'manufacturing'`) with the industry picker hidden behind `IS_DEMO_MODE`. This meant connector recommendations in Configuration, ontology builder prompts, and workspace UI were always manufacturing-flavoured regardless of the user's actual industry.

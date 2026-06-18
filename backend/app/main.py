@@ -1769,7 +1769,10 @@ def semantic_ask(
     if layer is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Semantic layer is not loaded — check server logs",
+            detail=(
+                "The semantic layer is not ready yet. "
+                "Connect a data source and build the pipeline to enable querying."
+            ),
         )
 
     # Merge user-provided context (entities, metrics, glossary) with YAML docs.
@@ -2675,7 +2678,10 @@ def patch_draft_entity(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     ok = catalog.save_entity_draft(
         name,
         user_description=body.user_description,
@@ -2700,7 +2706,10 @@ def patch_draft_metric(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     ok = catalog.save_metric_draft(
         name,
         description=body.description,
@@ -2827,7 +2836,10 @@ def list_templates(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     templates = catalog.list_templates()
     hidden = _hidden_demo_tables(_user)
     if hidden:
@@ -2855,7 +2867,10 @@ def create_template(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     try:
         tpl = catalog.create_template(
             name=payload.name,
@@ -2881,7 +2896,10 @@ def update_template(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     try:
         tpl = catalog.update_template(
             template_id,
@@ -2905,7 +2923,10 @@ def delete_template(
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
     if catalog is None:
-        raise HTTPException(status_code=503, detail="Semantic layer not loaded")
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
     try:
         catalog.delete_template(template_id)
     except KeyError as exc:
