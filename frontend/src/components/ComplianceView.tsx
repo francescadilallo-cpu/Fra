@@ -360,14 +360,19 @@ export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavT
                   {compliance.entities.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-8 text-center">
-                        <p className="text-sm text-gray-400 mb-2">No entities classified yet.</p>
+                        <p className="text-sm text-gray-400 mb-1">No entities classified yet.</p>
                         {!IS_DEMO_MODE && (
-                          <button
-                            onClick={() => onNavigate?.('sources')}
-                            className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
-                          >
-                            Connect a data source to build your ontology <ArrowRight size={12} />
-                          </button>
+                          <>
+                            <p className="text-xs text-gray-400 mb-3 max-w-sm mx-auto">
+                              Compliance classifications appear here once you build the semantic layer from your connected data sources.
+                            </p>
+                            <button
+                              onClick={() => onNavigate?.('sources')}
+                              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+                            >
+                              Connect a data source to build your ontology <ArrowRight size={12} />
+                            </button>
+                          </>
                         )}
                       </td>
                     </tr>

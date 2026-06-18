@@ -12,6 +12,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: malformed AUTH_USERS_JSON_ENV returns 503 instead of silent 401
+- `backend/app/main.py`
+  - Previously: if `AUTH_USERS_JSON_ENV` was set but contained invalid JSON, an empty array, or all malformed entries, every login attempt returned 401 "Incorrect username or password" — indistinguishable from a bad password, locking all users out with no diagnostic signal.
+  - Now: login returns 503 "AUTH_USERS_JSON_ENV is set but contains no valid user entries — check server configuration" when the env var parses to an empty user table, so operators immediately know the problem is configuration, not credentials.
+
+### Backend: sync_source and rebuild_data_store return 501 for unsupported connector types
+- `backend/app/main.py`
+  - `POST /api/sources/{id}/sync`: previously caught all exceptions as 500. Now catches `NotImplementedError` specifically and returns 501 so callers know the connector type is not yet implemented, not that the server crashed.
+  - `POST /api/data/store/rebuild`: previously had no error handling at all. Now wrapped in try/except; `NotImplementedError` → 501, all other exceptions → 500 with structured `{"detail": "Rebuild failed: …"}` and an `ERROR`-level log entry.
+
+### Backend: semantic layer null check and warmup log level
+- `backend/app/main.py`
+  - `semantic_ask`: changed `_semantic_state["layer"]` to `.get("layer")` with an explicit 503 guard — prevents a potential KeyError if warmup partially initialises state.
+  - Background warmup thread: failure now logged at `ERROR` (was `WARNING`) with `exc_info=True` so the full traceback appears in operator logs.
+
+### ComplianceView: empty state explains why no entities exist for fresh live workspaces
+- `frontend/src/components/ComplianceView.tsx`
+  - Live users with an empty ontology saw "No entities classified yet." with a link but no explanation. Added a brief description: "Compliance classifications appear here once you build the semantic layer from your connected data sources."
+
 ### Backend: context store seeded AW data no longer visible to live users
 - `backend/app/context/store.py`
   - Added `is_seeded: bool = False` field to `ContextEntity`, `ContextMetric`, and `ContextGlossaryTerm` dataclasses.

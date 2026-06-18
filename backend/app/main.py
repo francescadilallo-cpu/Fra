@@ -1110,7 +1110,9 @@ async def lifespan(app: FastAPI):
         try:
             _ensure_semantic_loaded()
         except Exception as exc:
-            logger.warning("Background semantic stack warmup failed: %s", exc)
+            logger.error(
+                "Background semantic stack warmup failed: %s", exc, exc_info=True
+            )
 
     import threading as _threading  # noqa: PLC0415
 
@@ -1286,6 +1288,18 @@ def login_for_access_token(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"{AUTH_USERS_JSON_ENV} is not configured",
+        )
+
+    if not _load_auth_users():
+        # Env var is set but parsed to an empty dict — misconfigured JSON or all
+        # entries are invalid. Return 503 (not 401) so operators know the env var
+        # is the problem, not the credentials.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"{AUTH_USERS_JSON_ENV} is set but contains no valid user entries — "
+                "check server configuration"
+            ),
         )
 
     user = _authenticate_user(form_data.username, form_data.password)
@@ -1751,7 +1765,12 @@ def semantic_ask(
             return SemanticAskResponse.model_validate_json(hit)
 
     _ensure_semantic_loaded()
-    layer = _semantic_state["layer"]
+    layer = _semantic_state.get("layer")
+    if layer is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Semantic layer is not loaded — check server logs",
+        )
 
     # Merge user-provided context (entities, metrics, glossary) with YAML docs.
     # Pass the merged docs directly to ask() instead of mutating the shared layer
@@ -1935,9 +1954,21 @@ def rebuild_data_store(
     from .connectors.duckdb_source_manager import get_source_manager
 
     mgr = get_source_manager(_SCENARIO_PATH)
-    row_counts = mgr.rebuild()
-    meta = mgr.describe()
-    _refresh_catalog_and_kg_after_rebuild(mgr)
+    try:
+        row_counts = mgr.rebuild()
+        meta = mgr.describe()
+        _refresh_catalog_and_kg_after_rebuild(mgr)
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Data store rebuild failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rebuild failed: {exc}",
+        ) from exc
     _audit(
         request,
         current_user,
@@ -2171,8 +2202,13 @@ def sync_source(
     try:
         mgr.ingest_one(source_id)
         _refresh_catalog_and_kg_after_rebuild(mgr)
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     cfg = mgr.registry.get(source_id) or cfg
     _audit(request, current_user, "Synced data source", source_id, category="data")
     return _source_cfg_to_response(cfg)
