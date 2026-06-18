@@ -1265,7 +1265,7 @@ export function WorkspaceSection() {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section id="workspace-section" className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
       <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
         <Building2 className="w-4 h-4 text-teal-600" />
         Workspace
@@ -1276,7 +1276,7 @@ export function WorkspaceSection() {
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && void handleSave()}
-          placeholder="Company name"
+          placeholder="e.g. Acme Corp"
           className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
         />
         <button

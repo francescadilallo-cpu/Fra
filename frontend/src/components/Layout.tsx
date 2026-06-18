@@ -301,7 +301,7 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
         ) : !IS_DEMO_MODE && (
           <>
             <button
-              onClick={() => onTabChange('config')}
+              onClick={() => { onTabChange('config'); setTimeout(() => document.getElementById('workspace-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150) }}
               className="flex items-center gap-1 text-xs text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded-lg px-2.5 py-1 transition-colors"
               title="Set your workspace name"
             >

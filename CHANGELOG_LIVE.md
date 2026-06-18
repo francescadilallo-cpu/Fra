@@ -12,6 +12,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Config: workspace setup UX improvements for new live users
+- `frontend/src/components/AdminSections.tsx`
+  - `WorkspaceSection`: added `id="workspace-section"` to the section element so the header CTA can scroll directly to it.
+  - Company name input placeholder: `"Company name"` → `"e.g. Acme Corp"` — more immediately scannable for users who haven't set one.
+- `frontend/src/components/Layout.tsx`
+  - "Set up workspace" header CTA: now scrolls to `#workspace-section` with `scrollIntoView()` (150 ms delay to allow tab transition) after navigating to the Config tab. Without this, users landed at the top of a long Config page and had to discover the Workspace section by scrolling.
+
 ### Backend: fix Italian-language error messages shown to live English users
 - `backend/app/main.py`
   - Rate limit (429) response: "Troppe richieste. Riprova tra poco." → "Too many requests — please wait a moment and try again."
