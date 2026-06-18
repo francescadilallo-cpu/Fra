@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: remove hardcoded AW entity names from "entity not modeled" fallback
+- `backend/app/semantic/layer.py`
+  - `_q_entity_not_modeled()` had a final fallback at the bottom of its if/elif chain (used when `_effective_docs`, `_ontology`, and `_catalog` are all None) that listed `"Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"` — the AdventureWorks demo entity set. A live user who queries an unrecognised entity while the semantic layer is still initialising would see AW entity names, not their own.
+  - Replaced with `None` sentinel; when no entity list is available, the message now reads "Connect a data source and run the pipeline to build your ontology." instead.
+
 ### Backend: sanitize source ingestion error messages before storing in registry
 - `backend/app/connectors/duckdb_source_manager.py`
   - Added `_safe_ingest_error(exc)` helper. Our own `ValueError` / `FileNotFoundError` / `NotImplementedError` carry crafted messages the user needs (e.g. "Could not connect to PostgreSQL: …", "Excel file contains no rows"). Any other exception type (DuckDB catalog errors like "Catalog Error: Table 'X' already exists", driver internals, etc.) is replaced with a generic "Ingestion failed — please check the source configuration and try again".

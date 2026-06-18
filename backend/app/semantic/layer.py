@@ -1527,11 +1527,17 @@ class SemanticLayer:
         elif self._catalog:
             available = ", ".join(sorted(self._catalog.list_entities())[:12])
         else:
-            available = "Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"
-        msg = (
-            f"The entity '{entity}' is not modeled in the semantic layer. "
-            f"Available entities are: {available}."
-        )
+            available = None
+        if available:
+            msg = (
+                f"The entity '{entity}' is not modeled in the semantic layer. "
+                f"Available entities are: {available}."
+            )
+        else:
+            msg = (
+                f"The entity '{entity}' is not modeled in the semantic layer. "
+                "Connect a data source and run the pipeline to build your ontology."
+            )
         return Result(
             answer=msg,
             sources_touched=[],
