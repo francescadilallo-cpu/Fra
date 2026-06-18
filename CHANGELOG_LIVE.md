@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### AgentsView: fix availableEntities using AW sector nodes for live users
+- `frontend/src/components/AgentsView.tsx`
+  - `availableEntities` (the entity dropdown in the Agent Builder modal) was built from `SECTORS[sectorId].ontology.nodes` — the AW sector nodes — as a base for all modes. A live manufacturing-sector user opening the agent builder would see AW entity names (SalesOrder, Customer, Employee…) in the dropdown even with no live ontology built.
+  - Fixed: in live mode, base entities come from `liveConfig?.ontology.nodes` (real backend entities) instead of the sector's demo ontology. Builder-added nodes from the extension store are still merged in.
+
 ### ContextTab: replace AW-specific entity form placeholders with generic examples
 - `frontend/src/components/ContextTab.tsx`
   - "Add entity" form: `placeholder="e.g. SalesOrder"` (technical name) and `"e.g. Sales Order"` (display name) → both replaced with `"e.g. Customer"`.

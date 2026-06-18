@@ -1151,12 +1151,14 @@ export default function AgentsView() {
   const customAgents = useMemo(() => customAgentsDefs.map(c => customToAgentDef(c, liveRowCounts)), [customAgentsDefs, liveRowCounts])
 
   const availableEntities = useMemo(() => {
-    const base = SECTORS[sectorId].ontology.nodes.map(n => n.data.label)
+    const base = IS_DEMO_MODE
+      ? SECTORS[sectorId].ontology.nodes.map(n => n.data.label)
+      : (liveConfig?.ontology.nodes ?? []).map(n => n.data.label)
     try {
       const ext = loadExtension(sectorId)
       return [...new Set([...base, ...ext.nodes.map(n => n.label)])]
     } catch { return base }
-  }, [sectorId])
+  }, [sectorId, liveConfig])
 
   // ── Builder modal ──────────────────────────────────────────────────────────
   const [showBuilder, setShowBuilder] = useState(false)
