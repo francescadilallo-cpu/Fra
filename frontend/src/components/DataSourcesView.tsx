@@ -14,7 +14,7 @@ import {
   getConnectorBackendDef,
   type BackendSource, type ParamField,
 } from '../api/sources'
-import { buildSemanticLayer, semanticSources } from '../api/semantic'
+import { buildSemanticLayer, semanticSources, backendErrorMessage } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
@@ -303,7 +303,7 @@ function ConnectedSourcesPanel({
     return (
       <div className="bg-white border border-slate-200 border-dashed rounded-xl p-8 text-center">
         <Database className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-        <p className="text-sm text-slate-500 font-medium">No additional sources connected</p>
+        <p className="text-sm text-slate-500 font-medium">{IS_DEMO_MODE ? 'No additional sources connected' : 'No sources connected yet'}</p>
         <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file below to start ingesting.</p>
       </div>
     )
@@ -609,8 +609,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         newSource.status === 'error' ? 'error' : 'ok',
       )
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Connection failed'
-      showToast(msg, 'error')
+      showToast(backendErrorMessage(err) || 'Connection failed', 'error')
     } finally {
       setCredentialLoading(false)
       setConnectingId(null)
@@ -625,8 +624,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       setSources(prev => prev.filter(s => s.id !== sourceId))
       showToast(`${src?.label ?? sourceId} disconnected`)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Disconnect failed'
-      showToast(msg, 'error')
+      showToast(backendErrorMessage(err) || 'Disconnect failed', 'error')
     }
   }
 
@@ -644,7 +642,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       setSources(prev => prev.map(s => s.id === sourceId ? updated : s))
       showToast(`${updated.label} synced · ${updated.row_count.toLocaleString('en-US')} records`)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Sync failed'
+      const msg = backendErrorMessage(err) || 'Sync failed'
       setSources(prev => prev.map(s => s.id === sourceId ? { ...s, status: 'error', error_msg: msg } : s))
       showToast(msg, 'error')
     }
@@ -697,8 +695,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       showToast(`Ingested ${upload.rows.length.toLocaleString('en-US')} rows from ${upload.filename}`)
       setUpload(null)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Ingest failed'
-      showToast(msg, 'error')
+      showToast(backendErrorMessage(err) || 'Ingest failed', 'error')
     } finally {
       setIngesting(false)
     }
@@ -769,7 +766,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {sourcesError && (
           <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            {sourcesError} — connect a source below to start (auth required)
+            {sourcesError}
           </div>
         )}
 

@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### DataSourcesView: fix error handling and empty-state copy for live users
+- `frontend/src/components/DataSourcesView.tsx`
+  - Empty state for connected sources panel: "No additional sources connected" used the word "additional" which implied there were already some base sources — confusing for live users who have none. Live mode now reads "No sources connected yet".
+  - Sources load error banner: appended the unconditional suffix "— connect a source below to start (auth required)" regardless of the actual error type (could be a 500, timeout, etc.). Removed the suffix; the error message from the server is sufficient.
+  - Error handling in `submitCredentials`, `disconnectSource`, `syncById`, and `ingestCsv`: all four catch blocks used inline `(err as ...).response.data.detail ?? 'fallback'` extraction, bypassing the shared `backendErrorMessage()` utility (which handles FastAPI arrays, 500/503 fallbacks, and ECONNABORTED). Switched all four to use `backendErrorMessage()`.
+
 ### Backend: data_store_status and aw_engine no longer expose raw exceptions to users
 - `backend/app/main.py`
   - `GET /api/data/store/status` (accessible by all authenticated users): catch block returned `{"error": str(exc)}` — the raw Python exception, potentially exposing file paths or internal state. Now returns `{"error": "Unable to load data store status"}` and logs the detail at ERROR level.
