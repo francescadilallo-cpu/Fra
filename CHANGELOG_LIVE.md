@@ -43,6 +43,15 @@ work is traceable across sessions and the git history is easy to reconcile.
 - `frontend/src/components/Layout.tsx`
   - "Set up workspace" header CTA: now scrolls to `#workspace-section` with `scrollIntoView()` (150 ms delay to allow tab transition) after navigating to the Config tab. Without this, users landed at the top of a long Config page and had to discover the Workspace section by scrolling.
 
+### Backend: English command support and English error messages in agentic executive layer
+- `backend/app/agentic/executive.py`
+  - `_parse_command`: The command parser only accepted Italian-language commands (regex patterns for "Sposta la data di consegna", "Segna l'ordine come", "Cancella l'ordine") but the AgentsView.tsx UI showed English examples ("Update the delivery date of order…", "Mark order as shipped", "Cancel order"). Added English regex patterns so both Italian and English commands are accepted.
+  - Added English terms ("shipped", "delivered", "processing") to `_STATUS_MAP` (was `_STATUS_IT_MAP`). Old name retained as alias to avoid breaking existing references.
+  - All Italian-language error messages in `_parse_command`, `submit_command`, `_validate_semantics`, and `approve_action` translated to English (e.g., "Ordine X non trovato" → "Order X not found", "Transizione di stato non valida" → "Invalid status transition", etc.).
+  - Italian rationale strings ("Write-back governato via Executive Agentic Layer") translated to English.
+- `backend/tests/test_executive_agentic.py`
+  - Updated test match patterns to use English strings (`"not supported"`, `"Invalid date"`, `"not found"`, `"Invalid status transition"` etc.).
+
 ### Backend: sanitize SemanticOntologyViolationError message in /api/semantic/ask
 - `backend/app/main.py`
   - `SemanticOntologyViolationError` catch block was returning `str(e)` to the HTTP client. The underlying error messages contain internal entity names, intent contract details, and property paths (e.g., `"Ontology violation: entities ['X'] are outside intent contract ['Y']"`). These are confusing for live users and expose internal schema details. Replaced with a generic user-friendly message: `"Your question doesn't match the available data model. Try rephrasing or ask about a different entity."`. The original error is now logged at INFO level for debugging.

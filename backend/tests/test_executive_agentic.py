@@ -117,7 +117,7 @@ class TestParseCommand:
         assert action.new_status == "cancelled"
 
     def test_unsupported_command_raises(self):
-        with pytest.raises(AgentSemanticValidationError, match="non supportato"):
+        with pytest.raises(AgentSemanticValidationError, match="not supported"):
             self._parse("Crea un nuovo ordine per cliente 5")
 
     def test_empty_command_raises(self):
@@ -136,7 +136,7 @@ class TestParseCommand:
         # 2025-13-45 is syntactically well-formed but not a real date.
         # Must surface as AgentSemanticValidationError (422), not an uncaught
         # ValueError that would become a 500.
-        with pytest.raises(AgentSemanticValidationError, match="[Dd]ata non valida"):
+        with pytest.raises(AgentSemanticValidationError, match="[Ii]nvalid date"):
             self._parse("Sposta la data di consegna dell'ordine 5 al 2025-13-45")
 
 
@@ -215,7 +215,7 @@ class TestSubmitCommand:
 
     def test_submit_unknown_order_raises_validation_error(self):
         layer = _make_layer_with_db([])
-        with pytest.raises(AgentSemanticValidationError, match="non trovato"):
+        with pytest.raises(AgentSemanticValidationError, match="not found"):
             layer.submit_command(
                 "Cancella l'ordine 999", actor="user", actor_role="admin"
             )
@@ -232,7 +232,9 @@ class TestSubmitCommand:
                 }
             ]
         )
-        with pytest.raises(AgentSemanticValidationError, match="[Tt]ransizione"):
+        with pytest.raises(
+            AgentSemanticValidationError, match="[Ii]nvalid status transition"
+        ):
             layer.submit_command(
                 "Segna l'ordine 20 come spedito", actor="u", actor_role="a"
             )
@@ -353,7 +355,7 @@ class TestApprovalRevalidatesAgainstCurrentState:
         writeback = MagicMock()
         monkeypatch.setattr(layer, "_execute_writeback", writeback)
 
-        with pytest.raises(AgentExecutionError, match="[Tt]ransizione"):
+        with pytest.raises(AgentExecutionError, match="[Ii]nvalid status transition"):
             layer.approve_action(
                 action.action_id,
                 actor="mgr",
@@ -388,7 +390,7 @@ class TestApprovalRevalidatesAgainstCurrentState:
         writeback = MagicMock()
         monkeypatch.setattr(layer, "_execute_writeback", writeback)
 
-        with pytest.raises(AgentExecutionError, match="non trovato"):
+        with pytest.raises(AgentExecutionError, match="not found"):
             layer.approve_action(
                 action.action_id,
                 actor="mgr",

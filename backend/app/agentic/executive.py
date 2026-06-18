@@ -63,12 +63,20 @@ class ResyncResult(BaseModel):
 
 OrderStatus = Literal["shipped", "cancelled", "delivered", "processing"]
 
-_STATUS_IT_MAP: dict[str, str] = {
+_STATUS_MAP: dict[str, str] = {
+    # Italian
     "spedito": "shipped",
     "consegnato": "delivered",
     "in lavorazione": "processing",
     "in elaborazione": "processing",
+    # English
+    "shipped": "shipped",
+    "delivered": "delivered",
+    "processing": "processing",
+    "in processing": "processing",
 }
+# Keep old name as alias for any references still using it
+_STATUS_IT_MAP = _STATUS_MAP
 
 _VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "processing": {"shipped", "cancelled"},
@@ -158,7 +166,7 @@ class ExecutiveAgenticLayer:
     ) -> PendingAgentAction:
         command_norm = command.strip()
         if not command_norm:
-            raise AgentSemanticValidationError("Comando esecutivo vuoto")
+            raise AgentSemanticValidationError("Command cannot be empty")
 
         proposal = self._parse_command(command_norm)
         self._audit(
@@ -179,7 +187,9 @@ class ExecutiveAgenticLayer:
                 actor_role=actor_role,
                 details={"reason": validation.reason, "checks": validation.checks},
             )
-            raise AgentSemanticValidationError(validation.reason or "Azione non valida")
+            raise AgentSemanticValidationError(
+                validation.reason or "Action rejected — check syntax or business rules"
+            )
 
         action_id = str(uuid.uuid4())
         action = PendingAgentAction(
@@ -280,8 +290,8 @@ class ExecutiveAgenticLayer:
                 revalidation = self._validate_semantics(action.proposed_action)
                 if not revalidation.passed:
                     raise AgentSemanticValidationError(
-                        "Rivalidazione fallita: lo stato e' cambiato dalla "
-                        f"proposta originale — {revalidation.reason}"
+                        "Re-validation failed: state has changed since the original "
+                        f"proposal — {revalidation.reason}"
                     )
 
                 self._execute_writeback(action.proposed_action)
@@ -345,6 +355,7 @@ class ExecutiveAgenticLayer:
     def _parse_command(self, command: str) -> ProposedWriteAction:
         import re
 
+        # Italian patterns kept for backward compatibility
         delivery_re = re.compile(
             r"sposta\s+la\s+data\s+di\s+consegna\s+dell[' ]ordine\s+(\d+)\s+(?:al|alla|a)\s+(\d{4}-\d{2}-\d{2})",
             re.IGNORECASE,
@@ -357,51 +368,67 @@ class ExecutiveAgenticLayer:
             r"(?:cancella|annulla)\s+l[' ]ordine\s+(\d+)",
             re.IGNORECASE,
         )
+        # English patterns
+        delivery_en_re = re.compile(
+            r"(?:update|change|set)\s+(?:the\s+)?delivery\s+date\s+(?:of\s+)?(?:order\s+)?(\d+)\s+to\s+(\d{4}-\d{2}-\d{2})",
+            re.IGNORECASE,
+        )
+        status_en_re = re.compile(
+            r"(?:mark|set)\s+order\s+(\d+)\s+as\s+(shipped|delivered|processing|in\s+processing)",
+            re.IGNORECASE,
+        )
+        cancel_en_re = re.compile(
+            r"(?:cancel)\s+order\s+(\d+)",
+            re.IGNORECASE,
+        )
 
-        m = delivery_re.search(command)
-        if m:
-            try:
-                parsed_date = date.fromisoformat(m.group(2))
-            except ValueError as exc:
-                raise AgentSemanticValidationError(
-                    f"Data non valida: '{m.group(2)}' non è una data calendario reale"
-                ) from exc
-            return ProposedWriteAction(
-                action_type="UPDATE_ORDER_DELIVERY_DATE",
-                order_id=int(m.group(1)),
-                new_delivery_date=parsed_date,
-                rationale="Write-back governato via Executive Agentic Layer",
-            )
-
-        m = status_re.search(command)
-        if m:
-            italian_status = m.group(2).lower().strip()
-            mapped = _STATUS_IT_MAP.get(italian_status)
-            if not mapped:
-                raise AgentSemanticValidationError(
-                    f"Stato non riconosciuto: {italian_status}"
+        for regex in (delivery_re, delivery_en_re):
+            m = regex.search(command)
+            if m:
+                try:
+                    parsed_date = date.fromisoformat(m.group(2))
+                except ValueError as exc:
+                    raise AgentSemanticValidationError(
+                        f"Invalid date: '{m.group(2)}' is not a valid calendar date (expected YYYY-MM-DD)"
+                    ) from exc
+                return ProposedWriteAction(
+                    action_type="UPDATE_ORDER_DELIVERY_DATE",
+                    order_id=int(m.group(1)),
+                    new_delivery_date=parsed_date,
+                    rationale="Write-back via Executive Agentic Layer",
                 )
-            return ProposedWriteAction(
-                action_type="UPDATE_ORDER_STATUS",
-                order_id=int(m.group(1)),
-                new_status=mapped,
-                rationale="Write-back governato via Executive Agentic Layer",
-            )
 
-        m = cancel_re.search(command)
-        if m:
-            return ProposedWriteAction(
-                action_type="UPDATE_ORDER_STATUS",
-                order_id=int(m.group(1)),
-                new_status="cancelled",
-                rationale="Write-back governato via Executive Agentic Layer",
-            )
+        for regex in (status_re, status_en_re):
+            m = regex.search(command)
+            if m:
+                raw_status = m.group(2).lower().strip()
+                mapped = _STATUS_MAP.get(raw_status)
+                if not mapped:
+                    raise AgentSemanticValidationError(
+                        f"Unrecognised status: '{raw_status}'. Valid values: shipped, delivered, processing"
+                    )
+                return ProposedWriteAction(
+                    action_type="UPDATE_ORDER_STATUS",
+                    order_id=int(m.group(1)),
+                    new_status=mapped,
+                    rationale="Write-back via Executive Agentic Layer",
+                )
+
+        for regex in (cancel_re, cancel_en_re):
+            m = regex.search(command)
+            if m:
+                return ProposedWriteAction(
+                    action_type="UPDATE_ORDER_STATUS",
+                    order_id=int(m.group(1)),
+                    new_status="cancelled",
+                    rationale="Write-back via Executive Agentic Layer",
+                )
 
         raise AgentSemanticValidationError(
-            "Comando non supportato. Formati validi: "
-            "'Sposta la data di consegna dell'ordine <id> al YYYY-MM-DD' | "
-            "'Segna l'ordine <id> come spedito/consegnato' | "
-            "'Cancella l'ordine <id>'"
+            "Command not supported. Valid formats: "
+            "'Update the delivery date of order <id> to YYYY-MM-DD' | "
+            "'Mark order <id> as shipped/delivered' | "
+            "'Cancel order <id>'"
         )
 
     def _validate_semantics(self, action: ProposedWriteAction) -> ValidationOutcome:
@@ -412,7 +439,7 @@ class ExecutiveAgenticLayer:
             return ValidationOutcome(
                 passed=False,
                 checks=checks,
-                reason="Ontologia non disponibile per validazione semantica",
+                reason="Ontology unavailable for semantic validation",
             )
 
         entity_names = set(ontology.entity_names())
@@ -420,7 +447,7 @@ class ExecutiveAgenticLayer:
             return ValidationOutcome(
                 passed=False,
                 checks=checks,
-                reason="Vincolo ontologico non soddisfatto: entity SalesOrder non presente",
+                reason="Ontology constraint not met: entity SalesOrder not present",
             )
         checks.append("ontology_entity_exists:SalesOrder")
 
@@ -430,7 +457,7 @@ class ExecutiveAgenticLayer:
             return ValidationOutcome(
                 passed=False,
                 checks=checks,
-                reason="Vincolo ontologico non soddisfatto: property order_date non presente in SalesOrder",
+                reason="Ontology constraint not met: property order_date not present in SalesOrder",
             )
         checks.append("ontology_property_exists:SalesOrder.order_date")
 
@@ -447,7 +474,7 @@ class ExecutiveAgenticLayer:
             return ValidationOutcome(
                 passed=False,
                 checks=checks,
-                reason=f"Ordine {action.order_id} non trovato",
+                reason=f"Order {action.order_id} not found",
             )
         checks.append("order_exists")
 
@@ -458,7 +485,7 @@ class ExecutiveAgenticLayer:
                 return ValidationOutcome(
                     passed=False,
                     checks=checks,
-                    reason="La data di consegna non puo essere antecedente alla data ordine",
+                    reason="Delivery date cannot be before the order date",
                 )
             checks.append("business_rule_delivery_date_gte_order_date")
 
@@ -471,8 +498,8 @@ class ExecutiveAgenticLayer:
                     passed=False,
                     checks=checks,
                     reason=(
-                        f"Transizione di stato non valida: {current_status!r} → {action.new_status!r}. "
-                        f"Consentite: {sorted(allowed) or 'nessuna'}"
+                        f"Invalid status transition: {current_status!r} → {action.new_status!r}. "
+                        f"Allowed: {sorted(allowed) or 'none'}"
                     ),
                 )
             checks.append(
