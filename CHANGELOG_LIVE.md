@@ -12,6 +12,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: context store seeded AW data no longer visible to live users
+- `backend/app/context/store.py`
+  - Added `is_seeded: bool = False` field to `ContextEntity`, `ContextMetric`, and `ContextGlossaryTerm` dataclasses.
+  - Schema: `is_seeded INTEGER NOT NULL DEFAULT 0` column added to `context_entities`, `context_metrics`, `context_glossary` tables (CREATE TABLE + ALTER TABLE migration for existing DBs).
+  - Startup migration backfills `is_seeded=1` for all known AdventureWorks demo records (7 entities, 5 metrics, 7 glossary terms) so existing deployments are fixed without a manual DB reset.
+  - `add_entity()`, `add_metric()`, `add_glossary_term()` each accept an `is_seeded` keyword argument (default `False`).
+  - `list_entities()`, `list_metrics()`, `list_glossary()` accept `exclude_seeded: bool = False`; when `True`, the SQL `WHERE is_seeded = 0` filter is applied.
+  - `seed_demo_data()` now passes `is_seeded=True` to all three add methods so newly seeded records are correctly tagged.
+  - `to_semantic_docs_override()` accepts `mode: str = "demo"` and calls the list methods with `exclude_seeded=(mode == "live")`. The memoised cache is now a `dict` keyed by mode so live and demo builds are cached independently.
+- `backend/app/main.py`
+  - Semantic ask endpoint passes `mode=_current_user.mode` to `_context_store.to_semantic_docs_override()`.
+- `backend/app/context/router.py`
+  - `GET /api/context/entities`, `GET /api/context/metrics`, `GET /api/context/glossary` now authenticate the caller via a lazy `_get_current_user` proxy dependency and pass `exclude_seeded=(mode == "live")` to the store, so live users don't see AW demo entities/metrics/glossary in the Context tab UI.
+  - Added a local `_oauth2_scheme` (`OAuth2PasswordBearer`) to avoid circular imports (the existing `_get_current_user_dep()` helper was designed for future use but called at module-load time, which would fail because `main.py` defines `oauth2_scheme` and `get_current_user` after importing this router).
+
 ### Dashboard: fix "Revenue 2014" KPI label leaking to live manufacturing users
 - `frontend/src/components/Dashboard.tsx`
   - The 4th KPI card's label fell back to `sector.kpiLabels.openValue` which for the manufacturing sector is `'Revenue 2014'` — a reference to the AdventureWorks 2014 dataset. Live manufacturing-sector users saw this AW-specific label on their dashboard.

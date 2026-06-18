@@ -1758,7 +1758,7 @@ def semantic_ask(
     # object, which would cause a race condition under concurrent requests.
     merged_docs = None
     try:
-        user_docs = _context_store.to_semantic_docs_override()
+        user_docs = _context_store.to_semantic_docs_override(mode=_current_user.mode)
         from .semantic.doc_schema import SemanticDocs  # noqa: PLC0415
 
         _base_docs = _semantic_state.get("base_docs")

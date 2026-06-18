@@ -34,6 +34,7 @@ class ContextEntity:
     description: str
     source: str
     created_at: str
+    is_seeded: bool = False
 
 
 @dataclass
@@ -46,6 +47,7 @@ class ContextMetric:
     unit: str
     certified: bool
     created_at: str
+    is_seeded: bool = False
 
 
 @dataclass
@@ -54,6 +56,7 @@ class ContextGlossaryTerm:
     term: str
     definition: str
     created_at: str
+    is_seeded: bool = False
 
 
 class ContextStore:
@@ -65,7 +68,7 @@ class ContextStore:
         # semantic ask, and rereading up to 1500 rows of entities/metrics/
         # glossary per request is pure waste. Invalidated on any mutation.
         self._docs_cache_lock = threading.Lock()
-        self._docs_cache: object | None = None
+        self._docs_cache: dict[str, object] = {}
         if os.getenv("FRA_SEED_DEMO_SOURCES", "false").strip().lower() in {
             "1",
             "true",
@@ -78,7 +81,7 @@ class ContextStore:
 
     def _invalidate_docs_cache(self) -> None:
         with self._docs_cache_lock:
-            self._docs_cache = None
+            self._docs_cache.clear()
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db)
@@ -105,7 +108,8 @@ class ContextStore:
                     synonyms TEXT NOT NULL DEFAULT '[]',
                     description TEXT NOT NULL DEFAULT '',
                     source TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    is_seeded INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS context_metrics (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,13 +119,15 @@ class ContextStore:
                     description TEXT NOT NULL DEFAULT '',
                     unit TEXT NOT NULL DEFAULT '',
                     certified INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    is_seeded INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS context_glossary (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     term TEXT NOT NULL UNIQUE,
                     definition TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    is_seeded INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_ctx_docs_created_at
                     ON context_documents (created_at DESC);
@@ -130,6 +136,60 @@ class ContextStore:
                 CREATE INDEX IF NOT EXISTS idx_ctx_metrics_created_at
                     ON context_metrics (created_at DESC);
             """)
+            # Migrate existing databases: add is_seeded column if absent.
+            for table in ("context_entities", "context_metrics", "context_glossary"):
+                try:
+                    conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN is_seeded INTEGER NOT NULL DEFAULT 0"  # noqa: S608
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
+            # Backfill is_seeded=1 for known demo-seeded records so that
+            # existing databases (seeded before this column existed) are also
+            # correctly filtered when a live-mode user queries the store.
+            _seeded_entities = (
+                "SalesOrder",
+                "Customer",
+                "Salesperson",
+                "Territory",
+                "Product",
+                "Employee",
+                "SalesOrderLine",
+            )
+            _seeded_metrics = (
+                "total_revenue",
+                "gross_revenue",
+                "order_count",
+                "active_customers",
+                "avg_order_value",
+            )
+            _seeded_terms = (
+                "fatturato",
+                "subtotal_amount",
+                "total_due",
+                "bridge",
+                "matricoladip",
+                "online_order_flag",
+                "knowledge_graph",
+            )
+            conn.execute(
+                "UPDATE context_entities SET is_seeded=1 WHERE name IN ({})".format(  # noqa: S608
+                    ",".join("?" * len(_seeded_entities))
+                ),
+                _seeded_entities,
+            )
+            conn.execute(
+                "UPDATE context_metrics SET is_seeded=1 WHERE name IN ({})".format(  # noqa: S608
+                    ",".join("?" * len(_seeded_metrics))
+                ),
+                _seeded_metrics,
+            )
+            conn.execute(
+                "UPDATE context_glossary SET is_seeded=1 WHERE term IN ({})".format(  # noqa: S608
+                    ",".join("?" * len(_seeded_terms))
+                ),
+                _seeded_terms,
+            )
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -202,11 +262,13 @@ class ContextStore:
         synonyms: list[str],
         description: str,
         source: str,
+        is_seeded: bool = False,
     ) -> ContextEntity:
         with self._conn() as conn:
             cur = conn.execute(
-                "INSERT INTO context_entities (name, display_name, synonyms, description, source, created_at)"
-                " VALUES (?,?,?,?,?,?)",
+                "INSERT INTO context_entities"
+                " (name, display_name, synonyms, description, source, created_at, is_seeded)"
+                " VALUES (?,?,?,?,?,?,?)",
                 (
                     name,
                     display_name,
@@ -214,6 +276,7 @@ class ContextStore:
                     description,
                     source,
                     self._now(),
+                    int(is_seeded),
                 ),
             )
             row = conn.execute(
@@ -221,18 +284,21 @@ class ContextStore:
             ).fetchone()
         d = dict(row)
         d["synonyms"] = json.loads(d["synonyms"])
+        d["is_seeded"] = bool(d["is_seeded"])
         self._invalidate_docs_cache()
         return ContextEntity(**d)
 
-    def list_entities(self) -> list[ContextEntity]:
+    def list_entities(self, exclude_seeded: bool = False) -> list[ContextEntity]:
+        filt = " WHERE is_seeded = 0" if exclude_seeded else ""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_entities ORDER BY created_at DESC LIMIT 500"
+                f"SELECT * FROM context_entities{filt} ORDER BY created_at DESC LIMIT 500"  # noqa: S608
             ).fetchall()
         result = []
         for r in rows:
             d = dict(r)
             d["synonyms"] = json.loads(d["synonyms"])
+            d["is_seeded"] = bool(d.get("is_seeded", 0))
             result.append(ContextEntity(**d))
         return result
 
@@ -252,12 +318,13 @@ class ContextStore:
         description: str,
         unit: str,
         certified: bool,
+        is_seeded: bool = False,
     ) -> ContextMetric:
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO context_metrics"
-                " (name, display_name, synonyms, description, unit, certified, created_at)"
-                " VALUES (?,?,?,?,?,?,?)",
+                " (name, display_name, synonyms, description, unit, certified, created_at, is_seeded)"
+                " VALUES (?,?,?,?,?,?,?,?)",
                 (
                     name,
                     display_name,
@@ -266,6 +333,7 @@ class ContextStore:
                     unit,
                     int(certified),
                     self._now(),
+                    int(is_seeded),
                 ),
             )
             row = conn.execute(
@@ -274,19 +342,22 @@ class ContextStore:
         d = dict(row)
         d["synonyms"] = json.loads(d["synonyms"])
         d["certified"] = bool(d["certified"])
+        d["is_seeded"] = bool(d["is_seeded"])
         self._invalidate_docs_cache()
         return ContextMetric(**d)
 
-    def list_metrics(self) -> list[ContextMetric]:
+    def list_metrics(self, exclude_seeded: bool = False) -> list[ContextMetric]:
+        filt = " WHERE is_seeded = 0" if exclude_seeded else ""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_metrics ORDER BY created_at DESC LIMIT 500"
+                f"SELECT * FROM context_metrics{filt} ORDER BY created_at DESC LIMIT 500"  # noqa: S608
             ).fetchall()
         result = []
         for r in rows:
             d = dict(r)
             d["synonyms"] = json.loads(d["synonyms"])
             d["certified"] = bool(d["certified"])
+            d["is_seeded"] = bool(d.get("is_seeded", 0))
             result.append(ContextMetric(**d))
         return result
 
@@ -298,25 +369,39 @@ class ContextStore:
 
     # ── Glossary ───────────────────────────────────────────────────────────────
 
-    def add_glossary_term(self, term: str, definition: str) -> ContextGlossaryTerm:
+    def add_glossary_term(
+        self,
+        term: str,
+        definition: str,
+        is_seeded: bool = False,
+    ) -> ContextGlossaryTerm:
         t = term.lower().strip()
         with self._conn() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO context_glossary (term, definition, created_at) VALUES (?,?,?)",
-                (t, definition, self._now()),
+                "INSERT OR REPLACE INTO context_glossary"
+                " (term, definition, created_at, is_seeded) VALUES (?,?,?,?)",
+                (t, definition, self._now(), int(is_seeded)),
             )
             row = conn.execute(
                 "SELECT * FROM context_glossary WHERE term=?", (t,)
             ).fetchone()
+        d = dict(row)
+        d["is_seeded"] = bool(d.get("is_seeded", 0))
         self._invalidate_docs_cache()
-        return ContextGlossaryTerm(**dict(row))
+        return ContextGlossaryTerm(**d)
 
-    def list_glossary(self) -> list[ContextGlossaryTerm]:
+    def list_glossary(self, exclude_seeded: bool = False) -> list[ContextGlossaryTerm]:
+        filt = " WHERE is_seeded = 0" if exclude_seeded else ""
         with self._conn() as conn:
             rows = conn.execute(
-                "SELECT * FROM context_glossary ORDER BY term LIMIT 500"
+                f"SELECT * FROM context_glossary{filt} ORDER BY term LIMIT 500"  # noqa: S608
             ).fetchall()
-        return [ContextGlossaryTerm(**dict(r)) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["is_seeded"] = bool(d.get("is_seeded", 0))
+            result.append(ContextGlossaryTerm(**d))
+        return result
 
     def delete_glossary_term(self, term_id: int) -> bool:
         with self._conn() as conn:
@@ -397,7 +482,9 @@ class ContextStore:
             ),
         ]
         for name, display_name, synonyms, description, source in entities:
-            self.add_entity(name, display_name, synonyms, description, source)
+            self.add_entity(
+                name, display_name, synonyms, description, source, is_seeded=True
+            )
             inserted += 1
 
         metrics = [
@@ -447,7 +534,15 @@ class ContextStore:
             ),
         ]
         for name, display_name, synonyms, description, unit, certified in metrics:
-            self.add_metric(name, display_name, synonyms, description, unit, certified)
+            self.add_metric(
+                name,
+                display_name,
+                synonyms,
+                description,
+                unit,
+                certified,
+                is_seeded=True,
+            )
             inserted += 1
 
         glossary = [
@@ -492,7 +587,7 @@ class ContextStore:
             ),
         ]
         for term, definition in glossary:
-            self.add_glossary_term(term, definition)
+            self.add_glossary_term(term, definition, is_seeded=True)
             inserted += 1
 
         # Seed a process context document
@@ -549,7 +644,7 @@ Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
         self._invalidate_docs_cache()
         return inserted
 
-    def to_semantic_docs_override(self):
+    def to_semantic_docs_override(self, mode: str = "demo"):
         from app.semantic.doc_schema import (
             EntityDoc,
             GlossaryTerm,
@@ -558,11 +653,12 @@ Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
         )
 
         with self._docs_cache_lock:
-            if self._docs_cache is not None:
-                return self._docs_cache
+            if mode in self._docs_cache:
+                return self._docs_cache[mode]
             # Build inside the lock so a concurrent _invalidate_docs_cache()
-            # cannot be overwritten by a stale computation that started before
-            # the invalidation but stores after it.
+            # cannot overwrite a stale computation that started before the
+            # invalidation but stores after it.
+            exclude = mode == "live"
             entities = [
                 EntityDoc(
                     name=e.name,
@@ -571,7 +667,7 @@ Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
                     description=e.description,
                     source=e.source,
                 )
-                for e in self.list_entities()
+                for e in self.list_entities(exclude_seeded=exclude)
             ]
             metrics = [
                 MetricDoc(
@@ -582,19 +678,20 @@ Online orders = 87.9% of volume (onlineOrderFlag=1). In-store = 12.1%.
                     unit=m.unit or None,
                     certified=m.certified,
                 )
-                for m in self.list_metrics()
+                for m in self.list_metrics(exclude_seeded=exclude)
             ]
             glossary = [
                 GlossaryTerm(term=g.term, definition=g.definition)
-                for g in self.list_glossary()
+                for g in self.list_glossary(exclude_seeded=exclude)
             ]
-            self._docs_cache = SemanticDocs(
+            result = SemanticDocs(
                 entities=entities,
                 metrics=metrics,
                 glossary=glossary,
                 disambiguation_rules=[],
             )
-            return self._docs_cache
+            self._docs_cache[mode] = result
+            return result
 
 
 # Module-level singleton — import this instead of constructing a new instance

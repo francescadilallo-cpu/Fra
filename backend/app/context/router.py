@@ -8,6 +8,7 @@ import sqlite3
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
 
 from .store import ContextStore, default_store
@@ -16,16 +17,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/context", tags=["context"])
 
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
+
 
 def _get_store() -> ContextStore:
     return default_store
 
 
-def _get_current_user_dep():
-    """Lazy import of get_current_user to avoid circular imports."""
+def _get_current_user(token: str = Depends(_oauth2_scheme)):
+    """Lazy proxy for main.get_current_user — avoids circular import at module load."""
     from app.main import get_current_user  # noqa: PLC0415
 
-    return Depends(get_current_user)
+    return get_current_user(token)
 
 
 # ── PDF extraction helper ──────────────────────────────────────────────────────
@@ -181,8 +184,14 @@ def search_documents(
 
 
 @router.get("/entities", response_model=list[EntityOut])
-def list_entities(store: ContextStore = Depends(_get_store)):
-    return [EntityOut(**e.__dict__) for e in store.list_entities()]
+def list_entities(
+    store: ContextStore = Depends(_get_store),
+    current_user=Depends(_get_current_user),
+):
+    exclude = getattr(current_user, "mode", "demo") == "live"
+    return [
+        EntityOut(**e.__dict__) for e in store.list_entities(exclude_seeded=exclude)
+    ]
 
 
 @router.post("/entities", response_model=EntityOut, status_code=status.HTTP_201_CREATED)
@@ -216,8 +225,12 @@ def delete_entity(entity_id: int, store: ContextStore = Depends(_get_store)):
 
 
 @router.get("/metrics", response_model=list[MetricOut])
-def list_metrics(store: ContextStore = Depends(_get_store)):
-    return [MetricOut(**m.__dict__) for m in store.list_metrics()]
+def list_metrics(
+    store: ContextStore = Depends(_get_store),
+    current_user=Depends(_get_current_user),
+):
+    exclude = getattr(current_user, "mode", "demo") == "live"
+    return [MetricOut(**m.__dict__) for m in store.list_metrics(exclude_seeded=exclude)]
 
 
 @router.post("/metrics", response_model=MetricOut, status_code=status.HTTP_201_CREATED)
@@ -256,8 +269,14 @@ def delete_metric(metric_id: int, store: ContextStore = Depends(_get_store)):
 
 
 @router.get("/glossary", response_model=list[GlossaryOut])
-def list_glossary(store: ContextStore = Depends(_get_store)):
-    return [GlossaryOut(**g.__dict__) for g in store.list_glossary()]
+def list_glossary(
+    store: ContextStore = Depends(_get_store),
+    current_user=Depends(_get_current_user),
+):
+    exclude = getattr(current_user, "mode", "demo") == "live"
+    return [
+        GlossaryOut(**g.__dict__) for g in store.list_glossary(exclude_seeded=exclude)
+    ]
 
 
 @router.post(
