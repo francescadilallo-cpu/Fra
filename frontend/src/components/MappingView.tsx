@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Table2, Pencil, Check, X, Search, GitBranch, ChevronDown, ChevronRight, BookOpen, AlertTriangle, Plus, Tag } from 'lucide-react'
+import { Table2, Pencil, Check, X, Search, GitBranch, ChevronDown, ChevronRight, BookOpen, AlertTriangle, Plus, Tag, Loader2 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
@@ -54,7 +54,8 @@ const DEMO_AMBIGUITIES: Ambiguity[] = IS_DEMO_MODE
   : []
 
 function SemanticDefinitionsPanel() {
-  const [defs, setDefs] = useState<SemanticDef[]>(() => DEMO_DEFS)
+  const [defs, setDefs] = useState<SemanticDef[]>(() => IS_DEMO_MODE ? DEMO_DEFS : [])
+  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [newForm, setNewForm] = useState({ entity: '', field: '', definition: '' })
@@ -64,6 +65,7 @@ function SemanticDefinitionsPanel() {
     api.get<{ definitions: SemanticDef[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.definitions?.length) setDefs(r.data.definitions) })
       .catch(() => { if (IS_DEMO_MODE) setDefs(DEMO_DEFS) })
+      .finally(() => setLoading(false))
   }, [])
 
   function startEdit(i: number) { setEditing(i); setEditText(defs[i].definition) }
@@ -82,6 +84,23 @@ function SemanticDefinitionsPanel() {
     ;(acc[d.entity] ??= []).push(d)
     return acc
   }, {})
+
+  if (loading) return (
+    <div className="flex-1 px-8 py-12 flex items-center justify-center gap-2 text-slate-400">
+      <Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading definitions…</span>
+    </div>
+  )
+
+  if (!IS_DEMO_MODE && defs.length === 0) return (
+    <div className="flex-1 px-8 py-16 flex flex-col items-center justify-center text-center gap-3">
+      <BookOpen className="w-10 h-10 text-slate-200" />
+      <p className="text-sm font-medium text-slate-500">No semantic definitions yet</p>
+      <p className="text-xs text-slate-400 max-w-xs">Build the semantic layer to auto-generate field definitions, or add one manually below.</p>
+      <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+        <Plus className="w-3.5 h-3.5" />Add first definition
+      </button>
+    </div>
+  )
 
   return (
     <div className="flex-1 px-8 py-6 space-y-6">
@@ -160,13 +179,29 @@ function SemanticDefinitionsPanel() {
 }
 
 function AmbiguityLogPanel() {
-  const [ambiguities, setAmbiguities] = useState<Ambiguity[]>(() => DEMO_AMBIGUITIES)
+  const [ambiguities, setAmbiguities] = useState<Ambiguity[]>(() => IS_DEMO_MODE ? DEMO_AMBIGUITIES : [])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.get<{ ambiguities: Ambiguity[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.ambiguities?.length) setAmbiguities(r.data.ambiguities) })
       .catch(() => { if (IS_DEMO_MODE) setAmbiguities(DEMO_AMBIGUITIES) })
+      .finally(() => setLoading(false))
   }, [])
+
+  if (loading) return (
+    <div className="flex-1 px-8 py-12 flex items-center justify-center gap-2 text-slate-400">
+      <Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm">Loading ambiguities…</span>
+    </div>
+  )
+
+  if (!IS_DEMO_MODE && ambiguities.length === 0) return (
+    <div className="flex-1 px-8 py-16 flex flex-col items-center justify-center text-center gap-3">
+      <AlertTriangle className="w-10 h-10 text-slate-200" />
+      <p className="text-sm font-medium text-slate-500">No ambiguities documented</p>
+      <p className="text-xs text-slate-400 max-w-xs">Ambiguities are detected automatically when the semantic layer finds conflicting field definitions across sources.</p>
+    </div>
+  )
 
   return (
     <div className="flex-1 px-8 py-6 space-y-4">
@@ -329,7 +364,7 @@ function TableGroup({ table, rows, savedEdits, onSave }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-white">
-                {['ERP Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
+                {['Source Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] text-slate-400 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>

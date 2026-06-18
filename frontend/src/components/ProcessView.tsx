@@ -625,10 +625,18 @@ export default function ProcessView() {
         {runState === 'done' && (
           <div className="mx-6 mb-5 grid grid-cols-4 gap-3">
             {[
-              { label: 'Rows Extracted',   value: summary.rows,                   sub: `${(liveConfig?.connectors ?? sector.connectors).length} sources connected` },
-              { label: 'Entities Mapped',  value: String(summary.entities),        sub: `${summary.entities} ontology classes` },
-              { label: 'KG Nodes Created', value: summary.enrichments,             sub: 'instances in Knowledge Graph' },
-              { label: 'KG Edges Indexed', value: summary.triples,                 sub: '3 cross-source bridges' },
+              { label: 'Rows Extracted',
+                value: summary.rows,
+                sub: `${(liveConfig?.connectors ?? sector.connectors).length} sources connected` },
+              { label: 'Entities Mapped',
+                value: String(liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)),
+                sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} ontology classes` },
+              { label: 'KG Nodes Created',
+                value: summary.enrichments,
+                sub: IS_DEMO_MODE ? 'instances in Knowledge Graph' : 'entities in Knowledge Graph' },
+              { label: 'KG Edges Indexed',
+                value: IS_DEMO_MODE ? summary.triples : String(liveConfig?.ontology?.edges?.length ?? 0),
+                sub: IS_DEMO_MODE ? '3 cross-source bridges' : `${liveConfig?.ontology?.edges?.length ?? 0} cross-source relationships` },
             ].map(({ label, value, sub }) => (
               <div key={label} className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 text-center">
                 <p className="text-lg font-bold text-teal-700">{value}</p>
@@ -661,10 +669,12 @@ export default function ProcessView() {
                   ) : (
                     <p className="text-xs text-slate-400 mt-0.5">—</p>
                   )}
-                  <div className="mt-2 flex items-center justify-center gap-1 text-xs text-slate-500">
-                    <Clock className="w-3 h-3" />
-                    <span>{AVG_DAYS[i % AVG_DAYS.length]}</span>
-                  </div>
+                  {IS_DEMO_MODE && (
+                    <div className="mt-2 flex items-center justify-center gap-1 text-xs text-slate-500">
+                      <Clock className="w-3 h-3" />
+                      <span>{AVG_DAYS[i % AVG_DAYS.length]}</span>
+                    </div>
+                  )}
                 </div>
                 {i < processStages.length - 1 && (
                   <div className="mt-10 text-slate-300 text-xl font-light flex-shrink-0">→</div>
