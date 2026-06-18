@@ -731,6 +731,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                 </div>
               </div>
             ))}
+            {activities.length === 0 && !IS_DEMO_MODE && (
+              <div className="py-4 text-center">
+                <Activity className="w-6 h-6 text-slate-200 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No activity yet</p>
+                <button onClick={() => onNavigate?.('sources')} className="text-xs text-teal-600 hover:underline mt-1">
+                  Connect a data source →
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -759,6 +768,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                 </div>
               </div>
             ))}
+            {records.length === 0 && !IS_DEMO_MODE && (
+              <div className="py-4 text-center">
+                <Database className="w-6 h-6 text-slate-200 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No entities yet</p>
+                <button onClick={() => onNavigate?.('sembuilder')} className="text-xs text-teal-600 hover:underline mt-1">
+                  Build the semantic layer →
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -787,6 +805,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                 </div>
               </div>
             ))}
+            {sources.length === 0 && !IS_DEMO_MODE && (
+              <div className="py-4 text-center">
+                <Database className="w-6 h-6 text-slate-200 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No sources connected</p>
+                <button onClick={() => onNavigate?.('sources')} className="text-xs text-teal-600 hover:underline mt-1">
+                  Add a data source →
+                </button>
+              </div>
+            )}
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2 text-xs text-slate-400">
             <Package className={`w-3.5 h-3.5 ${pipelineLastRun ? 'text-teal-500' : ''}`} />

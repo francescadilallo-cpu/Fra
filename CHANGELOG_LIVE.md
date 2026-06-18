@@ -26,6 +26,12 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Cross-source Knowledge Graph" now describes the user's *real* connected systems (`connectors.join(' ↔ ')`) and KG node/edge counts instead of `PLACED_BY, SOLD_BY, OF_PRODUCT link ERP↔CRM↔HR↔PIM`.
   - "Semantic Definitions" drops the `"fatturato"` example in live mode, using a generic phrasing.
 
+### Dashboard: empty states for fresh live workspaces
+- `frontend/src/components/Dashboard.tsx`
+  - "Recent Activity" panel: added a guided empty state for live users who have not yet connected any sources (was silently empty).
+  - "Data Entities" panel: added an empty state that links to the semantic layer builder.
+  - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
+
 ### Remove demo content leaks from AgentsView and DataExplorer
 - `frontend/src/components/AgentsView.tsx`
   - `ExecutiveActionsPanel` example text was Italian AdventureWorks commands ("Sposta la data di consegna…") — visible to live admin users because the panel is only shown in live mode. Replaced with generic English examples.
