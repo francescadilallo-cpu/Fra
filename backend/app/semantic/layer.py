@@ -1669,17 +1669,26 @@ class SemanticLayer:
                     disambiguation_required=False,
                 )
 
-        # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs)
-        definition = self._GLOSSARY.get(raw_term)
-        if definition is None and raw_term:
-            for key, val in self._GLOSSARY.items():
-                if raw_term in key or key in raw_term:
-                    definition = val
-                    break
-        if definition is None:
+        # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs).
+        # Skipped for live-mode requests: _GLOSSARY encodes AW demo semantics and would
+        # return AW-specific definitions (column names, dollar figures) to live users.
+        _live = bool(getattr(SemanticLayer._thread_local, "hidden_tables", frozenset()))
+        if not _live:
+            definition = self._GLOSSARY.get(raw_term)
+            if definition is None and raw_term:
+                for key, val in self._GLOSSARY.items():
+                    if raw_term in key or key in raw_term:
+                        definition = val
+                        break
+            if definition is None:
+                definition = (
+                    f"The term '{raw_term}' is not present in the semantic layer glossary. "
+                    "Available terms: " + ", ".join(sorted(self._GLOSSARY.keys())) + "."
+                )
+        else:
             definition = (
-                f"The term '{raw_term}' is not present in the semantic layer glossary. "
-                "Available terms: " + ", ".join(sorted(self._GLOSSARY.keys())) + "."
+                f"The term '{raw_term}' is not in your semantic layer glossary. "
+                "Add glossary terms via the Context tab."
             )
         return Result(
             answer=definition,

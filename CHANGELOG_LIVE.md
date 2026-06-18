@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: AW glossary fallback skipped for live-mode requests
+- `backend/app/semantic/layer.py`
+  - `_q_glossary_lookup()` has a deprecated `_GLOSSARY` dict fallback (last resort when no effective docs and no catalog glossary docs exist). The dict contains AW-specific definitions for "cliente attivo", "fatturato", "revenue", "revenue_with_tax", "margin", "active_customers", "duplicato", "accountid", "make only" — all with dollar figures and AW column names.
+  - A live user asking "what is fatturato?" would previously receive: `"'Fatturato' is an ambiguous term in the system: it can refer to revenue (SUM subtotal_amount, ~$20M)…"`.
+  - Fix: the `_GLOSSARY` path is now gated on `not _live` using the `hidden_tables` thread-local. Live users get a generic "term not in your glossary — add via Context tab" response instead.
+
 ### Backend: Italian ambiguity guards skip live-mode requests
 - `backend/app/semantic/layer.py`
   - The `_resolve_intent()` method contained two AmbiguityError guards triggered by Italian terms: one for "fatturato" (mentioning `subtotal_amount`, `~$20M`, `total_due`, `~$22.4M`) and one for "vendite" (mentioning `SalesOrder`). These guards encode AdventureWorks demo dataset semantics.
