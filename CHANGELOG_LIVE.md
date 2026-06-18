@@ -32,6 +32,11 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Data Entities" panel: added an empty state that links to the semantic layer builder.
   - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
 
+### DataExplorer: real entity row counts from backend for live users
+- `frontend/src/components/DataExplorer.tsx`
+  - `row_count` for live ontology nodes was always `0` (hardcoded in `buildExtendedOntology` for extension nodes). Now fetches `getLiveConfig()` on mount in live mode and overlays real `row_count` values from `liveConfig.ontology.nodes`, keyed by entity label.
+  - The header "N records in production DB" badge now shows accurate counts for live users with a built semantic layer.
+
 ### ComplianceView: fix misleading 100% scores and add empty-state CTA
 - `frontend/src/components/ComplianceView.tsx`
   - `ScoreBar` showed 100% GDPR/EU AI Act compliance for fresh live workspaces (formula gives 100 when no entities are assessed). Added `unassessed` prop that renders "Not assessed" instead of a fake perfect score.

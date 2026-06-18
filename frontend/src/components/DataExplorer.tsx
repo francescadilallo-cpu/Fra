@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Database, Search, ChevronUp, ChevronDown, X, Table2, Download, GitBranch, Zap } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateMockData } from '../data/mockDataGenerator'
 import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
+import { getLiveConfig } from '../api/semantic'
 import type { OntologyNode } from '../types'
 
 // ── AW entity → source system map ─────────────────────────────────────────────
@@ -357,9 +358,19 @@ export default function DataExplorer() {
   const { sector, sectorId } = useSector()
   const ontology = useExtendedOntology(sectorId)
   const [selected, setSelected] = useState<OntologyNode | null>(() => ontology.nodes[0] ?? null)
+  const [liveRowCounts, setLiveRowCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    getLiveConfig()
+      .then(cfg => setLiveRowCounts(Object.fromEntries(cfg.ontology.nodes.map(n => [n.data.label, n.data.row_count]))))
+      .catch(() => {})
+  }, [])
 
   const props = selected?.data.properties.length ?? 0
-  const rowCount = selected?.data.row_count ?? 0
+  const rowCount = !IS_DEMO_MODE && selected
+    ? (liveRowCounts[selected.data.label] ?? selected.data.row_count ?? 0)
+    : (selected?.data.row_count ?? 0)
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
