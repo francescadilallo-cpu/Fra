@@ -54,6 +54,20 @@ logger = logging.getLogger(__name__)
 
 _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
+
+def _safe_ingest_error(exc: Exception) -> str:
+    """Return a user-safe error string for source ingestion failures.
+
+    Our own ValueError/FileNotFoundError/NotImplementedError carry crafted
+    messages the user needs to see.  Any other exception type (DuckDB catalog
+    errors, driver internals, etc.) is replaced with a generic message so
+    internal details stay out of the /api/sources listing.
+    """
+    if isinstance(exc, (ValueError, FileNotFoundError, NotImplementedError)):
+        return str(exc)
+    return "Ingestion failed — please check the source configuration and try again"
+
+
 _ORION_CONTEXT_DOC = """\
 OrionSales — Business Context for AI SQL Generation
 
@@ -696,7 +710,9 @@ class DuckDBSourceManager:
                 )
             except Exception as exc:
                 logger.error("Failed to ingest source '%s': %s", cfg.id, exc)
-                self._registry.patch(cfg.id, status="error", error_msg=str(exc))
+                self._registry.patch(
+                    cfg.id, status="error", error_msg=_safe_ingest_error(exc)
+                )
         self._built_at = datetime.utcnow()
 
     def _write_meta(self, conn: duckdb.DuckDBPyConnection) -> None:

@@ -12,6 +12,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: sanitize source ingestion error messages before storing in registry
+- `backend/app/connectors/duckdb_source_manager.py`
+  - Added `_safe_ingest_error(exc)` helper. Our own `ValueError` / `FileNotFoundError` / `NotImplementedError` carry crafted messages the user needs (e.g. "Could not connect to PostgreSQL: …", "Excel file contains no rows"). Any other exception type (DuckDB catalog errors like "Catalog Error: Table 'X' already exists", driver internals, etc.) is replaced with a generic "Ingestion failed — please check the source configuration and try again".
+  - Line 699: `self._registry.patch(cfg.id, status="error", error_msg=str(exc))` → `error_msg=_safe_ingest_error(exc)`
+- `backend/app/main.py`
+  - `add_source` endpoint rebuild failure (line ~2151): same pattern. Imports and uses `_safe_ingest_error` from the connector module. Previously a raw `str(exc)` from the rebuild loop (which can be a DuckDB catalog error with internal table names) was stored and returned verbatim via `GET /api/sources` to all authenticated users (`user` + `admin` roles).
+
 ### Frontend: DataExplorer empty state for live workspaces with no ontology
 - `frontend/src/components/DataExplorer.tsx`
   - When a live user has no entities in their ontology (`!IS_DEMO_MODE && ontology.nodes.length === 0`), the explorer previously showed a blank entity list sidebar and the text "Select an entity to browse its data" — which is confusing when there is nothing to select.

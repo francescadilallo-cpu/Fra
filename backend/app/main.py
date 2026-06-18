@@ -2079,7 +2079,7 @@ def add_source(
 ) -> SourceResponse:
     """Register a new data source. Triggers a DuckDB rebuild for implemented types."""
     import uuid
-    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
     from .connectors.source_registry import SourceConfig, IMPLEMENTED_CONNECTOR_TYPES
 
     mgr = get_source_manager(_SCENARIO_PATH)
@@ -2148,7 +2148,9 @@ def add_source(
             cfg = mgr.registry.get(source_id) or cfg
             _refresh_catalog_and_kg_after_rebuild(mgr)
         except Exception as exc:
-            mgr.registry.patch(source_id, status="error", error_msg=str(exc))
+            mgr.registry.patch(
+                source_id, status="error", error_msg=_safe_ingest_error(exc)
+            )
             cfg = mgr.registry.get(source_id) or cfg
 
     _audit(
