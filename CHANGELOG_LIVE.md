@@ -12,6 +12,14 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Frontend: QueryInterface query error handler uses backendErrorMessage
+- `frontend/src/components/QueryInterface.tsx`
+  - The `resolve().catch` handler for `/api/semantic/ask` errors was using `e instanceof Error ? e.message : 'Unknown error'` — which could surface raw Axios or JS error messages (e.g. network stack traces, serialised objects) to users in the chat error bubble.
+  - Replaced with `backendErrorMessage(e)` which handles FastAPI validation arrays, 500/503 fallbacks, ECONNABORTED, and nested `detail.message` objects. `backendErrorMessage` was already imported in this file.
+
+---
+
+
 ### Frontend: QueryInterface — "no sources" CTA for fresh live workspaces
 - `frontend/src/components/QueryInterface.tsx`
   - Added `questionsLoaded` state so the component knows when the example-questions fetch has settled.

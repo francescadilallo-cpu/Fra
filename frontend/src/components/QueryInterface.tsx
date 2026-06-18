@@ -963,7 +963,7 @@ export default function QueryInterface() {
       // show an error message that will be immediately replaced by the login screen.
       const status = (e as { response?: { status?: number } })?.response?.status
       if (status === 401) return
-      const errMsg = e instanceof Error ? e.message : 'Unknown error'
+      const errMsg = backendErrorMessage(e) || 'Unknown error'
       setMessages((prev) => [
         ...prev,
         {
