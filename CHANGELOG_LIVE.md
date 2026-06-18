@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18 (continued)
 
+### Frontend: live users can now choose their industry sector during onboarding
+- `frontend/src/components/OnboardingWizard.tsx`
+  - **Before**: live users were silently defaulted to `manufacturing` sector (`selectedSector = 'manufacturing'`) with the industry picker hidden behind `IS_DEMO_MODE`. This meant connector recommendations in Configuration, ontology builder prompts, and workspace UI were always manufacturing-flavoured regardless of the user's actual industry.
+  - **After**: the sector picker (4-card grid: Manufacturing / Retail / Healthcare / Finance) is shown for both demo and live users in step 1. `selectedSector` now starts as `null` for everyone, so the "Get started" button stays disabled until both a company name and an industry are chosen. `canAdvanceStep1` already required `selectedSector !== null`, so no logic change was needed beyond removing the `IS_DEMO_MODE &&` guard.
+  - Demo-only wizard steps (ontology preview, custom entity, connectors, recommended agent) are unchanged — those are only shown in demo mode (`TOTAL_STEPS = IS_DEMO_MODE ? 5 : 1` is preserved).
+
 ### Frontend: empty states for Lifecycle and Conversion Funnel in ProcessView for live users
 - `frontend/src/components/ProcessView.tsx`
   - **Lifecycle section**: when `processStages` is empty and `!IS_DEMO_MODE`, show a message "Process stages will appear here once data sources are connected and the pipeline has run." with a "Connect a data source" link. Previously the section header was visible but the content area was blank.

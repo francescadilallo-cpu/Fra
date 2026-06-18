@@ -36,14 +36,14 @@ const SECTOR_NAMES: Record<string, string> = {
   finance: 'Finance',
 }
 
-// Live workspaces have no sector concept: the wizard collapses to a single
-// step (company name) and the sector id is only an internal anchor.
+// Live workspaces collapse the wizard to a single step (company name + sector);
+// the five demo steps (ontology preview, connectors, …) are demo-only.
 const TOTAL_STEPS = IS_DEMO_MODE ? 5 : 1
 
 export default function OnboardingWizard({ onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
   const [companyName, setCompanyName] = useState('')
-  const [selectedSector, setSelectedSector] = useState<SectorId | null>(IS_DEMO_MODE ? null : 'manufacturing')
+  const [selectedSector, setSelectedSector] = useState<SectorId | null>(null)
   const [customEntity, setCustomEntity] = useState('')
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set())
 
@@ -104,7 +104,6 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                   className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
               </div>
-              {IS_DEMO_MODE && (
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Industry</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -125,7 +124,6 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                   ))}
                 </div>
               </div>
-              )}
             </div>
           )}
 
