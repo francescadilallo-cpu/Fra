@@ -418,13 +418,31 @@ export default function DataExplorer() {
 
       {/* Body */}
       <div className="flex-1 overflow-hidden flex">
+        {!IS_DEMO_MODE && ontology.nodes.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center max-w-xs space-y-3">
+              <Database className="w-10 h-10 mx-auto text-slate-300" />
+              <p className="text-sm font-semibold text-slate-700">No entities in your ontology yet</p>
+              <p className="text-xs text-slate-500">
+                Build your ontology first to explore data here.{' '}
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sembuilder' } }))}
+                  className="underline font-medium text-teal-600 hover:text-teal-700"
+                >
+                  Go to Ontology Builder
+                </button>
+              </p>
+            </div>
+          </div>
+        ) : (
         <EntityList
           nodes={ontology.nodes}
           selected={selected}
           onSelect={setSelected}
         />
+        )}
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        {(IS_DEMO_MODE || ontology.nodes.length > 0) && <div className="flex-1 overflow-hidden flex flex-col">
           {selected ? (
             <>
               {/* Entity meta bar */}
@@ -465,7 +483,7 @@ export default function DataExplorer() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   )

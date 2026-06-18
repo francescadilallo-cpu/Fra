@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Frontend: DataExplorer empty state for live workspaces with no ontology
+- `frontend/src/components/DataExplorer.tsx`
+  - When a live user has no entities in their ontology (`!IS_DEMO_MODE && ontology.nodes.length === 0`), the explorer previously showed a blank entity list sidebar and the text "Select an entity to browse its data" — which is confusing when there is nothing to select.
+  - Now renders a centred empty state with "No entities in your ontology yet" and a "Go to Ontology Builder" inline link that fires `navigate-to-tab` → `sembuilder`.
+
 ### Frontend: QueryInterface query error handler uses backendErrorMessage
 - `frontend/src/components/QueryInterface.tsx`
   - The `resolve().catch` handler for `/api/semantic/ask` errors was using `e instanceof Error ? e.message : 'Unknown error'` — which could surface raw Axios or JS error messages (e.g. network stack traces, serialised objects) to users in the chat error bubble.
