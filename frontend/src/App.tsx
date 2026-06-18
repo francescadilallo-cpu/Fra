@@ -218,7 +218,7 @@ export default function App() {
           {activeTab === 'data' && <DataExplorer />}
           {activeTab === 'query' && <QueryInterface />}
           {activeTab === 'process' && <ProcessView />}
-          {activeTab === 'compliance' && <ComplianceView />}
+          {activeTab === 'compliance' && <ComplianceView onNavigate={setActiveTab} />}
           {activeTab === 'config' && <ConfigurationView />}
         </Suspense>
       </Layout>

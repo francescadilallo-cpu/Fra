@@ -2,10 +2,11 @@ import { useState } from 'react'
 import {
   ShieldCheck, AlertTriangle, Info, Download, FileText,
   Database, Bot, ChevronRight, CheckCircle2,
-  Clock, Lock, Globe,
+  Clock, Lock, Globe, ArrowRight,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
+import type { NavTab } from '../types'
 import {
   getSectorCompliance,
   computeComplianceScore,
@@ -40,7 +41,23 @@ const BASIS_LABELS: Record<LawfulBasis, string> = {
 const RISK_ORDER: Record<AiRiskLevel, number> = { high: 0, limited: 1, minimal: 2, unacceptable: -1 }
 
 // -- Sub-components --
-function ScoreBar({ label, score, icon }: { label: string; score: number; icon: React.ReactNode }) {
+function ScoreBar({ label, score, icon, unassessed = false }: { label: string; score: number; icon: React.ReactNode; unassessed?: boolean }) {
+  if (unassessed) {
+    return (
+      <div className="flex-1 rounded-xl border bg-slate-50 border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {icon}
+            <span className="text-sm font-medium text-gray-700">{label}</span>
+          </div>
+          <span className="text-sm font-semibold text-slate-400">Not assessed</span>
+        </div>
+        <div className="h-3 bg-white rounded-full overflow-hidden border border-gray-200">
+          <div className="h-full rounded-full bg-slate-200" style={{ width: '0%' }} />
+        </div>
+      </div>
+    )
+  }
   const color = score >= 85 ? 'teal' : score >= 70 ? 'amber' : 'red'
   const barClass = color === 'teal'
     ? 'bg-teal-500'
@@ -224,10 +241,11 @@ function AgentCard({ agent }: { agent: AgentCompliance }) {
 type ToastMsg = { id: number; text: string }
 
 // -- Main component --
-export default function ComplianceView() {
+export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
   const { sectorId, sector } = useSector()
   const compliance = getSectorCompliance(sectorId)
   const scores = computeComplianceScore(compliance)
+  const hasAssessment = compliance.entities.length > 0 || compliance.agents.length > 0
   const [toasts, setToasts] = useState<ToastMsg[]>([])
 
   const showToast = (text: string) => {
@@ -308,11 +326,13 @@ export default function ComplianceView() {
           label="GDPR Score"
           score={scores.gdprScore}
           icon={<ShieldCheck size={16} className="text-gray-500" />}
+          unassessed={!hasAssessment}
         />
         <ScoreBar
           label="EU AI Act Score"
           score={scores.aiActScore}
           icon={<Bot size={16} className="text-gray-500" />}
+          unassessed={!hasAssessment}
         />
       </div>
 
@@ -339,9 +359,16 @@ export default function ComplianceView() {
                 <tbody className="divide-y divide-gray-50">
                   {compliance.entities.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-gray-400">
-                        No entities classified yet — entities you add to your ontology
-                        will appear here for GDPR classification.
+                      <td colSpan={7} className="px-3 py-8 text-center">
+                        <p className="text-sm text-gray-400 mb-2">No entities classified yet.</p>
+                        {!IS_DEMO_MODE && (
+                          <button
+                            onClick={() => onNavigate?.('sources')}
+                            className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+                          >
+                            Connect a data source to build your ontology <ArrowRight size={12} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ) : (

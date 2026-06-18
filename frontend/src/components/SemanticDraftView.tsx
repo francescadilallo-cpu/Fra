@@ -386,7 +386,19 @@ function RelationsTab({ relations }: { relations: SemanticDraft['relations'] }) 
 
 function MetricsTab({ metrics, onUpdate }: { metrics: DraftMetric[]; onUpdate: () => void }) {
   if (metrics.length === 0) return (
-    <p className="text-sm text-slate-400 py-4 text-center">No metrics defined yet. Add them manually or rebuild the semantic layer.</p>
+    <div className="py-8 text-center">
+      <p className="text-sm text-slate-400 mb-2">No metrics defined yet.</p>
+      <p className="text-xs text-slate-400">
+        Rebuild the semantic layer from{' '}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+          className="text-teal-600 hover:underline"
+        >
+          Data Sources
+        </button>
+        {' '}to auto-extract KPIs, or add metrics manually using the Metrics tab in the Semantic Layer builder.
+      </p>
+    </div>
   )
   return (
     <div className="space-y-2">

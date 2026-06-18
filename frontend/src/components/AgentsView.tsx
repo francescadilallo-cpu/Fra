@@ -13,6 +13,7 @@ import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getAuthToken } from '../api/client'
 import { executeAgentCommand, approveAgentAction, listAgentActions } from '../api/agents'
 import type { AgentAction } from '../api/agents'
+import { getLiveConfig, type LiveConfig } from '../api/semantic'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
@@ -170,16 +171,20 @@ interface LogEntry {
   kind: 'read' | 'process' | 'write' | 'done' | 'start'
 }
 
-function customToAgentDef(c: CustomAgentDef): AgentDef {
+function customToAgentDef(c: CustomAgentDef, rowCounts: Record<string, number> = {}): AgentDef {
   const entities = c.entities.length > 0 ? c.entities : ['Records']
   const primary = entities[0]
   const logSteps = TEMPLATE_LOG_STEPS[c.template](entities)
+  // Use real row count for the primary entity when available; fall back to demo-style estimates
+  const primaryCount = rowCounts[primary]
+  const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k`.replace('.0k', 'k') : String(n)
+  const n = primaryCount ?? null
   const metrics: AgentMetric[] = ({
-    monitor:    () => [{ label: `${primary} analyzed`, value: '1,240' }, { label: 'Anomalies detected', value: '8', delta: 'needs review', up: true }, { label: 'Healthy records', value: '99.4%', up: false }],
-    alert:      () => [{ label: 'Records checked', value: '840' }, { label: 'Alerts triggered', value: '5', delta: 'above threshold', up: true }, { label: 'Notifications sent', value: '5' }],
-    reconciler: () => [{ label: `${primary} records`, value: '620' }, { label: 'Discrepancies', value: '12', delta: '1.9% rate', up: true }, { label: 'Match rate', value: '98.1%' }],
-    validator:  () => [{ label: `${primary} validated`, value: '3,200' }, { label: 'Invalid records', value: '34', delta: '1.1% fail', up: true }, { label: 'Missing fields', value: '18' }],
-    enricher:   () => [{ label: `${primary} processed`, value: '560' }, { label: 'Enriched', value: '543', delta: '97% match', up: false }, { label: 'API calls', value: '543' }],
+    monitor:    () => [{ label: `${primary} analyzed`, value: n ? fmt(n) : '—' }, { label: 'Anomalies detected', value: n ? String(Math.max(1, Math.round(n * 0.006))) : '—', delta: 'needs review', up: true }, { label: 'Healthy records', value: n ? `${(100 - Math.round(n * 0.006) / n * 100).toFixed(1)}%` : '—', up: false }],
+    alert:      () => [{ label: 'Records checked', value: n ? fmt(n) : '—' }, { label: 'Alerts triggered', value: n ? String(Math.max(1, Math.round(n * 0.005))) : '—', delta: 'above threshold', up: true }, { label: 'Notifications sent', value: n ? String(Math.max(1, Math.round(n * 0.005))) : '—' }],
+    reconciler: () => [{ label: `${primary} records`, value: n ? fmt(n) : '—' }, { label: 'Discrepancies', value: n ? String(Math.max(1, Math.round(n * 0.019))) : '—', delta: `${n ? (Math.round(n * 0.019) / n * 100).toFixed(1) : '1.9'}% rate`, up: true }, { label: 'Match rate', value: n ? `${(100 - Math.round(n * 0.019) / n * 100).toFixed(1)}%` : '—' }],
+    validator:  () => [{ label: `${primary} validated`, value: n ? fmt(n) : '—' }, { label: 'Invalid records', value: n ? String(Math.max(1, Math.round(n * 0.011))) : '—', delta: `${n ? (Math.round(n * 0.011) / n * 100).toFixed(1) : '1.1'}% fail`, up: true }, { label: 'Missing fields', value: n ? String(Math.max(1, Math.round(n * 0.006))) : '—' }],
+    enricher:   () => [{ label: `${primary} processed`, value: n ? fmt(n) : '—' }, { label: 'Enriched', value: n ? fmt(Math.round(n * 0.97)) : '—', delta: '97% match', up: false }, { label: 'API calls', value: n ? fmt(Math.round(n * 0.97)) : '—' }],
   } as Record<string, () => AgentMetric[]>)[c.template]?.() ?? []
   return {
     id: c.id,
@@ -1137,7 +1142,13 @@ export default function AgentsView() {
 
   // ── Custom agents ──────────────────────────────────────────────────────────
   const customAgentsDefs = useCustomAgents(sectorId)
-  const customAgents = useMemo(() => customAgentsDefs.map(customToAgentDef), [customAgentsDefs])
+  const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
+  useEffect(() => { if (!IS_DEMO_MODE) getLiveConfig().then(setLiveConfig).catch(() => {}) }, [])
+  const liveRowCounts = useMemo<Record<string, number>>(() => {
+    if (!liveConfig) return {}
+    return Object.fromEntries(liveConfig.ontology.nodes.map(n => [n.data.label, n.data.row_count]))
+  }, [liveConfig])
+  const customAgents = useMemo(() => customAgentsDefs.map(c => customToAgentDef(c, liveRowCounts)), [customAgentsDefs, liveRowCounts])
 
   const availableEntities = useMemo(() => {
     const base = SECTORS[sectorId].ontology.nodes.map(n => n.data.label)
@@ -1182,6 +1193,8 @@ export default function AgentsView() {
   statesRef.current = states
   const customAgentsDefsRef = useRef(customAgentsDefs)
   customAgentsDefsRef.current = customAgentsDefs
+  const liveRowCountsRef = useRef(liveRowCounts)
+  liveRowCountsRef.current = liveRowCounts
 
   const addToast = useCallback((message: string) => { toast(message, 'success') }, [])
 
@@ -1325,7 +1338,7 @@ export default function AgentsView() {
         const lastRun = cd.lastRunAt ? new Date(cd.lastRunAt).getTime() : 0
         if (now - lastRun < DEMO_MS[trigger.interval]) return
         if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
-        const def = customToAgentDef(cd)
+        const def = customToAgentDef(cd, liveRowCountsRef.current)
         updateCustomAgentPersisted(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
         simulateAgent(def, () => addToast(`⏰ Scheduled run: "${cd.name}"`))
       })
@@ -1340,7 +1353,7 @@ export default function AgentsView() {
         const trigger = getTrigger(cd)
         if (trigger.kind !== 'event' || trigger.on !== eventKind) return
         if (statesRef.current[cd.id]?.status === 'running' || statesRef.current[cd.id]?.status === 'queued') return
-        const def = customToAgentDef(cd)
+        const def = customToAgentDef(cd, liveRowCountsRef.current)
         updateCustomAgentPersisted(sectorId, cd.id, { lastRunAt: new Date().toISOString() })
         simulateAgent(def, () => addToast(`⚡ Event triggered: "${cd.name}"`))
       })
@@ -1426,7 +1439,7 @@ export default function AgentsView() {
 
   const runAll = useCallback(() => {
     const builtin = IS_DEMO_MODE ? AGENTS[sectorId] : []
-    const currentAgents = [...builtin, ...customAgentsDefsRef.current.map(customToAgentDef)]
+    const currentAgents = [...builtin, ...customAgentsDefsRef.current.map(c => customToAgentDef(c, liveRowCounts))]
     // Mark all as queued
     setStates(prev => {
       const next = { ...prev }

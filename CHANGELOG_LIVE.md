@@ -32,6 +32,23 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Data Entities" panel: added an empty state that links to the semantic layer builder.
   - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
 
+### ComplianceView: fix misleading 100% scores and add empty-state CTA
+- `frontend/src/components/ComplianceView.tsx`
+  - `ScoreBar` showed 100% GDPR/EU AI Act compliance for fresh live workspaces (formula gives 100 when no entities are assessed). Added `unassessed` prop that renders "Not assessed" instead of a fake perfect score.
+  - GDPR Data Map empty state ("No entities classified yet") now shows a CTA linking to Data Sources for live users, so they know the next step.
+  - Added `onNavigate` prop (optional) so the CTA can trigger tab navigation.
+- `frontend/src/App.tsx` — wires `onNavigate` to `ComplianceView`.
+
+### AgentsView: custom agent metrics use real entity row counts
+- `frontend/src/components/AgentsView.tsx`
+  - `customToAgentDef` previously returned hardcoded result metrics (`'840' records checked`, `'5' alerts triggered`, etc.) visible to live users who run custom agents. Now accepts `rowCounts: Record<string, number>` and derives metric values from the actual row count of the agent's primary entity.
+  - Fetches `getLiveConfig()` on mount in live mode and builds a `liveRowCounts` map from ontology node row counts, passed through to all `customToAgentDef` call sites (including scheduled/event-triggered runs).
+  - Falls back to `'—'` for any entity with no known row count rather than showing a fake number.
+
+### SemanticDraftView: actionable empty state for Metrics tab
+- `frontend/src/components/SemanticDraftView.tsx`
+  - "No metrics defined yet" message now links to the Data Sources tab and explains the two ways to add metrics, instead of just saying "Add them manually or rebuild."
+
 ### Remove Italian text leaks from QueryInterface and SemanticLayerView
 - `frontend/src/components/QueryInterface.tsx`
   - LLM API key panel had three Italian strings shown to all users (demo and live): "chiave salvata solo nel browser", "ottieni la chiave gratuita →", and "Salva" button label. Replaced with English equivalents.
