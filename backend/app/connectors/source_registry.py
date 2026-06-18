@@ -64,6 +64,7 @@ IMPLEMENTED_CONNECTOR_TYPES = {
     "excel",
     "sqlite",
     "postgresql",
+    "parquet",
     "context_doc",
 }
 

@@ -214,7 +214,18 @@ function LoadingSkeleton() {
 
 function EntitiesTab({ entities, onUpdate }: { entities: DraftEntity[]; onUpdate: () => void }) {
   if (entities.length === 0) return (
-    <p className="text-sm text-slate-400 py-4 text-center">No entities detected — try rebuilding after connecting sources.</p>
+    <div className="py-8 text-center">
+      <p className="text-sm text-slate-400 mb-2">No entities detected yet.</p>
+      <p className="text-xs text-slate-400 mb-3 max-w-xs mx-auto">
+        Entities are extracted automatically when you connect a data source and run the pipeline.
+      </p>
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+      >
+        Connect a data source <ArrowRight className="w-3 h-3" />
+      </button>
+    </div>
   )
   return (
     <div className="space-y-2">
@@ -351,9 +362,18 @@ function EntityCard({ entity, onSaved }: { entity: DraftEntity; onSaved: () => v
 
 function RelationsTab({ relations }: { relations: SemanticDraft['relations'] }) {
   if (relations.length === 0) return (
-    <p className="text-sm text-slate-400 py-4 text-center">
-      No relations detected. FK edges are auto-detected from column names ending in _id, _ref, _fk.
-    </p>
+    <div className="py-8 text-center">
+      <p className="text-sm text-slate-400 mb-2">No relations detected yet.</p>
+      <p className="text-xs text-slate-400 mb-3 max-w-xs mx-auto">
+        Cross-source links are auto-inferred from column names ending in <code className="bg-slate-100 px-1 rounded">_id</code>, <code className="bg-slate-100 px-1 rounded">_ref</code>, or <code className="bg-slate-100 px-1 rounded">_fk</code> after a pipeline run.
+      </p>
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+      >
+        Connect a data source <ArrowRight className="w-3 h-3" />
+      </button>
+    </div>
   )
 
   return (

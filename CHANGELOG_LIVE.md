@@ -12,6 +12,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: parquet connector registered as implemented
+- `backend/app/connectors/source_registry.py`
+  - `parquet` had a full ingester (`_ingest_parquet`) in `duckdb_source_manager.py` but was absent from `IMPLEMENTED_CONNECTOR_TYPES`. This meant registering a parquet source would not trigger a rebuild, and the source would silently be skipped. Added `parquet` to the set so it flows through the normal add-source → rebuild path.
+
+### SemanticDraftView: meaningful empty states for Entities and Relations tabs
+- `frontend/src/components/SemanticDraftView.tsx`
+  - EntitiesTab empty state: replaced one-liner "No entities detected — try rebuilding after connecting sources." with a centred card: explanatory text + "Connect a data source →" CTA using the `navigate-to-tab` event.
+  - RelationsTab empty state: replaced flat text with the same pattern — explains FK auto-detection and links to Data Sources.
+
+### AgentBuilder: empty entity list directs to correct next step
+- `frontend/src/components/AgentBuilder.tsx`
+  - "No entities in the ontology yet — add them in Ontology Builder first." misdirected live users to the Ontology Builder when the real first step is connecting a data source. Updated to: "No entities yet — connect a data source and run the pipeline, or build entities manually in the Ontology Builder."
+
 ### Backend: malformed AUTH_USERS_JSON_ENV returns 503 instead of silent 401
 - `backend/app/main.py`
   - Previously: if `AUTH_USERS_JSON_ENV` was set but contained invalid JSON, an empty array, or all malformed entries, every login attempt returned 401 "Incorrect username or password" — indistinguishable from a bad password, locking all users out with no diagnostic signal.

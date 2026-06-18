@@ -436,7 +436,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
               Which ontology entities will this agent access?
             </p>
             {availableEntities.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No entities in the ontology yet — add them in Ontology Builder first.</p>
+              <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run the pipeline, or build entities manually in the Ontology Builder.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {availableEntities.map(entity => {
