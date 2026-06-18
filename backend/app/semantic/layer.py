@@ -1868,7 +1868,16 @@ class SemanticLayer:
                     disambiguation_required=False,
                 )
 
-        # Fallback to hardcoded list (deprecated — metrics should come from the catalog)
+        # Fallback to hardcoded list (deprecated — metrics should come from the catalog).
+        # Skipped for live-mode requests: _CERTIFIED_METRICS encodes AW demo semantics.
+        _live = bool(getattr(SemanticLayer._thread_local, "hidden_tables", frozenset()))
+        if _live:
+            return Result(
+                answer=[],
+                sources_touched=[],
+                notes="No certified metrics configured for this workspace yet.",
+                disambiguation_required=False,
+            )
         return Result(
             answer=self._CERTIFIED_METRICS,
             sources_touched=[],

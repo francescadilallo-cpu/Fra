@@ -12,6 +12,10 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: AW certified-metrics fallback skipped for live-mode requests
+- `backend/app/semantic/layer.py`
+  - `_q_certified_metrics()` fell back to `_CERTIFIED_METRICS` (a hardcoded list with AW-specific `revenue = SUM(subtotal_amount)`, `active_customers = COUNT(DISTINCT accountId) WHERE accountId > 0`, etc.) when both `_effective_docs` and `_catalog` returned no metrics. Live users asking "what metrics are available?" would receive AW metric definitions. Gated fallback on `not _live`; live users now get an empty list with a neutral message.
+
 ### Backend: AW disambiguation rules fallback skipped for live-mode requests
 - `backend/app/semantic/layer.py`
   - `_q_disambiguation_rules()` fell back to three hardcoded AW rules (R1: accountId dedup, R2: subtotal_amount/total_due, R3: HR freshness) when `_effective_docs` was None. A live user asking "what are the disambiguation rules?" would receive AW-specific rules entirely unrelated to their workspace.
