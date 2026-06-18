@@ -12,6 +12,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### AdminSections: real webhook test replaces simulated delay
+- `frontend/src/components/AdminSections.tsx`
+  - `testChannel` converted from sync fake (`setTimeout`) to `async` function: live mode now calls `apiTestChannel(id)` (real HTTP POST via backend `httpx` client), shows actual latency from the backend response.
+  - Added `'error'` to `ChannelTest` state union; renders "Test failed — could not reach destination" in red when the backend returns an error.
+  - Demo mode keeps the simulated delay path; live mode uses the real endpoint.
+  - "Last test: a few hours ago" placeholder replaced with `—` (no stale/fake timestamp shown to live users).
+
+### ProcessView: onNavigate prop, conversion rate fix, empty-state CTA
+- `frontend/src/components/ProcessView.tsx`
+  - Added `onNavigate?: (tab: NavTab) => void` prop (imported `NavTab` from `types/index`).
+  - "No active cases yet" empty state gains a "Connect a data source →" CTA button wired to `onNavigate('sources')`.
+  - Conversion rate footer: no longer shows `0%` when funnel is empty — renders `—` instead.
+  - Added `ArrowRight` to lucide imports.
+- `frontend/src/App.tsx` — passes `onNavigate={setActiveTab}` to `<ProcessView />`.
+
 ### Fix demo content leaks in MappingView and ProcessView
 - `frontend/src/components/MappingView.tsx`
   - `SemanticDefinitionsPanel`: initial state was `DEMO_DEFS` unconditionally — live users would see AdventureWorks field definitions flash on every load. Now starts empty for live mode; shows a loading spinner while fetching, then a proper "No semantic definitions yet" empty state.

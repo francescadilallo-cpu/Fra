@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity } from 'lucide-react'
+import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity, ArrowRight } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig, type SemanticStatus } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
+import type { NavTab } from '../types/index'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
 
@@ -372,7 +373,7 @@ function fmt(v: number) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ProcessView() {
+export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
   const { sectorId, sector } = useSector()
   const isAWDemo = IS_DEMO_MODE && sectorId === 'manufacturing'
 
@@ -714,7 +715,7 @@ export default function ProcessView() {
           })}
         </div>
         <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-4 text-xs text-slate-500">
-          <span>Conversion rate: <strong className="text-teal-600">{funnel.length > 0 ? Math.round(((funnel[funnel.length - 1]?.count ?? 0) / Math.max(1, funnel[0]?.count ?? 1)) * 100) : 0}%</strong></span>
+          <span>Conversion rate: <strong className="text-teal-600">{funnel.length > 1 ? `${Math.round(((funnel[funnel.length - 1]?.count ?? 0) / Math.max(1, funnel[0]?.count ?? 1)) * 100)}%` : '—'}</strong></span>
           <span>Stages: <strong className="text-teal-600">{funnel.length}</strong></span>
           {runState === 'done' && (
             <span className="flex items-center gap-1 text-teal-600">
@@ -775,7 +776,15 @@ export default function ProcessView() {
             </tbody>
           </table>
           {!IS_DEMO_MODE && (
-            <p className="py-6 text-center text-sm text-slate-400">No active cases yet — they will appear here once your data sources are connected.</p>
+            <div className="py-6 text-center">
+              <p className="text-sm text-slate-400 mb-2">No active cases yet — they will appear here once your data sources are connected.</p>
+              <button
+                onClick={() => onNavigate?.('sources')}
+                className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+              >
+                Connect a data source <ArrowRight size={12} />
+              </button>
+            </div>
           )}
         </div>
         {isAWDemo && (

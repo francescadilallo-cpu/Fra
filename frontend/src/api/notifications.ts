@@ -38,3 +38,6 @@ export const getRouting = (): Promise<BackendRouting> =>
 
 export const saveRouting = (routing: BackendRouting): Promise<void> =>
   api.put('/api/notifications/routing', routing).then(() => undefined)
+
+export const testChannel = (id: string): Promise<{ ok: boolean; latency_ms: number | null; note?: string }> =>
+  api.post<{ ok: boolean; latency_ms: number | null; note?: string }>(`/api/notifications/channels/${id}/test`).then(r => r.data)

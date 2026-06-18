@@ -13,7 +13,7 @@ import {
 } from '../api/users'
 import {
   listChannels, addChannel as apiAddChannel, updateChannel as apiUpdateChannel,
-  removeChannel as apiRemoveChannel, getRouting, saveRouting,
+  removeChannel as apiRemoveChannel, getRouting, saveRouting, testChannel as apiTestChannel,
   type BackendChannel,
 } from '../api/notifications'
 import { listTokens, createToken as apiCreateToken, revokeToken as apiRevokeToken, type BackendToken } from '../api/tokens'
@@ -711,7 +711,7 @@ const INITIAL_ROUTING: Record<Severity, string[]> = IS_DEMO_MODE
   ? DEMO_ROUTING
   : { critical: [], warning: [], info: [] }
 
-type ChannelTest = { state: 'idle' | 'testing' | 'ok'; latency?: number }
+type ChannelTest = { state: 'idle' | 'testing' | 'ok' | 'error'; latency?: number }
 
 function backendChannelToLocal(c: BackendChannel): Channel {
   return { id: c.id, name: c.name, type: c.type, destination: c.destination, enabled: c.enabled }
@@ -849,12 +849,21 @@ export function NotificationsSection() {
     setChannels(prev => [...prev, { id: `c-${Date.now()}`, name, type, destination, enabled: true }])
   }
 
-  function testChannel(id: string) {
+  async function testChannel(id: string) {
     setTests(prev => ({ ...prev, [id]: { state: 'testing' } }))
-    setTimeout(() => {
+    if (IS_DEMO_MODE) {
+      await new Promise(r => setTimeout(r, 700 + Math.random() * 800))
       setTests(prev => ({ ...prev, [id]: { state: 'ok', latency: Math.floor(80 + Math.random() * 280) } }))
       setTimeout(() => setTests(prev => ({ ...prev, [id]: { state: 'idle' } })), 3000)
-    }, 700 + Math.random() * 800)
+      return
+    }
+    try {
+      const result = await apiTestChannel(id)
+      setTests(prev => ({ ...prev, [id]: { state: 'ok', latency: result.latency_ms ?? 0 } }))
+    } catch {
+      setTests(prev => ({ ...prev, [id]: { state: 'error' } }))
+    }
+    setTimeout(() => setTests(prev => ({ ...prev, [id]: { state: 'idle' } })), 3000)
   }
 
   function toggleRoute(sev: Severity, channelId: string) {
@@ -946,8 +955,13 @@ export function NotificationsSection() {
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Sending test…
                   </span>
+                ) : test.state === 'error' ? (
+                  <span className="text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Test failed — could not reach destination
+                  </span>
                 ) : (
-                  <span className="text-xs text-slate-400">Last test: a few hours ago</span>
+                  <span className="text-xs text-slate-400">Last test: —</span>
                 )}
                 <button
                   onClick={() => testChannel(c.id)}

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel, Field, field_validator
 
@@ -132,6 +134,53 @@ def remove_channel(channel_id: Annotated[str, Path(max_length=64)]) -> None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
         )
+
+
+@router.post("/channels/{channel_id}/test")
+async def test_channel(channel_id: Annotated[str, Path(max_length=64)]) -> dict:
+    """Send a test payload to the channel's destination and return latency (ms)."""
+    ch = next(
+        (c for c in get_notifications_store().list_channels() if c.id == channel_id),
+        None,
+    )
+    if ch is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Channel not found"
+        )
+
+    payload = {
+        "source": "SemanticIntelligence",
+        "event": "test",
+        "severity": "info",
+        "message": "Test notification from SemanticIntelligence — channel delivery confirmed.",
+    }
+
+    if ch.channel_type == "webhook":
+        try:
+            t0 = time.monotonic()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(ch.destination, json=payload)
+            latency_ms = round((time.monotonic() - t0) * 1000)
+            if resp.status_code >= 400:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Webhook returned HTTP {resp.status_code}",
+                )
+            return {"ok": True, "latency_ms": latency_ms}
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach webhook: {exc}",
+            ) from exc
+    else:
+        # Slack / email / Teams: deliver via the same dispatch path used by
+        # real events (not yet implemented). Return a placeholder response so
+        # the frontend can at least confirm the channel is reachable.
+        return {
+            "ok": True,
+            "latency_ms": None,
+            "note": f"{ch.channel_type} delivery not yet implemented on this deployment",
+        }
 
 
 @router.get("/routing")

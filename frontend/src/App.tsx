@@ -217,7 +217,7 @@ export default function App() {
           {activeTab === 'sources' && <DataSourcesView onNavigate={setActiveTab} />}
           {activeTab === 'data' && <DataExplorer />}
           {activeTab === 'query' && <QueryInterface />}
-          {activeTab === 'process' && <ProcessView />}
+          {activeTab === 'process' && <ProcessView onNavigate={setActiveTab} />}
           {activeTab === 'compliance' && <ComplianceView onNavigate={setActiveTab} />}
           {activeTab === 'config' && <ConfigurationView />}
         </Suspense>
