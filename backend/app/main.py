@@ -1845,11 +1845,12 @@ def semantic_ask(
             },
         )
     except SemanticOntologyViolationError as e:
+        logger.info("Ontology violation for question %r: %s", question, e)
         raise HTTPException(
             status_code=422,
             detail={
                 "error": "SEMANTIC_ONTOLOGY_VIOLATION",
-                "message": str(e),
+                "message": "Your question doesn't match the available data model. Try rephrasing or ask about a different entity.",
             },
         )
 

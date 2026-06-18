@@ -43,6 +43,10 @@ work is traceable across sessions and the git history is easy to reconcile.
 - `frontend/src/components/Layout.tsx`
   - "Set up workspace" header CTA: now scrolls to `#workspace-section` with `scrollIntoView()` (150 ms delay to allow tab transition) after navigating to the Config tab. Without this, users landed at the top of a long Config page and had to discover the Workspace section by scrolling.
 
+### Backend: sanitize SemanticOntologyViolationError message in /api/semantic/ask
+- `backend/app/main.py`
+  - `SemanticOntologyViolationError` catch block was returning `str(e)` to the HTTP client. The underlying error messages contain internal entity names, intent contract details, and property paths (e.g., `"Ontology violation: entities ['X'] are outside intent contract ['Y']"`). These are confusing for live users and expose internal schema details. Replaced with a generic user-friendly message: `"Your question doesn't match the available data model. Try rephrasing or ask about a different entity."`. The original error is now logged at INFO level for debugging.
+
 ### Backend: fix Italian-language error messages shown to live English users
 - `backend/app/main.py`
   - Rate limit (429) response: "Troppe richieste. Riprova tra poco." → "Too many requests — please wait a moment and try again."
