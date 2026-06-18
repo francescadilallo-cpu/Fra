@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getAuthToken, clearAuthToken } from './client'
+import { getAuthToken, handle401 } from './client'
 import type { CustomAgentDef, AgentTemplate, AgentTrigger, CustomFinding } from '../data/customAgents'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -16,7 +16,7 @@ http.interceptors.response.use(
   r => r,
   (error: unknown) => {
     const e = error as { response?: { status?: number } }
-    if (e.response?.status === 401) { clearAuthToken(); window.dispatchEvent(new CustomEvent('logout-requested')) }
+    handle401(e.response?.status)
     return Promise.reject(error)
   },
 )

@@ -12,6 +12,10 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Frontend: extend 401 dedup guard to agents and queries API modules
+- `frontend/src/api/agents.ts`, `frontend/src/api/queries.ts`
+  - Both modules had their own inline 401 interceptors (`clearAuthToken(); window.dispatchEvent(new CustomEvent('logout-requested'))`) that bypassed the shared `handle401()` dedup guard added in an earlier commit. If the agents and queries axios instances all fired 401 simultaneously, each module would trigger its own `logout-requested` event. Replaced both with `handle401(status)` so all four axios instances (client, semantic, agents, queries) share the same dedup lock.
+
 ### Config: workspace setup UX improvements for new live users
 - `frontend/src/components/AdminSections.tsx`
   - `WorkspaceSection`: added `id="workspace-section"` to the section element so the header CTA can scroll directly to it.
