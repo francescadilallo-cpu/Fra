@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: Italian ambiguity guards skip live-mode requests
+- `backend/app/semantic/layer.py`
+  - The `_resolve_intent()` method contained two AmbiguityError guards triggered by Italian terms: one for "fatturato" (mentioning `subtotal_amount`, `~$20M`, `total_due`, `~$22.4M`) and one for "vendite" (mentioning `SalesOrder`). These guards encode AdventureWorks demo dataset semantics.
+  - A live Italian-language user who types "fatturato" or "vendite" would get a disambiguation prompt referencing AW column names and dollar figures unrelated to their workspace.
+  - Fix: both guards are now wrapped in `if not _is_live_mode:` where `_is_live_mode = bool(hidden_tables)`. The `hidden_tables` frozenset is populated for live users by `main.py` at request time. Live users' queries fall through to the LLM SQL generation path which uses their actual schema context.
+
 ### Backend: remove hardcoded AW entity names from "entity not modeled" fallback
 - `backend/app/semantic/layer.py`
   - `_q_entity_not_modeled()` had a final fallback at the bottom of its if/elif chain (used when `_effective_docs`, `_ontology`, and `_catalog` are all None) that listed `"Customer, SalesOrder, SalesOrderLine, Product, Employee, Territory, Salesperson"` — the AdventureWorks demo entity set. A live user who queries an unrecognised entity while the semantic layer is still initialising would see AW entity names, not their own.

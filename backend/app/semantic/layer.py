@@ -484,70 +484,77 @@ class _RuleParser:
             return Intent(intent_type="data_provenance", raw_question=question)
 
         # ── Ambiguity guards (raise before unknown fallback) ──────────────
+        # These guards encode AW demo dataset semantics (subtotal_amount vs
+        # total_due, SalesOrder count vs revenue).  Skip them for live-mode
+        # requests so Italian live users don't get AW-specific messages.
+        _is_live_mode = bool(
+            getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+        )
 
-        # "fatturato" standalone — ambiguous between revenue and revenue_with_tax
-        _FATTURATO_QUALIFIERS = [
-            "per territorio",
-            "per venditore",
-            "per cliente",
-            "medio",
-            "per categoria",
-            "vs",
-            "quota",
-            "lordo",
-            "netto",
-            "incass",
-            "annualizzato",
-            "fonte",
-            "cliente ",
-            "reparto",
-            "b2b",
-            "b2c",
-            "venditore",
-            "venditori",
-            "top",
-        ]
-        if "fatturato" in q:
-            has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
-            is_standalone = not has_qualifier
-            if is_standalone:
+        if not _is_live_mode:
+            # "fatturato" standalone — ambiguous between revenue and revenue_with_tax
+            _FATTURATO_QUALIFIERS = [
+                "per territorio",
+                "per venditore",
+                "per cliente",
+                "medio",
+                "per categoria",
+                "vs",
+                "quota",
+                "lordo",
+                "netto",
+                "incass",
+                "annualizzato",
+                "fonte",
+                "cliente ",
+                "reparto",
+                "b2b",
+                "b2c",
+                "venditore",
+                "venditori",
+                "top",
+            ]
+            if "fatturato" in q:
+                has_qualifier = any(x in q for x in _FATTURATO_QUALIFIERS)
+                is_standalone = not has_qualifier
+                if is_standalone:
+                    raise AmbiguityError(
+                        "The term 'fatturato' is ambiguous: it could refer to pure revenue "
+                        "(subtotal_amount, ~$20M) or gross revenue including taxes and shipping "
+                        "(total_due, ~$22.4M). Please specify which definition to use.",
+                        candidates=[
+                            "revenue (~subtotal_amount)",
+                            "revenue_with_tax (~total_due)",
+                        ],
+                    )
+
+            # "vendite" standalone — ambiguous between order count and revenue
+            _VENDITE_QUALIFIERS = [
+                "per territorio",
+                "per venditore",
+                "per cliente",
+                "per categoria",
+                "per prodotto",
+                "per reparto",
+                "per mese",
+                "per anno",
+                "top",
+                "media",
+                "totale",
+                "b2b",
+                "b2c",
+            ]
+            if "vendite" in q and not any(kw in q for kw in _VENDITE_QUALIFIERS):
                 raise AmbiguityError(
-                    "The term 'fatturato' is ambiguous: it could refer to pure revenue "
-                    "(subtotal_amount, ~$20M) or gross revenue including taxes and shipping "
-                    "(total_due, ~$22.4M). Please specify which definition to use.",
+                    "The term 'vendite' is ambiguous: it could refer to the number of orders "
+                    "(count SalesOrder) or to revenue (revenue/revenue_with_tax). "
+                    "Please specify which metric to use.",
                     candidates=[
+                        "count_orders (number of orders)",
                         "revenue (~subtotal_amount)",
                         "revenue_with_tax (~total_due)",
                     ],
                 )
-
-        # "vendite" standalone — ambiguous between order count and revenue
-        _VENDITE_QUALIFIERS = [
-            "per territorio",
-            "per venditore",
-            "per cliente",
-            "per categoria",
-            "per prodotto",
-            "per reparto",
-            "per mese",
-            "per anno",
-            "top",
-            "media",
-            "totale",
-            "b2b",
-            "b2c",
-        ]
-        if "vendite" in q and not any(kw in q for kw in _VENDITE_QUALIFIERS):
-            raise AmbiguityError(
-                "The term 'vendite' is ambiguous: it could refer to the number of orders "
-                "(count SalesOrder) or to revenue (revenue/revenue_with_tax). "
-                "Please specify which metric to use.",
-                candidates=[
-                    "count_orders (number of orders)",
-                    "revenue (~subtotal_amount)",
-                    "revenue_with_tax (~total_due)",
-                ],
-            )
 
         # ── Step 3: Unknown — LLM SQL generation fallback ─────────────────────
         # Pass year/limit so that LLM-SQL and template paths can use them.
