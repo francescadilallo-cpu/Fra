@@ -12,6 +12,15 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### SemanticLayerView: proper empty state for Field Mappings tab
+- `frontend/src/components/SemanticLayerView.tsx`
+  - Field Mappings tab showed "No mappings match your search." even when no search was active and the semantic layer hadn't been built. Now shows a distinct "No field mappings yet" empty state with a note to build from Data Sources, and reserves the "No mappings match your search" message for when a search filter is active but yields no results.
+
+### Dashboard: welcome banner and agent panel copy corrected for live mode
+- `frontend/src/components/Dashboard.tsx`
+  - Welcome banner subtitle was "Your semantic layer is ready · 0 entities" for fresh live workspaces → now "Connect a data source to start building your semantic layer" when no entities exist.
+  - AgentIntelligence panel "No agents run yet for this sector." → "No agents run yet." in live mode; CTA "Go to Agents →" → "Create your first agent →".
+
 ### Dashboard: welcome banner shows accurate status for fresh live workspaces
 - `frontend/src/components/Dashboard.tsx`
   - Welcome banner subtitle was always "Your semantic layer is ready · N entities" — for a live workspace with 0 entities this reads "ready · 0 entities" which is incorrect.

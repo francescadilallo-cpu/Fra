@@ -181,8 +181,8 @@ function AgentIntelligence({ sectorId, onNavigate }: { sectorId: SectorId; onNav
       {runs.length === 0 ? (
         <div className="text-center py-6">
           <BotMessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <p className="text-sm text-slate-500">No agents run yet for this sector.</p>
-          <button onClick={() => onNavigate?.('agents')} className="text-xs text-blue-600 hover:underline mt-1">Go to Agents →</button>
+          <p className="text-sm text-slate-500">{IS_DEMO_MODE ? 'No agents run yet for this sector.' : 'No agents run yet.'}</p>
+          <button onClick={() => onNavigate?.('agents')} className="text-xs text-blue-600 hover:underline mt-1">{IS_DEMO_MODE ? 'Go to Agents →' : 'Create your first agent →'}</button>
         </div>
       ) : (
         <div className="space-y-3">

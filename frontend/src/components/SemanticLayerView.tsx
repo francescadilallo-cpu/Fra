@@ -3199,12 +3199,17 @@ export default function SemanticLayerView() {
                   <span className="text-[11px] text-slate-400">Types:</span>
                   {Object.keys(DEF_TYPE_COLORS).map(t => <DefTypeBadge key={t} type={t} />)}
                 </div>
-                {Object.keys(groupedMappings).length === 0
-                  ? <div className="text-center py-12 text-slate-400 text-sm">No mappings match your search.</div>
-                  : Object.entries(groupedMappings).map(([table, rows]) => (
-                    <MappingTableGroup key={table} table={table} rows={rows} savedEdits={savedEdits} onSave={handleMappingSave} />
-                  ))
-                }
+                {allMappings.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400">
+                    <Table2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">No field mappings yet</p>
+                    <p className="text-xs mt-1">Build the semantic layer from Data Sources to auto-generate mappings from your schema.</p>
+                  </div>
+                ) : Object.keys(groupedMappings).length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-sm">No mappings match your search.</div>
+                ) : Object.entries(groupedMappings).map(([table, rows]) => (
+                  <MappingTableGroup key={table} table={table} rows={rows} savedEdits={savedEdits} onSave={handleMappingSave} />
+                ))}
               </div>
             )}
 
