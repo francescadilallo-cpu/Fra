@@ -201,6 +201,30 @@ function DataTable({ node }: { node: OntologyNode }) {
     URL.revokeObjectURL(url)
   }
 
+  if (!IS_DEMO_MODE && rows.length === 0) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
+          <Database className="w-10 h-10 text-slate-200" />
+          <div>
+            <p className="text-sm font-semibold text-slate-600 mb-1">No row-level preview available</p>
+            <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+              Row data for <span className="font-mono text-teal-600">{node.data.label}</span> isn't loaded into the browser.
+              Use <strong>Query AI</strong> to run SQL against your live data.
+            </p>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-query', { detail: { question: `SELECT * FROM ${node.data.db_table ?? node.data.label} LIMIT 20` } }))}
+            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Open in Query AI
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
