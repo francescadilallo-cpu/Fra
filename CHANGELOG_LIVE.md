@@ -32,6 +32,12 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Data Entities" panel: added an empty state that links to the semantic layer builder.
   - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
 
+### Remove Italian text leaks from QueryInterface and SemanticLayerView
+- `frontend/src/components/QueryInterface.tsx`
+  - LLM API key panel had three Italian strings shown to all users (demo and live): "chiave salvata solo nel browser", "ottieni la chiave gratuita →", and "Salva" button label. Replaced with English equivalents.
+- `frontend/src/components/SemanticLayerView.tsx`
+  - "Add disambiguation rule" form placeholder was `"revenue" / "fatturato"` — the Italian/AW-specific term was shown to live users as a hint. Changed to generic `"revenue" / "net_sales"`.
+
 ### ProcessView: real KG node/edge counts in pipeline completion summary
 - `frontend/src/components/ProcessView.tsx`
   - `semanticStatus()` was already fetched on load but only used to build pipeline logs. Now also stored in `kgStatus` state.

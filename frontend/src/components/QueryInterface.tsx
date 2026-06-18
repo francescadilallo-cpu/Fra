@@ -741,7 +741,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-2">
           <Key className="w-3.5 h-3.5 text-teal-400" />
           <span className="text-xs font-semibold text-white">LLM Provider</span>
-          <span className="text-[10px] text-slate-400">— chiave salvata solo nel browser</span>
+          <span className="text-[10px] text-slate-400">— key stored in your browser only</span>
         </div>
         <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
       </div>
@@ -774,7 +774,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
         className="flex items-center gap-1.5 text-[11px] text-teal-400 hover:text-teal-300 transition-colors"
       >
         <ExternalLink className="w-3 h-3" />
-        {cfg.hint} — ottieni la chiave gratuita →
+        {cfg.hint} — get a free key →
       </a>
 
       {/* Key input */}
@@ -792,7 +792,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
           disabled={!draft.trim()}
           className="px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 flex-shrink-0"
         >
-          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Salva'}
+          {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Save'}
         </button>
         {stored.key && (
           <button onClick={handleClear} className="px-2 text-slate-500 hover:text-red-400 transition-colors">

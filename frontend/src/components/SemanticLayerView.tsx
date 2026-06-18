@@ -738,7 +738,7 @@ function RulesBuilder({ sectorId }: { sectorId: string }) {
             <div className="col-span-2">
               <label className="text-[11px] font-medium text-slate-600 mb-1 block">Ambiguous term <span className="text-red-400">*</span></label>
               <input value={form.term} onChange={e => setForm(f => ({ ...f, term: e.target.value }))}
-                placeholder='e.g. "revenue" / "fatturato"'
+                placeholder='e.g. "revenue" / "net_sales"'
                 className="w-full text-xs border border-amber-200 rounded-lg px-2 py-2 bg-white focus:border-amber-400 outline-none font-mono" />
             </div>
             <div className="col-span-2">
