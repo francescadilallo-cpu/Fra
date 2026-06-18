@@ -32,6 +32,10 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Data Entities" panel: added an empty state that links to the semantic layer builder.
   - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
 
+### SemanticLayerView: real KG node/edge counts from backend
+- `frontend/src/components/SemanticLayerView.tsx`
+  - Overview stat cards "KG Nodes" and "KG Edges" were using estimated values for live users (`totalRows` and `edgeCount * 8`). Now calls `semanticStatus()` on load and uses real `kg_nodes` / `kg_edges` from the backend, falling back to the estimates only if the API returns nothing.
+
 ### Remove demo content leaks from AgentsView and DataExplorer
 - `frontend/src/components/AgentsView.tsx`
   - `ExecutiveActionsPanel` example text was Italian AdventureWorks commands ("Sposta la data di consegna…") — visible to live admin users because the panel is only shown in live mode. Replaced with generic English examples.

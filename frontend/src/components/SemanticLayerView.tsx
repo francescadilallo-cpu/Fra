@@ -6,14 +6,14 @@ import {
   Table2, Pencil, Check, Search, Tag, BarChart2, Filter, SlidersHorizontal, TrendingUp, Sigma,
 } from 'lucide-react'
 import {
-  checkBackend, semanticSources,
+  checkBackend, semanticSources, semanticStatus,
   getMetrics, createMetric, deleteMetric as apiDeleteMetric,
   getHierarchies, createHierarchy, deleteHierarchy as apiDeleteHierarchy,
   getSegments, createSegment, deleteSegment as apiDeleteSegment,
   ask as backendAsk, adaptAskResult,
   getDraft, listQueryTemplates,
   type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
-  type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
+  type SemanticStatus, type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
 import { modeScopedSector, IS_DEMO_MODE } from '../lib/demoMode'
@@ -1874,6 +1874,7 @@ export default function SemanticLayerView() {
   const [backendMetrics, setBackendMetrics] = useState<BackendMetric[]>([])
   const [backendHierarchies, setBackendHierarchies] = useState<BackendHierarchy[]>([])
   const [backendSegments, setBackendSegments] = useState<BackendSegment[]>([])
+  const [kgStatus, setKgStatus] = useState<SemanticStatus | null>(null)
   const [_loadingSemantics, setLoadingSemantics] = useState(false)
   // Semantic draft (entities, relations, context docs, templates)
   const [draft, setDraft] = useState<SemanticDraft | null>(null)
@@ -1919,13 +1920,14 @@ export default function SemanticLayerView() {
       const ok = await checkBackend()
       setBackendOnline(ok)
       if (!ok) return
-      const [srcs, mets, hiers, segs, draftData, templates] = await Promise.all([
+      const [srcs, mets, hiers, segs, draftData, templates, kgStat] = await Promise.all([
         semanticSources().catch(() => []),
         getMetrics(sectorId).catch(() => []),
         getHierarchies(sectorId).catch(() => []),
         getSegments(sectorId).catch(() => []),
         getDraft().catch(() => null),
         listQueryTemplates().catch(() => []),
+        semanticStatus().catch(() => null),
       ])
       setBackendSources(srcs)
       setBackendMetrics(mets)
@@ -1933,6 +1935,7 @@ export default function SemanticLayerView() {
       setBackendSegments(segs)
       if (draftData) setDraft(draftData)
       setQueryTemplates(templates)
+      if (kgStat?.loaded) setKgStatus(kgStat)
     } catch {
       setBackendOnline(false)
     } finally {
@@ -2372,10 +2375,10 @@ export default function SemanticLayerView() {
               <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
               <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
               <StatCard label="KG Nodes"
-                value={isDemoWorkspace ? '193,062' : totalRows.toLocaleString()}
+                value={isDemoWorkspace ? '193,062' : (kgStatus?.kg_nodes ?? totalRows).toLocaleString()}
                 sub="entity instances" accent />
               <StatCard label="KG Edges"
-                value={isDemoWorkspace ? '313,193' : (edgeCount * 8).toLocaleString()}
+                value={isDemoWorkspace ? '313,193' : (kgStatus?.kg_edges ?? edgeCount * 8).toLocaleString()}
                 sub="semantic relations" accent />
             </div>
 
