@@ -2886,18 +2886,36 @@ export default function SemanticLayerView() {
             {showAddEntity && (
               <AddEntityForm sectorId={sectorId} entityOptions={entityOptions} onDone={() => setShowAddEntity(false)} />
             )}
-            <div className="space-y-2">
-              {ontology.nodes.map(node => (
-                <EntityCard
-                  key={node.id}
-                  nodeId={node.id}
-                  ontologyNode={node.data}
-                  sectorId={sectorId}
-                  isBase={baseNodeIds.has(node.id)}
-                  entityOptions={entityOptions}
-                />
-              ))}
-            </div>
+            {ontology.nodes.length === 0 && !IS_DEMO_MODE ? (
+              <div className="flex flex-col items-center justify-center py-14 text-center gap-4">
+                <Network className="w-10 h-10 text-slate-200" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-600 mb-1">No entities yet</p>
+                  <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                    Connect a data source and run the semantic pipeline — entities are auto-extracted from your tables. Or add them manually using the button above.
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+                  className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                >
+                  Connect a data source →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ontology.nodes.map(node => (
+                  <EntityCard
+                    key={node.id}
+                    nodeId={node.id}
+                    ontologyNode={node.data}
+                    sectorId={sectorId}
+                    isBase={baseNodeIds.has(node.id)}
+                    entityOptions={entityOptions}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

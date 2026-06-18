@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### SemanticLayerView: add empty state for Entities section when no ontology exists
+- `frontend/src/components/SemanticLayerView.tsx`
+  - The Entities section showed an empty list (no message) when a live user had no ontology built yet. With just a header and "Add entity" button, there was no guidance on how to get entities.
+  - Now shows: network icon, "No entities yet" heading, explanation that entities are auto-extracted when data sources are connected + the pipeline is run, and a "Connect a data source →" CTA button.
+
 ### OntologyGraph: fix "from Builder" badge logic for live users
 - `frontend/src/components/OntologyGraph.tsx`
   - The "+X from Builder" badge in the Ontology header used `extendedOntology.nodes.length > sector.ontology.nodes.length` for both demo and live mode. In live mode, `sector.ontology.nodes.length` is the AW node count (10+ nodes), so the badge would never appear even when a live user had added custom entities via the Builder.
