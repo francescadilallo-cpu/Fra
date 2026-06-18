@@ -89,6 +89,20 @@ export default function OverviewScreen({ onNavigate }: Props) {
   // Sector connectors are demo content; live shows only what the backend reports
   const connectors = liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])
 
+  // Solution-card copy must never leak AdventureWorks specifics into the live
+  // (sellable) product — derive it from the user's real sources instead.
+  const kgCountFragment = kgNodes > 0
+    ? `${kgNodes.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges`
+    : 'Build the layer to generate the graph'
+  const kgGraphDesc = IS_DEMO_MODE
+    ? `The semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. ${kgCountFragment}, reliable joins.`
+    : connectors.length > 1
+      ? `Cross-source bridges link your connected systems (${connectors.slice(0, 4).join(' ↔ ')}). ${kgCountFragment} — reliable joins across sources.`
+      : `Entities and their relationships are unified into one graph. ${kgCountFragment} — reliable joins.`
+  const semDefDesc = IS_DEMO_MODE
+    ? 'Every field has a formal definition. Ambiguities like "fatturato" are documented and resolved at query time by the AI engine.'
+    : 'Every field has a formal definition. Ambiguous terms are documented and resolved at query time by the AI engine — so the same word never returns two different numbers.'
+
   // Derive journey step completion from real system state
   const semBuilt = semStatus?.loaded === true
   const agentsRan = agentRuns.length > 0
@@ -333,12 +347,12 @@ export default function OverviewScreen({ onNavigate }: Props) {
               {
                 icon: Network, color: 'border-l-teal-500', bg: 'bg-teal-50',
                 title: 'Cross-source Knowledge Graph',
-                desc: `The semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. ${kgNodes > 0 ? `${kgNodes.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges` : 'Build the layer to generate the graph'}, reliable joins.`,
+                desc: kgGraphDesc,
               },
               {
                 icon: BookOpen, color: 'border-l-violet-500', bg: 'bg-violet-50',
                 title: 'Semantic Definitions',
-                desc: 'Every field has a formal definition. Ambiguities like "fatturato" are documented and resolved at query time by the AI engine.',
+                desc: semDefDesc,
               },
               {
                 icon: MessageSquare, color: 'border-l-blue-500', bg: 'bg-blue-50',
