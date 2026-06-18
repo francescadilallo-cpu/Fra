@@ -1953,7 +1953,7 @@ def rebuild_data_store(
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     """Force full re-ingest of all sources into the DuckDB snapshot. Admin-only."""
-    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
 
     mgr = get_source_manager(_SCENARIO_PATH)
     try:
@@ -1969,7 +1969,10 @@ def rebuild_data_store(
         logger.error("Data store rebuild failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Rebuild failed: {exc}",
+            detail=_safe_ingest_error(
+                exc,
+                fallback="Rebuild failed — please check your source configurations and try again",
+            ),
         ) from exc
     _audit(
         request,
@@ -2170,7 +2173,7 @@ def remove_source(
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
     """Remove a source from the registry and trigger a DuckDB rebuild."""
-    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
 
     mgr = get_source_manager(_SCENARIO_PATH)
     try:
@@ -2186,7 +2189,10 @@ def remove_source(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Source removed from registry but snapshot rebuild failed: {exc}",
+            detail=_safe_ingest_error(
+                exc,
+                fallback="Source removed — snapshot rebuild failed. Please retry or check your source configurations.",
+            ),
         )
 
 
@@ -2197,7 +2203,7 @@ def sync_source(
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> SourceResponse:
     """Re-ingest a single source and rebuild the DuckDB snapshot."""
-    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
 
     mgr = get_source_manager(_SCENARIO_PATH)
     cfg = mgr.registry.get(source_id)
@@ -2212,7 +2218,7 @@ def sync_source(
             detail=str(exc),
         ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=_safe_ingest_error(exc)) from exc
     cfg = mgr.registry.get(source_id) or cfg
     _audit(request, current_user, "Synced data source", source_id, category="data")
     return _source_cfg_to_response(cfg)

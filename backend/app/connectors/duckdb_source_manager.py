@@ -55,17 +55,21 @@ logger = logging.getLogger(__name__)
 _SCHEMA_VERSION = "3"  # bumped: registry-driven schema
 
 
-def _safe_ingest_error(exc: Exception) -> str:
+def _safe_ingest_error(
+    exc: Exception,
+    *,
+    fallback: str = "Ingestion failed — please check the source configuration and try again",
+) -> str:
     """Return a user-safe error string for source ingestion failures.
 
     Our own ValueError/FileNotFoundError/NotImplementedError carry crafted
     messages the user needs to see.  Any other exception type (DuckDB catalog
-    errors, driver internals, etc.) is replaced with a generic message so
-    internal details stay out of the /api/sources listing.
+    errors, driver internals, etc.) is replaced with *fallback* so internal
+    details stay out of API responses.
     """
     if isinstance(exc, (ValueError, FileNotFoundError, NotImplementedError)):
         return str(exc)
-    return "Ingestion failed — please check the source configuration and try again"
+    return fallback
 
 
 _ORION_CONTEXT_DOC = """\

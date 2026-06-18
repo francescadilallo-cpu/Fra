@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-18 (continued)
+
+### Backend: sanitize raw exceptions in sync/delete/rebuild source endpoints
+- `backend/app/connectors/duckdb_source_manager.py`
+  - Added `fallback` kwarg to `_safe_ingest_error()` (default unchanged) so callers can supply context-specific user-facing fallback messages without exposing raw DuckDB catalog errors.
+- `backend/app/main.py`
+  - **`POST /api/sources/{id}/sync`**: `except Exception as exc: detail=str(exc)` — leaked raw DuckDB catalog errors (e.g., "Catalog Error: Table with name X does not exist!") verbatim to the caller. Fixed to use `_safe_ingest_error(exc)`.
+  - **`DELETE /api/sources/{id}`**: `detail=f"Source removed from registry but snapshot rebuild failed: {exc}"` — same leak on rebuild failure after removal. Fixed to use `_safe_ingest_error(exc, fallback="Source removed — snapshot rebuild failed…")`.
+  - **`POST /api/data/store/rebuild`**: `detail=f"Rebuild failed: {exc}"` — same leak on full-store rebuild. Fixed to use `_safe_ingest_error(exc, fallback="Rebuild failed — please check your source configurations and try again")`.
+
+---
+
 ## 2026-06-18
 
 ### Backend: AW-specific intent heuristics skipped for live-mode requests
