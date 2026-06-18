@@ -193,26 +193,28 @@ function ConnectorCard({
              connected ? 'Connected' : 'Available'}
           </span>
         </div>
-        <button
-          onClick={onTest}
-          disabled={testState === 'testing'}
-          className={`text-[11px] font-medium px-2 py-1 rounded transition-colors ${
-            testState === 'testing' ? 'text-slate-400 cursor-not-allowed' :
-            testState === 'ok' ? 'text-teal-600 hover:bg-teal-50' :
-            testState === 'error' ? 'text-red-600 hover:bg-red-50' :
-            'text-slate-500 hover:bg-slate-100'
-          }`}
-        >
-          {testState === 'testing' ? (
-            <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Testing…</span>
-          ) : testState === 'ok' ? (
-            <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Re-test</span>
-          ) : testState === 'error' ? (
-            <span className="flex items-center gap-1"><XCircle className="w-3 h-3" />Retry</span>
-          ) : (
-            'Test'
-          )}
-        </button>
+        {connected && (
+          <button
+            onClick={onTest}
+            disabled={testState === 'testing'}
+            className={`text-[11px] font-medium px-2 py-1 rounded transition-colors ${
+              testState === 'testing' ? 'text-slate-400 cursor-not-allowed' :
+              testState === 'ok' ? 'text-teal-600 hover:bg-teal-50' :
+              testState === 'error' ? 'text-red-600 hover:bg-red-50' :
+              'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            {testState === 'testing' ? (
+              <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Testing…</span>
+            ) : testState === 'ok' ? (
+              <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Re-test</span>
+            ) : testState === 'error' ? (
+              <span className="flex items-center gap-1"><XCircle className="w-3 h-3" />Retry</span>
+            ) : (
+              'Test'
+            )}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -335,6 +337,7 @@ export default function ConfigurationView() {
   const [showAddModal, setShowAddModal] = useState(false)
 
   function testConnection(name: string) {
+    if (!IS_DEMO_MODE) return
     setTestStates(prev => ({ ...prev, [name]: 'testing' }))
     const delay = 800 + Math.random() * 1200
     setTimeout(() => {

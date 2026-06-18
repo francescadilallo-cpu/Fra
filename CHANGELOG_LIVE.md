@@ -12,6 +12,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### ConfigurationView: fake connector test disabled in live mode
+- `frontend/src/components/ConfigurationView.tsx`
+  - `testConnection` is now a no-op in live mode — clicking Test no longer simulates fake latency/success results for customers with unconnected sources.
+  - `ConnectorCard` Test button is only rendered when the connector is `connected`; live users see clean "Available" status without a misleading clickable Test action.
+
+### UseCasesView: demo CTAs hidden from live users; workspace corruption fixed
+- `frontend/src/components/UseCasesView.tsx`
+  - `loadScenario` (the "Load scenario → Dashboard" CTA) is now guarded by `IS_DEMO_MODE`: it no longer overwrites a live user's `si-company-name` in localStorage with "AdventureWorks Cycles".
+  - `handleDemoQuery` similarly guarded so "Try live in Query AI →" never fires in live mode.
+  - Live users see a single "Replicate this with your data →" CTA on each case card that navigates to Data Sources — actionable next step without leaking demo state.
+
 ### AdminSections: real webhook test replaces simulated delay
 - `frontend/src/components/AdminSections.tsx`
   - `testChannel` converted from sync fake (`setTimeout`) to `async` function: live mode now calls `apiTestChannel(id)` (real HTTP POST via backend `httpx` client), shows actual latency from the backend response.

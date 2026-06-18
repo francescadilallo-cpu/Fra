@@ -2,6 +2,7 @@ import { ArrowRight, TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, Bot,
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import type { NavTab } from '../types'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 
 interface Props {
   onNavigate: (tab: NavTab) => void
@@ -251,8 +252,7 @@ function ResultRow({ r }: { r: ResultMetric }) {
 
 function CaseCard({ uc, onLoad, onNavigate }: { uc: UseCase; onLoad: () => void; onNavigate: (tab: NavTab) => void }) {
   function handleDemoQuery() {
-    if (!uc.demoQuery) return
-    // Load scenario first, then navigate to Query AI
+    if (!uc.demoQuery || !IS_DEMO_MODE) return
     localStorage.setItem('si-company-name', uc.company)
     sessionStorage.setItem('query-prefill', uc.demoQuery)
     onNavigate('query')
@@ -337,25 +337,37 @@ function CaseCard({ uc, onLoad, onNavigate }: { uc: UseCase; onLoad: () => void;
 
       {/* CTAs */}
       <div className="px-6 pb-6 pt-2 flex flex-col gap-2">
-        {uc.demoQuery && (
+        {IS_DEMO_MODE ? (
+          <>
+            {uc.demoQuery && (
+              <button
+                onClick={handleDemoQuery}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+              >
+                <Zap className="w-4 h-4 text-teal-400" />
+                Try live in Query AI →
+              </button>
+            )}
+            <button
+              onClick={onLoad}
+              className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
+                uc.demoQuery
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+              }`}
+            >
+              Load scenario → Dashboard
+            </button>
+          </>
+        ) : (
           <button
-            onClick={handleDemoQuery}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            onClick={() => onNavigate('sources')}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
           >
-            <Zap className="w-4 h-4 text-teal-400" />
-            Try live in Query AI →
+            <ArrowRight className="w-4 h-4" />
+            Replicate this with your data →
           </button>
         )}
-        <button
-          onClick={onLoad}
-          className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
-            uc.demoQuery
-              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              : 'bg-teal-600 hover:bg-teal-700 text-white'
-          }`}
-        >
-          Load scenario → Dashboard
-        </button>
       </div>
     </div>
   )
@@ -365,6 +377,7 @@ export default function UseCasesView({ onNavigate }: Props) {
   const { setSector } = useSector()
 
   function loadScenario(uc: UseCase) {
+    if (!IS_DEMO_MODE) return
     localStorage.setItem('si-company-name', uc.company)
     setSector(uc.sector)
     window.dispatchEvent(new CustomEvent('company-name-changed'))
