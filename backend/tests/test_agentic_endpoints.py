@@ -598,7 +598,7 @@ def test_update_order_status_terminal_state_blocked(
     assert resp.status_code == 422
     detail = resp.json().get("detail", {})
     assert detail.get("error") == "AGENT_VALIDATION_FAILED"
-    assert "Transizione di stato non valida" in detail.get("message", "")
+    assert "Invalid status transition" in detail.get("message", "")
 
 
 def test_update_order_status_invalid_italian_status(

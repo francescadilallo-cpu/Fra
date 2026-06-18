@@ -132,6 +132,56 @@ class TestParseCommand:
         with pytest.raises(AgentSemanticValidationError):
             self._parse("Segna l'ordine 1 come sospeso")
 
+    # ── English command patterns ───────────────────────────────────────────────
+
+    def test_english_update_delivery_date(self):
+        action = self._parse("Update the delivery date of order 42 to 2025-03-15")
+        assert action.action_type == "UPDATE_ORDER_DELIVERY_DATE"
+        assert action.order_id == 42
+        assert action.new_delivery_date == date(2025, 3, 15)
+
+    def test_english_change_delivery_date(self):
+        action = self._parse("change delivery date of order 7 to 2025-06-01")
+        assert action.action_type == "UPDATE_ORDER_DELIVERY_DATE"
+        assert action.order_id == 7
+        assert action.new_delivery_date == date(2025, 6, 1)
+
+    def test_english_set_delivery_date(self):
+        action = self._parse("Set delivery date 100 to 2026-01-15")
+        assert action.action_type == "UPDATE_ORDER_DELIVERY_DATE"
+        assert action.order_id == 100
+
+    def test_english_mark_order_shipped(self):
+        action = self._parse("Mark order 5 as shipped")
+        assert action.action_type == "UPDATE_ORDER_STATUS"
+        assert action.order_id == 5
+        assert action.new_status == "shipped"
+
+    def test_english_mark_order_delivered(self):
+        action = self._parse("mark order 10 as delivered")
+        assert action.action_type == "UPDATE_ORDER_STATUS"
+        assert action.new_status == "delivered"
+
+    def test_english_mark_order_processing(self):
+        action = self._parse("set order 3 as processing")
+        assert action.action_type == "UPDATE_ORDER_STATUS"
+        assert action.new_status == "processing"
+
+    def test_english_mark_order_in_processing(self):
+        action = self._parse("Mark order 8 as in processing")
+        assert action.action_type == "UPDATE_ORDER_STATUS"
+        assert action.new_status == "processing"
+
+    def test_english_cancel_order(self):
+        action = self._parse("cancel order 99")
+        assert action.action_type == "UPDATE_ORDER_STATUS"
+        assert action.order_id == 99
+        assert action.new_status == "cancelled"
+
+    def test_english_unsupported_command_raises(self):
+        with pytest.raises(AgentSemanticValidationError, match="not supported"):
+            self._parse("Create a new order for customer 5")
+
     def test_impossible_calendar_date_raises_validation_error(self):
         # 2025-13-45 is syntactically well-formed but not a real date.
         # Must surface as AgentSemanticValidationError (422), not an uncaught

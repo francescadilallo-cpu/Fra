@@ -51,6 +51,7 @@ work is traceable across sessions and the git history is easy to reconcile.
   - Italian rationale strings ("Write-back governato via Executive Agentic Layer") translated to English.
 - `backend/tests/test_executive_agentic.py`
   - Updated test match patterns to use English strings (`"not supported"`, `"Invalid date"`, `"not found"`, `"Invalid status transition"` etc.).
+  - Added 9 new English-command parse tests covering all three English regex paths (update delivery date, mark as status, cancel) and an English unsupported-command guard.
 
 ### Backend: sanitize SemanticOntologyViolationError message in /api/semantic/ask
 - `backend/app/main.py`
