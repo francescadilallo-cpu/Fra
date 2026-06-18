@@ -238,7 +238,7 @@ def run_aw_query(
             "sql_used": None,
             "rows": [],
             "total_rows": 0,
-            "summary": f"Errore nella generazione della query: {exc}",
+            "summary": "Impossibile generare la query — riprovare.",
             "sources_touched": [],
             "provenance": {},
             "latency_ms": latency_ms,

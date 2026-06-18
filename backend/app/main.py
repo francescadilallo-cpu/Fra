@@ -1942,7 +1942,8 @@ def data_store_status(
             "notes": notes,
         }
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.error("data_store_status failed: %s", exc, exc_info=True)
+        return {"error": "Unable to load data store status"}
 
 
 @app.post("/api/data/store/rebuild")

@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: data_store_status and aw_engine no longer expose raw exceptions to users
+- `backend/app/main.py`
+  - `GET /api/data/store/status` (accessible by all authenticated users): catch block returned `{"error": str(exc)}` — the raw Python exception, potentially exposing file paths or internal state. Now returns `{"error": "Unable to load data store status"}` and logs the detail at ERROR level.
+- `backend/app/query/aw_engine.py`
+  - NL→SQL generation failure returned `"summary": f"Errore nella generazione della query: {exc}"` — an Italian-language message that included the raw exception (e.g. API auth errors). Now returns `"Impossibile generare la query — riprovare."` (generic Italian retry message); the full exception is still logged at ERROR level.
+
 ### Backend: ingester error messages improved for Excel, SQLite, and PostgreSQL failures
 - `backend/app/connectors/duckdb_source_manager.py`
   - `_ingest_excel()`: wrapped `pd.read_excel()` in try/except; openpyxl/xlrd errors (corrupted file, wrong format) now surface as a readable ValueError ("Could not read Excel file…") instead of a raw internal traceback. Added an empty-DataFrame guard that raises ValueError("Excel file contains no rows") so users know immediately the sheet is blank.
