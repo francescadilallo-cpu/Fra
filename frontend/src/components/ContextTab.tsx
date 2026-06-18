@@ -316,7 +316,7 @@ function EntitiesTab() {
                   <label className="block text-xs font-medium text-slate-600 mb-1">Technical name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="e.g. SalesOrder"
+                    placeholder="e.g. Customer"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   />
@@ -325,7 +325,7 @@ function EntitiesTab() {
                   <label className="block text-xs font-medium text-slate-600 mb-1">Display name *</label>
                   <input
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400"
-                    placeholder="e.g. Sales Order"
+                    placeholder="e.g. Customer"
                     value={form.display_name}
                     onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
                   />

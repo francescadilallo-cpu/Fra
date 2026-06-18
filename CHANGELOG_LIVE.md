@@ -12,6 +12,10 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### ContextTab: replace AW-specific entity form placeholders with generic examples
+- `frontend/src/components/ContextTab.tsx`
+  - "Add entity" form: `placeholder="e.g. SalesOrder"` (technical name) and `"e.g. Sales Order"` (display name) → both replaced with `"e.g. Customer"`.
+
 ### SemanticLayerView: replace AW-specific form placeholders with generic examples
 - `frontend/src/components/SemanticLayerView.tsx`
   - Metrics "Add Metric" form: `placeholder="e.g. subtotalAmount"` → `"e.g. amount"` (AW-specific field)
