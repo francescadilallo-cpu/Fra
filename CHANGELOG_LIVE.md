@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18 (continued)
 
+### Frontend: empty states for Lifecycle and Conversion Funnel in ProcessView for live users
+- `frontend/src/components/ProcessView.tsx`
+  - **Lifecycle section**: when `processStages` is empty and `!IS_DEMO_MODE`, show a message "Process stages will appear here once data sources are connected and the pipeline has run." with a "Connect a data source" link. Previously the section header was visible but the content area was blank.
+  - **Conversion Funnel section**: when `funnel` is empty and `!IS_DEMO_MODE`, show "Funnel metrics will be derived from your transaction data once the pipeline runs." with a "Run pipeline" CTA. Previously the summary footer ("Conversion rate: — · Stages: 0") was visible with no content above it, which looked broken.
+  - In both cases, live users with real data (from `liveConfig`) are unaffected — the non-empty path renders as before.
+
 ### Backend: sanitize raw exceptions in sync/delete/rebuild source endpoints
 - `backend/app/connectors/duckdb_source_manager.py`
   - Added `fallback` kwarg to `_safe_ingest_error()` (default unchanged) so callers can supply context-specific user-facing fallback messages without exposing raw DuckDB catalog errors.

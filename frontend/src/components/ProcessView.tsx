@@ -654,6 +654,17 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       {/* ── Lifecycle stages ──────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
+        {processStages.length === 0 && !IS_DEMO_MODE ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and the pipeline has run.</p>
+            <button
+              onClick={() => onNavigate?.('sources')}
+              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
+            >
+              Connect a data source <ArrowRight size={12} />
+            </button>
+          </div>
+        ) : (
         <div className="flex items-start gap-2 overflow-x-auto pb-2">
           {processStages.map((stage, i) => {
             const style = STAGE_STYLES[i % STAGE_STYLES.length]
@@ -686,11 +697,24 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             )
           })}
         </div>
+        )}
       </div>
 
       {/* ── Conversion funnel ─────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
+        {funnel.length === 0 && !IS_DEMO_MODE ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-slate-400">Funnel metrics will be derived from your transaction data once the pipeline runs.</p>
+            <button
+              onClick={() => onNavigate?.('process')}
+              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
+            >
+              Run pipeline →
+            </button>
+          </div>
+        ) : (
+        <>
         <div className="space-y-3">
           {funnel.map((item, i) => {
             const pct = Math.round((item.count / maxCount) * 100)
@@ -724,6 +748,8 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             </span>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* ── Active records ────────────────────────────────────────────────── */}
