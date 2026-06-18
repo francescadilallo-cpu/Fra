@@ -923,8 +923,11 @@ class SemanticLayer:
             payload = _extract_json_payload(raw_text)
         except Exception as exc:
             if strict:
+                logger.error(
+                    "LLM ontology mapping failed (%s): %s", provider, exc, exc_info=True
+                )
                 raise SemanticOntologyViolationError(
-                    f"Failed ontology intent mapping with {provider}: {exc}"
+                    "The semantic service is temporarily unavailable. Please try again."
                 ) from exc
             logger.warning("LLM ontology mapping failed, using rule fallback: %s", exc)
             return None
@@ -1477,7 +1480,13 @@ class SemanticLayer:
     # now served by seed Query Templates (DB) or LLM-generated SQL fallback.
 
     def _q_data_provenance(self, intent: Intent) -> Result:
-        entities = self._catalog.list_entities() if self._catalog else []
+        all_entities = self._catalog.list_entities() if self._catalog else []
+        # Filter out tables that are invisible to this request (e.g. demo tables
+        # for live-mode users) — they must not appear in provenance output.
+        hidden: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
+        entities = [e for e in all_entities if e not in hidden]
         prov_data: dict = {}
         for ent in entities:
             meta = self._catalog.get_entity(ent)
@@ -1921,17 +1930,26 @@ class SemanticLayer:
 
         try:
             self._validate_generated_sql(sql)
-        except Exception as exc:
+        except SemanticSecurityViolationError:
+            # Do not echo the table name — live users must not learn which demo
+            # tables exist from error messages.
             return Result(
-                answer=f"Template SQL is invalid: {exc}",
+                answer="This template is not available for your workspace.",
+                notes="template_unavailable",
+            )
+        except Exception as exc:
+            logger.warning("Template SQL failed validation: %s", exc)
+            return Result(
+                answer="Template query could not be validated.",
                 notes="template_invalid_sql",
             )
 
         try:
             rows = self._exec(sql)
         except Exception as exc:
+            logger.warning("Template query execution failed: %s", exc)
             return Result(
-                answer=f"Template query failed: {exc}",
+                answer="Template query failed — check server logs for details.",
                 sql_used=sql,
                 notes="template_exec_error",
             )

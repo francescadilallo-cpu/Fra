@@ -12,6 +12,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: semantic layer data-provenance and template error messages no longer leak demo table names
+- `backend/app/semantic/layer.py`
+  - `_q_data_provenance()`: before this fix, asking "provenienza dati" / "fonte dati" / "aggiornato" in live mode returned ALL catalog entities including the full AdventureWorks table metadata. Now filters the entity list through `_thread_local.hidden_tables` (the same guard used everywhere else in the semantic layer) so live users only see entities from their own sources.
+  - `_execute_template_query()`: when a template's SQL references a hidden demo table, `_validate_generated_sql()` raised `SemanticSecurityViolationError("…table outside this workspace: dipendenti_hr")` — the raw exception message (including the table name) was returned directly to the user. Now catches `SemanticSecurityViolationError` separately and returns "This template is not available for your workspace." Template execution errors (non-security) also return a generic message and log the detail at WARNING level.
+  - LLM ontology mapping failure: when the ANTHROPIC_API_KEY is invalid or rate-limited, the raw provider error (`401 Authentication Error: invalid_api_key`) was included in the 422 response to the user. Now logs the provider error at ERROR level and raises a sanitised "The semantic service is temporarily unavailable. Please try again." message instead.
+
+### Backend: semantic sources endpoint returns generic error messages
+- `backend/app/main.py`
+  - `/api/semantic/sources` DuckDB unified path: raw exception (could include file paths, connection strings, DuckDB internals) replaced with `"Unable to load source metadata"`; error logged at ERROR level.
+  - Same for the legacy per-domain connector fallback path.
+
 ### Backend: parquet connector registered as implemented
 - `backend/app/connectors/source_registry.py`
   - `parquet` had a full ingester (`_ingest_parquet`) in `duckdb_source_manager.py` but was absent from `IMPLEMENTED_CONNECTOR_TYPES`. This meant registering a parquet source would not trigger a rebuild, and the source would silently be skipped. Added `parquet` to the set so it flows through the normal add-source → rebuild path.

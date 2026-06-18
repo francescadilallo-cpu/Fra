@@ -2261,7 +2261,16 @@ def semantic_sources(
                 }
             ]
         except Exception as exc:
-            return [{"id": "unified", "name": "duckdb_unified", "error": str(exc)}]
+            logger.error(
+                "Failed to describe unified DuckDB source: %s", exc, exc_info=True
+            )
+            return [
+                {
+                    "id": "unified",
+                    "name": "duckdb_unified",
+                    "error": "Unable to load source metadata",
+                }
+            ]
 
     # Legacy fallback: iterate the per-domain connectors
     sources = []
@@ -2286,7 +2295,12 @@ def semantic_sources(
                 }
             )
         except Exception as exc:
-            sources.append({"id": key, "name": key, "error": str(exc)})
+            logger.error(
+                "Failed to describe legacy source '%s': %s", key, exc, exc_info=True
+            )
+            sources.append(
+                {"id": key, "name": key, "error": "Unable to load source metadata"}
+            )
     return sources
 
 
