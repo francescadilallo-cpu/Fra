@@ -16,7 +16,16 @@ import logging
 import threading
 from datetime import datetime
 
-from sqlalchemy import Float, Integer, String, Text, create_engine, delete, select
+from sqlalchemy import (
+    Boolean,
+    Float,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    delete,
+    select,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -96,6 +105,7 @@ class ContextDocRow(Base):
     title: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     content: Mapped[str | None] = mapped_column(Text, default="")
     created_at: Mapped[str | None] = mapped_column(String, default="")
+    is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
@@ -323,6 +333,12 @@ class MetadataCatalog:
                 )
             except Exception:
                 pass  # column already exists
+            try:
+                conn.execute(
+                    "ALTER TABLE context_docs ADD COLUMN is_builtin INTEGER DEFAULT 0"
+                )
+            except Exception:
+                pass  # column already exists
             conn.commit()
         finally:
             conn.close()
@@ -519,16 +535,27 @@ class MetadataCatalog:
             rows = session.execute(select(MetricMetaRow)).scalars().all()
             return [MetricMeta(r) for r in rows]
 
-    def list_context_docs(self, limit: int = 500) -> list[dict]:
-        """Return context documents as dicts with 'id', 'title', and 'content'."""
+    def list_context_docs(
+        self, limit: int = 500, exclude_builtin: bool = False
+    ) -> list[dict]:
+        """Return context documents as dicts with 'id', 'title', and 'content'.
+
+        When *exclude_builtin* is True, rows seeded by seed_glossary_docs
+        (is_builtin=True) are omitted — used to hide demo-specific glossary
+        terms from live-mode users who haven't added their own glossary yet.
+        """
         with self._Session() as session:
-            rows = session.execute(select(ContextDocRow).limit(limit)).scalars().all()
+            q = select(ContextDocRow)
+            if exclude_builtin:
+                q = q.where(ContextDocRow.is_builtin.is_(False))
+            rows = session.execute(q.limit(limit)).scalars().all()
             return [{"id": r.id, "title": r.title, "content": r.content} for r in rows]
 
     def seed_glossary_docs(self, terms: dict[str, str]) -> int:
         """Seed glossary terms as Context Documents if they don't already exist.
 
         Each term becomes a doc with title='Glossary: {term}' and content=definition.
+        Seeded terms are tagged is_builtin=True so live-mode queries can exclude them.
         Never overwrites existing docs.
         Returns count inserted.
         """
@@ -542,12 +569,17 @@ class MetadataCatalog:
                 title = f"Glossary: {term}"
                 existing = s.query(ContextDocRow).filter_by(title=title).first()
                 if existing is not None:
+                    # Back-fill is_builtin flag in case this row was created before
+                    # the column existed (migration sets it to 0 for old rows).
+                    if not existing.is_builtin:
+                        existing.is_builtin = True
                     continue
                 row = ContextDocRow(
                     id=str(_uuid.uuid4()),
                     title=title,
                     content=definition,
                     created_at=now,
+                    is_builtin=True,
                 )
                 s.add(row)
                 count += 1

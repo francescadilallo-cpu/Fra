@@ -3594,7 +3594,7 @@ def get_live_config(
                 "position": positions.get(e["name"], {"x": 80, "y": 100}),
                 "data": {
                     "label": e["name"],
-                    "uri": f"aw:{e['name']}",
+                    "uri": f"entity:{e['name']}",
                     "db_table": e["table"],
                     "row_count": e.get("record_count", 0),
                     "properties": [

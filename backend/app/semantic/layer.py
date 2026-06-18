@@ -1640,9 +1640,14 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
-        # Try catalog context docs (titles starting with "Glossary: ") — user-editable
+        # Try catalog context docs (titles starting with "Glossary: ") — user-editable.
+        # In live mode, exclude builtin-seeded terms (demo AW definitions) so users
+        # only see glossary entries they explicitly added themselves.
+        _live_mode = bool(
+            getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+        )
         if self._catalog:
-            catalog_docs = self._catalog.list_context_docs()
+            catalog_docs = self._catalog.list_context_docs(exclude_builtin=_live_mode)
             glossary_docs = [
                 d for d in catalog_docs if d["title"].startswith("Glossary: ")
             ]
@@ -1677,8 +1682,7 @@ class SemanticLayer:
         # Fallback to hardcoded glossary (deprecated — terms should be seeded as context docs).
         # Skipped for live-mode requests: _GLOSSARY encodes AW demo semantics and would
         # return AW-specific definitions (column names, dollar figures) to live users.
-        _live = bool(getattr(SemanticLayer._thread_local, "hidden_tables", frozenset()))
-        if not _live:
+        if not _live_mode:
             definition = self._GLOSSARY.get(raw_term)
             if definition is None and raw_term:
                 for key, val in self._GLOSSARY.items():
@@ -1692,8 +1696,8 @@ class SemanticLayer:
                 )
         else:
             definition = (
-                f"The term '{raw_term}' is not in your semantic layer glossary. "
-                "Add glossary terms via the Context tab."
+                f"The term '{raw_term}' is not in your workspace glossary. "
+                "Add glossary definitions via the Semantic Layer → Context tab."
             )
         return Result(
             answer=definition,

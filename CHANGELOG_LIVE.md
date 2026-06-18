@@ -10,6 +10,23 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-18 (session 3)
+
+### Backend: fix `aw:` URI prefix leaking into live-mode ontology nodes
+- `backend/app/main.py`
+  - `get_live_config()` (line ~3597): Changed `uri: f"aw:{e['name']}"` to `uri: f"entity:{e['name']}"` for nodes built from live-user data. The `aw:` prefix (short for AdventureWorks) was leaking into the `uri` field of live-user ontology nodes and was displayed in the UI in `OntologyGraph.tsx` ("URI: aw:Orders"), `SemanticLayerView.tsx`, and `MappingView.tsx`. The prefix is purely presentational (no functional branching on it), so `entity:` is a clean drop-in that removes the AW branding from live users' views.
+
+### Backend: tag seeded AW glossary terms as `is_builtin=True`; exclude from live-mode glossary lookups
+- `backend/app/metadata/catalog.py`
+  - Added `is_builtin: Mapped[bool]` column to `ContextDocRow` (default `False`, `server_default="0"`)
+  - Added `Boolean` to the SQLAlchemy imports
+  - `_migrate_schema()`: adds `ALTER TABLE context_docs ADD COLUMN is_builtin INTEGER DEFAULT 0` for existing databases
+  - `seed_glossary_docs()`: sets `is_builtin=True` on newly seeded rows; also back-fills the flag on rows that already existed (created before the column was added)
+  - `list_context_docs()`: accepts `exclude_builtin: bool = False`; when `True`, filters with `.where(ContextDocRow.is_builtin.is_(False))` so user-added glossary entries are returned but seeded AW entries are not
+- `backend/app/semantic/layer.py`
+  - `_q_glossary_lookup()`: computes `_live_mode` from `hidden_tables` and passes `exclude_builtin=_live_mode` to `list_context_docs()`. Removed duplicate `_live` variable from the hardcoded-fallback block (now uses `_live_mode`). Updated live-mode "not found" message: "not in your workspace glossary — add via Semantic Layer → Context tab."
+  - **Effect**: a fresh live user asking "define fatturato" no longer receives AW-specific definitions (subtotal_amount, total_due, ~$20M figures). They receive the CTA to add glossary terms. Live users who have added their own glossary terms continue to see those. Demo users are unaffected.
+
 ## 2026-06-18 (continued)
 
 ### Backend: improve 503 error messages for "layer not ready" cases
