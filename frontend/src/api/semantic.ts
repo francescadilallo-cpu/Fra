@@ -4,7 +4,7 @@
  */
 import axios, { AxiosError } from 'axios'
 import type { EngineResult, ChartData, SourceBadge } from '../data/queryEngine'
-import { getAuthToken, clearAuthToken } from './client'
+import { getAuthToken, handle401 } from './client'
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -23,15 +23,12 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-// Mirror the 401 handler from client.ts so that /api/ask 401s also trigger logout
+// Reuse the shared 401 handler so both axios instances use the same dedup guard.
 http.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     const maybeResponse = error as { response?: { status?: number } }
-    if (maybeResponse.response?.status === 401) {
-      clearAuthToken()
-      window.dispatchEvent(new CustomEvent('logout-requested'))
-    }
+    handle401(maybeResponse.response?.status)
     return Promise.reject(error)
   },
 )
@@ -487,9 +484,15 @@ export const listExampleQuestions = (): Promise<ExampleQuestion[]> =>
 
 export function backendErrorMessage(e: unknown): string {
   if (e instanceof AxiosError) {
+    const status = e.response?.status
     const detail = e.response?.data?.detail
+    // FastAPI pydantic validation errors return detail as an array of {msg, type, loc}
+    if (Array.isArray(detail)) return detail.map((d: { msg?: string }) => d.msg ?? String(d)).join('; ')
     if (typeof detail === 'string') return detail
     if (detail && typeof detail === 'object' && 'message' in detail) return String(detail.message)
+    if (status === 500) return 'Server error — please try again'
+    if (status === 503) return 'Service temporarily unavailable'
+    if (e.code === 'ECONNABORTED') return 'Request timed out — please try again'
     return e.message
   }
   return String(e)

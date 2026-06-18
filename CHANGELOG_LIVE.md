@@ -12,6 +12,15 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Frontend: deduplicate 401 logout, fix error message quality
+- `frontend/src/api/client.ts`
+  - Added `handle401(status)` shared helper with a `_logoutPending` dedup guard. When multiple in-flight requests all fail with 401 simultaneously (token expired mid-session), only the first one clears the token and fires `logout-requested`; subsequent 401s are no-ops. Guard resets after 5 s so future logins work normally.
+- `frontend/src/api/semantic.ts`
+  - Removed the duplicated 401 interceptor; now calls `handle401()` from `client.ts` so both axios instances share the dedup guard.
+  - `backendErrorMessage()`: fixed FastAPI pydantic validation errors — `detail` is an array of `{msg, type, loc}` objects; now joins `.msg` fields (was falling through to the raw axios message like "Request failed with status code 422"). Added friendly fallbacks for HTTP 500 ("Server error — please try again"), 503 ("Service temporarily unavailable"), and ECONNABORTED timeouts.
+- `frontend/src/components/QueryInterface.tsx`
+  - Error display: when a 401 is returned during a query, the axios interceptor already handles logout. The catch block no longer adds an error message to the chat for 401 responses (which would show briefly before the login screen replaced it).
+
 ### Backend: semantic layer data-provenance and template error messages no longer leak demo table names
 - `backend/app/semantic/layer.py`
   - `_q_data_provenance()`: before this fix, asking "provenienza dati" / "fonte dati" / "aggiornato" in live mode returned ALL catalog entities including the full AdventureWorks table metadata. Now filters the entity list through `_thread_local.hidden_tables` (the same guard used everywhere else in the semantic layer) so live users only see entities from their own sources.

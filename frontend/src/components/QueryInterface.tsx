@@ -957,6 +957,10 @@ export default function QueryInterface() {
     }
 
     resolve().catch((e: unknown) => {
+      // 401 is handled by the axios interceptor (triggers logout) — don't also
+      // show an error message that will be immediately replaced by the login screen.
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 401) return
       const errMsg = e instanceof Error ? e.message : 'Unknown error'
       setMessages((prev) => [
         ...prev,

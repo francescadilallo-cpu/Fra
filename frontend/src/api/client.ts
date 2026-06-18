@@ -59,15 +59,25 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Deduplicate 401 logouts — multiple in-flight requests can all fail with 401
+// simultaneously. Only the first one triggers logout; the rest are no-ops.
+let _logoutPending = false
+
+export function handle401(status: number | undefined): void {
+  if (status === 401 && !_logoutPending) {
+    _logoutPending = true
+    clearAuthToken()
+    window.dispatchEvent(new CustomEvent('logout-requested'))
+    // Reset after 5 s so fresh logins within the same tab work normally
+    setTimeout(() => { _logoutPending = false }, 5_000)
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
     const maybeResponse = error as { response?: { status?: number } }
-    if (maybeResponse.response?.status === 401) {
-      clearAuthToken()
-      // Signal App.tsx to drop the auth gate back to login
-      window.dispatchEvent(new CustomEvent('logout-requested'))
-    }
+    handle401(maybeResponse.response?.status)
     return Promise.reject(error)
   },
 )
