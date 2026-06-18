@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### MappingView: replace AW-specific form placeholders with generic examples
+- `frontend/src/components/MappingView.tsx`
+  - "Add Definition" form had `placeholder="e.g. SalesOrder"` (entity) and `placeholder="e.g. subtotal_amount"` (field) — both AdventureWorks-specific field names visible to all live users.
+  - Replaced with generic: `"e.g. Customer"` and `"e.g. revenue"`.
+
 ### QueryInterface: guard AW-specific disambiguation fallback from live users
 - `frontend/src/components/QueryInterface.tsx`
   - `DisambiguationCard` had a demo-only fallback (hardcoded "fatturato" / revenue disambiguation from AdventureWorks) that was not guarded against live mode. A live user running a query via the LLM path that triggered `isDisambiguation:true` without structured candidates would have seen AW-specific content in their workspace.

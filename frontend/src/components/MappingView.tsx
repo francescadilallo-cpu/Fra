@@ -118,11 +118,11 @@ function SemanticDefinitionsPanel() {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
-              <input value={newForm.entity} onChange={e => setNewForm(f => ({ ...f, entity: e.target.value }))} placeholder="e.g. SalesOrder" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
+              <input value={newForm.entity} onChange={e => setNewForm(f => ({ ...f, entity: e.target.value }))} placeholder="e.g. Customer" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
             </div>
             <div>
               <label className="text-[11px] text-slate-500 mb-1 block">Field</label>
-              <input value={newForm.field} onChange={e => setNewForm(f => ({ ...f, field: e.target.value }))} placeholder="e.g. subtotal_amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" />
+              <input value={newForm.field} onChange={e => setNewForm(f => ({ ...f, field: e.target.value }))} placeholder="e.g. revenue" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" />
             </div>
             <div>
               <label className="text-[11px] text-slate-500 mb-1 block">Definition</label>
