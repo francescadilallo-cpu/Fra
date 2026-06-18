@@ -750,14 +750,14 @@ function RulesBuilder({ sectorId }: { sectorId: string }) {
             <div>
               <label className="text-[11px] font-medium text-slate-600 mb-1 block">Option A <span className="text-red-400">*</span></label>
               <input value={form.opt1} onChange={e => setForm(f => ({ ...f, opt1: e.target.value }))}
-                placeholder="e.g. subtotalAmount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono mb-1" />
+                placeholder="e.g. net_amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono mb-1" />
               <input value={form.opt1Desc} onChange={e => setForm(f => ({ ...f, opt1Desc: e.target.value }))}
                 placeholder="Short description" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none" />
             </div>
             <div>
               <label className="text-[11px] font-medium text-slate-600 mb-1 block">Option B <span className="text-red-400">*</span></label>
               <input value={form.opt2} onChange={e => setForm(f => ({ ...f, opt2: e.target.value }))}
-                placeholder="e.g. totalDue" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono mb-1" />
+                placeholder="e.g. gross_amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-mono mb-1" />
               <input value={form.opt2Desc} onChange={e => setForm(f => ({ ...f, opt2Desc: e.target.value }))}
                 placeholder="Short description" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none" />
             </div>
@@ -1567,7 +1567,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
               <div key={f}>
                 <label className="text-[11px] text-slate-500 mb-1 block capitalize">{f}</label>
                 <input value={newForm[f]} onChange={e => setNewForm(p => ({ ...p, [f]: e.target.value }))}
-                  placeholder={f === 'entity' ? 'e.g. SalesOrder' : f === 'field' ? 'e.g. subtotal_amount' : 'What does this field mean?'}
+                  placeholder={f === 'entity' ? 'e.g. Customer' : f === 'field' ? 'e.g. revenue' : 'What does this field mean?'}
                   className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
               </div>
             ))}
@@ -3007,7 +3007,7 @@ export default function SemanticLayerView() {
                     </select></div>
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Field</label>
                     <input value={metricForm.field} onChange={e => setMetricForm(f => ({ ...f, field: e.target.value }))}
-                      placeholder="e.g. subtotalAmount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
+                      placeholder="e.g. amount" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Format</label>
                     <select value={metricForm.format} onChange={e => setMetricForm(f => ({ ...f, format: e.target.value as MetricFormat }))}
                       className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400">

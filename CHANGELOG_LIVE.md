@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### SemanticLayerView: replace AW-specific form placeholders with generic examples
+- `frontend/src/components/SemanticLayerView.tsx`
+  - Metrics "Add Metric" form: `placeholder="e.g. subtotalAmount"` → `"e.g. amount"` (AW-specific field)
+  - Disambiguation Rules "Add Rule" form: `placeholder="e.g. subtotalAmount"` and `"e.g. totalDue"` → `"e.g. net_amount"` and `"e.g. gross_amount"`
+  - Definitions "Add Definition" form: `placeholder="e.g. SalesOrder"` (entity) and `"e.g. subtotal_amount"` (field) → `"e.g. Customer"` and `"e.g. revenue"`
+
 ### SemanticLayerView: add empty state for Entities section when no ontology exists
 - `frontend/src/components/SemanticLayerView.tsx`
   - The Entities section showed an empty list (no message) when a live user had no ontology built yet. With just a header and "Add entity" button, there was no guidance on how to get entities.
