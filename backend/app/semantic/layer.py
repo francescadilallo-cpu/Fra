@@ -1717,6 +1717,15 @@ class SemanticLayer:
                 disambiguation_required=False,
             )
 
+        # Hardcoded rules are AW demo-specific — never surface to live users.
+        _live = bool(getattr(SemanticLayer._thread_local, "hidden_tables", frozenset()))
+        if _live:
+            return Result(
+                answer=[],
+                sources_touched=[],
+                notes="No disambiguation rules configured for this workspace.",
+                disambiguation_required=False,
+            )
         rules = [
             {
                 "rule_id": "R1",

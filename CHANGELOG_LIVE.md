@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: AW disambiguation rules fallback skipped for live-mode requests
+- `backend/app/semantic/layer.py`
+  - `_q_disambiguation_rules()` fell back to three hardcoded AW rules (R1: accountId dedup, R2: subtotal_amount/total_due, R3: HR freshness) when `_effective_docs` was None. A live user asking "what are the disambiguation rules?" would receive AW-specific rules entirely unrelated to their workspace.
+  - Fix: fallback is now gated on `not _live`. Live users receive an empty rules list with "No disambiguation rules configured for this workspace."
+
 ### Backend: AW glossary fallback skipped for live-mode requests
 - `backend/app/semantic/layer.py`
   - `_q_glossary_lookup()` has a deprecated `_GLOSSARY` dict fallback (last resort when no effective docs and no catalog glossary docs exist). The dict contains AW-specific definitions for "cliente attivo", "fatturato", "revenue", "revenue_with_tax", "margin", "active_customers", "duplicato", "accountid", "make only" — all with dollar figures and AW column names.
