@@ -12,6 +12,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: ingester error messages improved for Excel, SQLite, and PostgreSQL failures
+- `backend/app/connectors/duckdb_source_manager.py`
+  - `_ingest_excel()`: wrapped `pd.read_excel()` in try/except; openpyxl/xlrd errors (corrupted file, wrong format) now surface as a readable ValueError ("Could not read Excel file…") instead of a raw internal traceback. Added an empty-DataFrame guard that raises ValueError("Excel file contains no rows") so users know immediately the sheet is blank.
+  - `_ingest_sqlite_generic()`: wrapped `sqlite3.connect()` in try/except `sqlite3.Error`; connection failures (corrupted DB, wrong file type) now surface as "Could not open SQLite database…" instead of a raw C-level sqlite3 error.
+  - `_ingest_postgresql()`: wrapped `psycopg2.connect()` in try/except `psycopg2.OperationalError`; connection refusals and auth failures now surface as "Could not connect to PostgreSQL: …" with the OperationalError detail (host, port, auth) rather than a raw psycopg2 exception.
+
+### Frontend: fresh live workspace "Set up workspace" button in header
+- `frontend/src/components/Layout.tsx`
+  - When a live user has no company name set, the header now shows a dashed "Set up workspace" button (with a Building2 icon) that navigates to the Config tab. Previously the header was blank in this area, giving no indication that workspace setup was needed.
+
 ### Frontend: deduplicate 401 logout, fix error message quality
 - `frontend/src/api/client.ts`
   - Added `handle401(status)` shared helper with a `_logoutPending` dedup guard. When multiple in-flight requests all fail with 401 simultaneously (token expired mid-session), only the first one clears the token and fires `logout-requested`; subsequent 401s are no-ops. Guard resets after 5 s so future logins work normally.

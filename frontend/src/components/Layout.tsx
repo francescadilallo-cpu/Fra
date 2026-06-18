@@ -293,9 +293,21 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
         )}
       </div>
       <div className="flex items-center gap-2.5">
-        {companyName && (
+        {companyName ? (
           <>
             <CompanyMenu companyName={companyName} />
+            <div className="w-px h-5 bg-slate-200" />
+          </>
+        ) : !IS_DEMO_MODE && (
+          <>
+            <button
+              onClick={() => onTabChange('config')}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-teal-600 border border-dashed border-slate-300 hover:border-teal-400 rounded-lg px-2.5 py-1 transition-colors"
+              title="Set your workspace name"
+            >
+              <Building2 className="w-3 h-3" />
+              Set up workspace
+            </button>
             <div className="w-px h-5 bg-slate-200" />
           </>
         )}

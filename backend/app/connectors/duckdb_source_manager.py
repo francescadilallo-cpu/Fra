@@ -947,7 +947,15 @@ class DuckDBSourceManager:
             or path.stem.replace("-", "_").replace(" ", "_").lower()
         )
         safe_table = table.replace('"', '""')
-        df = pd.read_excel(str(path), sheet_name=sheet)
+        try:
+            df = pd.read_excel(str(path), sheet_name=sheet)
+        except Exception as exc:
+            raise ValueError(f"Cannot read Excel file '{path.name}': {exc}") from exc
+        if len(df) == 0:
+            raise ValueError(
+                f"Excel file '{path.name}' contains no data rows — "
+                "check that the sheet has a header row and at least one data row."
+            )
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df')
         self._row_counts[f"{cfg.id}.{table}"] = len(df)
         logger.info("XLS  %-25s %7d rows", table, len(df))
@@ -1012,7 +1020,13 @@ class DuckDBSourceManager:
         if not path.exists():
             raise FileNotFoundError(f"SQLite not found: {path}")
         table_filter: list[str] | None = cfg.params.get("tables")
-        src = _sqlite3.connect(str(path))
+        try:
+            src = _sqlite3.connect(str(path))
+        except _sqlite3.Error as exc:
+            raise ValueError(
+                f"Cannot open SQLite file '{path.name}': {exc} — "
+                "the file may be corrupted, locked, or in use by another process."
+            ) from exc
         src.row_factory = _sqlite3.Row
         try:
             tables = [
@@ -1051,7 +1065,13 @@ class DuckDBSourceManager:
             import psycopg2.extras
 
             limit = _pg_ingest_limit()
-            pg_conn = psycopg2.connect(dsn, connect_timeout=10)
+            try:
+                pg_conn = psycopg2.connect(dsn, connect_timeout=10)
+            except psycopg2.OperationalError as exc:
+                raise ValueError(
+                    f"Cannot connect to PostgreSQL: {exc} — "
+                    "check DSN, host reachability, port, and credentials."
+                ) from exc
             safe_schema = schema.replace('"', '""')
             try:
                 for i, table in enumerate(tables):
