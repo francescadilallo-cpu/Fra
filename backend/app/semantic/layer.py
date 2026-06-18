@@ -1449,7 +1449,7 @@ class SemanticLayer:
         except Exception as exc:
             logger.warning("_execute_llm_sql: execution failed: %s | sql=%s", exc, sql)
             return Result(
-                answer=f"Query failed: {exc}",
+                answer="The query could not be executed. Please try rephrasing your question.",
                 sql_used=sql,
                 notes="llm_sql_exec_error",
             )

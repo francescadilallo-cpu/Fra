@@ -12,6 +12,10 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: semantic layer LLM SQL execution error no longer leaks DuckDB internals
+- `backend/app/semantic/layer.py`
+  - `_execute_llm_sql()`: when the generated SQL fails to execute against DuckDB, the catch block returned `answer=f"Query failed: {exc}"` — the raw DuckDB exception (could include column names, table internals, or parse errors) went directly into the user-visible answer field. Now returns "The query could not be executed. Please try rephrasing your question."; the full exception is still logged at WARNING level with the offending SQL.
+
 ### DataSourcesView: fix error handling and empty-state copy for live users
 - `frontend/src/components/DataSourcesView.tsx`
   - Empty state for connected sources panel: "No additional sources connected" used the word "additional" which implied there were already some base sources — confusing for live users who have none. Live mode now reads "No sources connected yet".
