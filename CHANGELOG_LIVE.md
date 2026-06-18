@@ -12,6 +12,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: AW-specific intent heuristics skipped for live-mode requests
+- `backend/app/semantic/layer.py`
+  - Two rule-based guards in `_resolve_intent()` applied to ALL users, not just demo mode:
+    1. **Nationality guard** (line ~429): If a user typed "italian", "nazionalit", or "italiano", the handler returned an "impossible" response: "The field 'employee nationality' is not available in any of the configured data sources." This is AW-specific — the AW HR CSV has no nationality column. Live users with HR data that does include nationality would get a wrong "impossible" answer.
+    2. **Supplier guard** (line ~437): If a user typed "fornitore", "fornitori", "supplier", or "vendor", the handler returned `entity_not_modeled` with entity "Supplier". Live users who have modelled a Supplier entity in their ontology would get "Supplier is not modeled" incorrectly.
+  - Both guards are now wrapped in `if not _is_live` using the `hidden_tables` thread-local. Live users fall through to the LLM SQL generation path.
+
 ### Backend: AW certified-metrics fallback skipped for live-mode requests
 - `backend/app/semantic/layer.py`
   - `_q_certified_metrics()` fell back to `_CERTIFIED_METRICS` (a hardcoded list with AW-specific `revenue = SUM(subtotal_amount)`, `active_customers = COUNT(DISTINCT accountId) WHERE accountId > 0`, etc.) when both `_effective_docs` and `_catalog` returned no metrics. Live users asking "what metrics are available?" would receive AW metric definitions. Gated fallback on `not _live`; live users now get an empty list with a neutral message.

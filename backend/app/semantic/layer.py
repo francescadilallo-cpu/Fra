@@ -425,21 +425,26 @@ class _RuleParser:
         # ── Step 2: Structural intent patterns ────────────────────────────────
         # These return system info (no SQL). Keep these regardless of templates.
 
-        # ── Impossible query (nationality field not modeled) ──────────────
-        if "italian" in q or "nazionalit" in q or "italiano" in q.split():
-            return Intent(
-                intent_type="impossible",
-                filters={"reason": "nationality_not_available"},
-                raw_question=question,
-            )
+        # ── AW demo-specific heuristics — skipped for live-mode requests ─────
+        _is_live = bool(
+            getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+        )
+        if not _is_live:
+            # Nationality field is not modeled in the AW HR dataset.
+            if "italian" in q or "nazionalit" in q or "italiano" in q.split():
+                return Intent(
+                    intent_type="impossible",
+                    filters={"reason": "nationality_not_available"},
+                    raw_question=question,
+                )
 
-        # ── Entity not modeled — fornitori / supplier / vendor ────────────
-        if any(kw in q for kw in ["fornitore", "fornitori", "supplier", "vendor"]):
-            return Intent(
-                intent_type="entity_not_modeled",
-                filters={"entity": "Supplier"},
-                raw_question=question,
-            )
+            # Supplier is not an entity in the AW ontology.
+            if any(kw in q for kw in ["fornitore", "fornitori", "supplier", "vendor"]):
+                return Intent(
+                    intent_type="entity_not_modeled",
+                    filters={"entity": "Supplier"},
+                    raw_question=question,
+                )
 
         # ── Glossary lookup ───────────────────────────────────────────────
         _GLOSSARY_TRIGGERS = [
