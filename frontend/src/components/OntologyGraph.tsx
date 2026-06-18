@@ -223,6 +223,30 @@ function EntitiesView() {
         <span className="text-sm text-slate-500">{filtered.length} / {extendedOntology.nodes.length} entities</span>
       </div>
 
+      {extendedOntology.nodes.length === 0 && !IS_DEMO_MODE && (
+        <div className="py-14 text-center">
+          <Table2 className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+          <p className="text-sm text-slate-500 font-medium mb-1">No entities yet</p>
+          <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed mb-4">
+            Connect a data source and run the pipeline, or build entities manually with the Ontology Builder AI.
+          </p>
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+              className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+            >
+              Connect sources →
+            </button>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'builder' } }))}
+              className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            >
+              Build manually
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         {filtered.map(node => {
           const srcKey = getSourceKey(node.data.db_table ?? null)

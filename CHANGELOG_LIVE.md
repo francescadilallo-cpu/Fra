@@ -37,6 +37,11 @@ work is traceable across sessions and the git history is easy to reconcile.
   - The Entities section showed an empty list (no message) when a live user had no ontology built yet. With just a header and "Add entity" button, there was no guidance on how to get entities.
   - Now shows: network icon, "No entities yet" heading, explanation that entities are auto-extracted when data sources are connected + the pipeline is run, and a "Connect a data source →" CTA button.
 
+### OntologyGraph: add empty state for Entities tab when no ontology exists
+- `frontend/src/components/OntologyGraph.tsx`
+  - The Entities tab inside the OntologyGraph panel showed a blank list (no rows, no message) when a live user had no ontology nodes yet. There was no guidance on what to do next.
+  - Added a centred empty state visible only in live mode when `extendedOntology.nodes.length === 0`: table icon, "No entities yet" heading, brief explanation, and two CTA buttons — "Connect sources →" (navigates to the Sources tab) and "Build manually" (navigates to the Builder tab).
+
 ### OntologyGraph: fix "from Builder" badge logic for live users
 - `frontend/src/components/OntologyGraph.tsx`
   - The "+X from Builder" badge in the Ontology header used `extendedOntology.nodes.length > sector.ontology.nodes.length` for both demo and live mode. In live mode, `sector.ontology.nodes.length` is the AW node count (10+ nodes), so the badge would never appear even when a live user had added custom entities via the Builder.
