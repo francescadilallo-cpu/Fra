@@ -211,7 +211,7 @@ export default function App() {
           {activeTab === 'sembuilder' && <SemanticLayerView />}
           {activeTab === 'context' && <ContextTab />}
           {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
-          {activeTab === 'ontology' && <OntologyGraph />}
+          {activeTab === 'ontology' && <OntologyGraph onNavigate={setActiveTab} />}
           {activeTab === 'builder' && <OntologyBuilder />}
           {activeTab === 'agents' && <AgentsView />}
           {activeTab === 'sources' && <DataSourcesView onNavigate={setActiveTab} />}

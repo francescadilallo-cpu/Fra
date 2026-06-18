@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ReactFlow, Background, Controls, MiniMap, Handle, Position, type NodeProps, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Search, Download, Copy, Check, Table2 } from 'lucide-react'
+import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Search, Download, Copy, Check, Table2, ArrowRight } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { getLiveConfig, type LiveConfig } from '../api/semantic'
-import type { OntologyNodeData, OntologyNode, OntologyEdge, PropertyType } from '../types'
+import { IS_DEMO_MODE } from '../lib/demoMode'
+import type { OntologyNodeData, OntologyNode, OntologyEdge, PropertyType, NavTab } from '../types'
 
 // ── Type color map ───────────────────────────────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -592,7 +593,7 @@ function liveConfigToEdges(liveConfig: LiveConfig): OntologyEdge[] {
 // ── Main component ──────────────────────────────────────────────────────────
 type SubTab = 'graph' | 'entities' | 'architecture' | 'code'
 
-export default function OntologyGraph() {
+export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
   const { sector, sectorId } = useSector()
   const extendedOntology = useExtendedOntology(sectorId)
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('graph')
@@ -696,6 +697,29 @@ export default function OntologyGraph() {
               )}
             </div>
 
+            {!IS_DEMO_MODE && graphNodes.length === 0 && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-lg p-8 text-center max-w-sm pointer-events-auto">
+                  <GitBranch className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-slate-600 mb-1">No ontology built yet</p>
+                  <p className="text-xs text-slate-400 mb-4">Connect a data source and build your semantic layer — entities and relationships will appear here automatically.</p>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => onNavigate?.('sources')}
+                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    >
+                      Connect a data source <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => onNavigate?.('builder')}
+                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                    >
+                      Build manually with AI <Sparkles className="w-3.5 h-3.5 text-teal-500" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <ReactFlow
               nodes={filteredNodes as unknown as Node[]}
               edges={filteredEdges.map(e => ({

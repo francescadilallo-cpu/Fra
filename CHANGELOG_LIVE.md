@@ -12,6 +12,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### OntologyGraph: empty state for live workspaces with no built ontology
+- `frontend/src/components/OntologyGraph.tsx`
+  - Added `onNavigate?: (tab: NavTab) => void` prop.
+  - When `IS_DEMO_MODE=false` and no ontology nodes exist, an overlay card appears on the graph canvas guiding users to either "Connect a data source →" or "Build manually with AI".
+  - Previously: live users with no semantic layer saw a blank ReactFlow canvas with no next-step guidance.
+- `frontend/src/App.tsx` — passes `onNavigate={setActiveTab}` to `<OntologyGraph />`.
+
 ### ConfigurationView: fake connector test disabled in live mode
 - `frontend/src/components/ConfigurationView.tsx`
   - `testConnection` is now a no-op in live mode — clicking Test no longer simulates fake latency/success results for customers with unconnected sources.
