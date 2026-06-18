@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Backend: fix Italian-language error messages shown to live English users
+- `backend/app/main.py`
+  - Rate limit (429) response: "Troppe richieste. Riprova tra poco." → "Too many requests — please wait a moment and try again."
+  - `SemanticSecurityViolationError` (returned when the semantic layer blocks a query on security grounds): "Query semantica non valida o non autorizzata" → "This query is not available for your workspace." — consistent with the existing generic wording used in `layer.py` for the same exception class.
+
 ### Backend: semantic layer LLM SQL execution error no longer leaks DuckDB internals
 - `backend/app/semantic/layer.py`
   - `_execute_llm_sql()`: when the generated SQL fails to execute against DuckDB, the catch block returned `answer=f"Query failed: {exc}"` — the raw DuckDB exception (could include column names, table internals, or parse errors) went directly into the user-visible answer field. Now returns "The query could not be executed. Please try rephrasing your question."; the full exception is still logged at WARNING level with the offending SQL.

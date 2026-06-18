@@ -182,7 +182,7 @@ def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content={
             "error": "RATE_LIMIT_EXCEEDED",
-            "message": "Troppe richieste. Riprova tra poco.",
+            "message": "Too many requests — please wait a moment and try again.",
         },
     )
 
@@ -1841,7 +1841,7 @@ def semantic_ask(
             status_code=422,
             detail={
                 "error": "SEMANTIC_SECURITY_VIOLATION",
-                "message": "Query semantica non valida o non autorizzata",
+                "message": "This query is not available for your workspace.",
             },
         )
     except SemanticOntologyViolationError as e:
