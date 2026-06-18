@@ -486,7 +486,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
     "properties": {
       "class": {
         "type": "string",
-        "description": "Ontology class URI (e.g., ${prefix}:${extendedOntology.nodes[0]?.data.label ?? sector.ontology.nodes[0]?.data.label ?? 'Entity'})"
+        "description": "Ontology class URI (e.g., ${prefix}:${extendedOntology.nodes[0]?.data.label ?? (IS_DEMO_MODE ? sector.ontology.nodes[0]?.data.label : undefined) ?? 'Entity'})"
       },
       "filter": { "type": "object" },
       "limit": { "type": "integer", "default": 100 }
