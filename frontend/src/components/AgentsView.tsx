@@ -1019,7 +1019,7 @@ function ExecutiveActionsPanel() {
       {/* Command input */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
         <p className="text-[10px] text-slate-400 mb-2 font-mono">
-          "Sposta la data di consegna dell'ordine 1 al 2026-12-31" · "Segna l'ordine 1 come spedito" · "Cancella l'ordine 2"
+          E.g. "Update the delivery date of order 1 to 2026-12-31" · "Mark order 1 as shipped" · "Cancel order 2"
         </p>
         <div className="flex gap-2">
           <input

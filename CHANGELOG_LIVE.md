@@ -26,6 +26,12 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Cross-source Knowledge Graph" now describes the user's *real* connected systems (`connectors.join(' ↔ ')`) and KG node/edge counts instead of `PLACED_BY, SOLD_BY, OF_PRODUCT link ERP↔CRM↔HR↔PIM`.
   - "Semantic Definitions" drops the `"fatturato"` example in live mode, using a generic phrasing.
 
+### Remove demo content leaks from AgentsView and DataExplorer
+- `frontend/src/components/AgentsView.tsx`
+  - `ExecutiveActionsPanel` example text was Italian AdventureWorks commands ("Sposta la data di consegna…") — visible to live admin users because the panel is only shown in live mode. Replaced with generic English examples.
+- `frontend/src/components/DataExplorer.tsx`
+  - AW source system badge ("CRM — ClientHub", "ERP — OrionSales", "HR — CSV (IT schema)") was rendered for any user whose selected entity matched `AW_SOURCE_MAP` — no mode guard. Added `IS_DEMO_MODE &&` so the badge only appears in demo workspaces.
+
 ---
 
 ## 2026-06-17

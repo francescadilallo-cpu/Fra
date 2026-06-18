@@ -400,7 +400,7 @@ export default function DataExplorer() {
                 </div>
                 <span className="text-slate-300">·</span>
                 <span className="text-xs text-slate-500">{props} properties</span>
-                {AW_SOURCE_MAP[selected.data.label] && (
+                {IS_DEMO_MODE && AW_SOURCE_MAP[selected.data.label] && (
                   <>
                     <span className="text-slate-300">·</span>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${AW_SOURCE_MAP[selected.data.label].bg} ${AW_SOURCE_MAP[selected.data.label].color} ${AW_SOURCE_MAP[selected.data.label].border}`}>
