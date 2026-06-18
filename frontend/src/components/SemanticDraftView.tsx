@@ -7,6 +7,7 @@ import {
   getDraft, patchDraftEntity, patchDraftMetric,
   addContextDoc, deleteContextDoc,
   createQueryTemplate, updateQueryTemplate, deleteQueryTemplate,
+  backendErrorMessage,
   type SemanticDraft, type DraftEntity, type DraftMetric, type ContextDoc,
   type QueryTemplate, type QueryTemplateCreate,
 } from '../api/semantic'
@@ -863,8 +864,7 @@ function QueryTemplateForm({
         sources: parseList(sourcesRaw),
       })
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Could not save template'
-      setError(msg)
+      setError(backendErrorMessage(e) || 'Could not save template')
     } finally {
       setSaving(false)
     }

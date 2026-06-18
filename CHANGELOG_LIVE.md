@@ -19,6 +19,10 @@ work is traceable across sessions and the git history is easy to reconcile.
   - The hint only appears when: `!IS_DEMO_MODE && questionsLoaded && exampleQuestions.length === 0 && backendOnline === true` — i.e., never flashes during loading, never shown in demo mode, never shown when the backend is confirmed offline (the existing "No data source connected" amber banner already handles that case).
   - Added `Database` icon import from `lucide-react`.
 
+### Frontend: consistent `backendErrorMessage()` usage across all catch blocks — SemanticDraftView included
+- `frontend/src/components/SemanticDraftView.tsx`
+  - `QueryTemplateForm` save handler catch block was using `e instanceof Error ? e.message : 'fallback'` — which exposes raw JS/Axios error messages (e.g., constraint violations, timeouts) to users. Replaced with `backendErrorMessage(e)`.
+
 ### Frontend: consistent `backendErrorMessage()` usage across all catch blocks
 - `frontend/src/components/ContextTab.tsx`
   - Added import: `backendErrorMessage` from `'../api/semantic'`.
