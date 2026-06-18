@@ -32,6 +32,12 @@ work is traceable across sessions and the git history is easy to reconcile.
   - "Data Entities" panel: added an empty state that links to the semantic layer builder.
   - "Data Sources" panel: added an empty state that links to the sources view when no connectors are configured yet.
 
+### ProcessView: real KG node/edge counts in pipeline completion summary
+- `frontend/src/components/ProcessView.tsx`
+  - `semanticStatus()` was already fetched on load but only used to build pipeline logs. Now also stored in `kgStatus` state.
+  - Pipeline completion summary "KG Nodes Created" and "KG Edges Indexed" cards now show real `kgStatus.kg_nodes` / `kgStatus.kg_edges` for live users instead of the demo `summary.enrichments` / `summary.triples` values.
+  - Fallback chain: real KG count → ontology edge count → 0.
+
 ### SemanticLayerView: real KG node/edge counts from backend
 - `frontend/src/components/SemanticLayerView.tsx`
   - Overview stat cards "KG Nodes" and "KG Edges" were using estimated values for live users (`totalRows` and `edgeCount * 8`). Now calls `semanticStatus()` on load and uses real `kg_nodes` / `kg_edges` from the backend, falling back to the estimates only if the API returns nothing.

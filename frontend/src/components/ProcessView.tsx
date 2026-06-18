@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
-import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig } from '../api/semantic'
+import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig, type SemanticStatus } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
@@ -378,6 +378,7 @@ export default function ProcessView() {
 
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   const [liveSectorLogs, setLiveSectorLogs] = useState<Record<StepId, StepLog[]> | null>(null)
+  const [kgStatus, setKgStatus] = useState<SemanticStatus | null>(null)
 
   useEffect(() => {
     getLiveConfig().then(setLiveConfig).catch(() => {})
@@ -386,6 +387,7 @@ export default function ProcessView() {
         semanticSources().catch(() => []),
         semanticStatus().catch(() => null),
       ]).then(([srcs, status]) => {
+        if (status?.loaded) setKgStatus(status)
         const counts: Record<string, number> = {}
         srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
         if (!IS_DEMO_MODE) {
@@ -632,11 +634,11 @@ export default function ProcessView() {
                 value: String(liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)),
                 sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} ontology classes` },
               { label: 'KG Nodes Created',
-                value: summary.enrichments,
-                sub: IS_DEMO_MODE ? 'instances in Knowledge Graph' : 'entities in Knowledge Graph' },
+                value: IS_DEMO_MODE ? summary.enrichments : (kgStatus?.kg_nodes ?? 0).toLocaleString(),
+                sub: 'instances in Knowledge Graph' },
               { label: 'KG Edges Indexed',
-                value: IS_DEMO_MODE ? summary.triples : String(liveConfig?.ontology?.edges?.length ?? 0),
-                sub: IS_DEMO_MODE ? '3 cross-source bridges' : `${liveConfig?.ontology?.edges?.length ?? 0} cross-source relationships` },
+                value: IS_DEMO_MODE ? summary.triples : (kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0).toLocaleString(),
+                sub: IS_DEMO_MODE ? '3 cross-source bridges' : `${kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0} cross-source relationships` },
             ].map(({ label, value, sub }) => (
               <div key={label} className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 text-center">
                 <p className="text-lg font-bold text-teal-700">{value}</p>
