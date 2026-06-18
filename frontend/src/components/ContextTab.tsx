@@ -19,6 +19,7 @@ import {
   type ContextMetric,
   type GlossaryTerm,
 } from '../api/context'
+import { backendErrorMessage } from '../api/semantic'
 
 type SubTab = 'documents' | 'entities' | 'metrics' | 'glossary'
 
@@ -120,7 +121,7 @@ function DocumentsTab() {
       await uploadDocument(file)
       await reload()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = backendErrorMessage(e)
       setError(msg ?? 'Upload failed. Check the file format.')
     } finally {
       setUploading(false)
@@ -278,7 +279,7 @@ function EntitiesTab() {
       setShowForm(false)
       await reload()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = backendErrorMessage(e)
       setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)
@@ -473,7 +474,7 @@ function MetricsTab() {
       setShowForm(false)
       await reload()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = backendErrorMessage(e)
       setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)
@@ -675,7 +676,7 @@ function GlossaryTab() {
       setShowForm(false)
       await reload()
     } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = backendErrorMessage(e)
       setError(msg ?? 'Save failed.')
     } finally {
       setSaving(false)

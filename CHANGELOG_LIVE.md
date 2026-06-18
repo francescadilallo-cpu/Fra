@@ -12,6 +12,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Frontend: QueryInterface — "no sources" CTA for fresh live workspaces
+- `frontend/src/components/QueryInterface.tsx`
+  - Added `questionsLoaded` state so the component knows when the example-questions fetch has settled.
+  - When a live user has no data sources connected, the backend returns an empty array from `/api/semantic/example-questions`. Previously the suggestions section was silently hidden. Now a "No data sources connected yet" hint is shown with a "Go to Sources" inline link that fires `navigate-to-tab` → `sources`.
+  - The hint only appears when: `!IS_DEMO_MODE && questionsLoaded && exampleQuestions.length === 0 && backendOnline === true` — i.e., never flashes during loading, never shown in demo mode, never shown when the backend is confirmed offline (the existing "No data source connected" amber banner already handles that case).
+  - Added `Database` icon import from `lucide-react`.
+
+### Frontend: consistent `backendErrorMessage()` usage across all catch blocks
+- `frontend/src/components/ContextTab.tsx`
+  - Added import: `backendErrorMessage` from `'../api/semantic'`.
+  - 4 catch blocks (uploadDocument, createEntity, createMetric, createGlossaryTerm) were using inline `(e as ...).response?.data?.detail` extraction. Replaced all with `backendErrorMessage(e)`, which correctly handles FastAPI validation arrays, nested `detail.message`, and 500/503 status codes.
+- `frontend/src/components/DataSourcesView.tsx`
+  - `listSources` catch (line ~557) was using `err?.response?.data?.detail`. Replaced with `backendErrorMessage(err)`.
+- `frontend/src/components/AgentsView.tsx`
+  - `executeAgentCommand` catch was using a deep `?.response?.data?.detail?.message` extraction. Replaced with `backendErrorMessage(e)` (already handles `detail.message` objects). Added `backendErrorMessage` to the existing `semantic` import.
+
 ### Frontend: extend 401 dedup guard to agents and queries API modules
 - `frontend/src/api/agents.ts`, `frontend/src/api/queries.ts`
   - Both modules had their own inline 401 interceptors (`clearAuthToken(); window.dispatchEvent(new CustomEvent('logout-requested'))`) that bypassed the shared `handle401()` dedup guard added in an earlier commit. If the agents and queries axios instances all fired 401 simultaneously, each module would trigger its own `logout-requested` event. Replaced both with `handle401(status)` so all four axios instances (client, semantic, agents, queries) share the same dedup lock.

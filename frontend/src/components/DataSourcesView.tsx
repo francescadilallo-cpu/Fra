@@ -554,7 +554,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     listSources()
       .then(data => { if (!cancelled) setSources(data) })
       .catch(err => {
-        if (!cancelled) setSourcesError(err?.response?.data?.detail ?? 'Could not load sources')
+        if (!cancelled) setSourcesError(backendErrorMessage(err) || 'Could not load sources')
       })
       .finally(() => { if (!cancelled) setSourcesLoading(false) })
     return () => { cancelled = true }

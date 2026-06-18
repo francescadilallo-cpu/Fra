@@ -13,7 +13,7 @@ import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getAuthToken } from '../api/client'
 import { executeAgentCommand, approveAgentAction, listAgentActions } from '../api/agents'
 import type { AgentAction } from '../api/agents'
-import { getLiveConfig, type LiveConfig } from '../api/semantic'
+import { getLiveConfig, backendErrorMessage, type LiveConfig } from '../api/semantic'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
@@ -975,9 +975,7 @@ function ExecutiveActionsPanel() {
       toast('Command submitted — awaiting approval', 'success')
       await refresh()
     } catch (e) {
-      const msg = (e as { response?: { data?: { detail?: { message?: string } } } })
-        ?.response?.data?.detail?.message
-      toast(msg ?? 'Command rejected — check syntax or business rules', 'error')
+      toast(backendErrorMessage(e) || 'Command rejected — check syntax or business rules', 'error')
     } finally {
       setSubmitting(false)
     }

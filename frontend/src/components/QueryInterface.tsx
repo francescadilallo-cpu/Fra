@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw, Database } from 'lucide-react'
 import { executeQuery, type EngineResult, type ChartData } from '../data/queryEngine'
 import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
@@ -847,6 +847,7 @@ export default function QueryInterface() {
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [useBackend, setUseBackend] = useState(true)
   const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([])
+  const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const queryCount = messages.filter(m => m.role === 'user').length
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -864,9 +865,10 @@ export default function QueryInterface() {
 
   useEffect(() => {
     listExampleQuestions()
-      .then(setExampleQuestions)
+      .then(q => { setExampleQuestions(q); setQuestionsLoaded(true) })
       .catch(() => {
         if (IS_DEMO_MODE) setExampleQuestions(DEMO_EXAMPLE_QUESTIONS)
+        setQuestionsLoaded(true)
       })
   }, [])
 
@@ -1173,6 +1175,25 @@ export default function QueryInterface() {
                     {eq.question}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* No sources CTA for fresh live workspace */}
+            {!IS_DEMO_MODE && questionsLoaded && exampleQuestions.length === 0 && backendOnline === true && (
+              <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-left w-full max-w-lg">
+                <Database className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">No data sources connected yet</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Connect a source to start querying your data here.{' '}
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+                      className="underline font-medium text-teal-600 hover:text-teal-700"
+                    >
+                      Go to Sources
+                    </button>
+                  </p>
+                </div>
               </div>
             )}
           </div>
