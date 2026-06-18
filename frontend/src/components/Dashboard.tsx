@@ -426,7 +426,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     quotes: liveConfig?.metrics.find(m => m.name === 'revenue')?.label ?? sector.kpiLabels.quotes,
     orders: sector.kpiLabels.orders,
     conversion: sector.kpiLabels.conversion,
-    openValue: sector.kpiLabels.openValue,
+    openValue: IS_DEMO_MODE ? sector.kpiLabels.openValue : 'Total Value',
   }
 
   // Live: KPI cards derive from real backend data — funnel stage names

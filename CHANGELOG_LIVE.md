@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Dashboard: fix "Revenue 2014" KPI label leaking to live manufacturing users
+- `frontend/src/components/Dashboard.tsx`
+  - The 4th KPI card's label fell back to `sector.kpiLabels.openValue` which for the manufacturing sector is `'Revenue 2014'` — a reference to the AdventureWorks 2014 dataset. Live manufacturing-sector users saw this AW-specific label on their dashboard.
+  - Fixed: live mode now always shows `'Total Value'` for this KPI card. Demo mode retains the sector-specific label.
+
 ### AgentsView: fix availableEntities using AW sector nodes for live users
 - `frontend/src/components/AgentsView.tsx`
   - `availableEntities` (the entity dropdown in the Agent Builder modal) was built from `SECTORS[sectorId].ontology.nodes` — the AW sector nodes — as a base for all modes. A live manufacturing-sector user opening the agent builder would see AW entity names (SalesOrder, Customer, Employee…) in the dropdown even with no live ontology built.
