@@ -630,7 +630,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             {[
               { label: 'Rows Extracted',
                 value: summary.rows,
-                sub: `${(liveConfig?.connectors ?? sector.connectors).length} sources connected` },
+                sub: `${(liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])).length} sources connected` },
               { label: 'Entities Mapped',
                 value: String(liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)),
                 sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} ontology classes` },
