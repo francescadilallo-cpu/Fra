@@ -12,6 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### OntologyGraph: fix "from Builder" badge logic for live users
+- `frontend/src/components/OntologyGraph.tsx`
+  - The "+X from Builder" badge in the Ontology header used `extendedOntology.nodes.length > sector.ontology.nodes.length` for both demo and live mode. In live mode, `sector.ontology.nodes.length` is the AW node count (10+ nodes), so the badge would never appear even when a live user had added custom entities via the Builder.
+  - Fixed: in live mode, the badge now shows whenever `extendedOntology.nodes.length > 0` (any builder additions), displaying "+N from Builder" accurately.
+
 ### ProcessView: fix connector count in post-run summary for live users
 - `frontend/src/components/ProcessView.tsx`
   - The "Rows Extracted" summary card showed `sector.connectors.length` (AW-specific: 4) as a fallback when `liveConfig` was not yet loaded. Live users without a backend response would briefly see "4 sources connected" even with 0 real connectors.

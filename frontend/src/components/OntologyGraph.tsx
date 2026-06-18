@@ -644,11 +644,18 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
         <h1 className="text-2xl font-bold text-slate-900">Ontology</h1>
         <p className="text-slate-500 mt-1 text-sm">
           {sector.ontologyTitle} · {graphNodes.length} classes · {graphEdges.length} object properties
-          {extendedOntology.nodes.length > sector.ontology.nodes.length && (
-            <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
-              +{extendedOntology.nodes.length - sector.ontology.nodes.length} from Builder
-            </span>
-          )}
+          {IS_DEMO_MODE
+            ? extendedOntology.nodes.length > sector.ontology.nodes.length && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
+                  +{extendedOntology.nodes.length - sector.ontology.nodes.length} from Builder
+                </span>
+              )
+            : extendedOntology.nodes.length > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
+                  +{extendedOntology.nodes.length} from Builder
+                </span>
+              )
+          }
         </p>
       </div>
 
