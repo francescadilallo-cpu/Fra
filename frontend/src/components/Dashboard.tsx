@@ -614,7 +614,11 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-900">Welcome, {companyName} 👋</p>
             <p className="text-xs text-slate-600 mt-0.5">
-              Your semantic layer is ready · {ontology.nodes.length} entities · {workspaceLabel(sector.name)}{IS_DEMO_MODE ? ' · 1 recommended agent pre-configured' : ''}
+              {IS_DEMO_MODE
+                ? `Your semantic layer is ready · ${ontology.nodes.length} entities · ${workspaceLabel(sector.name)} · 1 recommended agent pre-configured`
+                : ontology.nodes.length > 0
+                  ? `Semantic layer active · ${ontology.nodes.length} entities · ${workspaceLabel(sector.name)}`
+                  : `Connect a data source to start building your semantic layer · ${workspaceLabel(sector.name)}`}
             </p>
           </div>
           <button

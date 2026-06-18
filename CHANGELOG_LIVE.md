@@ -12,6 +12,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-18
 
+### Dashboard: welcome banner shows accurate status for fresh live workspaces
+- `frontend/src/components/Dashboard.tsx`
+  - Welcome banner subtitle was always "Your semantic layer is ready · N entities" — for a live workspace with 0 entities this reads "ready · 0 entities" which is incorrect.
+  - In live mode: shows "Semantic layer active · N entities" when entities exist, or "Connect a data source to start building your semantic layer" when none do.
+  - Demo mode keeps the original "ready" wording unchanged.
+
 ### OntologyGraph: empty state for live workspaces with no built ontology
 - `frontend/src/components/OntologyGraph.tsx`
   - Added `onNavigate?: (tab: NavTab) => void` prop.
