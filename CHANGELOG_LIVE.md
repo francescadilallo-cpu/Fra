@@ -37,6 +37,11 @@ work is traceable across sessions and the git history is easy to reconcile.
   - The Entities section showed an empty list (no message) when a live user had no ontology built yet. With just a header and "Add entity" button, there was no guidance on how to get entities.
   - Now shows: network icon, "No entities yet" heading, explanation that entities are auto-extracted when data sources are connected + the pipeline is run, and a "Connect a data source →" CTA button.
 
+### AdminSections: notification channel test shows correct status for unimplemented delivery types
+- `frontend/src/components/AdminSections.tsx`
+  - Testing a Slack, Email, or Teams notification channel called the real backend endpoint, which returned `{ ok: true, latency_ms: null, note: "… delivery not yet implemented" }`. The frontend treated this as a full success and showed "✓ Test delivered · 0ms" — misleading for live users who expected delivery confirmation.
+  - Now: if the backend returns a `note` field (indicating partial/unimplemented delivery), the channel card shows "⚠ Channel saved — delivery not yet active on this deployment" in amber instead of the false green checkmark. True webhook delivery continues to show the confirmed result with real latency.
+
 ### OntologyGraph: add empty state for Entities tab when no ontology exists
 - `frontend/src/components/OntologyGraph.tsx`
   - The Entities tab inside the OntologyGraph panel showed a blank list (no rows, no message) when a live user had no ontology nodes yet. There was no guidance on what to do next.

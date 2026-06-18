@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Users, UserPlus, Key, Plus, Bell, FileClock, MessageSquare, Mail, Webhook,
   Eye, EyeOff, Copy, Trash2, X, Loader2, CheckCircle2, Send, ShieldCheck,
-  AlertCircle, MoreHorizontal, Globe, Filter, Lock, Sparkles, History, Building2,
+  AlertCircle, AlertTriangle, MoreHorizontal, Globe, Filter, Lock, Sparkles, History, Building2,
 } from 'lucide-react'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getTokenSubject } from '../api/client'
@@ -711,7 +711,7 @@ const INITIAL_ROUTING: Record<Severity, string[]> = IS_DEMO_MODE
   ? DEMO_ROUTING
   : { critical: [], warning: [], info: [] }
 
-type ChannelTest = { state: 'idle' | 'testing' | 'ok' | 'error'; latency?: number }
+type ChannelTest = { state: 'idle' | 'testing' | 'ok' | 'warn' | 'error'; latency?: number }
 
 function backendChannelToLocal(c: BackendChannel): Channel {
   return { id: c.id, name: c.name, type: c.type, destination: c.destination, enabled: c.enabled }
@@ -859,7 +859,11 @@ export function NotificationsSection() {
     }
     try {
       const result = await apiTestChannel(id)
-      setTests(prev => ({ ...prev, [id]: { state: 'ok', latency: result.latency_ms ?? 0 } }))
+      if (result.note) {
+        setTests(prev => ({ ...prev, [id]: { state: 'warn' } }))
+      } else {
+        setTests(prev => ({ ...prev, [id]: { state: 'ok', latency: result.latency_ms ?? 0 } }))
+      }
     } catch {
       setTests(prev => ({ ...prev, [id]: { state: 'error' } }))
     }
@@ -949,6 +953,11 @@ export function NotificationsSection() {
                   <span className="text-xs text-teal-700 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" />
                     Test delivered · {test.latency}ms
+                  </span>
+                ) : test.state === 'warn' ? (
+                  <span className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Channel saved — delivery not yet active on this deployment
                   </span>
                 ) : test.state === 'testing' ? (
                   <span className="text-xs text-slate-500 flex items-center gap-1">
