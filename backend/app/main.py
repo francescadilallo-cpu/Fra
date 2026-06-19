@@ -3067,6 +3067,14 @@ def get_system_prompt(request: Request) -> dict:
     # Build the core schema/SQL prompt
     base_prompt = _bsp(catalog=catalog, layer=layer, exclude_tables=exclude)
 
+    is_live = _optional_user_mode(request) == "live"
+    disambiguation_hint = (
+        "\n- isDisambiguation: true when a key term in the question maps to multiple"
+        " possible columns and a follow-up clarification is needed"
+        if is_live
+        else "\n- isDisambiguation: true only when 'fatturato'/'revenue' is ambiguous"
+    )
+
     # Append frontend-specific output format (richer than the backend format)
     frontend_format = (
         "\n\n== FRONTEND OUTPUT FORMAT =="
@@ -3088,7 +3096,7 @@ def get_system_prompt(request: Request) -> dict:
         "\n- sources: list only the source systems touched by your SQL"
         "\n- steps: 2-4 bullet points describing your query plan"
         "\n- followUps: exactly 3 related questions the user might want to ask next"
-        "\n- isDisambiguation: true only when 'fatturato'/'revenue' is ambiguous"
+        f"{disambiguation_hint}"
     )
 
     return {"prompt": base_prompt + frontend_format}

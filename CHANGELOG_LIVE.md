@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10p)
+
+### Backend: generic disambiguation hint in LLM system prompt for live users
+
+- `backend/app/main.py` (`get_system_prompt`)
+
+  The `/api/semantic/system-prompt` endpoint (used in direct-LLM frontend mode) appended an instruction `"isDisambiguation: true only when 'fatturato'/'revenue' is ambiguous"` to every system prompt, including those served to live-mode users. "Fatturato" is an AdventureWorks / Italian-ERP term with no relevance outside the demo dataset. For live users the instruction is now replaced with a generic form: `"isDisambiguation: true when a key term in the question maps to multiple possible columns and a follow-up clarification is needed"` — broader and not tied to any demo vocabulary.
+
+---
+
 ## 2026-06-19 (continued — session 10o)
 
 ### Frontend: context-aware empty state CTA in Dashboard "Data Entities" section
