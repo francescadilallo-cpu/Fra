@@ -1121,7 +1121,7 @@ export default function QueryInterface() {
                   </div>
                   <button
                     onClick={() => {
-                      localStorage.removeItem(`query-history-${sectorId}`)
+                      localStorage.removeItem(`query-history-${modeScopedSector(sectorId)}`)
                       setHistory([])
                     }}
                     className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
@@ -1155,10 +1155,11 @@ export default function QueryInterface() {
                   <button
                     onClick={() => {
                       const toDelete = [...favorites]
-                      localStorage.removeItem(`query-favorites-${sectorId}`)
+                      localStorage.removeItem(`query-favorites-${modeScopedSector(sectorId)}`)
                       setFavorites([])
+                      const scopedId = modeScopedSector(sectorId)
                       void Promise.allSettled(
-                        toDelete.map(q => deleteSavedQueryRemote(stableQueryId(sectorId, q)))
+                        toDelete.map(q => deleteSavedQueryRemote(stableQueryId(scopedId, q)))
                       )
                     }}
                     className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors"

@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10u)
+
+### Frontend: fix "Clear" buttons in QueryInterface failing silently for live users
+
+- `frontend/src/components/QueryInterface.tsx`
+
+  The "Clear" buttons for recent query history and saved favorites called `localStorage.removeItem(\`query-history-${sectorId}\`)` using the raw sector id, but the keys were stored under `query-history-${modeScopedSector(sectorId)}` (i.e. `query-history-live-manufacturing` for live users). Result: for live users, "Clear" appeared to work (local state reset) but the data survived in localStorage and reappeared on reload. Also, the bulk-delete of backend saved queries on "Clear favorites" passed `stableQueryId(sectorId, q)` (raw sector), but the backend records were keyed under the mode-scoped id — so deletions silently failed. All three references now use `modeScopedSector(sectorId)`.
+
+---
+
 ## 2026-06-19 (continued — session 10t)
 
 ### Frontend: scope agent-run localStorage key to mode to prevent live↔demo run bleed
