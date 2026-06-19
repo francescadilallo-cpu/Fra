@@ -3587,7 +3587,7 @@ def get_live_config(
             "funnel": None,
             "process_stages": [],
             "kpi_stats": [],
-            "built_at": datetime.utcnow().isoformat(),
+            "built_at": None,
         }
 
     catalog = _semantic_state.get("catalog")
@@ -3734,7 +3734,7 @@ def get_live_config(
         "funnel": _build_live_funnel(entities),
         "process_stages": _build_process_stages(entities),
         "kpi_stats": _build_live_kpi_stats(entities),
-        "built_at": datetime.utcnow().isoformat(),
+        "built_at": _semantic_state.get("built_at"),
     }
 
 

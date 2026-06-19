@@ -451,7 +451,7 @@ export interface LiveConfig {
   funnel: { stage: string; count: number; value: number }[] | null
   process_stages: { key: string; label: string; count: number }[]
   kpi_stats: LiveKpiStat[]
-  built_at: string
+  built_at: string | null
 }
 
 export const getLiveConfig = (): Promise<LiveConfig> =>

@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ag)
+
+### Backend/Frontend: fix built_at in live-config endpoint (same as semantic draft fix)
+
+- `backend/app/main.py` — `get_live_config()` — early-return and main-return paths
+- `frontend/src/api/semantic.ts` — `LiveConfig.built_at` type widened to `string | null`
+
+  `get_live_config()` had the same `datetime.utcnow().isoformat()` bug as `_get_semantic_draft()`: the not-loaded early return returned current request time, and the happy path also returned current request time. Dashboard uses `liveConfig?.built_at` as a secondary fallback for the "Last sync" display — so fresh live workspaces incorrectly showed "just now" instead of "Never". Both return sites now use `_semantic_state.get("built_at")` (None until first build). TypeScript `LiveConfig.built_at` widened from `string` to `string | null` to match; existing null guards in Dashboard.tsx are already sufficient.
+
+---
+
 ## 2026-06-19 (continued — session 10af)
 
 ### Backend: sanitize httpx error detail leaking from webhook test endpoint
