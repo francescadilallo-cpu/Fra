@@ -4,6 +4,7 @@ import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import { semanticStatus, getLiveConfig, semanticSources, type SemanticStatus, type LiveConfig } from '../api/semantic'
+import { listSources, type BackendSource } from '../api/sources'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
 
@@ -65,13 +66,15 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const [semStatus, setSemStatus] = useState<SemanticStatus | null>(null)
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({})
+  const [registeredSources, setRegisteredSources] = useState<BackendSource[]>([])
 
   useEffect(() => {
     Promise.all([
       semanticStatus().catch(() => null),
       getLiveConfig().catch(() => null),
       semanticSources().catch(() => null),
-    ]).then(([status, config, srcs]) => {
+      listSources().catch(() => []),
+    ]).then(([status, config, srcs, regSrcs]) => {
       if (status) setSemStatus(status)
       if (config) setLiveConfig(config)
       if (srcs) {
@@ -79,6 +82,8 @@ export default function OverviewScreen({ onNavigate }: Props) {
         srcs.forEach(s => Object.entries(s.record_counts ?? {}).forEach(([t, n]) => { counts[t] = n }))
         setTableCounts(counts)
       }
+      // Exclude seeded demo sources; only count user-added ones
+      setRegisteredSources((regSrcs as BackendSource[]).filter(s => !s.is_default))
     })
   }, [])
 
@@ -108,7 +113,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const agentsRan = agentRuns.length > 0
   // step 1 = sources, 2 = ontology, 3&4 = sembuilder, 5 = query, 6 = agents
   function stepDone(step: number): boolean {
-    if (step <= 2) return semBuilt || isAW
+    // Step 1 (sources): done if any non-default source is registered — regardless of pipeline state
+    if (step === 1) return registeredSources.length > 0 || isAW || semBuilt
+    if (step === 2) return semBuilt || isAW
     if (step <= 4) return semBuilt
     if (step === 5) return false  // can't auto-detect
     if (step === 6) return agentsRan
@@ -142,12 +149,14 @@ export default function OverviewScreen({ onNavigate }: Props) {
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${connectors.length > 0 ? 'bg-teal-400' : 'bg-slate-500'}`} />
+            <span className={`w-2 h-2 rounded-full ${connectors.length > 0 || registeredSources.length > 0 ? 'bg-teal-400' : 'bg-slate-500'}`} />
             <span className="text-xs text-slate-300">Sources</span>
             <span className="text-xs font-semibold text-white ml-1">
               {connectors.length > 0
                 ? `${connectors.slice(0, 4).map(c => c.split(' ')[0]).join(' · ')} — ${connectors.length} connected`
-                : 'none connected yet'}
+                : registeredSources.length > 0
+                  ? `${registeredSources.slice(0, 4).map(s => s.label).join(' · ')} — ${registeredSources.length} registered`
+                  : 'none connected yet'}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -213,7 +222,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(connectors.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : 'Connect your first source') },
+                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run pipeline` : 'Connect your first source') },
                   { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
                   { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
                 ].map(s => (
@@ -297,7 +306,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
-              <p className="text-3xl font-extrabold text-red-500 mb-2">{connectors.length > 0 ? connectors.length : 'N'}</p>
+              <p className="text-3xl font-extrabold text-red-500 mb-2">{connectors.length > 0 ? connectors.length : registeredSources.length > 0 ? registeredSources.length : 'N'}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
               <p className="text-xs text-slate-500">{liveConfig?.domain ?? (IS_DEMO_MODE ? sector.domain : 'Your data landscape')} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
             </div>
@@ -392,7 +401,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
             ] : [
               connectors.length > 0
                 ? `${connectors.length} data source${connectors.length !== 1 ? 's' : ''} connected — ${connectors.slice(0, 3).join(', ')}`
-                : 'Connect your data sources — databases, files, SaaS connectors',
+                : registeredSources.length > 0
+                  ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run pipeline to activate`
+                  : 'Connect your data sources — databases, files, SaaS connectors',
               semBuilt
                 ? `Semantic layer built — ${kgNodes.toLocaleString('en-US')} knowledge graph nodes`
                 : 'Build the semantic layer — entities, relations, and metrics auto-extracted',

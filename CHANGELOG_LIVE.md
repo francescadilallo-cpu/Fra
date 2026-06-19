@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 7)
+
+### Frontend: OverviewScreen shows registered sources before pipeline is built
+- `frontend/src/components/OverviewScreen.tsx`
+  - Added `listSources()` call (from `../api/sources`) to the parallel `useEffect` fetch. Stores non-default registered sources in a new `registeredSources` state slice.
+  - `stepDone(step)`: Step 1 (Sources) is now marked done as soon as any non-default source is registered in the registry — independent of whether the pipeline has been built. Previously `stepDone(1)` returned `semBuilt || isAW`, so a live user who connected a source but hadn't yet run the pipeline saw step 1 as "not started" even though the source was present in the registry.
+  - Status bar "Sources" chip: Falls back to `registeredSources` label list when `connectors` (pipeline-reported) is empty. Shows "N registered" instead of "none connected yet" when sources exist pre-pipeline.
+  - Workspace status card "Data Sources" value and sub-text: Uses `connectors.length || registeredSources.length` so the card shows the correct count regardless of pipeline state.
+  - Problem section "N systems" stat: Same fallback to `registeredSources.length`.
+  - CTA bullet: Shows "N sources registered — run pipeline to activate" when sources exist but the pipeline hasn't run yet.
+
 ## 2026-06-19 (continued — session 6)
 
 ### Backend: root-cause fix — exclude AW base docs from live-mode ask() calls
