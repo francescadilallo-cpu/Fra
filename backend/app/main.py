@@ -1547,11 +1547,12 @@ def validate_ontology_configuration(
             },
         )
     except Exception as exc:
+        logger.warning("Ontology parse error at %s: %s", path, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error": "ONTOLOGY_PARSE_ERROR",
-                "message": f"Failed to parse ontology file: {exc}",
+                "message": "Failed to parse ontology file — please verify the YAML format and structure",
             },
         )
 

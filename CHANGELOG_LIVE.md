@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10al)
+
+### Backend: sanitize YAML parse error detail in ontology validation endpoint
+
+- `backend/app/main.py` — `validate_ontology_file()` — broad `except Exception` handler
+
+  The `/api/semantic/ontology/validate` endpoint's catch-all `except Exception` used `f"Failed to parse ontology file: {exc}"` as the HTTPException detail. YAML scanner errors, file I/O errors, and similar can expose internal paths, YAML parser internals, and Python class names. Replaced with a fixed user-friendly message; full exception is now logged at WARNING level server-side.
+
+---
+
 ## 2026-06-19 (continued — session 10ak)
 
 ### Frontend: add pipeline-run-updated listeners to OverviewScreen, DataExplorer, OntologyBuilder
