@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10k)
+
+### Frontend: suppress misleading Retry button on prerequisite-failure errors in QueryInterface
+
+- `frontend/src/components/QueryInterface.tsx`
+
+  When a live user submits a query but hasn't connected data sources (HTTP 409) or the pipeline hasn't been built yet (HTTP 503), the error bubble previously showed a "Retry" button. Retrying immediately produces the same error — the prerequisite hasn't changed. Added `canRetry = status !== 409 && status !== 503` so the Retry button is suppressed for these two statuses. The descriptive error message ("No data sources connected. Add a data source before asking questions." / "The semantic layer is not ready yet.") remains visible and guides the user to the correct next action.
+
+---
+
 ## 2026-06-19 (continued — session 10j)
 
 ### Frontend: pre-run warning for live users with no sources in ProcessView

@@ -966,13 +966,17 @@ export default function QueryInterface() {
       const errMsg = ('isAxiosError' in (e as object))
         ? (backendErrorMessage(e) || 'Unknown error')
         : ((e instanceof Error ? e.message : String(e)) || 'Unknown error')
+      // 409 = no sources connected; 503 = pipeline not built yet.
+      // Retrying immediately would produce the exact same error, so suppress the
+      // Retry button for these prerequisite-failure statuses.
+      const canRetry = status !== 409 && status !== 503
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: 'error',
           content: `Error: ${errMsg}`,
-          retryQuery: question,
+          retryQuery: canRetry ? question : undefined,
           timestamp: new Date(),
         },
       ])
