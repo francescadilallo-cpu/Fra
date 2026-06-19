@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10x)
+
+### Backend: sanitize errors from `/api/semantic/build` endpoint
+
+- `backend/app/main.py` — `build_semantic_layer()`
+
+  `reload_semantic()` was called inside `build_semantic_layer` with no exception handling. A crash during ontology loading, KG build, or catalog population would propagate as a raw 500 with internal stack trace / DuckDB error details visible to the client. Wrapped the executor call in a try/except that re-raises via `_safe_ingest_error()` — same pattern already used by all ingestion endpoints. Internal engine errors are replaced by a generic "Semantic layer build failed — please check your source configuration and try again" message; `ValueError` / `FileNotFoundError` / `NotImplementedError` (which carry user-actionable messages) pass through.
+
+---
+
 ## 2026-06-19 (continued — session 10w)
 
 ### Frontend: "Try a query" CTA in SemanticDraftView header for live users

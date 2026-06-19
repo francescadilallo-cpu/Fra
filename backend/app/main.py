@@ -2654,10 +2654,20 @@ async def build_semantic_layer(
     workspace responds instantly on subsequent visits.
     """
     import asyncio
+    from .connectors.duckdb_source_manager import _safe_ingest_error
 
     if force or not _semantic_state["loaded"]:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, reload_semantic)
+        try:
+            await loop.run_in_executor(None, reload_semantic)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_ingest_error(
+                    exc,
+                    fallback="Semantic layer build failed — please check your source configuration and try again",
+                ),
+            ) from exc
         # Auto-generate templates from the freshly-built schema (always from
         # the full unfiltered draft — templates are shared system-wide)
         catalog = _semantic_state.get("catalog")
