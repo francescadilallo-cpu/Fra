@@ -1904,6 +1904,8 @@ def rebuild_knowledge_graph(
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     """Rebuild KG + semantic stack. Admin-only because it mutates in-memory system state."""
+    from .connectors.duckdb_source_manager import _safe_ingest_error
+
     with _semantic_init_lock:
         _bump_semantic_cache_namespace()
         if _semantic_state.get("layer") is not None:
@@ -1923,7 +1925,16 @@ def rebuild_knowledge_graph(
                 "hr_pim": None,
             }
         )
-        _ensure_semantic_loaded()
+        try:
+            _ensure_semantic_loaded()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=_safe_ingest_error(
+                    exc,
+                    fallback="Knowledge graph rebuild failed — please check your source configuration and try again",
+                ),
+            ) from exc
         hidden = _hidden_demo_tables(current_user)
         status = _semantic_status_payload(hidden)
         _audit(

@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ac)
+
+### Backend: sanitize errors from /api/kg/build endpoint
+
+- `backend/app/main.py` — `rebuild_knowledge_graph()`
+
+  `_ensure_semantic_loaded()` in the `/api/kg/build` admin endpoint had no exception handling. A build failure would propagate as a raw 500. Wrapped in try/except with `_safe_ingest_error()` — the same pattern as `build_semantic_layer`.
+
+---
+
 ## 2026-06-19 (continued — session 10ab)
 
 ### Backend: catch-all for unexpected errors in semantic_ask
