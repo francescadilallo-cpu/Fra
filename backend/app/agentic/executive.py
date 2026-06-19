@@ -336,7 +336,14 @@ class ExecutiveAgenticLayer:
                     actor_role=actor_role,
                     details={"error": str(exc)},
                 )
-                raise AgentExecutionError(str(exc)) from exc
+                # Only pass through messages from controlled validation exceptions;
+                # raw system errors (DB, IO) must not leak internal details.
+                _safe_msg = (
+                    str(exc)
+                    if isinstance(exc, (ValueError, AgentSemanticValidationError))
+                    else "Action execution failed — see audit log for details"
+                )
+                raise AgentExecutionError(_safe_msg) from exc
 
     def get_action(self, action_id: str) -> PendingAgentAction | None:
         """Return a single action by id, or None if unknown."""

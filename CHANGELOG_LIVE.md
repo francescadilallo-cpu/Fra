@@ -10,6 +10,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 9)
+
+### Backend: sanitize raw exception messages in AgentExecutionError
+- `backend/app/agentic/executive.py`
+  - In `approve_action()`, the broad `except Exception` handler wrapped arbitrary exception strings directly into `AgentExecutionError(str(exc))`. The router then returned this as `detail.message` in HTTP 409 responses. A raw `sqlite3.OperationalError` or `OSError` from `_execute_writeback` or `_propagate_changes` could expose internal schema details (table names, column names, file paths) to API callers.
+  - Fix: only pass the original exception message through if the exception is a known, controlled validation type (`ValueError` or `AgentSemanticValidationError`). All other exception types are replaced with a generic "Action execution failed — see audit log for details" message. The full exception is still logged to the audit record (unchanged), so operators can diagnose failures without the details leaking to callers.
+
 ## 2026-06-19 (continued — session 8)
 
 ### Frontend: exclude AdventureWorks case card from UseCasesView for live users
