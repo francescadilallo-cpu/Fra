@@ -170,7 +170,7 @@ async def test_channel(channel_id: Annotated[str, Path(max_length=64)]) -> dict:
         except httpx.RequestError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Could not reach webhook: {exc}",
+                detail="Could not reach the webhook endpoint — check the URL and network connectivity",
             ) from exc
     else:
         # Slack / email / Teams: deliver via the same dispatch path used by

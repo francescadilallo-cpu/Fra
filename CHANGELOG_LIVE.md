@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10af)
+
+### Backend: sanitize httpx error detail leaking from webhook test endpoint
+
+- `backend/app/notifications/router.py` — `test_channel()`
+
+  `POST /api/notifications/channels/{id}/test` was constructing the `HTTPException` detail with `f"Could not reach webhook: {exc}"`. `httpx.RequestError` messages can contain internal details like host resolution failures, DNS errors, or connection timeout internals. Replaced with a fixed user-friendly message: "Could not reach the webhook endpoint — check the URL and network connectivity".
+
+---
+
 ## 2026-06-19 (continued — session 10ae)
 
 ### Backend/Frontend: fix misleading "Last sync: just now" timestamp for live users
