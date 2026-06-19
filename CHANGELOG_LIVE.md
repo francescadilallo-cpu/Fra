@@ -10,6 +10,36 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10v)
+
+### Comprehensive live/demo audit — all remaining paths verified clean
+
+Full systematic sweep of every component and backend endpoint not covered by prior sessions. No new bugs found — all paths correctly guarded.
+
+**Frontend components confirmed clean:**
+- `AgentWorkflows.tsx` — `WORKFLOWS[sectorId]` AW names properly gated; `AgentsView.tsx` uses `IS_DEMO_MODE ? WORKFLOWS[...] : []`
+- `ConfigurationView.tsx` — `AGENT_SECTOR` AW content gated; `AWConfigSources` gated; Test button only rendered when `connected`, and `connected` is only true in demo mode
+- `SemanticDraftView.tsx` — empty states navigate to sources; `DEMO_CONTEXT_DOCS` gated by `IS_DEMO_MODE`
+- `OnboardingWizard.tsx`, `AgentBuilder.tsx`, `CommandPalette.tsx`, `Layout.tsx`, `ComplianceView.tsx` — all clean
+- `ContextTab.tsx` — `DEMO_FALLBACK_*` only in `if (IS_DEMO_MODE)` catch blocks; live errors show generic message
+- `MappingView.tsx` — `DEMO_DEFS` / `DEMO_AMBIGUITIES` only in `IS_DEMO_MODE` guards; live empty states properly shown
+- `Dashboard.tsx` — KPI cards, activities, entities, sources all derive from real backend data for live users
+
+**Backend endpoints confirmed clean:**
+- `/api/ask` (legacy) — alias to `semantic_ask()`; no separate AW path
+- `aw_engine.py:run_aw_query()` — dead code, never called from any endpoint
+- `context/router.py` — `list_entities`, `list_metrics` use `exclude_seeded=True` for live users
+- `context/store.py:seed_demo_data()` — only called when `FRA_SEED_DEMO_SOURCES=true` env var set
+- `semantic_ask()` — `hidden_tables`, `merged_docs` (no AW base docs for live), 409/503 guards all correct
+- `list_templates()` and `list_example_questions()` — both filter demo-sourced templates for live users
+- `sl_metrics`, `sl_hierarchies`, `sl_segments` — `AND is_builtin = 0` applied for live users
+- `to_semantic_docs_override(mode="live")` — `exclude_seeded=True` for live; user-created docs only
+
+**Dead code identified (no action needed):**
+- `api/mockData.ts` — exports AW mock data but is never imported by any component
+
+---
+
 ## 2026-06-19 (continued — session 10u)
 
 ### Frontend: fix "Clear" buttons in QueryInterface failing silently for live users
