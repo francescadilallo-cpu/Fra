@@ -776,9 +776,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
               <div className="py-4 text-center">
                 <Database className="w-6 h-6 text-slate-200 mx-auto mb-2" />
                 <p className="text-xs text-slate-400">No entities yet</p>
-                <button onClick={() => onNavigate?.('sembuilder')} className="text-xs text-teal-600 hover:underline mt-1">
-                  Build the semantic layer →
-                </button>
+                {(liveConfig?.connectors?.length ?? 0) > 0 ? (
+                  <button onClick={() => onNavigate?.('process')} className="text-xs text-teal-600 hover:underline mt-1">
+                    Run Pipeline →
+                  </button>
+                ) : (
+                  <button onClick={() => onNavigate?.('sources')} className="text-xs text-teal-600 hover:underline mt-1">
+                    Connect a data source →
+                  </button>
+                )}
               </div>
             )}
           </div>

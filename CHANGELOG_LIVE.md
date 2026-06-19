@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10o)
+
+### Frontend: context-aware empty state CTA in Dashboard "Data Entities" section
+
+- `frontend/src/components/Dashboard.tsx`
+
+  The "Data Entities" panel on the Dashboard always showed "Build the semantic layer →" when empty for live users, regardless of whether data sources were already connected. Live users with connectors registered but no pipeline run yet now see "Run Pipeline →" (navigates to Process tab) instead — more accurate next step since they don't need to re-configure sources. Live users with no connectors still see "Connect a data source →" (navigates to Sources tab).
+
+---
+
 ## 2026-06-19 (continued — session 10n)
 
 ### Frontend: keep no-sources warning visible in ProcessView during and after pipeline simulation
