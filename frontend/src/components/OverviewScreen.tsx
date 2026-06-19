@@ -441,9 +441,23 @@ export default function OverviewScreen({ onNavigate }: Props) {
             ))}
           </ul>
           <div className="flex items-center justify-center gap-3 flex-wrap">
-            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
-              Start from Connect →
-            </button>
+            {IS_DEMO_MODE ? (
+              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+                Start from Connect →
+              </button>
+            ) : semBuilt ? (
+              <button onClick={() => onNavigate('query')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+                Query Your Data →
+              </button>
+            ) : (registeredSources.length > 0 || connectors.length > 0) ? (
+              <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+                Run Pipeline →
+              </button>
+            ) : (
+              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+                Connect First Source →
+              </button>
+            )}
             <button onClick={() => onNavigate('query')} className="bg-slate-700 text-slate-200 rounded-lg px-6 py-3 text-sm font-semibold hover:bg-slate-600 transition-colors">
               Query AI →
             </button>

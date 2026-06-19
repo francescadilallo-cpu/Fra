@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10l)
+
+### Frontend: context-aware primary CTA in OverviewScreen dark section
+
+- `frontend/src/components/OverviewScreen.tsx`
+
+  The dark "Ready to build your semantic layer?" CTA section at the bottom of the Overview page always showed "Start from Connect →" as its primary button for live users, regardless of pipeline state. Made it follow the same progressive logic as the hero section: if the semantic pipeline is built → "Query Your Data →" (navigates to Query); if sources are registered but not yet built → "Run Pipeline →" (navigates to Process); if no sources at all → "Connect First Source →" (navigates to Sources). Demo mode keeps the original "Start from Connect →" label unchanged. Eliminates the jarring experience of seeing "Start from Connect →" when a live user already has a full semantic layer built.
+
+---
+
 ## 2026-06-19 (continued — session 10k)
 
 ### Frontend: suppress misleading Retry button on prerequisite-failure errors in QueryInterface
