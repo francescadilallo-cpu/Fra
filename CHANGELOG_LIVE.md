@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10h)
+
+### Frontend: UX improvements for live users in OverviewScreen
+
+- `frontend/src/components/OverviewScreen.tsx`
+
+  **KG stats in status bar for live users**: The dark status bar chip showing Knowledge Graph node/edge counts was gated by `isAW` (manufacturing demo only). Live users who had built their pipeline never saw KG stats even though the data was available from `semStatus?.kg_nodes`. Changed condition from `{isAW && ...}` to `{(isAW || kgNodes > 0) && ...}` — live users with a built pipeline now see `X nodes · Y edges` in the status bar. The `isAW` fallback ("not yet built") is preserved for demo users who haven't built yet.
+
+  **Context-aware primary CTA for live workspaces**: The hero section always showed "Start from Connect →" regardless of workspace state. For live users mid-journey this was misleading — if sources are connected but the pipeline hasn't run, "Run Pipeline →" is the next action; if the pipeline is built, "Query Your Data →" is more relevant. Added a 3-state conditional:
+  - No sources → "Connect First Source →" (→ sources tab)
+  - Sources registered, pipeline not built → "Run Pipeline →" (→ process tab)
+  - Pipeline built (`semBuilt`) → "Query Your Data →" (→ query tab)
+  Demo mode keeps the original "Start from Connect →" unchanged.
+
+---
+
 ## 2026-06-19 (continued — session 10g)
 
 ### Frontend: fix double-wrapped error messages in QueryInterface

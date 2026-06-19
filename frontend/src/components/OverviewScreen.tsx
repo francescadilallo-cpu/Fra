@@ -137,7 +137,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <span className="text-xs text-slate-300">Ontology</span>
             <span className="text-xs font-semibold text-white ml-1">{entityCount} entities · {edgeCount} relationships</span>
           </div>
-          {isAW && (
+          {(isAW || kgNodes > 0) && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 bg-teal-400 rounded-full" />
               <span className="text-xs text-slate-300">Knowledge Graph</span>
@@ -237,9 +237,23 @@ export default function OverviewScreen({ onNavigate }: Props) {
           )}
 
           <div className="flex items-center gap-3">
-            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-              Start from Connect →
-            </button>
+            {IS_DEMO_MODE ? (
+              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+                Start from Connect →
+              </button>
+            ) : semBuilt ? (
+              <button onClick={() => onNavigate('query')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+                Query Your Data →
+              </button>
+            ) : (registeredSources.length > 0 || connectors.length > 0) ? (
+              <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+                Run Pipeline →
+              </button>
+            ) : (
+              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+                Connect First Source →
+              </button>
+            )}
             <button onClick={() => onNavigate('dashboard')} className="border border-slate-200 text-slate-600 rounded-lg px-6 py-3 text-sm font-semibold hover:border-teal-300 hover:text-teal-700 transition-colors">
               Go to Dashboard
             </button>
