@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Plus, Trash2, Eye, Bell, RefreshCw, ShieldCheck, Sparkles, Bot, Hand, Clock, Zap } from 'lucide-react'
+import { IS_DEMO_MODE } from '../lib/demoMode'
 import type {
   CustomAgentDef, AgentTemplate, CustomFinding, AgentTrigger,
   ScheduleInterval, EventTriggerKind,
@@ -607,7 +608,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
                     <option key={k} value={k}>{SCHEDULE_LABELS[k]}</option>
                   ))}
                 </select>
-                <span className="text-[10px] text-slate-400 ml-auto italic">(accelerated in demo)</span>
+                {IS_DEMO_MODE && <span className="text-[10px] text-slate-400 ml-auto italic">(accelerated in demo)</span>}
               </div>
             )}
             {trigger.kind === 'event' && (

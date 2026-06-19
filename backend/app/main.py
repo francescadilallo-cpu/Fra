@@ -2311,7 +2311,10 @@ def semantic_sources(
                 }
             ]
 
-    # Legacy fallback: iterate the per-domain connectors
+    # Legacy fallback: iterate the per-domain connectors (demo paths only).
+    # Live-mode users never have these demo connectors — return empty immediately.
+    if hidden:
+        return []
     sources = []
     for key in ["erp", "crm", "hr_pim"]:
         connector = _semantic_state.get(key)

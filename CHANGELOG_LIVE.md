@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10f)
+
+### Backend + Frontend: fix two remaining demo-content leaks
+
+#### `backend/app/main.py` — `semantic_sources` legacy fallback
+- The legacy connector fallback path at the bottom of `semantic_sources()` (lines ~2315-2343) iterated `["erp", "crm", "hr_pim"]` — the three hardcoded demo connector names. This path executes when `mgr is None` (no unified DuckDB source manager loaded). A live user whose pipeline hadn't initialized `mgr` yet would see these AW connector names in the API response (even though the `hidden` filter at the top of the path would have caught any table-level data).
+- Added an early-return guard: `if hidden: return []`. Live users never have "erp"/"crm"/"hr_pim" connectors — the legacy path is demo-only.
+
+#### `frontend/src/components/AgentBuilder.tsx` — schedule label visible in live mode
+- The inline label `(accelerated in demo)` was rendered unconditionally in the agent schedule selector UI (no `IS_DEMO_MODE` guard). Live users saw this parenthetical text when building a scheduled agent.
+- Added `import { IS_DEMO_MODE } from '../lib/demoMode'` and wrapped the label in `{IS_DEMO_MODE && ...}`.
+
 ## 2026-06-19 (continued — session 10e)
 
 ### Backend: filter demo context doc from GET /api/semantic/draft/context; deduplicate formula regex
