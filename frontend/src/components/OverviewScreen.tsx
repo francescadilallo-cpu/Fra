@@ -68,7 +68,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
   const [tableCounts, setTableCounts] = useState<Record<string, number>>({})
   const [registeredSources, setRegisteredSources] = useState<BackendSource[]>([])
 
-  useEffect(() => {
+  const loadOverviewData = () => {
     Promise.all([
       semanticStatus().catch(() => null),
       getLiveConfig().catch(() => null),
@@ -85,7 +85,17 @@ export default function OverviewScreen({ onNavigate }: Props) {
       // Exclude seeded demo sources; only count user-added ones
       setRegisteredSources((regSrcs as BackendSource[]).filter(s => !s.is_default))
     })
-  }, [])
+  }
+
+  useEffect(() => {
+    loadOverviewData()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    window.addEventListener('pipeline-run-updated', loadOverviewData)
+    return () => window.removeEventListener('pipeline-run-updated', loadOverviewData)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const entityCount = semStatus?.loaded ? semStatus.entities.length : ontology.nodes.length
   const edgeCount = semStatus?.loaded ? semStatus.kg_edges : ontology.edges.length

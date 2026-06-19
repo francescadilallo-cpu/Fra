@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ak)
+
+### Frontend: add pipeline-run-updated listeners to OverviewScreen, DataExplorer, OntologyBuilder
+
+- `frontend/src/components/OverviewScreen.tsx` — extracted `loadOverviewData()` fn, added listener
+- `frontend/src/components/DataExplorer.tsx` — added listener for liveRowCounts refresh
+- `frontend/src/components/OntologyBuilder.tsx` — added listener for liveConfig refresh
+
+  Completing the `pipeline-run-updated` refresh sweep across all semantic-data-consuming views. These three components fetched `semanticStatus`, `getLiveConfig`, `semanticSources`, and `listSources` once on mount and never refreshed. After a pipeline run, the OverviewScreen setup checklist, DataExplorer row counts, and OntologyBuilder entity/edge graph now update immediately without a page reload.
+
+---
+
 ## 2026-06-19 (continued — session 10aj)
 
 ### Frontend: refresh remaining live views (Dashboard storeStatus, AgentsView) after pipeline run

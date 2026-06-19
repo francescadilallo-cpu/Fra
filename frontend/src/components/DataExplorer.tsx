@@ -386,9 +386,12 @@ export default function DataExplorer() {
 
   useEffect(() => {
     if (IS_DEMO_MODE) return
-    getLiveConfig()
+    const refresh = () => getLiveConfig()
       .then(cfg => setLiveRowCounts(Object.fromEntries(cfg.ontology.nodes.map(n => [n.data.label, n.data.row_count]))))
       .catch(() => {})
+    refresh()
+    window.addEventListener('pipeline-run-updated', refresh)
+    return () => window.removeEventListener('pipeline-run-updated', refresh)
   }, [])
 
   const props = selected?.data.properties.length ?? 0

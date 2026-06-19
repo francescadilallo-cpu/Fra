@@ -910,6 +910,12 @@ export default function OntologyBuilder() {
   useEffect(() => {
     getLiveConfig().then(setLiveConfig).catch(() => {})
   }, [])
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const refresh = () => getLiveConfig().then(setLiveConfig).catch(() => {})
+    window.addEventListener('pipeline-run-updated', refresh)
+    return () => window.removeEventListener('pipeline-run-updated', refresh)
+  }, [])
 
   const initial = useMemo(() => buildInitialState(sector, sectorId, liveConfig), [sector, sectorId, liveConfig])
   const [nodes, setNodes] = useState<Node[]>(initial.nodes)
