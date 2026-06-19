@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10r)
+
+### Frontend: fix saved-query backend isolation between live and demo users
+
+- `frontend/src/components/QueryInterface.tsx`
+
+  Saved queries persisted to the backend (`/api/queries/saved`) used the raw sector id (e.g. `manufacturing`) as the `sector_id` scope, so live and demo users shared the same backend bucket. Now `modeScopedSector(sectorId)` is used when calling `listSavedQueries` and `saveQueryRemote` / `deleteSavedQueryRemote`, giving live users an isolated `live-<sector>` namespace. localStorage favorites (already scoped via `modeScopedSector`) are unaffected.
+
+---
+
 ## 2026-06-19 (continued — session 10q)
 
 ### Frontend: actionable navigation CTAs in QueryInterface error bubbles for 409/503

@@ -67,10 +67,12 @@ function toggleFavorite(sectorId: string, query: string, current: string[]): str
     ? [query, ...current].slice(0, FAVORITES_MAX)
     : current.filter(q => q !== query)
   saveFavoritesLocal(sectorId, next)
+  // Use mode-scoped sector for backend so live and demo saved queries don't share the same bucket
+  const scopedId = modeScopedSector(sectorId)
   if (adding) {
-    saveQueryRemote(sectorId, query, stableQueryId(sectorId, query)).catch(() => {})
+    saveQueryRemote(scopedId, query, stableQueryId(scopedId, query)).catch(() => {})
   } else {
-    deleteSavedQueryRemote(stableQueryId(sectorId, query)).catch(() => {})
+    deleteSavedQueryRemote(stableQueryId(scopedId, query)).catch(() => {})
   }
   return next
 }
@@ -898,8 +900,9 @@ export default function QueryInterface() {
     setHistory(loadHistory(sectorId))
     const local = loadFavorites(sectorId)
     setFavorites(local)
-    // Sync favorites from backend; merge remote-only entries into localStorage
-    listSavedQueries(sectorId).then(remote => {
+    // Sync favorites from backend; merge remote-only entries into localStorage.
+    // Use mode-scoped sector so live and demo users query separate saved-query buckets.
+    listSavedQueries(modeScopedSector(sectorId)).then(remote => {
       const remoteQueries = remote.map(r => r.query)
       const merged = [...new Set([...local, ...remoteQueries])].slice(0, FAVORITES_MAX)
       if (merged.length !== local.length) {
