@@ -1532,24 +1532,50 @@ class SemanticLayer:
 
     def _q_entity_not_modeled(self, intent: Intent) -> Result:
         entity = intent.filters.get("entity", "Unknown")
-        if self._effective_docs and self._effective_docs.entities:
-            available = ", ".join(e.display_name for e in self._effective_docs.entities)
-        elif self._ontology:
-            available = ", ".join(sorted(self._ontology.entity_names()))
-        elif self._catalog:
-            available = ", ".join(sorted(self._catalog.list_entities())[:12])
+        _live = bool(getattr(SemanticLayer._thread_local, "hidden_tables", frozenset()))
+        if _live:
+            # For live users, list only their own entities (not the demo ones
+            # that share the same catalog/ontology instance).
+            hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+            available: str | None = None
+            if self._catalog:
+                all_draft = self._catalog.get_draft_entities()
+                live_entities = [
+                    e["name"] for e in all_draft if e.get("table") not in hidden
+                ]
+                if live_entities:
+                    available = ", ".join(sorted(live_entities)[:12])
+            if available:
+                msg = (
+                    f"The entity '{entity}' is not in your semantic layer. "
+                    f"Available entities are: {available}."
+                )
+            else:
+                msg = (
+                    f"The entity '{entity}' is not in your workspace yet. "
+                    "Connect a data source and run the pipeline to build your ontology."
+                )
         else:
-            available = None
-        if available:
-            msg = (
-                f"The entity '{entity}' is not modeled in the semantic layer. "
-                f"Available entities are: {available}."
-            )
-        else:
-            msg = (
-                f"The entity '{entity}' is not modeled in the semantic layer. "
-                "Connect a data source and run the pipeline to build your ontology."
-            )
+            if self._effective_docs and self._effective_docs.entities:
+                available = ", ".join(
+                    e.display_name for e in self._effective_docs.entities
+                )
+            elif self._ontology:
+                available = ", ".join(sorted(self._ontology.entity_names()))
+            elif self._catalog:
+                available = ", ".join(sorted(self._catalog.list_entities())[:12])
+            else:
+                available = None
+            if available:
+                msg = (
+                    f"The entity '{entity}' is not modeled in the semantic layer. "
+                    f"Available entities are: {available}."
+                )
+            else:
+                msg = (
+                    f"The entity '{entity}' is not modeled in the semantic layer. "
+                    "Connect a data source and run the pipeline to build your ontology."
+                )
         return Result(
             answer=msg,
             sources_touched=[],

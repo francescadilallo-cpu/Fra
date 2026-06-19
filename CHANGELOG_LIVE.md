@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19
+
+### Backend: fix AW entity names leaking into live-mode "entity not modeled" responses
+- `backend/app/semantic/layer.py`
+  - `_q_entity_not_modeled()`: For live-mode requests (`hidden_tables` non-empty), now queries `self._catalog.get_draft_entities()` filtered by `hidden_tables` to get only the user's own entities, rather than falling through to `self._ontology.entity_names()` or `self._catalog.list_entities()` which both return AW demo entities (the shared ontology is not per-request filtered). If the live user has no entities yet, returns a CTA ("Connect a data source and run the pipeline"). Demo mode path unchanged.
+
 ## 2026-06-18 (session 3)
 
 ### Backend: fix `aw:` URI prefix leaking into live-mode ontology nodes
