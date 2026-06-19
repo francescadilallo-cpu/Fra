@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10i)
+
+### Frontend: context-aware empty states for live users in SemanticLayerView
+
+- `frontend/src/components/SemanticLayerView.tsx`
+
+  **Sources section empty state**: When a live user visits Semantic Layer → Data Sources with no backend sources ingested yet and no manually-documented sources, the empty state previously just offered "Document manually." For live users with the backend online but no sources connected, the primary CTA now says "Go to Connect →" (dispatches `navigate-to-tab: sources`) with a secondary "Document manually" option. Demo mode and offline mode are unchanged.
+
+  **Metrics section empty state**: Was a generic "No metrics defined yet." For live users with the backend online, the message is now context-aware:
+  - Pipeline built (`kgStatus !== null`): "No metrics were auto-extracted from your pipeline. Define them manually above."
+  - Pipeline not yet built (`kgStatus === null`): "Run the semantic pipeline first — metrics will be auto-extracted from your data. You can also define custom ones manually above."
+
+  **Hierarchies section empty state**: Same pattern — when live + backend online + pipeline not built, the message now reads "Run the semantic pipeline to auto-extract dimension hierarchies, or define them manually above." instead of the generic instruction.
+
+---
+
 ## 2026-06-19 (continued — session 10h)
 
 ### Frontend: UX improvements for live users in OverviewScreen

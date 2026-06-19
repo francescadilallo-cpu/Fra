@@ -2851,12 +2851,33 @@ export default function SemanticLayerView() {
                   <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center">
                     <Server className="w-8 h-8 text-slate-300 mx-auto mb-3" />
                     <p className="text-sm font-semibold text-slate-500">No data sources defined yet</p>
-                    <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
-                      Document each database, CSV, API, or warehouse that feeds your semantic layer.
-                    </p>
-                    <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
-                      + Add first source
-                    </button>
+                    {!IS_DEMO_MODE && useBackendData && backendSources.length === 0 ? (
+                      <>
+                        <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
+                          Connect a real data source first in the Sources tab, then document it here for the semantic layer.
+                        </p>
+                        <div className="flex items-center justify-center gap-3 flex-wrap">
+                          <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+                            className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                          >
+                            Go to Connect →
+                          </button>
+                          <button onClick={() => setShowAddSource(true)} className="text-xs border border-slate-300 text-slate-600 px-4 py-2 rounded-lg hover:bg-slate-100 transition-colors font-medium">
+                            Document manually
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
+                          Document each database, CSV, API, or warehouse that feeds your semantic layer.
+                        </p>
+                        <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                          + Add first source
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
                 {userSources.map(s => (
@@ -3034,7 +3055,15 @@ export default function SemanticLayerView() {
               <div className="text-center py-12 text-slate-400">
                 <BarChart2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No metrics defined yet</p>
-                <p className="text-xs mt-1">Click "Define metric" to add your first business measure.</p>
+                {!IS_DEMO_MODE && useBackendData ? (
+                  kgStatus !== null ? (
+                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">No metrics were auto-extracted from your pipeline. Define them manually using the button above.</p>
+                  ) : (
+                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
+                  )
+                ) : (
+                  <p className="text-xs mt-1">Click "Define metric" to add your first business measure.</p>
+                )}
               </div>
             )}
           </div>
@@ -3099,7 +3128,11 @@ export default function SemanticLayerView() {
               <div className="text-center py-12 text-slate-400">
                 <SlidersHorizontal className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No hierarchies defined yet</p>
-                <p className="text-xs mt-1">Click "Add hierarchy" to define a drill-down path.</p>
+                {!IS_DEMO_MODE && useBackendData && kgStatus === null ? (
+                  <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline to auto-extract dimension hierarchies, or define them manually using the button above.</p>
+                ) : (
+                  <p className="text-xs mt-1">Click "Add hierarchy" to define a drill-down path.</p>
+                )}
               </div>
             )}
           </div>
