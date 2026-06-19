@@ -629,6 +629,13 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
     getLiveConfig().then(setLiveConfig).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const refresh = () => getLiveConfig().then(setLiveConfig).catch(() => {})
+    window.addEventListener('pipeline-run-updated', refresh)
+    return () => window.removeEventListener('pipeline-run-updated', refresh)
+  }, [])
+
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(gnd(node))
   }, [])

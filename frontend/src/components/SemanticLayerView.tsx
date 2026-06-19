@@ -1945,6 +1945,12 @@ export default function SemanticLayerView() {
 
   useEffect(() => { loadFromBackend() }, [loadFromBackend])
 
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    window.addEventListener('pipeline-run-updated', loadFromBackend)
+    return () => window.removeEventListener('pipeline-run-updated', loadFromBackend)
+  }, [loadFromBackend])
+
   // Query examples derived from live templates
   const pgExamples = queryTemplates.slice(0, 8).map(t => ({ id: t.id, question: t.name }))
   const baseNodeIds = new Set(SECTORS[sectorId].ontology.nodes.map(n => n.id))

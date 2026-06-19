@@ -10,6 +10,23 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ai)
+
+### Frontend: auto-refresh Semantic views after pipeline run
+
+- `frontend/src/components/SemanticDraftView.tsx` — added `pipeline-run-updated` listener
+- `frontend/src/components/OntologyGraph.tsx` — added `pipeline-run-updated` listener (live mode only)
+- `frontend/src/components/SemanticLayerView.tsx` — added `pipeline-run-updated` listener (live mode only)
+
+  The "Run Pipeline" button in ProcessView dispatches `pipeline-run-updated` on completion. Before this change, three views that display semantic layer data only loaded once on mount:
+  - `SemanticDraftView` polled every 5s while `loaded=false`, but stopped polling after the first successful load — a force rebuild left it stale
+  - `OntologyGraph` never refreshed its live config
+  - `SemanticLayerView` never refreshed draft/sources/metrics/hierarchies
+
+  All three now listen to `pipeline-run-updated` and reload their data immediately when the pipeline completes.
+
+---
+
 ## 2026-06-19 (continued — session 10ah)
 
 ### Frontend: refresh Dashboard activity feed immediately after pipeline run

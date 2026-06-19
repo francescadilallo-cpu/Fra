@@ -43,6 +43,11 @@ export function SemanticDraftView() {
     return () => { if (pollRef.current) clearTimeout(pollRef.current) }
   }, [loadDraft])
 
+  useEffect(() => {
+    window.addEventListener('pipeline-run-updated', loadDraft)
+    return () => window.removeEventListener('pipeline-run-updated', loadDraft)
+  }, [loadDraft])
+
   if (loading) return <LoadingSkeleton />
 
   if (!draft?.loaded) return <EmptyState />
