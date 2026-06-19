@@ -76,8 +76,9 @@ export function useCustomAgents(sectorId: SectorId): CustomAgentDef[] {
     const onStorage = (e: StorageEvent) => { if (e.key === KEY(sectorId)) refresh() }
     window.addEventListener('storage', onStorage)
 
-    // Sync from backend: merge remote agents into localStorage (backend wins on conflict)
-    listAgents(sectorId)
+    // Sync from backend: merge remote agents into localStorage (backend wins on conflict).
+    // Use mode-scoped sector so live and demo agents don't share the same backend bucket.
+    listAgents(modeScopedSector(sectorId))
       .then(remote => {
         const local = loadCustomAgents(sectorId)
         const localIds = new Set(local.map(a => a.id))
@@ -104,7 +105,9 @@ export function useCustomAgents(sectorId: SectorId): CustomAgentDef[] {
 
 export async function addCustomAgentPersisted(sectorId: string, agent: CustomAgentDef): Promise<void> {
   addCustomAgent(sectorId, agent)
-  try { await createAgent(agent) } catch { /* offline — localStorage is the source of truth */ }
+  // Use mode-scoped sector for backend isolation (localStorage KEY already applies modeScopedSector)
+  const backendAgent = { ...agent, sectorId: modeScopedSector(agent.sectorId || sectorId) }
+  try { await createAgent(backendAgent) } catch { /* offline — localStorage is the source of truth */ }
 }
 
 export async function removeCustomAgentPersisted(sectorId: string, agentId: string): Promise<void> {

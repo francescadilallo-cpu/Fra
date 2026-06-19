@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10s)
+
+### Frontend: fix custom-agent backend isolation between live and demo users
+
+- `frontend/src/data/customAgents.ts`
+
+  Same bucket-sharing bug as saved queries: `listAgents(sectorId)` and `createAgent(agent)` both used the raw sector id (`manufacturing`) rather than the mode-scoped one (`live-manufacturing`). Live and demo users could therefore see each other's custom agents when fetched from the backend. Fixed:
+  - `listAgents()` now receives `modeScopedSector(sectorId)` so the GET uses the correct scope.
+  - `addCustomAgentPersisted()` now creates a `backendAgent` with `sectorId: modeScopedSector(...)` before calling `createAgent()`, so the POST writes to the correct scope.
+  localStorage is unaffected (the KEY function already applied `modeScopedSector` there).
+
+---
+
 ## 2026-06-19 (continued — session 10r)
 
 ### Frontend: fix saved-query backend isolation between live and demo users
