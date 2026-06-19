@@ -569,6 +569,20 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
           </div>
         </div>
 
+        {/* No-sources warning for fresh live workspaces */}
+        {!IS_DEMO_MODE && liveConfig !== null && (liveConfig.connectors?.length ?? 0) === 0 && runState === 'idle' && (
+          <div className="mx-6 mt-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-amber-800">No data sources connected yet</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Connect a source before running the pipeline.{' '}
+                <button onClick={() => onNavigate?.('sources')} className="underline font-medium">Go to Sources →</button>
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Step indicators + progress */}
         <div className="px-6 py-5">
           <div className="flex items-start gap-0">

@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10j)
+
+### Frontend: pre-run warning for live users with no sources in ProcessView
+
+- `frontend/src/components/ProcessView.tsx`
+
+  Added a pre-run warning banner inside the Semantic Layer Pipeline card. When a live user visits the Process tab and no data sources have been ingested yet (`liveConfig !== null && connectors.length === 0` and pipeline is idle), an amber callout now appears before the step indicators: "No data sources connected yet. Connect a source before running the pipeline." with a "Go to Sources →" CTA. This prevents the confusing experience of running the pipeline and seeing only empty/warning log output. The banner is hidden once any source is connected or when the pipeline is running/done.
+
+---
+
 ## 2026-06-19 (continued — session 10i)
 
 ### Frontend: context-aware empty states for live users in SemanticLayerView
