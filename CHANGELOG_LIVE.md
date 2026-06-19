@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ad)
+
+### Frontend: ProcessView uses force=true when triggering live rebuild
+
+- `frontend/src/api/semantic.ts` — `buildSemanticLayer()` — added optional `force` param
+- `frontend/src/components/ProcessView.tsx` — passes `force=true` for live builds
+
+  `buildSemanticLayer()` previously always sent `force=false` (the backend default), which means the rebuild is skipped if the layer is already loaded. For the ProcessView "Run Pipeline" button, the user is explicitly requesting a rebuild — possibly because they added or updated a source. Now the ProcessView call passes `force=true` so the backend always rebuilds, and the `buildSemanticLayer` API signature is extended to accept an optional `force` boolean (false by default for the DataSourcesView path, which is always a first-build).
+
+---
+
 ## 2026-06-19 (continued — session 10ac)
 
 ### Backend: sanitize errors from /api/kg/build endpoint

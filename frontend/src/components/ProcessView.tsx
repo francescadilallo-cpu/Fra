@@ -476,7 +476,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
     if (!IS_DEMO_MODE) {
       const controller = new AbortController()
       liveBuildControllerRef.current = controller
-      buildSemanticLayer(controller.signal)
+      buildSemanticLayer(controller.signal, true)
         .then(() => { liveBuildResult = 'ok' })
         .catch((err: unknown) => {
           if ((err as { code?: string })?.code === 'ERR_CANCELED') return
