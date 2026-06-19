@@ -1073,11 +1073,9 @@ export default function QueryInterface() {
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
                 <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-semibold text-amber-800">No data source connected</p>
+                  <p className="text-xs font-semibold text-amber-800">Backend temporarily unavailable</p>
                   <p className="text-xs text-amber-700 mt-0.5">
-                    The backend is offline.{' '}
-                    <button onClick={() => setShowApiPanel(true)} className="underline font-medium">Add an API key</button>
-                    {' '}to query via LLM, or start the backend for real results.
+                    Could not reach the query service. Please try again in a moment.
                   </p>
                 </div>
               </div>

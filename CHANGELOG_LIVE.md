@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10m)
+
+### Frontend: fix misleading "No data source connected" message when backend is offline in QueryInterface
+
+- `frontend/src/components/QueryInterface.tsx`
+
+  When the backend was temporarily unreachable, live users saw an amber banner titled "No data source connected" — which is inaccurate: their data sources are connected, the backend is just down. Replaced with "Backend temporarily unavailable / Could not reach the query service. Please try again in a moment." Demo mode banner unchanged (shows "Demo engine active").
+
+---
+
 ## 2026-06-19 (continued — session 10l)
 
 ### Frontend: context-aware primary CTA in OverviewScreen dark section
