@@ -1782,18 +1782,39 @@ def semantic_ask(
     # Merge user-provided context (entities, metrics, glossary) with YAML docs.
     # Pass the merged docs directly to ask() instead of mutating the shared layer
     # object, which would cause a race condition under concurrent requests.
+    #
+    # For live-mode users, do NOT include _base_docs (the AW demo YAML docs).
+    # _base_docs encodes AdventureWorks semantics (entities, metrics, glossary,
+    # disambiguation rules) that are meaningless and confusing for live users.
+    # Each handler in layer.py has a _live guard, but excluding _base_docs here
+    # is the root-cause fix: _effective_docs will only contain what the live
+    # user has explicitly added via the Context tab.
     merged_docs = None
     try:
         user_docs = _context_store.to_semantic_docs_override(mode=_current_user.mode)
         from .semantic.doc_schema import SemanticDocs  # noqa: PLC0415
 
         _base_docs = _semantic_state.get("base_docs")
-        merged_docs = SemanticDocs(
-            entities=user_docs.entities + (_base_docs.entities if _base_docs else []),
-            metrics=user_docs.metrics + (_base_docs.metrics if _base_docs else []),
-            glossary=user_docs.glossary + (_base_docs.glossary if _base_docs else []),
-            disambiguation_rules=_base_docs.disambiguation_rules if _base_docs else [],
-        )
+        if hidden:
+            # Live mode: user docs only, no AW base docs
+            merged_docs = SemanticDocs(
+                entities=user_docs.entities,
+                metrics=user_docs.metrics,
+                glossary=user_docs.glossary,
+                disambiguation_rules=[],
+            )
+        else:
+            # Demo mode: merge user docs with AW base docs
+            merged_docs = SemanticDocs(
+                entities=user_docs.entities
+                + (_base_docs.entities if _base_docs else []),
+                metrics=user_docs.metrics + (_base_docs.metrics if _base_docs else []),
+                glossary=user_docs.glossary
+                + (_base_docs.glossary if _base_docs else []),
+                disambiguation_rules=_base_docs.disambiguation_rules
+                if _base_docs
+                else [],
+            )
     except Exception as _merge_exc:
         logger.warning(
             "Context merge failed, proceeding without user docs: %s", _merge_exc

@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 6)
+
+### Backend: root-cause fix — exclude AW base docs from live-mode ask() calls
+- `backend/app/main.py`
+  - `semantic_ask()` endpoint: When `hidden` is non-empty (live mode), the `merged_docs` object passed to `layer.ask()` now contains ONLY the user's own context-store entries — NOT the AW YAML semantic docs (`_base_docs`). Previously, `_base_docs` was always merged in regardless of mode. This meant `_effective_docs` inside every `_q_*` handler contained AW entities, metrics, glossary terms, and disambiguation rules for live users. All the per-handler `_live` guards were defensive workarounds for this root cause. With this fix, live users' `_effective_docs` is clean: it only reflects what the user has explicitly added via the Context tab (or is empty for a fresh workspace), and the `_live` guards become a true defense-in-depth layer rather than the primary protection.
+
 ## 2026-06-19 (continued — session 5)
 
 ### Backend: filter default (AW) context docs from live-mode LLM SQL prompts
