@@ -10,6 +10,14 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10g)
+
+### Frontend: fix double-wrapped error messages in QueryInterface
+- `frontend/src/components/QueryInterface.tsx`
+  - The inner `try/catch` around `ask()` was re-throwing a wrapped `new Error(`Backend: ${backendErrorMessage(e)}`)`. The outer `.catch()` handler then called `backendErrorMessage(e)` on this plain `Error`, which returns `String(e)` = `"Error: Backend: ..."`, then added another `"Error: "` prefix — yielding triple-prefixed messages like `"Error: Error: Backend: No data sources connected..."` to users.
+  - Fix: removed the inner `try/catch` (letting the AxiosError propagate naturally to the outer handler). Updated the outer `.catch()` to distinguish AxiosErrors (using `backendErrorMessage`) from plain `Error` objects (using `.message` directly). Now shows clean messages like `"Error: No data sources connected. Add a data source before asking questions."`.
+  - Side benefit: the 409 status check in the outer catch now correctly fires for backend errors (previously the wrapped plain `Error` had no `.response.status` property, so the 401 guard was silently bypassed for backend auth errors).
+
 ## 2026-06-19 (continued — session 10f)
 
 ### Backend + Frontend: fix two remaining demo-content leaks

@@ -924,14 +924,11 @@ export default function QueryInterface() {
       let result: EngineResult
 
       if (canUseBackend && useBackend) {
-        // Backend path — real data, server-side query execution
-        try {
-          const raw = await ask(question, sectorId)
-          result = adaptAskResult(raw)
-        } catch (backendErr) {
-          // Backend failed mid-query — surface the error with detail
-          throw new Error(`Backend: ${backendErrorMessage(backendErr)}`)
-        }
+        // Backend path — real data, server-side query execution.
+        // Re-throw the original error so the outer handler can inspect the
+        // HTTP status (e.g. 401, 409) and extract the backend detail correctly.
+        const raw = await ask(question, sectorId)
+        result = adaptAskResult(raw)
       } else if (isLLMActive) {
         // Browser LLM path — direct provider call (Groq/Gemini/Claude)
         result = await executeLLMQuery(question, creds.key, creds.provider)
@@ -963,7 +960,12 @@ export default function QueryInterface() {
       // show an error message that will be immediately replaced by the login screen.
       const status = (e as { response?: { status?: number } })?.response?.status
       if (status === 401) return
-      const errMsg = backendErrorMessage(e) || 'Unknown error'
+      // For AxiosErrors use backendErrorMessage (extracts detail from response).
+      // For plain Error objects (thrown inside resolve()), use .message directly
+      // to avoid String(e) = "Error: <message>" creating a double "Error: Error:" prefix.
+      const errMsg = ('isAxiosError' in (e as object))
+        ? (backendErrorMessage(e) || 'Unknown error')
+        : ((e instanceof Error ? e.message : String(e)) || 'Unknown error')
       setMessages((prev) => [
         ...prev,
         {
