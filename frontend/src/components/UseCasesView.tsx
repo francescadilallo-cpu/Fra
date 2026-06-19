@@ -384,7 +384,11 @@ export default function UseCasesView({ onNavigate }: Props) {
     onNavigate('dashboard')
   }
 
-  const totalValue = USE_CASES.reduce((acc, uc) => {
+  // Exclude the AW demo case for live users — it contains internal schema identifiers
+  // (fatturato, matricolaDip, dipendenti_hr, etc.) that must not appear in the live product.
+  const displayedCases = IS_DEMO_MODE ? USE_CASES : USE_CASES.filter(uc => uc.id !== 'adventureworks')
+
+  const totalValue = displayedCases.reduce((acc, uc) => {
     const n = parseFloat(uc.annualValue.replace(/[€$K]/g, '')) * (uc.annualValue.includes('K') ? 1000 : 1)
     return acc + n
   }, 0)
@@ -397,10 +401,10 @@ export default function UseCasesView({ onNavigate }: Props) {
         <div className="max-w-6xl flex items-center gap-6">
           <span className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Real Business Cases</span>
           <div className="h-3 w-px bg-slate-700" />
-          <span className="text-xs text-slate-400">4 real companies · manufacturing · retail · healthcare · finance</span>
+          <span className="text-xs text-slate-400">{displayedCases.length} real cases · {[...new Set(displayedCases.map(uc => uc.sector))].join(' · ')}</span>
           <div className="ml-auto">
             <span className="text-xs text-slate-400">Average value generated: </span>
-            <span className="text-sm font-bold text-teal-400">€{(totalValue / USE_CASES.length / 1000).toFixed(0)}K/yr per client</span>
+            <span className="text-sm font-bold text-teal-400">€{(totalValue / displayedCases.length / 1000).toFixed(0)}K/yr per client</span>
           </div>
         </div>
       </div>
@@ -424,7 +428,7 @@ export default function UseCasesView({ onNavigate }: Props) {
       {/* Case cards grid */}
       <section className="px-4 md:px-8 lg:px-12 py-12 bg-slate-50">
         <div className="max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {USE_CASES.map(uc => (
+          {displayedCases.map(uc => (
             <CaseCard key={uc.id} uc={uc} onLoad={() => loadScenario(uc)} onNavigate={onNavigate} />
           ))}
         </div>
@@ -459,13 +463,13 @@ export default function UseCasesView({ onNavigate }: Props) {
         <div className="max-w-6xl">
           <span className="text-xs font-semibold tracking-widest text-teal-400 uppercase">By the numbers</span>
           <h2 className="mt-3 text-2xl font-bold text-white mb-10">
-            The 4 use cases add up to concrete results
+            The {displayedCases.length} use cases add up to concrete results
           </h2>
           <div className="grid grid-cols-4 gap-6">
             {[
-              { value: '€868K',    label: 'Total value generated/year',           sub: 'avg €217K per client' },
+              { value: `€${Math.round(totalValue / 1000)}K`, label: 'Total value generated/year', sub: `avg €${Math.round(totalValue / displayedCases.length / 1000)}K per client` },
               { value: '90 days',  label: 'Average time-to-value',                sub: 'from signature to measurable impact' },
-              { value: '4 sectors',label: 'Manufacturing · Retail · Healthcare · Finance', sub: 'same semantic layer, vertical ontologies' },
+              { value: `${displayedCases.length} sectors`, label: [...new Set(displayedCases.map(uc => uc.sector.charAt(0).toUpperCase() + uc.sector.slice(1)))].join(' · '), sub: 'same semantic layer, vertical ontologies' },
               { value: '0 FTE',    label: 'Employees redeployed',                  sub: 'no job cuts — only higher-value work' },
             ].map(({ value, label, sub }) => (
               <div key={label} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">

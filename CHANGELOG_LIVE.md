@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 8)
+
+### Frontend: exclude AdventureWorks case card from UseCasesView for live users
+- `frontend/src/components/UseCasesView.tsx`
+  - The `USE_CASES` array contains an "AdventureWorks Cycles" entry with explicit AW schema identifiers: "fatturato", "subtotal_amount", "total_due", "matricolaDip", "dipendenti_hr", "product_catalog_pim", salesperson names "Linda Mitchell" and "Jae Pak". The array was rendered without an `IS_DEMO_MODE` guard, so live users saw this card.
+  - Added `displayedCases`: for live mode, filters out the entry with `id === 'adventureworks'`. Demo mode continues to show all 4 cases.
+  - Updated header strip case count and sector list to derive from `displayedCases`.
+  - Updated card grid to map `displayedCases` instead of `USE_CASES`.
+  - Updated summary stats section ("The N use cases", total value, sectors) to compute dynamically from `displayedCases`, so the numbers remain consistent in both modes.
+
 ## 2026-06-19 (continued — session 7)
 
 ### Frontend: OverviewScreen shows registered sources before pipeline is built
