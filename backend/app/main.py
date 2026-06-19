@@ -870,7 +870,7 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
             "created_at": c.connected_at,
         }
         for c in registry.list()
-        if c.connector_type == "context_doc"
+        if c.connector_type == "context_doc" and (not hidden or not c.is_default)
     ]
 
     templates = catalog.list_templates() if catalog else []

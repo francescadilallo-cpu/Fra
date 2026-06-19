@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10d)
+
+### Backend: hide demo context doc from /api/semantic/draft for live users
+- `backend/app/main.py`
+  - `_get_semantic_draft()`: The `context_docs` list comprehension returned all `connector_type == "context_doc"` registry entries without filtering by `is_default`. The AW demo seeds a context doc ("OrionSales — Business Context", `is_default=True`) that describes bicycle-manufacturer business rules. Live users could see this in the `SemanticDraftView` "Context" tab via `GET /api/semantic/draft`. Added `and (not hidden or not c.is_default)` to the comprehension — when `hidden` is non-empty (live mode), only non-default context docs are returned.
+
 ## 2026-06-19 (continued — session 10c)
 
 ### Backend: fix metric formula leak in get_live_config endpoint
