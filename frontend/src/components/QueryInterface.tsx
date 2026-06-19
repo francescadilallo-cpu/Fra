@@ -21,6 +21,7 @@ interface Message {
   entities?: string[]
   timestamp: Date
   retryQuery?: string
+  httpStatus?: number
 }
 
 // ── Query history helpers ──────────────────────────────────────────────────────
@@ -600,6 +601,12 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
   }
 
   if (message.role === 'error') {
+    const navCTA = !IS_DEMO_MODE && message.httpStatus === 409
+      ? { label: 'Connect a data source →', tab: 'sources' }
+      : !IS_DEMO_MODE && message.httpStatus === 503
+        ? { label: 'Run Pipeline →', tab: 'process' }
+        : null
+
     return (
       <div className="flex gap-3 items-start">
         <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -607,6 +614,14 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
         </div>
         <div className="max-w-[85%] bg-red-500/10 border border-red-500/20 rounded-2xl rounded-tl-sm px-4 py-3 space-y-2">
           <p className="text-sm text-red-400">{message.content}</p>
+          {navCTA && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: navCTA.tab } }))}
+              className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors"
+            >
+              {navCTA.label}
+            </button>
+          )}
           {message.retryQuery && onRetry && (
             <button
               onClick={() => onRetry(message.retryQuery!)}
@@ -977,6 +992,7 @@ export default function QueryInterface() {
           role: 'error',
           content: `Error: ${errMsg}`,
           retryQuery: canRetry ? question : undefined,
+          httpStatus: status || undefined,
           timestamp: new Date(),
         },
       ])

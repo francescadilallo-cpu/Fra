@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10q)
+
+### Frontend: actionable navigation CTAs in QueryInterface error bubbles for 409/503
+
+- `frontend/src/components/QueryInterface.tsx`
+
+  When a live user asked a question and got a 409 ("No data sources connected") or 503 ("semantic layer not ready") error, the chat showed an error message with no actionable next step — just the error text and no Retry button (correctly suppressed since retrying would produce the same error). Now:
+  - HTTP 409 error: shows "Connect a data source →" button that navigates to the Sources tab
+  - HTTP 503 error: shows "Run Pipeline →" button that navigates to the Process tab
+  Added `httpStatus?: number` field to the `Message` interface so `MessageBubble` can distinguish these error types without string-matching the error text.
+
+---
+
 ## 2026-06-19 (continued — session 10p)
 
 ### Backend: generic disambiguation hint in LLM system prompt for live users
