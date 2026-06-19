@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10w)
+
+### Frontend: "Try a query" CTA in SemanticDraftView header for live users
+
+- `frontend/src/components/SemanticDraftView.tsx`
+
+  After a live user builds the semantic layer and lands on the Schema Config view, there was no indication of what to do next. Added a "Try a query →" button in the header that only appears for live users (`!IS_DEMO_MODE`) once at least one entity has been discovered. Clicking it fires the `navigate-to-tab` event to take the user directly to the QueryInterface, making the "build → explore" journey explicit.
+
+---
+
 ## 2026-06-19 (continued — session 10v)
 
 ### Comprehensive live/demo audit — all remaining paths verified clean

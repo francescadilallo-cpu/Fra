@@ -75,6 +75,15 @@ export function SemanticDraftView() {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
+          {!IS_DEMO_MODE && draft.entities.length > 0 && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'query' } }))}
+              className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-teal-50 font-medium transition-colors"
+              title="Start querying your data"
+            >
+              Try a query <ArrowRight className="w-3 h-3" />
+            </button>
+          )}
           <button
             onClick={handleExport}
             className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-50 transition-colors"
