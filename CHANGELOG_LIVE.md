@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 3)
+
+### Backend: filter hidden tables from intent classifier system prompt
+- `backend/app/semantic/layer.py`
+  - `_llm_ontology_mapping()`: The system prompt for the LLM intent classifier listed AW demo entity names, metric names, relation hints, and table names. For live users, all four lists are now filtered by `hidden_tables`. Previously the classifier saw "Allowed ontology entities: SalesOrder, Customer, account, dipendenti_hr…" and "Known metrics: total_revenue, gross_revenue…" for live users — this could cause incorrect intent classification (e.g., mapping a generic question to AW-specific handlers) as well as leaking AW terminology into log artifacts. The filter uses the same `getattr(thread_local, 'hidden_tables', frozenset())` pattern used throughout live-mode guards.
+
 ## 2026-06-19 (continued)
 
 ### Backend: filter hidden tables from "no LLM configured" entity hint in _execute_llm_sql

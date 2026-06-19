@@ -873,19 +873,30 @@ class SemanticLayer:
                 )
             return None
 
-        entity_names = (
+        # For live-mode requests, exclude demo-scenario tables so the intent
+        # classifier is not confused by AW entity/metric names it can't query.
+        _hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+
+        _raw_entities = (
             self._ontology.entity_names()
             if self._ontology
-            else self._catalog.list_entities()
+            else (self._catalog.list_entities() if self._catalog else [])
         )
-        metric_names = self._catalog.list_metrics() if self._catalog else []
+        entity_names = [e for e in _raw_entities if e not in _hidden]
+
+        _raw_metrics = self._catalog.list_metrics() if self._catalog else []
+        # Metrics stored as AW-specific formulas referencing hidden tables are
+        # filtered out in _get_semantic_draft() but not here. Use entity names
+        # as a proxy: drop metrics whose name exactly matches a hidden entity.
+        metric_names = [m for m in _raw_metrics if m not in _hidden]
+
         relation_hints: list[str] = []
         if self._ontology:
-            for entity in self._ontology.entity_names():
+            for entity in entity_names:
                 for rel in self._ontology.relations_of(entity):
                     target = rel.get("target")
                     rel_name = rel.get("name")
-                    if target and rel_name:
+                    if target and rel_name and target not in _hidden:
                         relation_hints.append(f"{entity}.{rel_name}->{target}")
 
         # Compact table list for the intent mapper (helps the LLM decide if a
@@ -893,11 +904,14 @@ class SemanticLayer:
         table_names: list[str] = []
         if self._mgr:
             try:
-                table_names = sorted(self._mgr.get_schema_info().keys())[:25]
+                schema = self._mgr.get_schema_info()
+                table_names = sorted(k for k in schema if k not in _hidden)[:25]
             except Exception:
                 pass
         elif self._catalog:
-            table_names = sorted(self._catalog.list_entities())[:25]
+            table_names = sorted(
+                e for e in self._catalog.list_entities() if e not in _hidden
+            )[:25]
 
         system_prompt = (
             "You are an ontology intent mapper for a neuro-symbolic semantic layer. "
