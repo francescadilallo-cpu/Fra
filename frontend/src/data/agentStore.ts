@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { SectorId } from './sectors'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, modeScopedSector } from '../lib/demoMode'
 
 export interface StoredFinding {
   severity: 'info' | 'warning' | 'critical'
@@ -15,7 +15,7 @@ export interface AgentRunSummary {
   findings: StoredFinding[]
 }
 
-const KEY = (sectorId: string) => `agent-runs-${sectorId}`
+const KEY = (sectorId: string) => `agent-runs-${modeScopedSector(sectorId)}`
 const CHANGE_EVENT = 'agent-store-changed'
 
 // Pre-populated demo runs shown in the Dashboard before the user runs any agent.

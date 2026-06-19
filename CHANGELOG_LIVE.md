@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10t)
+
+### Frontend: scope agent-run localStorage key to mode to prevent live↔demo run bleed
+
+- `frontend/src/data/agentStore.ts`
+
+  Agent run summaries were stored under `agent-runs-${sectorId}` (e.g. `agent-runs-manufacturing`) regardless of mode. A live user's agent runs could therefore appear when switching to demo mode on the same browser, and vice versa. Fixed: `KEY` now uses `modeScopedSector(sectorId)` → `agent-runs-manufacturing` for demo, `agent-runs-live-manufacturing` for live.
+
+---
+
 ## 2026-06-19 (continued — session 10s)
 
 ### Frontend: fix custom-agent backend isolation between live and demo users
