@@ -24,6 +24,12 @@ work is traceable across sessions and the git history is easy to reconcile.
   - Pipeline built (`semBuilt`) → "Query Your Data →" (→ query tab)
   Demo mode keeps the original "Start from Connect →" unchanged.
 
+  **Live-data chips in Guided Journey cards**: The journey cards showed AW demo chips (e.g. "193,062 nodes · 313,193 edges") for demo users but nothing for live users. Added live-specific data chips for non-demo workspaces:
+  - Step 1 (Sources): shows `N source(s) connected` when sources are registered
+  - Step 2 (Ontology): shows `N entities · N relationships` when entities exist
+  - Steps 3–4 (KG / Semantic Layer): shows `N nodes · N edges` when pipeline is built
+  These are derived from the same real-time state already loaded (`registeredSources`, `entityCount`, `edgeCount`, `kgNodes`) — no extra API calls.
+
 ---
 
 ## 2026-06-19 (continued — session 10g)

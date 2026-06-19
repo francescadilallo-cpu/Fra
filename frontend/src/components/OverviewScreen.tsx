@@ -301,6 +301,16 @@ export default function OverviewScreen({ onNavigate }: Props) {
                   {isAW && aw && (
                     <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
                   )}
+                  {!IS_DEMO_MODE && (() => {
+                    const srcCount = registeredSources.length || connectors.length
+                    if (step === 1 && srcCount > 0)
+                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{srcCount} source{srcCount !== 1 ? 's' : ''} connected</p>
+                    if (step === 2 && entityCount > 0)
+                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{entityCount} entit{entityCount !== 1 ? 'ies' : 'y'} · {edgeCount} relationship{edgeCount !== 1 ? 's' : ''}</p>
+                    if ((step === 3 || step === 4) && kgNodes > 0)
+                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{kgNodes.toLocaleString()} nodes · {edgeCount.toLocaleString()} edges</p>
+                    return null
+                  })()}
                   <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
                     Open <ArrowRight className="w-3 h-3" />
                   </div>
