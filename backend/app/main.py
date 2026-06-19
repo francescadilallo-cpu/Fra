@@ -495,6 +495,7 @@ _semantic_state: dict[str, Any] = {
     "erp": None,
     "crm": None,
     "hr_pim": None,
+    "built_at": None,
 }
 _semantic_init_lock = threading.RLock()
 
@@ -596,6 +597,7 @@ def _ensure_semantic_loaded() -> None:
                 "erp": erp,
                 "crm": crm,
                 "hr_pim": hr_pim,
+                "built_at": datetime.utcnow().isoformat(),
             }
         )
         # Seed golden query templates on first install (never overwrites existing,
@@ -889,7 +891,7 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
         "context_docs": context_docs,
         "templates": templates,
         "loaded": _semantic_state.get("loaded", False),
-        "built_at": datetime.utcnow().isoformat(),
+        "built_at": _semantic_state.get("built_at"),
     }
 
 

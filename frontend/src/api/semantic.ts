@@ -360,7 +360,7 @@ export interface SemanticDraft {
   context_docs: ContextDoc[]
   templates: QueryTemplate[]
   loaded: boolean
-  built_at: string
+  built_at: string | null
 }
 
 export const buildSemanticLayer = (signal?: AbortSignal, force = false): Promise<SemanticDraft> =>

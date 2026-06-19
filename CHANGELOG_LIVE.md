@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ae)
+
+### Backend/Frontend: fix misleading "Last sync: just now" timestamp for live users
+
+- `backend/app/main.py` — `_semantic_state`, `_ensure_semantic_loaded()`, `_get_semantic_draft()`
+- `frontend/src/api/semantic.ts` — `SemanticDraft.built_at` type
+
+  `_get_semantic_draft()` was always returning `datetime.utcnow().isoformat()` for `built_at`, meaning every call to `/api/semantic/build` or `/api/semantic/draft` reported the current request time as the layer's build time — never the actual time the semantic layer was constructed. This caused the Dashboard "Last sync" widget to show "just now" even for fresh live workspaces that had never been built.
+
+  Fix: `built_at` is now stored in `_semantic_state` when `_ensure_semantic_loaded()` actually finishes building the layer, and `_get_semantic_draft()` reads it back (`None` until first build). The TypeScript `SemanticDraft.built_at` type is widened from `string` to `string | null` to match. Dashboard.tsx already uses `liveConfig?.built_at` with optional chaining, so `null` falls through correctly to show "Never" for unbuilt live workspaces.
+
+---
+
 ## 2026-06-19 (continued — session 10ad)
 
 ### Frontend: ProcessView uses force=true when triggering live rebuild
