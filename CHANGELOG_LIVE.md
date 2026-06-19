@@ -10,6 +10,14 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 5)
+
+### Backend: filter default (AW) context docs from live-mode LLM SQL prompts
+- `backend/app/main.py`
+  - `_sync_context_docs_to_layer()`: Now includes `is_default` in the dict passed to `set_context_docs()`, so the layer can distinguish user-created context docs from seeded demo ones.
+- `backend/app/semantic/layer.py`
+  - `_execute_llm_sql()`: When in live mode (`hidden_tables` non-empty), filters out context docs where `is_default=True` before building the LLM system prompt. Previously, in a hybrid demo+live deployment (where `FRA_SEED_DEMO_SOURCES=true`), the OrionSales business context doc (with AW-specific disambiguation rules, revenue figures, bridge structures, etc.) was injected verbatim into every live user's SQL generation prompt — confusing the LLM with irrelevant AW schema details and potentially leaking AW terminology into LLM reasoning traces.
+
 ## 2026-06-19 (continued — session 4)
 
 ### Backend: defense-in-depth — filter hidden demo tables from payload validator and plan builder

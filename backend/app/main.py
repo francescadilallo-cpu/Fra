@@ -710,7 +710,11 @@ def _sync_context_docs_to_layer() -> None:
 
     registry = get_source_registry()
     docs = [
-        {"title": c.label, "content": c.params.get("content", "")}
+        {
+            "title": c.label,
+            "content": c.params.get("content", ""),
+            "is_default": c.is_default,
+        }
         for c in registry.list()
         if c.connector_type == "context_doc"
     ]

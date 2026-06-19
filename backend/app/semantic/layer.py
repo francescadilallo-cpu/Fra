@@ -1414,8 +1414,16 @@ class SemanticLayer:
             else "No schema available."
         )
 
-        # Append any user-supplied business context notes to the schema prompt
-        _ctx_docs = getattr(self, "_context_docs", []) or []
+        # Append any user-supplied business context notes to the schema prompt.
+        # In live mode, exclude default (AW demo) context docs — they describe
+        # the demo dataset, not the user's own data, so they would confuse the
+        # LLM rather than help it.
+        _all_ctx_docs = getattr(self, "_context_docs", []) or []
+        _ctx_docs = (
+            [d for d in _all_ctx_docs if not d.get("is_default", False)]
+            if _hidden
+            else _all_ctx_docs
+        )
         _ctx_block = ""
         if _ctx_docs:
             _ctx_parts = [
