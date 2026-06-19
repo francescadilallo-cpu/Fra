@@ -10,6 +10,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 4)
+
+### Backend: defense-in-depth — filter hidden demo tables from payload validator and plan builder
+- `backend/app/semantic/layer.py`
+  - `_allowed_catalog_tables()`: Now reads `hidden_tables` from the thread-local and excludes both hidden entity names and their source table names from the result set. Previously, AW source tables (SalesOrderHeader, HumanResources.Employee, etc.) were included in the "allowed" set, meaning the `_validate_llm_payload_security()` guard would pass LLM payload strings that referenced them. Now those tables are excluded, so any LLM payload that sneaks in an AW table reference is blocked at the payload security gate before it ever reaches SQL generation.
+  - `_build_validated_plan()`: Added `_hidden_bp` (read from `hidden_tables` thread-local) and applied it when building `catalog_entities` and `metrics` sets. Without this, an AW entity or metric that slipped past the intent classifier filter would have passed the catalog-membership check in the plan validator. With this change the plan builder validates against only the entities and metrics visible to the current request.
+
 ## 2026-06-19 (continued — session 3)
 
 ### Backend: filter hidden tables from intent classifier system prompt

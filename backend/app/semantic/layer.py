@@ -1068,10 +1068,16 @@ class SemanticLayer:
                     )
 
     def _allowed_catalog_tables(self) -> set[str]:
+        hidden: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
+        hidden_lower = {h.lower() for h in hidden}
         tables: set[str] = set()
         if not self._catalog:
             return tables
         for entity in self._catalog.list_entities():
+            if entity.lower() in hidden_lower:
+                continue
             meta = self._catalog.get_entity(entity)
             if not meta:
                 continue
@@ -1080,7 +1086,9 @@ class SemanticLayer:
                     continue
                 table = src.get("table")
                 if isinstance(table, str) and table.strip():
-                    tables.add(table.strip().lower())
+                    t = table.strip().lower()
+                    if t not in hidden_lower:
+                        tables.add(t)
         return tables
 
     def _iter_string_leaves(
@@ -1138,11 +1146,16 @@ class SemanticLayer:
             "ontology_contract_selected",
         ]
 
+        _hidden_bp: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
         catalog_entities = (
-            set(self._catalog.list_entities()) if self._catalog else set()
+            {e for e in self._catalog.list_entities() if e not in _hidden_bp}
+            if self._catalog
+            else set()
         )
         ontology_entities = (
-            set(self._ontology.entity_names())
+            {e for e in self._ontology.entity_names() if e not in _hidden_bp}
             if self._ontology
             else set(catalog_entities)
         )
@@ -1192,7 +1205,7 @@ class SemanticLayer:
             mapping.metric if mapping.metric is not None else contract.get("metric")
         )
         if metric and self._catalog:
-            metrics = set(self._catalog.list_metrics())
+            metrics = {m for m in self._catalog.list_metrics() if m not in _hidden_bp}
             if metric not in metrics:
                 raise SemanticOntologyViolationError(
                     f"Metadata violation: metric '{metric}' not found in catalog"
