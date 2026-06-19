@@ -569,8 +569,8 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
           </div>
         </div>
 
-        {/* No-sources warning for fresh live workspaces */}
-        {!IS_DEMO_MODE && liveConfig !== null && (liveConfig.connectors?.length ?? 0) === 0 && runState === 'idle' && (
+        {/* No-sources warning for fresh live workspaces — persists across all run states */}
+        {!IS_DEMO_MODE && liveConfig !== null && (liveConfig.connectors?.length ?? 0) === 0 && (
           <div className="mx-6 mt-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
             <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>

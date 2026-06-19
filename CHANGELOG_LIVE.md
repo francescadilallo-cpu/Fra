@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10n)
+
+### Frontend: keep no-sources warning visible in ProcessView during and after pipeline simulation
+
+- `frontend/src/components/ProcessView.tsx`
+
+  The "No data sources connected yet" amber banner in ProcessView was gated by `runState === 'idle'`, causing it to disappear the moment a live user clicked "Run Pipeline". The simulation then completed showing empty log entries while the banner was gone, hiding the explanation for why nothing useful happened. Removed the idle-state guard so the banner persists in all run states (running, done, and idle) for live users with no connected sources.
+
+---
+
 ## 2026-06-19 (continued — session 10m)
 
 ### Frontend: fix misleading "No data source connected" message when backend is offline in QueryInterface
