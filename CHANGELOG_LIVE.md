@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ab)
+
+### Backend: catch-all for unexpected errors in semantic_ask
+
+- `backend/app/main.py` — `semantic_ask()` / `ask_legacy_alias()`
+
+  The `layer.ask()` call was wrapped in try/except for `AmbiguityError`, `SemanticSecurityViolationError`, and `SemanticOntologyViolationError`, but had no catch-all. Any other unexpected exception (LLM client error, SQL parse failure, etc.) would propagate as an unhandled 500 with a raw stack trace visible to the client. Added a final `except Exception` that logs the full traceback server-side and returns a generic sanitized 500 detail to the caller.
+
+---
+
 ## 2026-06-19 (continued — session 10aa)
 
 ### Frontend: ProcessView live build — add 30-second timeout to prevent infinite polling

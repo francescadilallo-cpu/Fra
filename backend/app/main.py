@@ -1882,6 +1882,17 @@ def semantic_ask(
                 "message": "Your question doesn't match the available data model. Try rephrasing or ask about a different entity.",
             },
         )
+    except Exception as exc:
+        logger.error(
+            "Unexpected error in semantic_ask for question %r: %s",
+            question,
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while processing your question. Please try again.",
+        ) from exc
 
 
 # ── KG rebuild (admin) ────────────────────────────────────────────────────────
