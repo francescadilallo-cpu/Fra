@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10aj)
+
+### Frontend: refresh remaining live views (Dashboard storeStatus, AgentsView) after pipeline run
+
+- `frontend/src/components/Dashboard.tsx` — added `getDataStoreStatus` to `pipeline-run-updated` handler
+- `frontend/src/components/AgentsView.tsx` — added `pipeline-run-updated` listener for `liveConfig`/`liveRowCounts`
+
+  Following the `pipeline-run-updated` refresh work (session 10ah/10ai), two more stale data paths were identified:
+  - Dashboard's `storeStatus` (DuckDB row counts, built_at) was not refreshed on pipeline run — now re-fetched alongside `liveConfig` and `draft`
+  - AgentsView's `liveConfig` (used to populate `liveRowCounts` displayed on custom agent cards) was fetched once on mount and never updated — now listens to `pipeline-run-updated` and refreshes immediately
+
+---
+
 ## 2026-06-19 (continued — session 10ai)
 
 ### Frontend: auto-refresh Semantic views after pipeline run

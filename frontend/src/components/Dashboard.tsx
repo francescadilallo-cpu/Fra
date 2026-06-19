@@ -374,6 +374,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       if (!IS_DEMO_MODE) {
         getLiveConfig().catch(() => null).then(config => { if (config) setLiveConfig(config) })
         getDraft().catch(() => null).then(draftData => { if (draftData) setDraft(draftData) })
+        getDataStoreStatus().catch(() => null).then(status => { if (status && !status.error) setStoreStatus(status) })
       }
     }
     refresh()

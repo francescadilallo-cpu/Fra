@@ -1142,6 +1142,12 @@ export default function AgentsView() {
   const customAgentsDefs = useCustomAgents(sectorId)
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   useEffect(() => { if (!IS_DEMO_MODE) getLiveConfig().then(setLiveConfig).catch(() => {}) }, [])
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const refresh = () => getLiveConfig().then(setLiveConfig).catch(() => {})
+    window.addEventListener('pipeline-run-updated', refresh)
+    return () => window.removeEventListener('pipeline-run-updated', refresh)
+  }, [])
   const liveRowCounts = useMemo<Record<string, number>>(() => {
     if (!liveConfig) return {}
     return Object.fromEntries(liveConfig.ontology.nodes.map(n => [n.data.label, n.data.row_count]))
