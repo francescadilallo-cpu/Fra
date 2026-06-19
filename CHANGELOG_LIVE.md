@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ah)
+
+### Frontend: refresh Dashboard activity feed immediately after pipeline run
+
+- `frontend/src/components/Dashboard.tsx` — `pipeline-run-updated` listener
+
+  The Dashboard's `pipeline-run-updated` event handler only refreshed `pipelineLastRun` from localStorage. After a successful "Run Pipeline" build, the activity feed entry "Semantic layer built — N entities, M metrics" and the connector/ontology stats only updated on the next page load. Now the handler also re-fetches `liveConfig` and `draft` from the backend (live mode only) so the activity feed, entity/metric counts, and "built_at" in the activity card update immediately when the pipeline finishes.
+
+---
+
 ## 2026-06-19 (continued — session 10ag)
 
 ### Backend/Frontend: fix built_at in live-config endpoint (same as semantic draft fix)

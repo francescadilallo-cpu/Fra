@@ -369,6 +369,12 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     const refresh = () => {
       const raw = localStorage.getItem(`pipeline-last-run-${modeScopedSector(sectorId)}`)
       setPipelineLastRun(raw ? new Date(raw) : null)
+      // Re-fetch live config and draft so the activity feed and entity count
+      // reflect the newly built semantic layer without requiring a page reload.
+      if (!IS_DEMO_MODE) {
+        getLiveConfig().catch(() => null).then(config => { if (config) setLiveConfig(config) })
+        getDraft().catch(() => null).then(draftData => { if (draftData) setDraft(draftData) })
+      }
     }
     refresh()
     window.addEventListener('pipeline-run-updated', refresh)
