@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10b)
+
+### Backend: apply formula-based metric filter in plan validator
+- `backend/app/semantic/layer.py`
+  - `_build_validated_plan()`: The metric validation at line 1221 used `m not in _hidden_bp` (entity-name filter). Like the intent classifier bug above, AW metric names ("revenue") don't match hidden table names, so they passed as valid plan metrics for live users. Added the same formula-based filter: when `_hidden_bp` is non-empty, fetch `list_metric_objects()` formulas and exclude metrics whose formula references any hidden table before checking if the plan's metric is valid.
+
 ## 2026-06-19 (continued — session 10)
 
 ### Backend: filter AW-seeded catalog metrics from live-mode responses

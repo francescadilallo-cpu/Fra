@@ -1218,7 +1218,24 @@ class SemanticLayer:
             mapping.metric if mapping.metric is not None else contract.get("metric")
         )
         if metric and self._catalog:
-            metrics = {m for m in self._catalog.list_metrics() if m not in _hidden_bp}
+            if _hidden_bp:
+                _hidden_bp_lower = {h.lower() for h in _hidden_bp}
+                _all_metric_objs = {
+                    m.name: m.formula for m in self._catalog.list_metric_objects()
+                }
+                metrics = {
+                    m
+                    for m in self._catalog.list_metrics()
+                    if m not in _hidden_bp
+                    and not any(
+                        h in (_all_metric_objs.get(m) or "").lower()
+                        for h in _hidden_bp_lower
+                    )
+                }
+            else:
+                metrics = {
+                    m for m in self._catalog.list_metrics() if m not in _hidden_bp
+                }
             if metric not in metrics:
                 raise SemanticOntologyViolationError(
                     f"Metadata violation: metric '{metric}' not found in catalog"
