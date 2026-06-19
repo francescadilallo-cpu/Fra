@@ -740,7 +740,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       globalToast(
         isCanceled
           ? 'Build timed out — the backend took too long to respond'
-          : 'Build failed — check backend connection or source configuration',
+          : backendErrorMessage(err) || 'Build failed — check backend connection or source configuration',
         'error',
       )
     }

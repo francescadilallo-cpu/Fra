@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10y)
+
+### Frontend: surface backend error message in build-semantic-layer toast
+
+- `frontend/src/components/DataSourcesView.tsx` — `handleBuildSemanticLayer()`
+
+  The catch block showed a hardcoded generic string ("Build failed — check backend connection or source configuration") even though the backend now emits a sanitized, user-actionable `detail` field on failure. Changed to `backendErrorMessage(err) || <fallback>` so the sanitized backend message (e.g. "Semantic layer build failed — please check your source configuration and try again") reaches the toast when available.
+
+---
+
 ## 2026-06-19 (continued — session 10x)
 
 ### Backend: sanitize errors from `/api/semantic/build` endpoint
