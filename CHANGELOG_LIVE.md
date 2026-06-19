@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10z)
+
+### Frontend: ProcessView "Run Pipeline" triggers a real backend build for live users
+
+- `frontend/src/components/ProcessView.tsx` — `runPipeline()`, `stopPipeline()`
+
+  The "Run Pipeline" button in ProcessView was a pure UI animation for all users — no actual backend call was made for live workspaces, and `pipeline-last-run` was written to localStorage regardless, making the Dashboard show a fake "Pipeline synced" timestamp for live users.
+
+  Fixed: for live users, `runPipeline()` now fires `buildSemanticLayer()` (with an `AbortController`) in parallel with the existing animation. The animation always plays to completion for a smooth UX, but the pipeline is only marked "done" once the real build resolves. If the build fails, the animation is aborted and the sanitized error message from the backend is shown via toast. `stopPipeline()` now also aborts any in-flight build request.
+
+---
+
 ## 2026-06-19 (continued — session 10y)
 
 ### Frontend: surface backend error message in build-semantic-layer toast

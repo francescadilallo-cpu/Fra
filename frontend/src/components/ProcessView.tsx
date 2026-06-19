@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity, ArrowRight } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
-import { getLiveConfig, semanticSources, semanticStatus, type LiveConfig, type SemanticStatus } from '../api/semantic'
+import { getLiveConfig, semanticSources, semanticStatus, buildSemanticLayer, backendErrorMessage, type LiveConfig, type SemanticStatus } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
+import { toast as globalToast } from './Toast'
 import type { NavTab } from '../types/index'
 
 // ── Pipeline types ────────────────────────────────────────────────────────────
@@ -423,6 +424,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
   const intervalRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
   const logsEndRef = useRef<HTMLDivElement>(null)
+  const liveBuildControllerRef = useRef<AbortController | null>(null)
 
   // Auto-scroll logs
   useEffect(() => {
@@ -454,6 +456,8 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
     timeoutsRef.current.forEach(clearTimeout)
     timeoutsRef.current = []
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    liveBuildControllerRef.current?.abort()
+    liveBuildControllerRef.current = null
     setRunState('idle')
     setStatuses(IDLE_STATUSES)
     setElapsed(0)
@@ -464,6 +468,22 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
     setLogs([])
     setRunState('running')
     startTimeRef.current = Date.now()
+
+    // For live workspaces, fire the real build in parallel with the animation.
+    // The animation always runs to TOTAL_MS; the build result gates completion.
+    let liveBuildResult: 'pending' | 'ok' | 'error' = IS_DEMO_MODE ? 'ok' : 'pending'
+    let liveBuildError = ''
+    if (!IS_DEMO_MODE) {
+      const controller = new AbortController()
+      liveBuildControllerRef.current = controller
+      buildSemanticLayer(controller.signal)
+        .then(() => { liveBuildResult = 'ok' })
+        .catch((err: unknown) => {
+          if ((err as { code?: string })?.code === 'ERR_CANCELED') return
+          liveBuildResult = 'error'
+          liveBuildError = backendErrorMessage(err) || 'Build failed — check backend connection or source configuration'
+        })
+    }
 
     // Progress ticker
     intervalRef.current = window.setInterval(() => {
@@ -501,8 +521,19 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       offset += step.durationMs
     }
 
-    // Pipeline done
-    timeoutsRef.current.push(window.setTimeout(() => {
+    // Pipeline done — for live mode, poll until the real build resolves
+    const finalize = () => {
+      if (!IS_DEMO_MODE && liveBuildResult === 'pending') {
+        // Real build still in flight — check again in 500ms
+        timeoutsRef.current.push(window.setTimeout(finalize, 500))
+        return
+      }
+      if (liveBuildResult === 'error') {
+        if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+        stopPipeline()
+        globalToast(liveBuildError, 'error')
+        return
+      }
       const duration = Date.now() - startTimeRef.current
       setLastRunDuration(duration)
       setLastRunAt(new Date().toLocaleTimeString('en-US', { hour12: false }))
@@ -511,7 +542,8 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       setElapsed(TOTAL_MS)
       localStorage.setItem(`pipeline-last-run-${modeScopedSector(sectorId)}`, new Date().toISOString())
       window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
-    }, offset))
+    }
+    timeoutsRef.current.push(window.setTimeout(finalize, offset))
   }
 
   const progressPct = Math.min(100, Math.round((elapsed / TOTAL_MS) * 100))
