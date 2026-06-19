@@ -521,12 +521,18 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       offset += step.durationMs
     }
 
-    // Pipeline done — for live mode, poll until the real build resolves
+    // Pipeline done — for live mode, poll until the real build resolves (max 30 s)
+    const buildDeadline = Date.now() + offset + 30_000
     const finalize = () => {
       if (!IS_DEMO_MODE && liveBuildResult === 'pending') {
-        // Real build still in flight — check again in 500ms
-        timeoutsRef.current.push(window.setTimeout(finalize, 500))
-        return
+        if (Date.now() < buildDeadline) {
+          timeoutsRef.current.push(window.setTimeout(finalize, 500))
+          return
+        }
+        // Timed out waiting for backend — treat as error
+        liveBuildResult = 'error'
+        liveBuildError = 'Build timed out — the backend took too long to respond'
+        liveBuildControllerRef.current?.abort()
       }
       if (liveBuildResult === 'error') {
         if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }

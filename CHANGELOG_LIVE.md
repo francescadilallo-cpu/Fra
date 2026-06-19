@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10aa)
+
+### Frontend: ProcessView live build — add 30-second timeout to prevent infinite polling
+
+- `frontend/src/components/ProcessView.tsx` — `runPipeline()` `finalize` closure
+
+  The poll-for-build-result loop in `finalize()` had no termination condition beyond the build resolving. If the backend hangs indefinitely, the 500ms timer would loop forever. Added a `buildDeadline = Date.now() + offset + 30_000` guard: once the deadline passes without the build resolving, the request is aborted and a "Build timed out" error toast is shown — matching DataSourcesView's behaviour.
+
+---
+
 ## 2026-06-19 (continued — session 10z)
 
 ### Frontend: ProcessView "Run Pipeline" triggers a real backend build for live users
