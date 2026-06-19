@@ -3548,14 +3548,24 @@ def get_live_config(
     all_entities: list[dict] = catalog.get_draft_entities() if catalog else []
     entities = [e for e in all_entities if e["table"] not in hidden]
     metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
-    if hidden and not entities:
-        # Live workspace with no real sources yet: metrics all come from demo.
-        metrics_raw = []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.
     hidden_keys = set(hidden) | {
         e["name"] for e in all_entities if e["table"] in hidden
     }
+    if hidden:
+        # Drop any metric whose formula references a hidden (demo) table.
+        # Use the same regex-token filter as /api/semantic/status so the two
+        # endpoints stay consistent — covers both the no-entities case and the
+        # case where the user has real sources but demo metrics remain in the catalog.
+        import re as _re
+
+        _ref_re = _re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+        metrics_raw = [
+            m
+            for m in metrics_raw
+            if not (set(_ref_re.findall(m.get("formula") or "")) & hidden_keys)
+        ]
 
     relations: list[dict] = []
     if kg:

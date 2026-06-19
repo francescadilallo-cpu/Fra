@@ -10,6 +10,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10c)
+
+### Backend: fix metric formula leak in get_live_config endpoint
+- `backend/app/main.py`
+  - `/api/live-config` (`get_live_config`): The guard at lines 3551-3553 only cleared `metrics_raw` when `hidden and not entities`. For live users who had connected their own sources (entities non-empty), `metrics_raw` still contained AW metrics including Italian labels like "Fatturato (ricavi puri)" and formulas like `SUM(sales_order_header.subtotal_amount)`. These were returned to the frontend and could appear as KPI labels in the Dashboard (line 426: `liveConfig?.metrics.find(m => m.name === 'revenue')?.label`).
+  - Applied the same regex-token formula filter already used by `/api/semantic/status` (lines 828-837): extract identifier tokens from each metric's formula and exclude any metric whose token set intersects the hidden table names. Now consistent across both endpoints regardless of whether the user has real entities yet.
+
 ## 2026-06-19 (continued — session 10b)
 
 ### Backend: apply formula-based metric filter in plan validator
