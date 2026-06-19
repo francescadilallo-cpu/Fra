@@ -885,10 +885,23 @@ class SemanticLayer:
         entity_names = [e for e in _raw_entities if e not in _hidden]
 
         _raw_metrics = self._catalog.list_metrics() if self._catalog else []
-        # Metrics stored as AW-specific formulas referencing hidden tables are
-        # filtered out in _get_semantic_draft() but not here. Use entity names
-        # as a proxy: drop metrics whose name exactly matches a hidden entity.
-        metric_names = [m for m in _raw_metrics if m not in _hidden]
+        # Filter out metrics whose formula references a hidden table (AW demo-specific
+        # formulas like SUM(sales_order_header.subtotal_amount) must not appear in
+        # the live-mode intent classifier prompt).
+        if _hidden and self._catalog:
+            _hidden_lower = {h.lower() for h in _hidden}
+            _metric_objs = {
+                m.name: m.formula for m in self._catalog.list_metric_objects()
+            }
+            metric_names = [
+                m
+                for m in _raw_metrics
+                if not any(
+                    h in (_metric_objs.get(m) or "").lower() for h in _hidden_lower
+                )
+            ]
+        else:
+            metric_names = [m for m in _raw_metrics if m not in _hidden]
 
         relation_hints: list[str] = []
         if self._ontology:
@@ -1917,7 +1930,19 @@ class SemanticLayer:
 
         # Try catalog metrics — user-editable via the metadata catalog
         if self._catalog:
+            _cm_hidden: frozenset[str] = getattr(
+                SemanticLayer._thread_local, "hidden_tables", frozenset()
+            )
+            _cm_hidden_lower = {h.lower() for h in _cm_hidden}
             catalog_metrics = self._catalog.list_metric_objects()
+            if _cm_hidden_lower:
+                # Exclude metrics whose formula references a hidden demo table
+                # (e.g. SUM(sales_order_header.subtotal_amount) must not reach live users).
+                catalog_metrics = [
+                    m
+                    for m in catalog_metrics
+                    if not any(h in (m.formula or "").lower() for h in _cm_hidden_lower)
+                ]
             if catalog_metrics:
                 answer = [
                     {

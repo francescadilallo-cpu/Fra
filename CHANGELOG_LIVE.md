@@ -10,6 +10,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10)
+
+### Backend: filter AW-seeded catalog metrics from live-mode responses
+- `backend/app/semantic/layer.py`
+  - `_llm_ontology_mapping()` (intent classifier): The metric names passed to the LLM were filtered only by exact name match against `hidden_tables`. Since AW metrics are named "revenue", "revenue_with_tax", etc. (not table names), they slipped through. Added formula-based filtering: when in live mode, fetches `list_metric_objects()` and excludes any metric whose formula references a hidden table (e.g. `SUM(sales_order_header.subtotal_amount)` is excluded because "sales_order_header" is a hidden table). Prevents the LLM intent classifier from treating AW metric definitions as available options for live users.
+  - `_q_certified_metrics()`: When `catalog.list_metric_objects()` returned results, it was returning ALL catalog metrics including AW-seeded ones with AW-specific formulas (`SUM(sales_order_header.subtotal_amount)`, `SUM(sales_order_header.total_due)`, etc.) to live users asking "what metrics are available?" Added `_cm_hidden_lower` filter: excludes any catalog metric whose formula contains a hidden table name before building the response. Live users with no user-defined metrics now fall through to the `"No certified metrics configured"` response rather than receiving AW formulas.
+
 ## 2026-06-19 (continued — session 9)
 
 ### Backend: sanitize raw exception messages in AgentExecutionError
