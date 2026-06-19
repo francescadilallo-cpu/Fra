@@ -829,11 +829,12 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
         # Drop any metric whose formula references a hidden (demo) table —
         # not just when the workspace is empty, otherwise demo metrics
         # reappear as soon as the first real source is connected.
-        _ref_re = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
         metrics = [
             m
             for m in metrics
-            if not (set(_ref_re.findall(m.get("formula") or "")) & hidden_keys)
+            if not (
+                set(_FORMULA_TOKEN_RE.findall(m.get("formula") or "")) & hidden_keys
+            )
         ]
 
     relations: list[dict] = []
@@ -2762,11 +2763,12 @@ def patch_draft_metric(
     summary="List global context documents",
 )
 def list_draft_context(
-    _: UserPrincipal = Depends(require_roles("user", "admin")),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     from .connectors.source_registry import get_source_registry
 
     registry = get_source_registry()
+    hidden = _hidden_demo_tables(current_user)
     return [
         {
             "id": c.id,
@@ -2775,7 +2777,7 @@ def list_draft_context(
             "created_at": c.connected_at,
         }
         for c in registry.list()
-        if c.connector_type == "context_doc"
+        if c.connector_type == "context_doc" and (not hidden or not c.is_default)
     ]
 
 
@@ -3161,6 +3163,9 @@ def _auto_layout_positions(
 
 
 _FUNNEL_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# Token extractor for metric formula filtering — identifies SQL identifiers
+# (table names, column names) referenced in a formula string.
+_FORMULA_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 # Column names that typically hold an order/transaction lifecycle state
 _FUNNEL_STATUS_COLUMNS = {
@@ -3558,13 +3563,12 @@ def get_live_config(
         # Use the same regex-token filter as /api/semantic/status so the two
         # endpoints stay consistent — covers both the no-entities case and the
         # case where the user has real sources but demo metrics remain in the catalog.
-        import re as _re
-
-        _ref_re = _re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
         metrics_raw = [
             m
             for m in metrics_raw
-            if not (set(_ref_re.findall(m.get("formula") or "")) & hidden_keys)
+            if not (
+                set(_FORMULA_TOKEN_RE.findall(m.get("formula") or "")) & hidden_keys
+            )
         ]
 
     relations: list[dict] = []

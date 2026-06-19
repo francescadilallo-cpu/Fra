@@ -10,6 +10,13 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10e)
+
+### Backend: filter demo context doc from GET /api/semantic/draft/context; deduplicate formula regex
+- `backend/app/main.py`
+  - `list_draft_context()` (`GET /api/semantic/draft/context`): Added `_hidden_demo_tables(current_user)` filter — live-mode users no longer see the AW "OrionSales — Business Context" doc from this endpoint (same guard applied in `_get_semantic_draft()`). Changed `_` parameter to `current_user` so the mode is accessible.
+  - Extracted `_FORMULA_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")` as a module-level constant (alongside `_FUNNEL_IDENT_RE`). Replaced two local `re.compile(...)` calls inside `_get_semantic_draft()` (line 832) and `get_live_config()` (line 3564) with the shared constant to avoid recompiling the pattern on every request.
+
 ## 2026-06-19 (continued — session 10d)
 
 ### Backend: hide demo context doc from /api/semantic/draft for live users
