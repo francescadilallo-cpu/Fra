@@ -10,6 +10,12 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued)
+
+### Backend: filter hidden tables from "no LLM configured" entity hint in _execute_llm_sql
+- `backend/app/semantic/layer.py`
+  - `_execute_llm_sql()`: When no LLM provider is configured, the method builds a hint like "Try asking about: account, sales_order_header…" using `self._catalog.list_entities()`. That call returns ALL entity names including AW demo entities. Fixed to filter by `hidden_tables` (same thread-local pattern used throughout the live-mode guards) before building the hint string.
+
 ## 2026-06-19
 
 ### Backend: fix AW entity names leaking into live-mode "entity not modeled" responses

@@ -1351,10 +1351,13 @@ class SemanticLayer:
         """
         provider = _llm_intent_provider()
         if provider is None:
-            # Build the hint from actual catalog entities rather than hardcoding domain names.
-            _hint_tables = (
-                sorted(self._catalog.list_entities())[:6] if self._catalog else []
-            )
+            # Build the hint from catalog entities visible to this request.
+            _hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+            if self._catalog:
+                _all = self._catalog.list_entities()
+                _hint_tables = sorted(e for e in _all if e not in _hidden)[:6]
+            else:
+                _hint_tables = []
             _hint = (
                 f" Try asking about: {', '.join(_hint_tables)}." if _hint_tables else ""
             )
