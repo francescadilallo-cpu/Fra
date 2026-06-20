@@ -1338,15 +1338,30 @@ class DuckDBSourceManager:
                 my_conn.close()
         except ImportError:
             # Fallback: DuckDB mysql_scanner extension (no Python driver needed)
-            conn.execute("INSTALL mysql_scanner; LOAD mysql_scanner;")
-            safe_dsn = dsn.replace("'", "''")
-            conn.execute(f"ATTACH '{safe_dsn}' AS _mysql_src (TYPE MYSQL, READ_ONLY)")
+            try:
+                conn.execute("INSTALL mysql_scanner; LOAD mysql_scanner;")
+                safe_dsn = dsn.replace("'", "''")
+                conn.execute(
+                    f"ATTACH '{safe_dsn}' AS _mysql_src (TYPE MYSQL, READ_ONLY)"
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot connect to MySQL: {exc} — "
+                    "check DSN, host reachability, port, and credentials."
+                ) from exc
             for table in tables:
                 safe_table = table.replace('"', '""')
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-                    f'SELECT * FROM _mysql_src."{safe_table}"'
-                )
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                        f'SELECT * FROM _mysql_src."{safe_table}"'
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Table '{table}' not found in MySQL database — "
+                        f"check that the table exists and the DSN is correct. "
+                        f"(MySQL: {exc})"
+                    ) from exc
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
