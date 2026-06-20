@@ -79,8 +79,10 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   },
   mysql: {
     connector_type: 'mysql',
-    params_schema: [],
-    waitlist_only: true,
+    params_schema: [
+      { key: 'dsn', label: 'Connection string', type: 'text', placeholder: 'mysql://user:pass@host:3306/db', required: true },
+      { key: 'tables', label: 'Tables (comma-separated)', type: 'text', placeholder: 'orders,customers', required: true },
+    ],
   },
   'google-sheets': {
     connector_type: 'csv',

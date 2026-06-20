@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10ay)
+
+### Feature: MySQL data source connector (live ingestion)
+
+- `backend/app/connectors/source_registry.py` — Added `"mysql"` to `IMPLEMENTED_CONNECTOR_TYPES`
+- `backend/app/connectors/duckdb_source_manager.py` — Added `_ingest_mysql()` method + dispatcher
+- `frontend/src/api/sources.ts` — Restored MySQL credential form (removed `waitlist_only`, added params_schema)
+
+  **What**: Full MySQL ingestion support via the standard `_stream_cursor_into_table()` pipeline.
+  Primary path uses `pymysql.cursors.SSDictCursor` (server-side streaming) for memory-efficient row streaming. Fallback path uses DuckDB's `mysql_scanner` extension if pymysql is unavailable.
+  Respects the `FRA_PG_INGEST_LIMIT` env var (default 100 k rows). Over-limit tables are truncated with a warning. Multiple tables per source supported. Frontend shows the DSN + tables credential form instead of the waitlist panel.
+
+---
+
 ## 2026-06-20 (session 10ax)
 
 ### Fix: CSV column mapping allows manual override for unmatched columns

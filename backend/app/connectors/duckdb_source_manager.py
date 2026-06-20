@@ -758,6 +758,8 @@ class DuckDBSourceManager:
             self._ingest_sqlite_generic(conn, cfg)
         elif ctype == "postgresql":
             self._ingest_postgresql(conn, cfg)
+        elif ctype == "mysql":
+            self._ingest_mysql(conn, cfg)
         elif ctype == "parquet":
             self._ingest_parquet(conn, cfg)
         elif ctype == "context_doc":
@@ -1151,6 +1153,83 @@ class DuckDBSourceManager:
                 logger.info("PG   %-25s %7d rows", table, n)
                 if table not in cfg.target_tables:
                     cfg.target_tables.append(table)
+
+    def _ingest_mysql(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
+        dsn = cfg.params.get("dsn", "")
+        tables: list[str] = cfg.params.get("tables", [])
+        if not dsn:
+            raise ValueError(
+                "MySQL source requires 'dsn' param (mysql://user:pass@host:3306/db)"
+            )
+        if not tables:
+            raise ValueError(
+                "MySQL source requires 'tables' param (list of table names)"
+            )
+        try:
+            import urllib.parse
+
+            import pymysql
+            import pymysql.cursors
+
+            parsed = urllib.parse.urlparse(dsn)
+            my_conn = pymysql.connect(
+                host=parsed.hostname or "localhost",
+                port=parsed.port or 3306,
+                user=parsed.username,
+                password=parsed.password or "",
+                database=(parsed.path or "").lstrip("/"),
+                connect_timeout=10,
+                cursorclass=pymysql.cursors.SSDictCursor,  # server-side streaming
+            )
+            limit = _pg_ingest_limit()
+            try:
+                for table in tables:
+                    safe_bt = table.replace("`", "``")
+                    safe_dbt = table.replace('"', '""')
+                    with my_conn.cursor() as cur:
+                        if limit > 0:
+                            cur.execute(f"SELECT * FROM `{safe_bt}` LIMIT {limit + 1}")
+                        else:
+                            cur.execute(f"SELECT * FROM `{safe_bt}`")
+                        # pymysql SSDictCursor supports fetchmany for chunked streaming
+                        n, truncated = self._stream_cursor_into_table(
+                            conn, cur, safe_dbt, row_limit=limit
+                        )
+                    if truncated:
+                        logger.warning(
+                            "MySQL %-25s TRUNCATED at %d rows — raise "
+                            "FRA_PG_INGEST_LIMIT (or set 0) to ingest full table.",
+                            table,
+                            limit,
+                        )
+                    self._row_counts[f"{cfg.id}.{table}"] = n
+                    logger.info("MySQL %-25s %7d rows", table, n)
+                    if table not in cfg.target_tables:
+                        cfg.target_tables.append(table)
+            finally:
+                my_conn.close()
+        except ImportError:
+            # Fallback: DuckDB mysql_scanner extension (no Python driver needed)
+            conn.execute("INSTALL mysql_scanner; LOAD mysql_scanner;")
+            safe_dsn = dsn.replace("'", "''")
+            conn.execute(f"ATTACH '{safe_dsn}' AS _mysql_src (TYPE MYSQL, READ_ONLY)")
+            for table in tables:
+                safe_table = table.replace('"', '""')
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                    f'SELECT * FROM _mysql_src."{safe_table}"'
+                )
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
+                n = _row[0] if _row is not None else 0
+                self._row_counts[f"{cfg.id}.{table}"] = n
+                logger.info("MySQL %-25s %7d rows", table, n)
+                if table not in cfg.target_tables:
+                    cfg.target_tables.append(table)
+        except pymysql.OperationalError as exc:  # type: ignore[possibly-undefined]
+            raise ValueError(
+                f"Cannot connect to MySQL: {exc} — "
+                "check DSN, host reachability, port, and credentials."
+            ) from exc
 
     def _ingest_parquet(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
