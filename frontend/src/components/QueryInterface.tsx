@@ -881,12 +881,17 @@ export default function QueryInterface() {
   useEffect(() => { checkBackendOnce() }, [checkBackendOnce])
 
   useEffect(() => {
-    listExampleQuestions()
+    const load = () => listExampleQuestions()
       .then(q => { setExampleQuestions(q); setQuestionsLoaded(true) })
       .catch(() => {
         if (IS_DEMO_MODE) setExampleQuestions(DEMO_EXAMPLE_QUESTIONS)
         setQuestionsLoaded(true)
       })
+    load()
+    if (!IS_DEMO_MODE) {
+      window.addEventListener('pipeline-run-updated', load)
+      return () => window.removeEventListener('pipeline-run-updated', load)
+    }
   }, [])
 
   // Refresh creds from localStorage when panel closes

@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10an)
+
+### Frontend: refresh QueryInterface example questions on pipeline-run-updated
+
+- `frontend/src/components/QueryInterface.tsx` — `listExampleQuestions()` useEffect
+
+  `listExampleQuestions()` returns questions derived from semantic layer templates, which are auto-generated from the schema on each build. After a pipeline run, new templates and entity-based questions become available, but the QueryInterface only fetched them on mount — leaving the suggestion panel stale. Now re-fetches on `pipeline-run-updated` (live mode only) so fresh questions appear immediately after a build.
+
+---
+
 ## 2026-06-19 (continued — session 10am)
 
 ### Frontend: add pipeline-run-updated listeners to MappingView (definitions + ambiguities)
