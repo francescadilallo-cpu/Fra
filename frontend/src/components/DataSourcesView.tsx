@@ -11,7 +11,7 @@ import { parseCSV, suggestMappings, SAMPLE_CSV_BY_SECTOR, type MappingSuggestion
 import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import {
   listSources, addSource, removeSource, syncSource,
-  getConnectorBackendDef,
+  getConnectorBackendDef, CONNECTOR_BACKEND_MAP,
   type BackendSource, type ParamField,
 } from '../api/sources'
 import { Mail } from 'lucide-react'
@@ -309,7 +309,12 @@ function ConnectorLogo({ c, size = 'md' }: { c: ConnectorDef; size?: 'sm' | 'md'
 // ── Connected sources panel ───────────────────────────────────────────────────
 
 function connectorById(id: string): ConnectorDef | undefined {
-  return CONNECTORS.find(c => c.id === id)
+  // Direct id match
+  const direct = CONNECTORS.find(c => c.id === id)
+  if (direct) return direct
+  // Reverse lookup: find which UI connector maps to this backend connector_type
+  const uiId = Object.entries(CONNECTOR_BACKEND_MAP).find(([, def]) => def.connector_type === id)?.[0]
+  return uiId ? CONNECTORS.find(c => c.id === uiId) : undefined
 }
 
 function relativeTime(iso: string | null): string {
