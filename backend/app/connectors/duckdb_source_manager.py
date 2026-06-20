@@ -1082,14 +1082,28 @@ class DuckDBSourceManager:
             ) from exc
         src.row_factory = _sqlite3.Row
         try:
-            tables = [
+            all_tables = [
                 r[0]
                 for r in src.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
                 ).fetchall()
             ]
             if table_filter:
-                tables = [t for t in tables if t in table_filter]
+                tables = [t for t in all_tables if t in table_filter]
+                missing = [t for t in table_filter if t not in all_tables]
+                if missing:
+                    available = ", ".join(all_tables) or "none"
+                    raise ValueError(
+                        f"Table(s) not found in '{path.name}': {', '.join(missing)}. "
+                        f"Available tables: {available}"
+                    )
+            else:
+                tables = all_tables
+            if not tables:
+                raise ValueError(
+                    f"SQLite file '{path.name}' contains no user tables — "
+                    "the file may be empty or only contain internal SQLite system tables."
+                )
             for table in tables:
                 safe_id = table.replace('"', '""')  # escape SQL identifier
                 cur = src.execute(f'SELECT * FROM "{safe_id}"')
