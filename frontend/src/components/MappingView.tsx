@@ -61,12 +61,22 @@ function SemanticDefinitionsPanel() {
   const [newForm, setNewForm] = useState({ entity: '', field: '', definition: '' })
   const [showAdd, setShowAdd] = useState(false)
 
-  useEffect(() => {
+  const loadDefs = () => {
     api.get<{ definitions: SemanticDef[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.definitions?.length) setDefs(r.data.definitions) })
       .catch(() => { if (IS_DEMO_MODE) setDefs(DEMO_DEFS) })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => {
+    loadDefs()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    window.addEventListener('pipeline-run-updated', loadDefs)
+    return () => window.removeEventListener('pipeline-run-updated', loadDefs)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEdit(i: number) { setEditing(i); setEditText(defs[i].definition) }
   function saveEdit(i: number) {
@@ -182,12 +192,22 @@ function AmbiguityLogPanel() {
   const [ambiguities, setAmbiguities] = useState<Ambiguity[]>(() => IS_DEMO_MODE ? DEMO_AMBIGUITIES : [])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const loadAmbiguities = () => {
     api.get<{ ambiguities: Ambiguity[] }>('/api/semantic/mapping-defs')
       .then(r => { if (r.data.ambiguities?.length) setAmbiguities(r.data.ambiguities) })
       .catch(() => { if (IS_DEMO_MODE) setAmbiguities(DEMO_AMBIGUITIES) })
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => {
+    loadAmbiguities()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    window.addEventListener('pipeline-run-updated', loadAmbiguities)
+    return () => window.removeEventListener('pipeline-run-updated', loadAmbiguities)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div className="flex-1 px-8 py-12 flex items-center justify-center gap-2 text-slate-400">

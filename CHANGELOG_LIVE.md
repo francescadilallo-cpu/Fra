@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10am)
+
+### Frontend: add pipeline-run-updated listeners to MappingView (definitions + ambiguities)
+
+- `frontend/src/components/MappingView.tsx` — `SemanticDefinitionsPanel`, `AmbiguityLogPanel`
+
+  Both sub-components fetched `/api/semantic/mapping-defs` once on mount and never refreshed. After a pipeline run, semantic definitions and ambiguity entries auto-generated from the new schema would only appear after a page reload. Both panels now listen to `pipeline-run-updated` (live mode only) and reload their data immediately.
+
+---
+
 ## 2026-06-19 (continued — session 10al)
 
 ### Backend: sanitize YAML parse error detail in ontology validation endpoint
