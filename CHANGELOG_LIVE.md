@@ -45,6 +45,32 @@ work is traceable across sessions and the git history is easy to reconcile.
 - `frontend/src/components/OntologyBuilder.tsx`
   - Fix pre-existing TypeScript unused parameter warning (`sectorId` → `_sectorId` in `buildAddClassIntent`)
 
+- `frontend/src/components/OntologyGraph.tsx`
+  - Sub-tab "Ontology Graph" → "Entity Graph"
+
+- `frontend/src/components/SemanticLayerView.tsx`
+  - Section nav descriptions: "Semantic concepts" → "Business entities", "Cross-system joins" → "Cross-source connections", "Disambiguation" → "Conflict rules"
+  - Sub-tab "Semantic Definitions" → "Field Definitions"
+  - Sidebar heading "Semantic Layer" → "Data Model"
+  - Section description "Semantic layer status..." → "Data model status..."
+  - Mappings table headers: "Ontology Class" → "Entity", "Ontology Property" → "Entity Field"
+  - Setup guide step descriptions simplified: "Connect semantic names to physical tables" → "Map entity names to your data tables", "Resolve terms that map to multiple fields" → "Clarify terms with conflicting definitions"
+
+- `frontend/src/components/ProcessView.tsx` (additional)
+  - "Semantic Layer Pipeline" → "Setup Pipeline" (pipeline panel heading)
+  - "KG Nodes Created" → "Entities Indexed"; "KG Edges Indexed" → "Relationships"
+  - Sub-labels: "ontology classes" → "entity types"; "instances in Knowledge Graph" → "entity instances indexed"
+  - "Semantic layer ready" → "Data model ready"; "View Ontology" → "View Data Model"
+
+- `frontend/src/components/DataSourcesView.tsx` (additional)
+  - Build step "Building knowledge graph…" → "Building data model…"
+
+- `frontend/src/components/SemanticDraftView.tsx` (additional)
+  - "The AI uses this knowledge graph..." → "The AI uses this data model..."
+
+- `frontend/src/components/ComplianceView.tsx`
+  - "run the setup wizard" → "run setup"
+
 ---
 
 ## 2026-06-20 (session cont.)
