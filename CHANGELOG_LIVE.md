@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10as)
+
+### Backend: refresh built_at timestamp after each catalog/KG rebuild
+
+- `backend/app/main.py` — `_refresh_catalog_and_kg_after_rebuild()`
+
+  **Bug**: `_semantic_state["built_at"]` was set once in `_ensure_semantic_loaded()` (initial process startup) and never updated. After a source add, remove, or sync — which triggers `mgr.rebuild()` then `_refresh_catalog_and_kg_after_rebuild()` — the catalog and KG were updated in-memory but `built_at` remained at the original process-start time. The Dashboard activity feed and SemanticLayerView's `draft.built_at` therefore showed the startup timestamp rather than the time of the most recent data change.
+
+  **Fix**: At the end of `_refresh_catalog_and_kg_after_rebuild()`, after catalog, KG, and cache invalidation steps complete, set `_semantic_state["built_at"] = datetime.utcnow().isoformat()` when `loaded=True`. This makes the timestamp reflect the most recent actual rebuild, so live users see accurate "Semantic layer built" activity timestamps.
+
+---
+
 ## 2026-06-20 (session 10ar)
 
 ### Fix: OntologyBuilder canvas stays empty for live users until sector switch

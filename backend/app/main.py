@@ -702,6 +702,11 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
         except Exception:
             pass
 
+    # Update the build timestamp so the dashboard shows when the most recent
+    # data change happened, not just when the process first started up.
+    if _semantic_state.get("loaded"):
+        _semantic_state["built_at"] = datetime.utcnow().isoformat()
+
 
 def _sync_context_docs_to_layer() -> None:
     """Push context_doc registry entries into the semantic layer LLM prompt."""
