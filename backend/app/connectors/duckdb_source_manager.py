@@ -1243,14 +1243,29 @@ class DuckDBSourceManager:
         except ImportError:
             # Fallback: try DuckDB postgres_scanner
             safe_schema = schema.replace('"', '""')
-            conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
-            safe_dsn = dsn.replace("'", "''")
-            conn.execute(f"ATTACH '{safe_dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
+            try:
+                conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
+                safe_dsn = dsn.replace("'", "''")
+                conn.execute(
+                    f"ATTACH '{safe_dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)"
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot connect to PostgreSQL: {exc} — "
+                    "check DSN, host reachability, port, and credentials."
+                ) from exc
             for table in tables:
                 safe_table = table.replace('"', '""')
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
-                )
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Table '{table}' not found in schema '{schema}' — "
+                        f"check that the table exists and the schema name is correct. "
+                        f"(PostgreSQL: {exc})"
+                    ) from exc
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
