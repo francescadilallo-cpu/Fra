@@ -2601,7 +2601,7 @@ export default function SemanticLayerView() {
         {section === 'playground' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Play} title="Query Playground"
-              desc="Type a natural language question — see how the semantic layer resolves it into metrics, dimensions, segments, and SQL"
+              desc="Type a natural language question — see how it resolves into metrics, dimensions, segments, and SQL"
             />
 
             {/* Info banner */}
@@ -2783,7 +2783,7 @@ export default function SemanticLayerView() {
         {section === 'sources' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Database} title="Data Sources"
-              desc="Register every physical data system that feeds your semantic layer"
+              desc="Register every data system you want to query and analyse"
               action={
                 <button onClick={() => setShowAddSource(v => !v)}
                     className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
@@ -3229,7 +3229,7 @@ export default function SemanticLayerView() {
         {section === 'definitions' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Tag} title="Field Definitions"
-              desc="Semantic glossary, field-to-ontology mappings, and ambiguity resolutions"
+              desc="Business terms, field definitions, and ambiguity resolutions"
               action={editCount > 0 ? (
                 <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-3 py-1 font-medium">
                   {editCount} edit{editCount !== 1 ? 's' : ''} saved

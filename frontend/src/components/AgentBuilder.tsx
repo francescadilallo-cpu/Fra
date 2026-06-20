@@ -319,7 +319,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Create New Agent</h2>
-              <p className="text-xs text-slate-500">Define an executive agent on your semantic layer</p>
+              <p className="text-xs text-slate-500">Define an agent that reads from your connected data</p>
             </div>
           </div>
           <button
@@ -435,7 +435,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
               Reads from (select entities)
             </label>
             <p className="text-xs text-slate-400 mb-3">
-              Which ontology entities will this agent access?
+              Which data entities will this agent read from?
             </p>
             {availableEntities.length === 0 ? (
               <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run the pipeline, or build entities manually in the Ontology Builder.</p>

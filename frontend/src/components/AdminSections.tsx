@@ -43,8 +43,8 @@ const ROLE_COLORS: Record<UserRole, string> = {
 
 const ROLE_DESC: Record<UserRole, string> = {
   admin:  'Full access · manage users, tokens, governance',
-  editor: 'Edit ontology, run agents, generate reports',
-  viewer: 'Read-only access to dashboards and ontology',
+  editor: 'Edit data model, run agents, generate reports',
+  viewer: 'Read-only access to dashboards and data model',
 }
 
 const DEMO_USERS: User[] = [
@@ -364,8 +364,8 @@ interface ApiToken {
 }
 
 const TOKEN_SCOPES = [
-  { key: 'read:ontology',  label: 'Read ontology' },
-  { key: 'write:ontology', label: 'Edit ontology' },
+  { key: 'read:ontology',  label: 'View data model' },
+  { key: 'write:ontology', label: 'Edit data model' },
   { key: 'read:agents',    label: 'Read agent state' },
   { key: 'write:agents',   label: 'Run/control agents' },
   { key: 'read:metrics',   label: 'Read metrics & KPIs' },

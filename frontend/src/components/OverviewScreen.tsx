@@ -53,7 +53,7 @@ const JOURNEY: {
   {
     step: 6, section: 'ACT',
     tab: 'agents',       icon: BotMessageSquare, title: 'Agents',
-    desc: 'Automated agents running on the semantic layer: anomaly detection, trend analysis, alerts.',
+    desc: 'Automated agents that monitor your data: anomaly detection, trend analysis, alerts.',
     aw: '4 AW agents: Sales Performance · CRM Dedup · Revenue Disambiguator · Bridge Validator',
   },
 ]
@@ -233,8 +233,8 @@ export default function OverviewScreen({ onNavigate }: Props) {
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run pipeline` : 'Connect your first source') },
-                  { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
-                  { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
+                  { label: 'Entities',          value: String(entityCount),             sub: `${edgeCount} relationships` },
+                  { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} knowledge nodes` : 'Run setup to build' },
                 ].map(s => (
                   <div key={s.label} className="border border-slate-200 rounded-lg px-3 py-2.5 bg-white">
                     <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
@@ -439,8 +439,8 @@ export default function OverviewScreen({ onNavigate }: Props) {
                   ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run pipeline to activate`
                   : 'Connect your data sources — databases, files, SaaS connectors',
               semBuilt
-                ? `Semantic layer built — ${kgNodes.toLocaleString('en-US')} knowledge graph nodes`
-                : 'Build the semantic layer — entities, relations, and metrics auto-extracted',
+                ? `Data model ready — ${kgNodes.toLocaleString('en-US')} knowledge nodes`
+                : 'Build your data model — entities, relationships, and metrics auto-discovered',
               'Natural language Query AI — ask questions in plain English',
               'Define agents to monitor data quality and business KPIs',
             ]).map(item => (

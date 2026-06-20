@@ -841,7 +841,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
             {building ? (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-teal-800 mb-3">Building semantic layer…</p>
+                <p className="text-xs font-semibold text-teal-800 mb-3">Building your data model…</p>
                 {BUILD_STEPS.map((step, i) => {
                   const stepNum = i + 1
                   const done = buildStep > stepNum || buildStep === 4
@@ -862,7 +862,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             ) : (
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
+                  <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
                   <p className="text-xs text-teal-700 mt-0.5">
                     {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered from your data
                   </p>
@@ -871,7 +871,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                   onClick={handleBuildSemanticLayer}
                   className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm"
                 >
-                  <Zap className="w-4 h-4" /> Build Semantic Layer
+                  <Zap className="w-4 h-4" /> Build Data Model
                 </button>
               </div>
             )}

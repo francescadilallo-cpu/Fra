@@ -740,7 +740,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-lg p-8 text-center max-w-sm pointer-events-auto">
                   <GitBranch className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <p className="text-sm font-semibold text-slate-600 mb-1">No ontology built yet</p>
-                  <p className="text-xs text-slate-400 mb-4">Connect a data source and build your semantic layer — entities and relationships will appear here automatically.</p>
+                  <p className="text-xs text-slate-400 mb-4">Connect a data source and run setup — entities and relationships will appear here automatically.</p>
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={() => onNavigate?.('sources')}
