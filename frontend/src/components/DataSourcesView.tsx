@@ -203,9 +203,9 @@ function CredentialModal({
           /* Waitlist panel — no credential form, no registration to the backend */
           <div className="px-5 py-6 space-y-4">
             <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 text-center space-y-2">
-              <p className="text-sm font-semibold text-amber-800">Direct API ingestion in progress</p>
+              <p className="text-sm font-semibold text-amber-800">Native API connector in progress</p>
               <p className="text-xs text-amber-700 leading-relaxed">
-                We're building the native {connector.name} connector. In the meantime, export your data as a CSV and use the <span className="font-semibold">CSV upload</span> section below — your data will be fully semantic-layer indexed.
+                We're building the native {connector.name} connector. In the meantime, export your data as a CSV and use the <span className="font-semibold">CSV upload</span> section below — your data will be fully queryable.
               </p>
             </div>
             {notified ? (
@@ -341,7 +341,7 @@ function ConnectedSourcesPanel({
       <div className="bg-white border border-slate-200 border-dashed rounded-xl p-8 text-center">
         <Database className="w-8 h-8 text-slate-300 mx-auto mb-2" />
         <p className="text-sm text-slate-500 font-medium">{IS_DEMO_MODE ? 'No additional sources connected' : 'No sources connected yet'}</p>
-        <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file below to start ingesting.</p>
+        <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file below to get started.</p>
       </div>
     )
   }
@@ -366,7 +366,7 @@ function ConnectedSourcesPanel({
                   ? `${s.row_count.toLocaleString('en-US')} records · synced ${relativeTime(s.last_sync_at)}`
                   : s.last_sync_at
                     ? `synced ${relativeTime(s.last_sync_at)} · 0 records`
-                    : s.status === 'pending' ? 'Run the pipeline to ingest data' : 'Not yet synced'}
+                    : s.status === 'pending' ? 'Run setup to load data' : 'Not yet synced'}
               </p>
               {s.error_msg && (
                 <p className="text-[10px] text-red-500 mt-0.5 line-clamp-3" title={s.error_msg}>{s.error_msg}</p>
@@ -537,7 +537,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
                   <td className="px-3 py-2">
                     <button
                       onClick={() => onToggle(s.column)}
-                      title={s.confidence === 'none' ? 'No ontology match found — click to include anyway' : undefined}
+                      title={s.confidence === 'none' ? 'No entity match found — click to include anyway' : undefined}
                       className={`w-6 h-6 rounded flex items-center justify-center transition-all ${accepted ? 'bg-teal-600 text-white' : s.confidence === 'none' ? 'border border-dashed border-slate-300 text-slate-300 hover:border-slate-400 hover:text-slate-400' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                       {accepted && <Check className="w-3.5 h-3.5" />}
                     </button>
@@ -761,7 +761,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     'all', 'italian', 'erp', 'accounting', 'ecommerce', 'crm', 'payments', 'database', 'cloud', 'logistics',
   ]
 
-  const BUILD_STEPS = ['Scanning data sources…', 'Building knowledge graph…', 'Extracting metrics & relations…']
+  const BUILD_STEPS = ['Scanning data sources…', 'Building data model…', 'Extracting metrics & relations…']
 
   async function handleBuildSemanticLayer() {
     setBuilding(true)
@@ -774,7 +774,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       await buildSemanticLayer(controller.signal)
       clearTimeout(t2); clearTimeout(t3); clearTimeout(timeoutId)
       setBuildStep(4)
-      globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
+      globalToast(`Your data is ready — ${sources.length} source${sources.length !== 1 ? 's' : ''} connected`, 'success')
       window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
       navTimerRef.current = setTimeout(() => {
         setBuilding(false); setBuildStep(0)
@@ -799,7 +799,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {workspaceLabel(sector.name)} · Connect business systems or upload files — data ingests into DuckDB and becomes queryable instantly
+          {workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly
         </p>
       </div>
 
@@ -841,7 +841,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
             {building ? (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-teal-800 mb-3">Building semantic layer…</p>
+                <p className="text-xs font-semibold text-teal-800 mb-3">Building your data model…</p>
                 {BUILD_STEPS.map((step, i) => {
                   const stepNum = i + 1
                   const done = buildStep > stepNum || buildStep === 4
@@ -862,16 +862,16 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             ) : (
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
+                  <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
                   <p className="text-xs text-teal-700 mt-0.5">
-                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relations, and metrics auto-extracted from schema
+                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered from your data
                   </p>
                 </div>
                 <button
                   onClick={handleBuildSemanticLayer}
                   className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm"
                 >
-                  <Zap className="w-4 h-4" /> Build Semantic Layer
+                  <Zap className="w-4 h-4" /> Build Data Model
                 </button>
               </div>
             )}
@@ -927,7 +927,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="flex items-center gap-2 mb-3">
             <Upload className="w-4 h-4 text-slate-500" />
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Upload File</h2>
-            <span className="text-xs text-slate-400">· auto-mapping to your ontology</span>
+            <span className="text-xs text-slate-400">· fields auto-matched to your data model</span>
           </div>
           <UploadPanel
             upload={upload} onUpload={handleFile} onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
@@ -952,7 +952,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="bg-white rounded-xl shadow-2xl px-6 py-5 flex items-center gap-3">
             <Loader2 className="w-5 h-5 text-teal-500 animate-spin" />
             <div>
-              <p className="text-sm font-semibold text-slate-900">Ingesting to DuckDB…</p>
+              <p className="text-sm font-semibold text-slate-900">Processing your data…</p>
               <p className="text-xs text-slate-500 mt-0.5">Mapping fields · validating · indexing</p>
             </div>
           </div>

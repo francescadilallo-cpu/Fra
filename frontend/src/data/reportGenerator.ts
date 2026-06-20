@@ -59,8 +59,8 @@ function recommendations(runs: AgentRunSummary[], sectorId: SectorId): string[] 
       recs.push('High-risk profiles (score > 75) should be reviewed manually before disbursement approval.')
     }
   }
-  recs.push('Run the semantic layer pipeline weekly to maintain data freshness across all connected sources.')
-  recs.push('Review ontology mappings after any ERP schema change to prevent silent field mismatches.')
+  recs.push('Run the data pipeline weekly to maintain data freshness across all connected sources.')
+  recs.push('Review field mappings after any schema change to prevent silent field mismatches.')
   return recs
 }
 
@@ -241,7 +241,7 @@ export function generateHtmlReport(input: ReportInput): string {
   ${funnel.length > 0 ? `
   <div class="section">
     <h2>2. Key Performance Indicators</h2>
-    <p class="section-sub">Derived from the semantic layer — ${esc(sector.kpiLabels.quotes)} → ${esc(sector.kpiLabels.orders)}</p>
+    <p class="section-sub">Derived from your data model — ${esc(sector.kpiLabels.quotes)} → ${esc(sector.kpiLabels.orders)}</p>
     <div class="kpi-row">
       <div class="kpi"><div class="val">${totalFirst}</div><div class="lbl">${esc(sector.kpiLabels.quotes)}</div></div>
       <div class="kpi"><div class="val">${totalLast}</div><div class="lbl">${esc(sector.kpiLabels.orders)}</div></div>
@@ -275,7 +275,7 @@ export function generateHtmlReport(input: ReportInput): string {
   <!-- Recommendations -->
   <div class="section">
     <h2>${(funnel.length > 0 ? 3 : 2) + (agentRuns.length > 0 ? 2 : 1)}. AI Recommendations</h2>
-    <p class="section-sub">Automatically generated based on current state of the semantic layer and agent findings</p>
+    <p class="section-sub">Automatically generated based on your data model and agent findings</p>
     ${recsHtml}
   </div>
 

@@ -23,24 +23,24 @@ const JOURNEY: {
   {
     step: 1, section: 'CONNECT',
     tab: 'sources',      icon: Plug,           title: 'Data Sources',
-    desc: 'Connect your data sources. Configure mappings, validate quality, and ingest into the semantic layer.',
+    desc: 'Connect your data sources. Configure mappings, validate quality, and start querying your data.',
     aw: '3 AW sources active: ERP 152k rows · CRM 59k · HR+PIM 794',
   },
   {
     step: 2, section: 'BUILD',
-    tab: 'ontology',     icon: GitBranch,      title: 'Ontology',
+    tab: 'ontology',     icon: GitBranch,      title: 'Entity Graph',
     desc: 'Define your business entities and their properties. The graph shows relationships and cardinalities.',
     aw: '8 AW entities: Customer 19,829 · SalesOrder 31,465 · Product 504…',
   },
   {
     step: 3, section: 'BUILD',
-    tab: 'sembuilder',   icon: Network,        title: 'Knowledge Graph',
+    tab: 'sembuilder',   icon: Network,        title: 'Data Model',
     desc: 'Visualize how entities connect across sources. Document cross-source bridges.',
     aw: '193,062 nodes · 313,193 edges · 3 bridges ⚡ (PLACED_BY · SOLD_BY · OF_PRODUCT)',
   },
   {
     step: 4, section: 'BUILD',
-    tab: 'sembuilder',   icon: BookOpen,       title: 'Semantic Layer',
+    tab: 'sembuilder',   icon: BookOpen,       title: 'Definitions & Metrics',
     desc: 'Define the meaning of fields. Document ambiguities, map cross-source field synonyms, and certify metrics.',
     aw: '47 semantic definitions · 2 documented ambiguities · cross-source bridges',
   },
@@ -53,7 +53,7 @@ const JOURNEY: {
   {
     step: 6, section: 'ACT',
     tab: 'agents',       icon: BotMessageSquare, title: 'Agents',
-    desc: 'Automated agents running on the semantic layer: anomaly detection, trend analysis, alerts.',
+    desc: 'Automated agents that monitor your data: anomaly detection, trend analysis, alerts.',
     aw: '4 AW agents: Sales Performance · CRM Dedup · Revenue Disambiguator · Bridge Validator',
   },
 ]
@@ -144,13 +144,13 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 bg-teal-400 rounded-full" />
-            <span className="text-xs text-slate-300">Ontology</span>
+            <span className="text-xs text-slate-300">Entity graph</span>
             <span className="text-xs font-semibold text-white ml-1">{entityCount} entities · {edgeCount} relationships</span>
           </div>
           {(isAW || kgNodes > 0) && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 bg-teal-400 rounded-full" />
-              <span className="text-xs text-slate-300">Knowledge Graph</span>
+              <span className="text-xs text-slate-300">Data model</span>
               <span className="text-xs font-semibold text-white ml-1">
                 {kgNodes > 0
                   ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`
@@ -232,9 +232,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run pipeline` : 'Connect your first source') },
-                  { label: 'Ontology Entities', value: String(entityCount),             sub: `${edgeCount} relationships` },
-                  { label: 'Semantic Layer',  value: semBuilt ? 'Built' : 'Pending',    sub: semBuilt ? `${kgNodes.toLocaleString()} KG nodes` : 'Run pipeline to build' },
+                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run setup` : 'Connect your first source') },
+                  { label: 'Entities',          value: String(entityCount),             sub: `${edgeCount} relationships` },
+                  { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} knowledge nodes` : 'Run setup to build' },
                 ].map(s => (
                   <div key={s.label} className="border border-slate-200 rounded-lg px-3 py-2.5 bg-white">
                     <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
@@ -424,7 +424,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       <section className="px-4 md:px-8 lg:px-12 py-16 bg-slate-900">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold text-white leading-snug mb-6">
-            {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your semantic layer?'}
+            {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your data model?'}
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {(IS_DEMO_MODE ? [
@@ -436,11 +436,11 @@ export default function OverviewScreen({ onNavigate }: Props) {
               connectors.length > 0
                 ? `${connectors.length} data source${connectors.length !== 1 ? 's' : ''} connected — ${connectors.slice(0, 3).join(', ')}`
                 : registeredSources.length > 0
-                  ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run pipeline to activate`
+                  ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run setup to activate`
                   : 'Connect your data sources — databases, files, SaaS connectors',
               semBuilt
-                ? `Semantic layer built — ${kgNodes.toLocaleString('en-US')} knowledge graph nodes`
-                : 'Build the semantic layer — entities, relations, and metrics auto-extracted',
+                ? `Data model ready — ${kgNodes.toLocaleString('en-US')} knowledge nodes`
+                : 'Build your data model — entities, relationships, and metrics auto-discovered',
               'Natural language Query AI — ask questions in plain English',
               'Define agents to monitor data quality and business KPIs',
             ]).map(item => (

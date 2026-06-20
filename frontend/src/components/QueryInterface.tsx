@@ -413,7 +413,7 @@ function DisambiguationCard({ candidates, onChoose }: { candidates?: string[]; o
           <span className="text-sm font-semibold text-amber-800">Disambiguation required — choose a definition</span>
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Your question maps to more than one metric in the semantic layer. Pick the definition you mean and the query will re-run using it:
+          Your question matches more than one metric in your data. Pick the definition you mean and the query will re-run using it:
         </p>
         <div className={`grid gap-3 ${candidates.length > 2 ? 'sm:grid-cols-3' : 'grid-cols-2'}`}>
           {candidates.map((c, i) => {
@@ -456,8 +456,8 @@ function DisambiguationCard({ candidates, onChoose }: { candidates?: string[]; o
           <span className="text-sm font-semibold text-amber-800">Ambiguous term — can you be more specific?</span>
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Your question contains a term that maps to more than one metric or field in your semantic layer.
-          Try rephrasing with the exact field name, or define the term in <strong>Semantic Layer → Definitions</strong> to avoid this in future queries.
+          Your question contains a term that matches more than one metric or field in your data.
+          Try rephrasing with the exact field name, or define the term in <strong>Data Model → Definitions</strong> to avoid this in future queries.
         </p>
       </div>
     )
@@ -513,7 +513,7 @@ function StepsTrace({ steps }: { steps: string[] }) {
       >
         {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         <ListChecks className="w-3 h-3" />
-        <span>Semantic layer resolution</span>
+        <span>How the answer was resolved</span>
       </button>
       {open && (
         <ol className="mt-2 space-y-1 pl-1">
@@ -715,7 +715,7 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
         {message.entities && message.entities.length > 0 && !r.sources && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <GitBranch className="w-3 h-3 text-teal-500 flex-shrink-0" />
-            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Via semantic layer:</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wide">Entities used:</span>
             {message.entities.map(e => (
               <span key={e} className="text-[10px] font-mono bg-teal-50 border border-teal-200 text-teal-700 px-1.5 py-0.5 rounded">
                 {e}
@@ -780,7 +780,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Key className="w-3.5 h-3.5 text-teal-400" />
-          <span className="text-xs font-semibold text-white">LLM Provider</span>
+          <span className="text-xs font-semibold text-white">AI Provider</span>
           <span className="text-[10px] text-slate-400">— key stored in your browser only</span>
         </div>
         <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
@@ -1032,7 +1032,7 @@ export default function QueryInterface() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
             <p className="text-slate-400 mt-1 text-sm">
-              {workspaceLabel(sector.name)} · Ask questions in natural language — powered by the semantic layer
+              {workspaceLabel(sector.name)} · Ask questions in natural language — powered by your data model
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1071,7 +1071,7 @@ export default function QueryInterface() {
                 }`}
               >
                 {isLLMActive
-                  ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
+                  ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'AI'} active</>
                   : <><Key className="w-3.5 h-3.5" />Add API Key</>}
               </button>
             )}
@@ -1094,7 +1094,7 @@ export default function QueryInterface() {
             <div>
               <h3 className="text-lg font-semibold text-slate-900">AI Data Assistant</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
-                Ask questions about your data in natural language. The engine queries the semantic layer and returns real results with charts.
+                Ask questions about your data in natural language and get real results with charts.
               </p>
             </div>
 
@@ -1261,7 +1261,7 @@ export default function QueryInterface() {
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
-                <span>{isLLMActive ? `Asking ${PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'}…` : 'Querying semantic layer…'}</span>
+                <span>{isLLMActive ? `Asking ${PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'AI'}…` : 'Processing your question…'}</span>
               </div>
             </div>
           </div>

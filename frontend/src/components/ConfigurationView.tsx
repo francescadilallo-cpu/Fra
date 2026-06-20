@@ -390,7 +390,9 @@ export default function ConfigurationView() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Configuration</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          Connectors, governance, agents and sector templates — all live and interactive.
+          {IS_DEMO_MODE
+            ? 'Connectors, governance, agents and sector templates — all live and interactive.'
+            : 'Governance rules, agent configuration, workspace settings and API tokens.'}
         </p>
       </div>
 
@@ -403,7 +405,9 @@ export default function ConfigurationView() {
               Connector Library
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Pre-built connectors — click <strong>Test</strong> to verify latency and connectivity in real time.
+              {IS_DEMO_MODE
+                ? <>Pre-built connectors — click <strong>Test</strong> to verify latency and connectivity in real time.</>
+                : 'Available connectors — add your data sources from the Data Sources tab.'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -446,13 +450,23 @@ export default function ConfigurationView() {
           ))}
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="mt-4 flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800 font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add custom data source
-        </button>
+        {IS_DEMO_MODE ? (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="mt-4 flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800 font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add custom data source
+          </button>
+        ) : (
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+            className="mt-4 flex items-center gap-2 text-sm text-teal-600 hover:text-teal-800 font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add a data source →
+          </button>
+        )}
       </section>
 
       {/* Section 2: Governance */}
@@ -504,15 +518,15 @@ export default function ConfigurationView() {
           Configured AI Agents
         </h2>
         <p className="text-xs text-slate-500">
-          Agents operating on the semantic layer of <strong className="text-teal-700">{SECTORS[sectorId].name}</strong>.
+          Agents configured for <strong className="text-teal-700">{SECTORS[sectorId].name}</strong>.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
           {agents.map(a => <AgentCard key={a.name} {...a} />)}
         </div>
       </section>
 
-      {/* Section 4: Sector templates */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      {/* Section 4: Sector templates — demo only (live workspaces have a single real sector) */}
+      {IS_DEMO_MODE && <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
           <Database className="w-4 h-4 text-teal-600" />
           Sector Templates
@@ -566,7 +580,7 @@ export default function ConfigurationView() {
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
           <span>Want a template for your sector? Contact us — we develop new templates in 2-3 weeks.</span>
         </div>
-      </section>
+      </section>}
 
       {/* Section 5: Workspace */}
       <WorkspaceSection />

@@ -641,7 +641,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
   }, [])
 
   const tabs: { id: SubTab; label: string; icon: typeof GitBranch }[] = [
-    { id: 'graph',        label: 'Ontology Graph',      icon: GitBranch },
+    { id: 'graph',        label: 'Entity Graph',        icon: GitBranch },
     { id: 'entities',     label: 'Entities',            icon: Table2 },
     { id: 'architecture', label: 'System Architecture', icon: Layers },
     { id: 'code',         label: 'OWL/RDF Code',        icon: Code2 },
@@ -739,8 +739,8 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
               <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-lg p-8 text-center max-w-sm pointer-events-auto">
                   <GitBranch className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm font-semibold text-slate-600 mb-1">No ontology built yet</p>
-                  <p className="text-xs text-slate-400 mb-4">Connect a data source and build your semantic layer — entities and relationships will appear here automatically.</p>
+                  <p className="text-sm font-semibold text-slate-600 mb-1">No data model built yet</p>
+                  <p className="text-xs text-slate-400 mb-4">Connect a data source and run setup — entities and relationships will appear here automatically.</p>
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={() => onNavigate?.('sources')}

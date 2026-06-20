@@ -158,7 +158,7 @@ function DocumentsTab() {
       <SectionCard>
         <SectionHeader
           title="Upload documents"
-          subtitle="Supported: .txt, .md, .pdf — content enriches semantic layer responses"
+          subtitle="Supported: .txt, .md, .pdf — content guides AI query responses"
         />
         <div className="p-5">
           <input
@@ -793,7 +793,7 @@ export default function ContextTab() {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-slate-900">Context</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Enrich the semantic layer with documents and definitions. User context takes priority over default YAML metadata.
+          Add business context to guide AI query responses. Documents and definitions you upload take priority over auto-detected information.
         </p>
       </div>
 

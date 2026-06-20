@@ -195,8 +195,8 @@ const SCHEDULE_LABELS: Record<ScheduleInterval, string> = {
 }
 
 const EVENT_LABELS: Record<EventTriggerKind, string> = {
-  'new-entity':        'When a new ontology entity is added',
-  'pipeline-complete': 'When the data pipeline completes',
+  'new-entity':        'When a new entity type is added to the data model',
+  'pipeline-complete': 'When data processing completes',
   'critical-finding':  'When another agent finds something critical',
 }
 
@@ -319,7 +319,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">Create New Agent</h2>
-              <p className="text-xs text-slate-500">Define an executive agent on your semantic layer</p>
+              <p className="text-xs text-slate-500">Define an agent that reads from your connected data</p>
             </div>
           </div>
           <button
@@ -435,10 +435,10 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
               Reads from (select entities)
             </label>
             <p className="text-xs text-slate-400 mb-3">
-              Which ontology entities will this agent access?
+              Which data entities will this agent read from?
             </p>
             {availableEntities.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run the pipeline, or build entities manually in the Ontology Builder.</p>
+              <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run setup, or build entities manually in the Builder AI.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {availableEntities.map(entity => {

@@ -864,8 +864,9 @@ class DuckDBSourceManager:
 
     def _ingest_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
         import io
+        import tempfile
 
-        # Support inline CSV (uploaded from browser) or file path
+        # Support inline CSV (uploaded from browser), HTTP(S) URL, or local file path
         _MAX_INLINE_BYTES = 5 * 1024 * 1024  # 5 MB guard against OOM
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
@@ -884,24 +885,90 @@ class DuckDBSourceManager:
             )
             n = len(df)
         else:
-            path = _safe_data_path(cfg.params.get("path", ""))
-            if not path.exists():
-                raise FileNotFoundError(f"CSV not found: {path}")
-            table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
-            safe_table = table.replace('"', '""')
-            delimiter = cfg.params.get("delimiter", ",")
-            safe_path = str(path).replace("'", "''")
-            safe_delim = delimiter.replace("'", "''")
-            # Stream the file straight into DuckDB — DuckDB parses it natively
-            # (parallel, out-of-core) instead of materialising the whole file in
-            # a pandas DataFrame in Python memory.
-            conn.execute(
-                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-                f"SELECT * FROM read_csv_auto('{safe_path}', "
-                f"delim='{safe_delim}', header=true)"
-            )
-            _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
-            n = _row[0] if _row is not None else 0
+            raw_path = cfg.params.get("path", "")
+            # URL path: download to a temp file, then read locally
+            tmp_path: str | None = None
+            if raw_path.startswith(("http://", "https://")):
+                import httpx
+                import re as _re
+
+                # Auto-convert Google Sheets view/edit URLs to CSV export URLs so
+                # users can paste the sharing link directly without needing to know
+                # the /export?format=csv URL pattern.
+                download_url = raw_path
+                _gs_match = _re.match(
+                    r"https://docs\.google\.com/spreadsheets/d/([^/]+)/(?:edit|view|pub)",
+                    raw_path,
+                )
+                if _gs_match and "export" not in raw_path:
+                    sheet_id = _gs_match.group(1)
+                    # Preserve gid param if present (e.g. #gid=12345 or ?gid=12345)
+                    gid_match = _re.search(r"[?&#]gid=(\d+)", raw_path)
+                    gid_suffix = f"&gid={gid_match.group(1)}" if gid_match else ""
+                    download_url = (
+                        f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+                        f"/export?format=csv{gid_suffix}"
+                    )
+                    logger.info(
+                        "Google Sheets URL auto-converted to CSV export: %s",
+                        download_url,
+                    )
+
+                try:
+                    resp = httpx.get(download_url, follow_redirects=True, timeout=30)
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    raise ValueError(
+                        f"Failed to download CSV from URL (HTTP {exc.response.status_code}): {raw_path}"
+                    ) from exc
+                except httpx.RequestError as exc:
+                    raise ValueError(
+                        f"Could not reach URL — check the address and network access: {raw_path}"
+                    ) from exc
+                # Sanity-check: reject clearly non-CSV responses (HTML login pages etc.)
+                content_type = resp.headers.get("content-type", "")
+                if "text/html" in content_type and "text/csv" not in content_type:
+                    raise ValueError(
+                        f"URL returned HTML instead of CSV — the file may require login "
+                        f"or the link may not be publicly shared: {raw_path}"
+                    )
+                with tempfile.NamedTemporaryFile(
+                    suffix=".csv", delete=False, mode="wb"
+                ) as tmp:
+                    tmp.write(resp.content)
+                    tmp_path = tmp.name
+                path = Path(tmp_path)
+            else:
+                path = _safe_data_path(raw_path)
+                if not path.exists():
+                    raise FileNotFoundError(f"CSV not found: {path}")
+            try:
+                table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
+                safe_table = table.replace('"', '""')
+                delimiter = cfg.params.get("delimiter", ",")
+                safe_path = str(path).replace("'", "''")
+                safe_delim = delimiter.replace("'", "''")
+                # Stream the file straight into DuckDB — DuckDB parses it natively
+                # (parallel, out-of-core) instead of materialising the whole file in
+                # a pandas DataFrame in Python memory.
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                        f"SELECT * FROM read_csv_auto('{safe_path}', "
+                        f"delim='{safe_delim}', header=true)"
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Cannot parse CSV file '{path.name}': {exc} — "
+                        "check that the file has a header row and consistent columns."
+                    ) from exc
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
+                n = _row[0] if _row is not None else 0
+            finally:
+                if tmp_path:
+                    import os
+
+                    os.unlink(tmp_path)
         self._row_counts[f"{cfg.id}.{table}"] = n
         logger.info("CSV  %-25s %7d rows", table, n)
         if table not in cfg.target_tables:
@@ -944,13 +1011,30 @@ class DuckDBSourceManager:
                     exc,
                 )
 
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        records = (
-            raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
-        )
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"JSON file '{path.name}' is not valid JSON: {exc}"
+            ) from exc
+        if records_key:
+            records = raw.get(records_key) if isinstance(raw, dict) else None
+            if records is None:
+                available = (
+                    ", ".join(f"'{k}'" for k in raw.keys())
+                    if isinstance(raw, dict)
+                    else "(not an object)"
+                )
+                raise ValueError(
+                    f"JSON file '{path.name}': records_key '{records_key}' not found. "
+                    f"Available top-level keys: {available}"
+                )
+        else:
+            records = raw if isinstance(raw, list) else raw.get("records", raw)
         if not isinstance(records, list):
             raise ValueError(
-                "JSON must be a top-level array or contain a list under 'records_key'"
+                f"JSON file '{path.name}' must be a top-level array or an object containing a list "
+                f"under '{records_key or 'records'}' — got {type(records).__name__}"
             )
         df = pd.DataFrame(records)
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df')
@@ -1051,14 +1135,28 @@ class DuckDBSourceManager:
             ) from exc
         src.row_factory = _sqlite3.Row
         try:
-            tables = [
+            all_tables = [
                 r[0]
                 for r in src.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
                 ).fetchall()
             ]
             if table_filter:
-                tables = [t for t in tables if t in table_filter]
+                tables = [t for t in all_tables if t in table_filter]
+                missing = [t for t in table_filter if t not in all_tables]
+                if missing:
+                    available = ", ".join(all_tables) or "none"
+                    raise ValueError(
+                        f"Table(s) not found in '{path.name}': {', '.join(missing)}. "
+                        f"Available tables: {available}"
+                    )
+            else:
+                tables = all_tables
+            if not tables:
+                raise ValueError(
+                    f"SQLite file '{path.name}' contains no user tables — "
+                    "the file may be empty or only contain internal SQLite system tables."
+                )
             for table in tables:
                 safe_id = table.replace('"', '""')  # escape SQL identifier
                 cur = src.execute(f'SELECT * FROM "{safe_id}"')
@@ -1120,6 +1218,12 @@ class DuckDBSourceManager:
                         n, truncated = self._stream_cursor_into_table(
                             conn, cur, safe_table, row_limit=limit
                         )
+                    except psycopg2.ProgrammingError as exc:
+                        raise ValueError(
+                            f"Table '{table}' not found in schema '{schema}' — "
+                            f"check that the table exists and the schema name is correct. "
+                            f"(PostgreSQL: {exc})"
+                        ) from exc
                     finally:
                         cur.close()
                     if truncated:
@@ -1139,14 +1243,29 @@ class DuckDBSourceManager:
         except ImportError:
             # Fallback: try DuckDB postgres_scanner
             safe_schema = schema.replace('"', '""')
-            conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
-            safe_dsn = dsn.replace("'", "''")
-            conn.execute(f"ATTACH '{safe_dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)")
+            try:
+                conn.execute("INSTALL postgres_scanner; LOAD postgres_scanner;")
+                safe_dsn = dsn.replace("'", "''")
+                conn.execute(
+                    f"ATTACH '{safe_dsn}' AS _pg_src (TYPE POSTGRES, READ_ONLY)"
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot connect to PostgreSQL: {exc} — "
+                    "check DSN, host reachability, port, and credentials."
+                ) from exc
             for table in tables:
                 safe_table = table.replace('"', '""')
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
-                )
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM _pg_src."{safe_schema}"."{safe_table}"'
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Table '{table}' not found in schema '{schema}' — "
+                        f"check that the table exists and the schema name is correct. "
+                        f"(PostgreSQL: {exc})"
+                    ) from exc
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
@@ -1187,10 +1306,19 @@ class DuckDBSourceManager:
                     safe_bt = table.replace("`", "``")
                     safe_dbt = table.replace('"', '""')
                     with my_conn.cursor() as cur:
-                        if limit > 0:
-                            cur.execute(f"SELECT * FROM `{safe_bt}` LIMIT {limit + 1}")
-                        else:
-                            cur.execute(f"SELECT * FROM `{safe_bt}`")
+                        try:
+                            if limit > 0:
+                                cur.execute(
+                                    f"SELECT * FROM `{safe_bt}` LIMIT {limit + 1}"
+                                )
+                            else:
+                                cur.execute(f"SELECT * FROM `{safe_bt}`")
+                        except pymysql.ProgrammingError as exc:
+                            raise ValueError(
+                                f"Table '{table}' not found in MySQL database — "
+                                f"check that the table exists and the database name is correct. "
+                                f"(MySQL: {exc})"
+                            ) from exc
                         # pymysql SSDictCursor supports fetchmany for chunked streaming
                         n, truncated = self._stream_cursor_into_table(
                             conn, cur, safe_dbt, row_limit=limit
@@ -1210,15 +1338,30 @@ class DuckDBSourceManager:
                 my_conn.close()
         except ImportError:
             # Fallback: DuckDB mysql_scanner extension (no Python driver needed)
-            conn.execute("INSTALL mysql_scanner; LOAD mysql_scanner;")
-            safe_dsn = dsn.replace("'", "''")
-            conn.execute(f"ATTACH '{safe_dsn}' AS _mysql_src (TYPE MYSQL, READ_ONLY)")
+            try:
+                conn.execute("INSTALL mysql_scanner; LOAD mysql_scanner;")
+                safe_dsn = dsn.replace("'", "''")
+                conn.execute(
+                    f"ATTACH '{safe_dsn}' AS _mysql_src (TYPE MYSQL, READ_ONLY)"
+                )
+            except Exception as exc:
+                raise ValueError(
+                    f"Cannot connect to MySQL: {exc} — "
+                    "check DSN, host reachability, port, and credentials."
+                ) from exc
             for table in tables:
                 safe_table = table.replace('"', '""')
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-                    f'SELECT * FROM _mysql_src."{safe_table}"'
-                )
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                        f'SELECT * FROM _mysql_src."{safe_table}"'
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Table '{table}' not found in MySQL database — "
+                        f"check that the table exists and the DSN is correct. "
+                        f"(MySQL: {exc})"
+                    ) from exc
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
                 self._row_counts[f"{cfg.id}.{table}"] = n
@@ -1243,10 +1386,16 @@ class DuckDBSourceManager:
         )
         safe_table = table.replace('"', '""')
         safe_path = str(path).replace("'", "''")
-        conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-            f"SELECT * FROM read_parquet('{safe_path}')"
-        )
+        try:
+            conn.execute(
+                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                f"SELECT * FROM read_parquet('{safe_path}')"
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"Cannot read Parquet file '{path.name}': {exc} — "
+                "the file may be corrupted or not a valid Parquet file."
+            ) from exc
         _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
         n = _row[0] if _row is not None else 0
         self._row_counts[f"{cfg.id}.{table}"] = n

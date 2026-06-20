@@ -1813,8 +1813,8 @@ def semantic_ask(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "The semantic layer is not ready yet. "
-                "Connect a data source and build the pipeline to enable querying."
+                "The data model is not ready yet. "
+                "Connect a data source and run setup to enable querying."
             ),
         )
 
@@ -2779,7 +2779,7 @@ def patch_draft_entity(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     ok = catalog.save_entity_draft(
         name,
@@ -2807,7 +2807,7 @@ def patch_draft_metric(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     ok = catalog.save_metric_draft(
         name,
@@ -2845,7 +2845,7 @@ def add_draft_relation(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     relation_id = catalog.add_manual_relation(
         from_table=body.from_table,
@@ -2877,7 +2877,7 @@ def delete_draft_relation(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     ok = catalog.remove_manual_relation(relation_id)
     if not ok:
@@ -2992,7 +2992,7 @@ def list_templates(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     templates = catalog.list_templates()
     hidden = _hidden_demo_tables(_user)
@@ -3023,7 +3023,7 @@ def create_template(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     try:
         tpl = catalog.create_template(
@@ -3052,7 +3052,7 @@ def update_template(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     try:
         tpl = catalog.update_template(
@@ -3079,7 +3079,7 @@ def delete_template(
     if catalog is None:
         raise HTTPException(
             status_code=503,
-            detail="Semantic layer not ready — build it from Data Sources first",
+            detail="Data model not ready — connect a data source and run setup first",
         )
     try:
         catalog.delete_template(template_id)
@@ -4246,7 +4246,7 @@ class OntologyExtensionPayload(BaseModel):
     @model_validator(mode="after")
     def _validate_size(self) -> "OntologyExtensionPayload":
         if len(json.dumps(self.payload)) > _ONTOLOGY_EXT_MAX_BYTES:
-            raise ValueError("ontology extension exceeds 1 MB limit")
+            raise ValueError("data model extension exceeds 1 MB limit")
         return self
 
 

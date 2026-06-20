@@ -384,7 +384,7 @@ function TableGroup({ table, rows, savedEdits, onSave }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-white">
-                {['Source Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
+                {['Source Field', 'Entity', 'Mapped Property (click to edit)', 'Type', 'Schema URI'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] text-slate-400 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>

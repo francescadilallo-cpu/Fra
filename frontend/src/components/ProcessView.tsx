@@ -126,19 +126,19 @@ function buildLiveLogs(
     map: tables.length === 0
       ? [{ text: 'No mappings to resolve', type: 'warn' }]
       : [
-          { text: 'Loading semantic mappings...', type: 'info' },
-          { text: 'Discovering column types and keys...', type: 'info' },
+          { text: 'Discovering fields and column types...', type: 'info' },
+          { text: 'Matching fields to your data model...', type: 'info' },
           { text: `✓ ${total.toLocaleString()} rows mapped`, type: 'ok' },
         ],
     enrich: [
-      { text: 'Building Knowledge Graph nodes and edges...', type: 'info' },
-      { text: `✓ ${kgNodes.toLocaleString()} KG nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
+      { text: 'Building Knowledge Graph...', type: 'info' },
+      { text: `✓ ${kgNodes.toLocaleString()} knowledge nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
       { text: `✓ ${kgEdges.toLocaleString()} relationships indexed`, type: kgEdges > 0 ? 'ok' : 'info' },
     ],
     index: [
-      { text: 'Writing to semantic layer index...', type: 'info' },
-      { text: '✓ Ontology entities registered', type: 'ok' },
-      { text: '✓ Semantic layer ready', type: 'ok' },
+      { text: 'Registering entities and metrics...', type: 'info' },
+      { text: '✓ Entities and metrics registered', type: 'ok' },
+      { text: '✓ Data model ready', type: 'ok' },
     ],
   }
 }
@@ -581,7 +581,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <Activity className={`w-4 h-4 ${runState === 'running' ? 'text-teal-500 animate-pulse' : 'text-slate-400'}`} />
-            <h2 className="font-semibold text-slate-900">Semantic Layer Pipeline</h2>
+            <h2 className="font-semibold text-slate-900">Setup Pipeline</h2>
             {lastRunAt && runState !== 'running' && (
               <span className="text-[11px] text-slate-400">· Last run at {lastRunAt} ({((lastRunDuration ?? 0) / 1000).toFixed(1)}s)</span>
             )}
@@ -614,7 +614,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             <div>
               <p className="text-xs font-semibold text-amber-800">No data sources connected yet</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                Connect a source before running the pipeline.{' '}
+                Connect a source before running setup.{' '}
                 <button onClick={() => onNavigate?.('sources')} className="underline font-medium">Go to Sources →</button>
               </p>
             </div>
@@ -685,11 +685,11 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
                 sub: `${(liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])).length} sources connected` },
               { label: 'Entities Mapped',
                 value: String(liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)),
-                sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} ontology classes` },
-              { label: 'KG Nodes Created',
+                sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} entity types` },
+              { label: 'Entities Indexed',
                 value: IS_DEMO_MODE ? summary.enrichments : (kgStatus?.kg_nodes ?? 0).toLocaleString(),
-                sub: 'instances in Knowledge Graph' },
-              { label: 'KG Edges Indexed',
+                sub: 'entity instances indexed' },
+              { label: 'Relationships',
                 value: IS_DEMO_MODE ? summary.triples : (kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0).toLocaleString(),
                 sub: IS_DEMO_MODE ? '3 cross-source bridges' : `${kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0} cross-source relationships` },
             ].map(({ label, value, sub }) => (
@@ -705,13 +705,13 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         {/* Next steps after successful live pipeline run */}
         {runState === 'done' && !IS_DEMO_MODE && (
           <div className="mx-6 mb-5 flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-            <p className="text-xs text-slate-600 font-medium">Semantic layer ready — start exploring your data</p>
+            <p className="text-xs text-slate-600 font-medium">Data model ready — start exploring your data</p>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => onNavigate?.('sembuilder' as NavTab)}
                 className="text-xs font-medium px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
               >
-                View Ontology
+                View Data Model
               </button>
               <button
                 onClick={() => onNavigate?.('query' as NavTab)}
@@ -729,7 +729,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         {processStages.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and the pipeline has run.</p>
+            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and setup has run.</p>
             <button
               onClick={() => onNavigate?.('sources')}
               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
@@ -778,12 +778,12 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
         {funnel.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">Funnel metrics will be derived from your transaction data once the pipeline runs.</p>
+            <p className="text-sm text-slate-400">Funnel metrics will be derived from your transaction data once setup runs.</p>
             <button
               onClick={() => onNavigate?.('process')}
               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
             >
-              Run pipeline →
+              Run setup →
             </button>
           </div>
         ) : (
@@ -817,7 +817,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
           {runState === 'done' && (
             <span className="flex items-center gap-1 text-teal-600">
               <CheckCircle2 className="w-3 h-3" />
-              Synced from semantic layer
+              Data model synced
             </span>
           )}
         </div>

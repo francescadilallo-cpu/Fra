@@ -233,7 +233,7 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <Layers className="w-4 h-4 text-teal-600" />
-          Knowledge Graph
+          Data Model
         </h2>
         <div className="flex items-center gap-2">
           <button
@@ -265,8 +265,8 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: 'Entities',   value: status.entities.length,             color: 'text-teal-600',   bg: 'bg-teal-50' },
-              { label: 'KG Nodes',   value: status.kg_nodes.toLocaleString(),   color: 'text-blue-600',   bg: 'bg-blue-50' },
-              { label: 'KG Edges',   value: status.kg_edges.toLocaleString(),   color: 'text-violet-600', bg: 'bg-violet-50' },
+              { label: 'Know. Nodes', value: status.kg_nodes.toLocaleString(),   color: 'text-blue-600',   bg: 'bg-blue-50' },
+              { label: 'Know. Edges', value: status.kg_edges.toLocaleString(),   color: 'text-violet-600', bg: 'bg-violet-50' },
               { label: 'Metadata',   value: status.metadata_rows.toLocaleString(), color: 'text-amber-600', bg: 'bg-amber-50' },
             ].map(s => (
               <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center`}>
@@ -311,12 +311,12 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
         <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-5 text-center">
           <Layers className="w-7 h-7 text-slate-300 mx-auto mb-2" />
           <p className="text-xs text-slate-500 font-medium">Not built yet</p>
-          <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build the semantic layer</p>
+          <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build your data model</p>
           <button
             onClick={() => onNavigate?.('sources')}
             className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
-            <Zap className="w-3 h-3 inline mr-1" />Build Semantic Layer
+            <Zap className="w-3 h-3 inline mr-1" />Build Data Model
           </button>
         </div>
       )}
@@ -459,7 +459,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const dateRangeStat = (liveConfig?.kpi_stats ?? []).find(k => k.type === 'date_range')
   const liveKpis = [
     {
-      label: funnel[0]?.stage ?? 'Records ingested',
+      label: funnel[0]?.stage ?? 'Records loaded',
       value: `${(funnel[0]?.count ?? totalRecords).toLocaleString('en-US')}`,
       icon: FileText,
       color: 'text-blue-600', bg: 'bg-blue-50',
@@ -486,7 +486,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       color: 'text-amber-600', bg: 'bg-amber-50',
       spark: [] as number[], sparkColor: '#d97706', trend: 0,
     } : {
-      label: 'Entities in semantic layer',
+      label: 'Entities in your data model',
       value: `${draft?.entities.length ?? 0}`,
       icon: Users,
       color: 'text-amber-600', bg: 'bg-amber-50',
@@ -566,7 +566,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
     draft?.built_at ? {
       id: 1,
       dot: 'bg-green-500',
-      message: `Semantic layer built — ${draft.entities.length} entities, ${draft.metrics.length} metrics`,
+      message: `Data model ready — ${draft.entities.length} entities, ${draft.metrics.length} metrics`,
       time: new Date(draft.built_at).toLocaleDateString(),
       status: 'Active',
     } : null,
@@ -625,8 +625,8 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
               {IS_DEMO_MODE
                 ? `Your semantic layer is ready · ${ontology.nodes.length} entities · ${workspaceLabel(sector.name)} · 1 recommended agent pre-configured`
                 : ontology.nodes.length > 0
-                  ? `Semantic layer active · ${ontology.nodes.length} entities · ${workspaceLabel(sector.name)}`
-                  : `Connect a data source to start building your semantic layer · ${workspaceLabel(sector.name)}`}
+                  ? `${ontology.nodes.length} entities in your data model · ${workspaceLabel(sector.name)}`
+                  : `Connect a data source to get started · ${workspaceLabel(sector.name)}`}
             </p>
           </div>
           <button

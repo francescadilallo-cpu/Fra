@@ -635,7 +635,7 @@ function parseUserPrompt(
         return {
           reply:
             `I am creating a relation **${src.label} → ${label} → ${dst.label}**. ` +
-            'Checking the ontology: no duplicate relations.',
+            'Checking: no duplicate relations.',
           changes: [{
             id: `c-${uid()}`,
             kind: 'add_relation',
@@ -667,7 +667,7 @@ function parseUserPrompt(
             id: `c-${uid()}`,
             kind: 'rename',
             summary: `Rename ${found.label} → ${newName}`,
-            rationale: 'Structural change: impacts SPARQL queries, DB mappings and MCP tools. Backup required.',
+            rationale: 'Structural change: all queries and field mappings referencing this class will be updated.',
             requiresSteward: true,
             warnings: [`${existing.length} mappings may require updating.`],
           }],
@@ -739,7 +739,7 @@ function parseUserPrompt(
 function buildAddClassIntent(
   nameRaw: string,
   propsRaw: string,
-  sectorId: string,
+  _sectorId: string,
   prefix: string,
   existing: { id: string; label: string }[],
   lowConfidence = false,
@@ -749,8 +749,8 @@ function buildAddClassIntent(
   if (dup) {
     return {
       reply:
-        `I was about to create **${name}** but it already exists in the ${sectorId} ontology. ` +
-        'I suggest reusing the existing class instead of duplicating (ontology governance).',
+        `I was about to create **${name}** but it already exists in your data model. ` +
+        'I suggest reusing the existing class instead of duplicating.',
       changes: [{
         id: `c-${uid()}`,
         kind: 'rename',
@@ -784,13 +784,13 @@ function buildAddClassIntent(
       replyPrefix +
       `I propose a new class **${name}** with ${props.length} properties: ` +
       `${props.map((p) => `\`${p.name}\``).join(', ')}. ` +
-      `Verified: no duplicate concept in the ${sectorId} ontology. ` +
+      `Verified: no duplicate concept in your data model. ` +
       'Structural change — requires data steward approval.',
     changes: [{
       id: `c-${uid()}`,
       kind: 'add_class',
       summary: `Add ${name} class`,
-      rationale: `New non-duplicate entity. ${props.length} properties derived from the description. URI: ${prefix}:${name}.`,
+      rationale: `New entity. ${props.length} properties derived from the description.`,
       newNode: {
         id: name,
         label: name,
@@ -951,7 +951,7 @@ export default function OntologyBuilder() {
       text: IS_DEMO_MODE
         ? `Hi! I am the Ontology Builder AI. I can help you modify the **${sector.name}** ontology in natural language. ` +
           'Describe a new entity, relation, or property — I propose changes and you approve.'
-        : 'Hi! I am the Ontology Builder AI. Your ontology starts empty — describe the entities of your business in natural language ' +
+        : 'Hi! I am the Builder AI. Your data model starts empty — describe the entities of your business in natural language ' +
           '(e.g. "Add entity Customer with name, email") and I will build it with you, change by change.',
     }),
     [sector.name],
@@ -1208,7 +1208,7 @@ export default function OntologyBuilder() {
   }, [pending, approve])
 
   const clearExtensions = useCallback(async () => {
-    const ok = await showConfirm(`All custom extensions for ${sector.name} will be permanently removed.`, { title: 'Reset ontology?', dangerous: true })
+    const ok = await showConfirm(`All custom extensions for ${sector.name} will be permanently removed.`, { title: 'Reset data model?', dangerous: true })
     if (!ok) return
     saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
     const s = buildInitialState(sector, sectorId, liveConfig)
@@ -1381,10 +1381,10 @@ export default function OntologyBuilder() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Wand2 className="w-6 h-6 text-teal-600" />
-            Ontology Builder AI
+            Builder AI
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Modify the <strong className="text-teal-700">{sector.name}</strong> ontology in natural language.
+            Build your <strong className="text-teal-700">{sector.name}</strong> data model in natural language.
             The bot proposes changes, you approve.
           </p>
         </div>
@@ -1442,7 +1442,7 @@ export default function OntologyBuilder() {
                   <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-pulse [animation-delay:200ms]" />
                   <span className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-pulse [animation-delay:400ms]" />
                 </span>
-                <span>analyzing ontology...</span>
+                <span>analyzing...</span>
               </div>
             )}
           </div>

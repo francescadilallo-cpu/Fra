@@ -94,7 +94,6 @@ SAAS_CONNECTOR_TYPES = {
     "sdi",
     "agenzia_entrate",
     "inps",
-    "mysql",
 }
 
 

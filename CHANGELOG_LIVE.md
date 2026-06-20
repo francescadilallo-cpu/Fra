@@ -10,6 +10,174 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 2)
+
+### Fix + improve: connector error wrapping; jargon in backend API errors and frontend empty states
+
+- `backend/app/connectors/duckdb_source_manager.py`
+  - PostgreSQL DuckDB fallback (`except ImportError` path): raw DuckDB exceptions on connect and per-table read now wrapped in clear `ValueError` messages
+  - MySQL DuckDB fallback (`except ImportError` path): same fix — clear messages on connect failure and table-not-found
+
+- `backend/app/main.py`
+  - 8 endpoints returning "Semantic layer not ready — build it from Data Sources first" → "Data model not ready — connect a data source and run setup first"
+
+- `frontend/src/components/OntologyGraph.tsx`
+  - "No ontology built yet" → "No data model built yet" (live-user empty state in graph view)
+
+- `frontend/src/components/DataExplorer.tsx`
+  - "run the pipeline — entities are auto-discovered from your schema" → "run setup — entities are auto-extracted from your tables"
+
+- `frontend/src/components/Layout.tsx`
+  - Sidebar nav labels (Build section, visible to all users):
+    - "Ontology" → "Entity Graph"
+    - "Ontology Builder" → "Builder AI"
+    - "Knowledge Graph" → "Data Model"
+
+- Cross-component label consistency update (all references to old nav labels):
+  - `Dashboard.tsx` — card heading "Knowledge Graph" → "Data Model"
+  - `ProcessView.tsx` — "KG Nodes Created" → "Entities Indexed", "KG Edges Indexed" → "Relationships", "ontology classes" → "entity types", "instances in Knowledge Graph" → "entity instances indexed", "Semantic layer ready" → "Data model ready", "View Ontology" → "View Data Model"
+  - `OverviewScreen.tsx` — step titles updated; status badges "Ontology" → "Entity graph", "Knowledge Graph" → "Data model"
+  - `QueryInterface.tsx` — "Knowledge Graph → Definitions" → "Data Model → Definitions"
+  - `SemanticDraftView.tsx` — "Metrics tab in the Knowledge Graph" → "Metrics tab in Data Model"
+  - `CommandPalette.tsx` — "Ontology" → "Entity Graph", `sembuilder` → "Data Model"
+  - `AccessGate.tsx` — demo option description: "semantic ambiguities, Knowledge Graph already built" → "data ambiguities, Data Model already built"
+
+- `frontend/src/components/OntologyBuilder.tsx`
+  - Fix pre-existing TypeScript unused parameter warning (`sectorId` → `_sectorId` in `buildAddClassIntent`)
+
+- `frontend/src/components/OntologyGraph.tsx`
+  - Sub-tab "Ontology Graph" → "Entity Graph"
+
+- `frontend/src/components/SemanticLayerView.tsx`
+  - Section nav descriptions: "Semantic concepts" → "Business entities", "Cross-system joins" → "Cross-source connections", "Disambiguation" → "Conflict rules"
+  - Sub-tab "Semantic Definitions" → "Field Definitions"
+  - Sidebar heading "Semantic Layer" → "Data Model"
+  - Section description "Semantic layer status..." → "Data model status..."
+  - Mappings table headers: "Ontology Class" → "Entity", "Ontology Property" → "Entity Field"
+  - Setup guide step descriptions simplified: "Connect semantic names to physical tables" → "Map entity names to your data tables", "Resolve terms that map to multiple fields" → "Clarify terms with conflicting definitions"
+
+- `frontend/src/components/ProcessView.tsx` (additional)
+  - "Semantic Layer Pipeline" → "Setup Pipeline" (pipeline panel heading)
+  - "KG Nodes Created" → "Entities Indexed"; "KG Edges Indexed" → "Relationships"
+  - Sub-labels: "ontology classes" → "entity types"; "instances in Knowledge Graph" → "entity instances indexed"
+  - "Semantic layer ready" → "Data model ready"; "View Ontology" → "View Data Model"
+
+- `frontend/src/components/DataSourcesView.tsx` (additional)
+  - Build step "Building knowledge graph…" → "Building data model…"
+
+- `frontend/src/components/SemanticDraftView.tsx` (additional)
+  - "The AI uses this knowledge graph..." → "The AI uses this data model..."
+
+- `frontend/src/components/ComplianceView.tsx`
+  - "run the setup wizard" → "run setup"
+
+---
+
+## 2026-06-20 (session cont.)
+
+### Improve: extended jargon sweep — 10 more files cleaned
+
+- `backend/app/main.py` — 503 message "The semantic layer is not ready yet" → "The data model is not ready yet"; size error "ontology extension" → "data model extension"
+- `frontend/src/components/OntologyBuilder.tsx` — Builder AI title, bot welcome message for live users, AI message text (rationale, duplicate checks), analyzing spinner, reset dialog
+- `frontend/src/components/OnboardingWizard.tsx` — step 1 tagline "The semantic layer for European businesses" → "AI-powered data platform..."
+- `frontend/src/components/ConfigurationView.tsx` — agents section subtitle
+- `frontend/src/data/llmQueryEngine.ts` — empty key error "LLM panel" → "AI provider panel"
+- `frontend/src/components/SemanticLayerView.tsx` — 8 additional strings (bridge desc, definitions empty state, ambiguity count, setup guide heading, sources empty state×2, query templates desc, bridges page desc)
+- `frontend/src/components/ProcessView.tsx` — "Synced from semantic layer" → "Data model synced"
+- `frontend/src/components/AgentsView.tsx` — agent start log, agents subtitle
+- `frontend/src/components/DataSourcesView.tsx` — waitlist panel text
+- `frontend/src/components/OverviewScreen.tsx` — live-user CTA heading
+- `frontend/src/data/reportGenerator.ts` — 3 strings in downloaded report (recommendations, KPI sub-label, report section)
+
+---
+
+## 2026-06-20 (session 10bf)
+
+### Fix + improve: MySQL/Parquet ingester errors; jargon cleanup across 6 frontend files
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_mysql`, `_ingest_parquet`
+
+  **MySQL table-not-found**: `pymysql.ProgrammingError` (table doesn't exist) was uncaught and produced the generic "Ingestion failed" fallback. Now raises a clear ValueError: "Table 'my_table' not found in MySQL database — check that the table exists and the database name is correct."
+
+  **Parquet read errors**: A corrupted or non-Parquet file would raise a raw DuckDB exception string. Now wrapped in a ValueError: "Cannot read Parquet file 'foo.parquet': … — the file may be corrupted or not a valid Parquet file."
+
+- `frontend/src/components/DataSourcesView.tsx` — empty state, source status, success toast, header subtitle
+- `frontend/src/components/SemanticLayerView.tsx` — relations empty state
+- `frontend/src/components/SemanticDraftView.tsx` — stat chip, context notes label, context doc description
+- `frontend/src/components/QueryInterface.tsx` — AI provider label and loading text
+- `frontend/src/components/OverviewScreen.tsx` — step 1 description
+- `frontend/src/components/ComplianceView.tsx` — live-user empty state guidance
+- `frontend/src/components/AgentBuilder.tsx` — event trigger labels
+
+  Jargon removed across all files:
+  - "FK edges" → "Relationships"
+  - "injected into LLM prompts" → "used when generating AI queries"
+  - "Context documents are injected into LLM prompts when generating SQL" → "Context documents guide AI query generation"
+  - "Querying semantic layer…" → "Processing your question…"
+  - "LLM Provider" → "AI Provider"
+  - "LLM active" / "LLM" fallback → "AI active" / "AI"
+  - "ingest into the semantic layer" → "start querying your data"
+  - "start ingesting" → "get started"
+  - "Run the pipeline to ingest data" → "Run setup to load data"
+  - "Semantic layer built — N sources ingested" → "Your data is ready — N sources connected" (success toast)
+  - "data is ingested and becomes queryable instantly" → "data loads automatically and becomes queryable instantly"
+  - "No relations found in the semantic layer yet" → "No relationships found yet"
+  - "Build the semantic layer to auto-populate entity relations, or define FK edges" → "Run the setup to discover relationships automatically, or define them"
+  - "build the semantic layer from your connected data sources" → "connect your data sources and run the setup wizard"
+  - "Connect a data source to build your ontology" → "Connect a data source to get started"
+  - "When a new ontology entity is added" → "When a new entity type is added to the data model"
+  - "When the data pipeline completes" → "When data processing completes"
+
+---
+
+## 2026-06-20 (session 10be — continued)
+
+### Improve: CSV ingester auto-converts Google Sheets URLs; PG ingester table-not-found error
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_csv`, `_ingest_postgresql`
+
+  **CSV URL / Google Sheets**: Users who paste a standard Google Sheets sharing URL (`.../edit#gid=0`) received a cryptic DuckDB parse error because the URL returns HTML. Fixed:
+  1. Sheets edit/view URLs are auto-converted to `/export?format=csv&gid=...` at ingest time — users can paste the sharing link directly without knowing the export URL pattern.
+  2. Any URL that returns `text/html` content-type now raises a clear error: "URL returned HTML instead of CSV — the file may require login or the link may not be publicly shared."
+
+  **PostgreSQL table-not-found**: When a table in the `tables` list didn't exist in the database, `psycopg2.ProgrammingError` was swallowed and replaced with the generic "Ingestion failed" fallback. Now raises: "Table 'my_table' not found in schema 'public' — check that the table exists and the schema name is correct."
+
+---
+
+## 2026-06-20 (session 10be)
+
+### Fix: JSON ingester — better error messages for malformed files and missing records_key
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_json_file`
+
+  Three improvements:
+  1. `json.JSONDecodeError` (which IS a ValueError subclass) now produces a readable message: "JSON file 'foo.json' is not valid JSON: …" instead of a raw Python traceback.
+  2. If `records_key` is configured but the key doesn't exist in the JSON object, the error now lists available top-level keys: "records_key 'data' not found. Available: 'results', 'items'".
+  3. The "not a list" error now names the file and shows the actual type it found, making it easier to diagnose nested-object payloads.
+
+---
+
+## 2026-06-20 (session 10bd)
+
+### Improve: remove developer jargon from live-user UI text
+
+- `frontend/src/components/DataSourcesView.tsx` — header subtitle, build CTA subtitle, ingest overlay, upload section tag
+- `frontend/src/components/MappingView.tsx` — mapping table column headers
+- `backend/app/connectors/duckdb_source_manager.py` — SQLite ingester error handling (committed separately)
+
+  **DataSourcesView**: Four places used developer terminology visible to all users:
+  - Header subtitle: "data ingests into DuckDB" → "data is ingested" (DuckDB is an implementation detail)
+  - Build CTA subtitle: "auto-extracted from schema" → "auto-discovered from your data"
+  - Upload section tag: "auto-mapping to your ontology" → "fields auto-matched to your data model"
+  - Ingest overlay: "Ingesting to DuckDB…" → "Processing your data…"
+
+  **MappingView**: Field mapping table column headers used ontology jargon:
+  - "Ontology Class" → "Entity"
+  - "Ontology Property (click to edit)" → "Mapped Property (click to edit)"
+  - "URI" → "Schema URI"
+
+---
+
 ## 2026-06-20 (session 10bc)
 
 ### Improve: MappingView proper empty state + QueryInterface onboarding CTA

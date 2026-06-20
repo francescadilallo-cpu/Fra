@@ -110,31 +110,31 @@ const TEMPLATE_LOG_STEPS: Record<AgentTemplate, (entities: string[]) => string[]
     ...entities.map((e, i) => `READ ${e} → ${200 + i * 140} records loaded`),
     'Computing statistical baselines and z-scores…',
     'Detecting anomalies and outliers…',
-    'WRITE anomaly report → semantic layer',
+    'WRITE anomaly report → Knowledge Graph',
   ],
   alert: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${150 + i * 90} records loaded`),
     'Evaluating alert threshold conditions…',
     'Preparing notifications for triggered rules…',
-    'WRITE alert log → semantic layer',
+    'WRITE alert log → Knowledge Graph',
   ],
   reconciler: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${280 + i * 120} records loaded`),
     'Cross-referencing keys across entity sets…',
     'Identifying mismatches and orphan records…',
-    'WRITE reconciliation report → semantic layer',
+    'WRITE reconciliation report → Knowledge Graph',
   ],
   validator: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${310 + i * 100} records loaded`),
     'Checking completeness and required fields…',
     'Validating data types and constraint rules…',
-    'WRITE validation summary → semantic layer',
+    'WRITE validation summary → Knowledge Graph',
   ],
   enricher: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${190 + i * 110} records loaded`),
     'Fetching external enrichment data…',
     'Augmenting records with derived attributes…',
-    'WRITE enriched records → semantic layer',
+    'WRITE enriched records → Knowledge Graph',
   ],
 }
 
@@ -1282,7 +1282,7 @@ export default function AgentsView() {
       ...prev,
       [def.id]: { status: 'running', progress: 5, logLines: [] },
     }))
-    appendLog(def.id, def.name, 'Agent started — connecting to semantic layer', 'start')
+    appendLog(def.id, def.name, 'Agent started — connecting to your data model', 'start')
 
     const tick = setInterval(() => {
       step++
@@ -1514,7 +1514,7 @@ export default function AgentsView() {
           <p className="text-slate-500 mt-1 text-sm">
             {allAgents.length === 0 && !IS_DEMO_MODE
               ? 'Build agents to automate monitoring, alerts, reconciliation, and data quality checks'
-              : 'Operational agents connected to the semantic layer · executing in parallel'}
+              : 'Operational agents active · executing in parallel'}
             {completedCount > 0 && (
               <span className="ml-2 text-slate-400">
                 · {completedCount}/{allAgents.length} completed · {totalFindings} findings

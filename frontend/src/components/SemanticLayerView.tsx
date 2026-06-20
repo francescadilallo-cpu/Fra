@@ -620,7 +620,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">A bridge is a semantic join between two entities that live in different physical systems. Bridges are persisted and visible in the ontology graph.</p>
+      <p className="text-xs text-slate-500">A bridge connects two entities that live in different data systems — it lets a single query pull matching records across both sources.</p>
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
@@ -1486,7 +1486,7 @@ function MappingTableGroup({ table, rows, savedEdits, onSave }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-white">
-                {['DB Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
+                {['DB Field', 'Entity', 'Entity Field (click to edit)', 'Type', 'URI'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] text-slate-400 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -1549,7 +1549,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       {defs.length === 0 && (
         <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
           <p className="text-sm font-semibold">No definitions yet</p>
-          <p className="text-xs mt-1">Build the semantic layer to auto-populate definitions from entity columns, or add them manually below.</p>
+          <p className="text-xs mt-1">Run setup to auto-populate definitions from your data, or add them manually below.</p>
         </div>
       )}
       <div className="flex items-center justify-between">
@@ -1635,7 +1635,7 @@ function AmbiguityLogPanel({ isDemoWorkspace }: { isDemoWorkspace: boolean }) {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time by the semantic layer</p>
+      <p className="text-xs text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time</p>
       {ambiguities.map((amb, i) => (
         <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
@@ -1674,10 +1674,10 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'overview',     label: 'Overview',    Icon: Layers,           desc: 'Stats & quality' },
   { id: 'playground',   label: 'Playground',  Icon: Play,             desc: 'Test NL queries', group: 'Tools' },
   { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
-  { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
-  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
-  { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source FK links' },
-  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Disambiguation', group: 'Semantics' },
+  { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Business entities' },
+  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-source connections' },
+  { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source field links' },
+  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Conflict rules', group: 'Semantics' },
   { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
   { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },
   { id: 'segments',     label: 'Segments',    Icon: Filter,           desc: 'Saved filters' },
@@ -1773,9 +1773,9 @@ function RelationsSection({ relationsData, onNavigate }: {
         <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 space-y-2">
           {relationsData.length === 0 ? (
             <>
-              <p className="text-xs text-slate-400">No relations found in the semantic layer yet.</p>
+              <p className="text-xs text-slate-400">No relationships found yet.</p>
               <p className="text-[11px] text-slate-400">
-                Build the semantic layer to auto-populate entity relations, or define FK edges in the{' '}
+                Run the setup to discover relationships automatically, or define them in the{' '}
                 <button onClick={() => onNavigate('entities')} className="text-teal-600 hover:underline">Entities</button> section.
               </p>
             </>
@@ -2245,7 +2245,7 @@ export default function SemanticLayerView() {
         <div className="px-4 pt-4 pb-3 border-b border-slate-200 flex-shrink-0">
           <div className="flex items-center gap-2 mb-2">
             <Network className="w-4 h-4 text-teal-600" />
-            <span className="text-sm font-bold text-slate-900">Semantic Layer</span>
+            <span className="text-sm font-bold text-slate-900">Data Model</span>
           </div>
           {/* Global search */}
           <div className="relative">
@@ -2367,7 +2367,7 @@ export default function SemanticLayerView() {
             <SemanticDraftView />
 
             <SectionHeader icon={Layers} title="Overview"
-              desc="Semantic layer status, coverage score, and data quality"
+              desc="Data model status, coverage score, and data quality"
               action={
                 <button onClick={exportYAML}
                   className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm">
@@ -2378,14 +2378,14 @@ export default function SemanticLayerView() {
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
-              <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
-              <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
-              <StatCard label="KG Nodes"
+              <StatCard label="Entities"         value={nodeCount.toString()} sub="business concepts" />
+              <StatCard label="Verified Metrics" value={metricsCount.toString()} sub="reusable measures" />
+              <StatCard label="Knowledge Nodes"
                 value={isDemoWorkspace ? '193,062' : (kgStatus?.kg_nodes ?? totalRows).toLocaleString()}
                 sub="entity instances" accent />
-              <StatCard label="KG Edges"
+              <StatCard label="Knowledge Edges"
                 value={isDemoWorkspace ? '313,193' : (kgStatus?.kg_edges ?? edgeCount * 8).toLocaleString()}
-                sub="semantic relations" accent />
+                sub="data relationships" accent />
             </div>
 
             {/* Completeness score */}
@@ -2510,7 +2510,7 @@ export default function SemanticLayerView() {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-teal-600" />
-                    <h3 className="text-base font-bold text-slate-900">Build your semantic layer — step by step</h3>
+                    <h3 className="text-base font-bold text-slate-900">Build your data model — step by step</h3>
                   </div>
                   {backendSources.length > 0 && (
                     <button
@@ -2523,7 +2523,7 @@ export default function SemanticLayerView() {
                 </div>
                 <p className="text-sm text-slate-500 mb-5">
                   {backendSources.length > 0
-                    ? `${backendSources.length} source${backendSources.length !== 1 ? 's' : ''} connected — run the pipeline to auto-discover entities and build the semantic layer.`
+                    ? `${backendSources.length} source${backendSources.length !== 1 ? 's' : ''} connected — run setup to auto-discover entities and build your data model.`
                     : 'Follow these four steps to give AI agents a unified, queryable view of your company\'s data.'
                   }
                 </p>
@@ -2542,9 +2542,9 @@ export default function SemanticLayerView() {
                         <p className="text-sm font-semibold text-slate-900 capitalize">{item.label}</p>
                         <p className="text-xs text-slate-400 mt-0.5">{
                           i === 0 ? 'Register your databases, CSVs and APIs' :
-                          i === 1 ? 'Connect semantic names to physical tables' :
-                          i === 2 ? 'Join data across different source systems' :
-                          'Resolve terms that map to multiple fields'
+                          i === 1 ? 'Map entity names to your data tables' :
+                          i === 2 ? 'Link data across different source systems' :
+                          'Clarify terms with conflicting definitions'
                         }</p>
                         <span className={`mt-1.5 inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           item.done ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'
@@ -2565,7 +2565,7 @@ export default function SemanticLayerView() {
                   <FileCode className="w-4 h-4 text-slate-400" /> Query Templates
                   <span className="text-xs text-slate-400 font-normal">— click "Try" to run in Query AI</span>
                 </h3>
-                <p className="text-xs text-slate-400 mb-3">Saved query templates from the semantic layer. Use these as starting points.</p>
+                <p className="text-xs text-slate-400 mb-3">Saved query templates from your data model. Use these as starting points.</p>
                 <div className="space-y-2">
                   {queryTemplates.slice(0, 6).map(t => (
                     <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4">
@@ -2601,7 +2601,7 @@ export default function SemanticLayerView() {
         {section === 'playground' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Play} title="Query Playground"
-              desc="Type a natural language question — see how the semantic layer resolves it into metrics, dimensions, segments, and SQL"
+              desc="Type a natural language question — see how it resolves into metrics, dimensions, segments, and SQL"
             />
 
             {/* Info banner */}
@@ -2783,7 +2783,7 @@ export default function SemanticLayerView() {
         {section === 'sources' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Database} title="Data Sources"
-              desc="Register every physical data system that feeds your semantic layer"
+              desc="Register every data system you want to query and analyse"
               action={
                 <button onClick={() => setShowAddSource(v => !v)}
                     className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
@@ -2873,7 +2873,7 @@ export default function SemanticLayerView() {
                     {!IS_DEMO_MODE && useBackendData && backendSources.length === 0 ? (
                       <>
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
-                          Connect a real data source first in the Sources tab, then document it here for the semantic layer.
+                          Connect a real data source first in the Sources tab, then document it here.
                         </p>
                         <div className="flex items-center justify-center gap-3 flex-wrap">
                           <button
@@ -2890,7 +2890,7 @@ export default function SemanticLayerView() {
                     ) : (
                       <>
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
-                          Document each database, CSV, API, or warehouse that feeds your semantic layer.
+                          Document each database, CSV, API, or warehouse you want to query.
                         </p>
                         <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
                           + Add first source
@@ -2912,8 +2912,8 @@ export default function SemanticLayerView() {
         {/* ── ENTITIES ── */}
         {section === 'entities' && (
           <div className="px-8 py-7 space-y-5">
-            <SectionHeader icon={Network} title="Semantic Entities"
-              desc="Each entity abstracts a physical table — expand to view fields, click Edit to set semantic → physical mappings"
+            <SectionHeader icon={Network} title="Entities"
+              desc="Each entity maps to a data table — expand to view fields, click Edit to configure field definitions"
               action={
                 <button onClick={() => setShowAddEntity(v => !v)}
                   className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
@@ -2932,7 +2932,7 @@ export default function SemanticLayerView() {
                 <div>
                   <p className="text-sm font-semibold text-slate-600 mb-1">No entities yet</p>
                   <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                    Connect a data source and run the semantic pipeline — entities are auto-extracted from your tables. Or add them manually using the button above.
+                    Connect a data source and run setup — entities are auto-extracted from your tables. Or add them manually using the button above.
                   </p>
                 </div>
                 <button
@@ -2965,7 +2965,7 @@ export default function SemanticLayerView() {
             <SectionHeader icon={GitBranch} title="Cross-source Bridges"
               desc="Semantic joins that connect entities living in different physical systems" />
             <p className="text-xs text-slate-500 leading-relaxed">
-              A bridge tells the semantic layer: <em>"field X in system A is the same concept as field Y in system B."</em>
+              A bridge tells the data model: <em>"field X in system A is the same concept as field Y in system B."</em>
               This enables a single query to pull data from multiple sources without knowing the underlying schema differences.
             </p>
 
@@ -3078,7 +3078,7 @@ export default function SemanticLayerView() {
                   kgStatus !== null ? (
                     <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">No metrics were auto-extracted from your pipeline. Define them manually using the button above.</p>
                   ) : (
-                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
+                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run setup first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
                   )
                 ) : (
                   <p className="text-xs mt-1">Click "Define metric" to add your first business measure.</p>
@@ -3148,7 +3148,7 @@ export default function SemanticLayerView() {
                 <SlidersHorizontal className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No hierarchies defined yet</p>
                 {!IS_DEMO_MODE && useBackendData && kgStatus === null ? (
-                  <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline to auto-extract dimension hierarchies, or define them manually using the button above.</p>
+                  <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run setup to auto-extract dimension hierarchies, or define them manually using the button above.</p>
                 ) : (
                   <p className="text-xs mt-1">Click "Add hierarchy" to define a drill-down path.</p>
                 )}
@@ -3229,7 +3229,7 @@ export default function SemanticLayerView() {
         {section === 'definitions' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={Tag} title="Field Definitions"
-              desc="Semantic glossary, field-to-ontology mappings, and ambiguity resolutions"
+              desc="Business terms, field definitions, and ambiguity resolutions"
               action={editCount > 0 ? (
                 <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-3 py-1 font-medium">
                   {editCount} edit{editCount !== 1 ? 's' : ''} saved
@@ -3241,7 +3241,7 @@ export default function SemanticLayerView() {
             <div className="flex items-center gap-1 border-b border-slate-200">
               {([
                 { id: 'mappings'    as const, label: 'Field Mappings',       Icon: Table2       },
-                { id: 'definitions' as const, label: 'Semantic Definitions', Icon: BookOpen     },
+                { id: 'definitions' as const, label: 'Field Definitions',    Icon: BookOpen     },
                 { id: 'ambiguity'   as const, label: 'Ambiguity Log',        Icon: AlertTriangle },
               ]).map(({ id, label, Icon }) => (
                 <button key={id} onClick={() => setDefTab(id)}
@@ -3273,7 +3273,7 @@ export default function SemanticLayerView() {
                   <div className="text-center py-12 text-slate-400">
                     <Table2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-medium">No field mappings yet</p>
-                    <p className="text-xs mt-1">Build the semantic layer from Data Sources to auto-generate mappings from your schema.</p>
+                    <p className="text-xs mt-1">Connect a data source and run setup to auto-generate field mappings from your data.</p>
                   </div>
                 ) : Object.keys(groupedMappings).length === 0 ? (
                   <div className="text-center py-12 text-slate-400 text-sm">No mappings match your search.</div>
