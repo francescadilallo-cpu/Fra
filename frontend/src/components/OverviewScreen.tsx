@@ -424,7 +424,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
       <section className="px-4 md:px-8 lg:px-12 py-16 bg-slate-900">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-2xl font-bold text-white leading-snug mb-6">
-            {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your semantic layer?'}
+            {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your data model?'}
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
             {(IS_DEMO_MODE ? [

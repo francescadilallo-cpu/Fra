@@ -203,9 +203,9 @@ function CredentialModal({
           /* Waitlist panel — no credential form, no registration to the backend */
           <div className="px-5 py-6 space-y-4">
             <div className="rounded-xl bg-amber-50 border border-amber-100 p-4 text-center space-y-2">
-              <p className="text-sm font-semibold text-amber-800">Direct API ingestion in progress</p>
+              <p className="text-sm font-semibold text-amber-800">Native API connector in progress</p>
               <p className="text-xs text-amber-700 leading-relaxed">
-                We're building the native {connector.name} connector. In the meantime, export your data as a CSV and use the <span className="font-semibold">CSV upload</span> section below — your data will be fully semantic-layer indexed.
+                We're building the native {connector.name} connector. In the meantime, export your data as a CSV and use the <span className="font-semibold">CSV upload</span> section below — your data will be fully queryable.
               </p>
             </div>
             {notified ? (

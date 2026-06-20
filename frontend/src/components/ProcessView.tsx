@@ -817,7 +817,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
           {runState === 'done' && (
             <span className="flex items-center gap-1 text-teal-600">
               <CheckCircle2 className="w-3 h-3" />
-              Synced from semantic layer
+              Data model synced
             </span>
           )}
         </div>

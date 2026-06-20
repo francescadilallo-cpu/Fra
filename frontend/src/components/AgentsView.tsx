@@ -1282,7 +1282,7 @@ export default function AgentsView() {
       ...prev,
       [def.id]: { status: 'running', progress: 5, logLines: [] },
     }))
-    appendLog(def.id, def.name, 'Agent started — connecting to semantic layer', 'start')
+    appendLog(def.id, def.name, 'Agent started — connecting to your data model', 'start')
 
     const tick = setInterval(() => {
       step++
@@ -1514,7 +1514,7 @@ export default function AgentsView() {
           <p className="text-slate-500 mt-1 text-sm">
             {allAgents.length === 0 && !IS_DEMO_MODE
               ? 'Build agents to automate monitoring, alerts, reconciliation, and data quality checks'
-              : 'Operational agents connected to the semantic layer · executing in parallel'}
+              : 'Operational agents active · executing in parallel'}
             {completedCount > 0 && (
               <span className="ml-2 text-slate-400">
                 · {completedCount}/{allAgents.length} completed · {totalFindings} findings
