@@ -1233,7 +1233,7 @@ export default function QueryInterface() {
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
                       className="text-[11px] text-slate-500 border border-slate-200 rounded-md px-2.5 py-1 hover:bg-slate-100 font-medium transition-colors"
                     >
-                      2. Run Pipeline →
+                      2. Run Setup →
                     </button>
                   </div>
                 </div>

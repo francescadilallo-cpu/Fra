@@ -440,7 +440,7 @@ export default function DataExplorer() {
                   onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
                   className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
-                  2. Run Pipeline →
+                  2. Run Setup →
                 </button>
               </div>
             </div>

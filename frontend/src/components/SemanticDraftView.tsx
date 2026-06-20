@@ -65,7 +65,7 @@ export function SemanticDraftView() {
     const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = 'semantic-layer-schema.json'; a.click()
+    a.href = url; a.download = 'data-model-schema.json'; a.click()
     URL.revokeObjectURL(url)
     toast('Schema exported', 'success')
   }
