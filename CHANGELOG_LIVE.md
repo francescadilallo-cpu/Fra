@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10ba)
+
+### Feature: Relations tab — add/delete user-defined joins in SemanticDraftView
+
+- `backend/app/metadata/catalog.py` — `ManualRelationRow` SQLAlchemy model + `_migrate_schema()` + `add_manual_relation()` / `remove_manual_relation()` / `list_manual_relations()`
+- `backend/app/main.py` — `RelationCreate` Pydantic model + `POST /api/semantic/draft/relations` + `DELETE /api/semantic/draft/relations/{id}` + `_get_semantic_draft()` now merges KG edges (`is_manual=False`) with manual relations (`is_manual=True`)
+- `frontend/src/api/semantic.ts` — `DraftRelation` extended with `id?` / `is_manual?`; new `addRelation()` / `removeRelation()` API functions
+- `frontend/src/components/SemanticDraftView.tsx` — `RelationsTab` rewritten with full CRUD: "Add relation" button opens an inline form with table dropdowns; manual rows show a trash icon; auto-detected KG rows show an `auto` badge and are read-only (rebuilt on next pipeline run)
+
+---
+
 ## 2026-06-20 (session 10az)
 
 ### Improve: QueryInterface error hints + Dashboard empty-state for fresh live workspaces

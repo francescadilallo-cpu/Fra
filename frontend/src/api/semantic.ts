@@ -310,10 +310,12 @@ export interface DraftEntity {
 }
 
 export interface DraftRelation {
+  id?: number
   from_table: string
   to_table: string
   via_column: string
   edge_type: string
+  is_manual?: boolean
 }
 
 export interface DraftMetric {
@@ -390,6 +392,14 @@ export const addContextDoc = (title: string, content: string): Promise<ContextDo
 
 export const deleteContextDoc = (id: string): Promise<void> =>
   http.delete(`/api/semantic/draft/context/${encodeURIComponent(id)}`).then(() => undefined)
+
+export const addRelation = (
+  relation: Pick<DraftRelation, 'from_table' | 'to_table' | 'via_column' | 'edge_type'>
+): Promise<DraftRelation> =>
+  http.post<DraftRelation>('/api/semantic/draft/relations', relation).then(r => r.data)
+
+export const removeRelation = (relationId: number): Promise<void> =>
+  http.delete(`/api/semantic/draft/relations/${relationId}`).then(() => undefined)
 
 // ── Query Templates ───────────────────────────────────────────────────────────
 

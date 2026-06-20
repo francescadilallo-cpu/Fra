@@ -108,6 +108,17 @@ class ContextDocRow(Base):
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
+class ManualRelationRow(Base):
+    __tablename__ = "manual_relations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    from_table: Mapped[str] = mapped_column(String, nullable=False)
+    to_table: Mapped[str] = mapped_column(String, nullable=False)
+    via_column: Mapped[str | None] = mapped_column(String, default="")
+    edge_type: Mapped[str | None] = mapped_column(String, default="FK")
+    created_at: Mapped[str | None] = mapped_column(String, default="")
+
+
 # ── Pydantic-style dataclasses (returned by public API) ──────────────────────
 
 
@@ -339,6 +350,18 @@ class MetadataCatalog:
                 )
             except Exception:
                 pass  # column already exists
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS manual_relations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_table TEXT NOT NULL,
+                    to_table TEXT NOT NULL,
+                    via_column TEXT DEFAULT '',
+                    edge_type TEXT DEFAULT 'FK',
+                    created_at TEXT DEFAULT ''
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
@@ -735,6 +758,55 @@ class MetadataCatalog:
                     "description": r.description or "",
                     "formula": r.formula or "",
                     "unit": r.unit or "",
+                }
+                for r in rows
+            ]
+
+    # ── Manual relations CRUD ──────────────────────────────────────────────
+
+    def add_manual_relation(
+        self,
+        from_table: str,
+        to_table: str,
+        via_column: str = "",
+        edge_type: str = "FK",
+    ) -> int:
+        """Persist a user-defined relation. Returns the new row id."""
+        now = datetime.utcnow().isoformat()
+        with self._Session() as session:
+            row = ManualRelationRow(
+                from_table=from_table,
+                to_table=to_table,
+                via_column=via_column,
+                edge_type=edge_type,
+                created_at=now,
+            )
+            session.add(row)
+            session.commit()
+            return row.id  # type: ignore[return-value]
+
+    def remove_manual_relation(self, relation_id: int) -> bool:
+        """Delete a manual relation by id. Returns False if not found."""
+        with self._Session() as session:
+            row = session.get(ManualRelationRow, relation_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+        return True
+
+    def list_manual_relations(self) -> list[dict]:
+        """Return all user-defined relations as dicts."""
+        with self._Session() as session:
+            rows = session.execute(select(ManualRelationRow)).scalars().all()
+            return [
+                {
+                    "id": r.id,
+                    "from_table": r.from_table,
+                    "to_table": r.to_table,
+                    "via_column": r.via_column or "",
+                    "edge_type": r.edge_type or "FK",
+                    "is_manual": True,
                 }
                 for r in rows
             ]

@@ -861,8 +861,8 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
         ]
 
     relations: list[dict] = []
+    seen: set[tuple] = set()
     if kg:
-        seen: set[tuple] = set()
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
             src_table = src.split(":")[0]
@@ -880,8 +880,15 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
                         if edge_type.startswith("FK_")
                         else "",
                         "edge_type": edge_type,
+                        "is_manual": False,
                     }
                 )
+    if catalog:
+        for mr in catalog.list_manual_relations():
+            key = (mr["from_table"], mr["to_table"], mr["edge_type"])
+            if key not in seen:
+                seen.add(key)
+                relations.append(mr)
 
     from .connectors.source_registry import get_source_registry
 
@@ -1024,6 +1031,13 @@ class MetricDraftUpdate(BaseModel):
 class ContextDocCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=20000)
+
+
+class RelationCreate(BaseModel):
+    from_table: str = Field(min_length=1, max_length=256)
+    to_table: str = Field(min_length=1, max_length=256)
+    via_column: str = Field(default="", max_length=256)
+    edge_type: str = Field(default="FK", max_length=64)
 
 
 class QueryTemplatePayload(BaseModel):
@@ -2814,6 +2828,60 @@ def patch_draft_metric(
         except Exception:
             pass
     return {"ok": True}
+
+
+@app.post(
+    "/api/semantic/draft/relations",
+    tags=["semantic"],
+    summary="Add a user-defined relation between two tables",
+    status_code=201,
+)
+def add_draft_relation(
+    body: RelationCreate,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
+    relation_id = catalog.add_manual_relation(
+        from_table=body.from_table,
+        to_table=body.to_table,
+        via_column=body.via_column,
+        edge_type=body.edge_type,
+    )
+    return {
+        "id": relation_id,
+        "from_table": body.from_table,
+        "to_table": body.to_table,
+        "via_column": body.via_column,
+        "edge_type": body.edge_type,
+        "is_manual": True,
+    }
+
+
+@app.delete(
+    "/api/semantic/draft/relations/{relation_id}",
+    tags=["semantic"],
+    summary="Delete a user-defined relation",
+    status_code=204,
+)
+def delete_draft_relation(
+    relation_id: int,
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> None:
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic layer not ready — build it from Data Sources first",
+        )
+    ok = catalog.remove_manual_relation(relation_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Relation {relation_id} not found")
 
 
 @app.get(

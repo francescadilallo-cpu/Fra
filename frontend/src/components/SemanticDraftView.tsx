@@ -6,9 +6,10 @@ import {
 import {
   getDraft, patchDraftEntity, patchDraftMetric,
   addContextDoc, deleteContextDoc,
+  addRelation, removeRelation,
   createQueryTemplate, updateQueryTemplate, deleteQueryTemplate,
   backendErrorMessage,
-  type SemanticDraft, type DraftEntity, type DraftMetric, type ContextDoc,
+  type SemanticDraft, type DraftEntity, type DraftRelation, type DraftMetric, type ContextDoc,
   type QueryTemplate, type QueryTemplateCreate,
 } from '../api/semantic'
 import { toast } from './Toast'
@@ -132,7 +133,7 @@ export function SemanticDraftView() {
       {/* Tab content */}
       <div className="p-4">
         {activeTab === 'entities'  && <EntitiesTab  entities={draft.entities}         onUpdate={loadDraft} />}
-        {activeTab === 'relations' && <RelationsTab relations={draft.relations} />}
+        {activeTab === 'relations' && <RelationsTab relations={draft.relations} entities={draft.entities} onUpdate={loadDraft} />}
         {activeTab === 'metrics'   && <MetricsTab   metrics={draft.metrics}            onUpdate={loadDraft} />}
         {activeTab === 'context'   && <ContextDocsTab docs={draft.context_docs}        onUpdate={loadDraft} />}
         {activeTab === 'templates' && <QueryTemplatesTab templates={draft.templates ?? []} onUpdate={loadDraft} />}
@@ -375,44 +376,211 @@ function EntityCard({ entity, onSaved }: { entity: DraftEntity; onSaved: () => v
 
 // ── Relations tab ─────────────────────────────────────────────────────────────
 
-function RelationsTab({ relations }: { relations: SemanticDraft['relations'] }) {
-  if (relations.length === 0) return (
-    <div className="py-8 text-center">
-      <p className="text-sm text-slate-400 mb-2">No relations detected yet.</p>
-      <p className="text-xs text-slate-400 mb-3 max-w-xs mx-auto">
-        Cross-source links are auto-inferred from column names ending in <code className="bg-slate-100 px-1 rounded">_id</code>, <code className="bg-slate-100 px-1 rounded">_ref</code>, or <code className="bg-slate-100 px-1 rounded">_fk</code> after a pipeline run.
-      </p>
-      <button
-        onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-        className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
-      >
-        Connect a data source <ArrowRight className="w-3 h-3" />
-      </button>
-    </div>
-  )
+function RelationsTab({
+  relations,
+  entities,
+  onUpdate,
+}: {
+  relations: DraftRelation[]
+  entities: DraftEntity[]
+  onUpdate: () => void
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [form, setForm] = useState({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' })
+
+  const tableNames = entities.map(e => e.table).sort()
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.from_table || !form.to_table) return
+    setSaving(true)
+    try {
+      await addRelation(form)
+      setForm({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' })
+      setShowForm(false)
+      onUpdate()
+      toast('Relation added', 'success')
+    } catch (err) {
+      toast(backendErrorMessage(err) || 'Failed to add relation', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(r: DraftRelation) {
+    if (r.id == null) return
+    setDeleting(r.id)
+    try {
+      await removeRelation(r.id)
+      onUpdate()
+      toast('Relation removed', 'success')
+    } catch (err) {
+      toast(backendErrorMessage(err) || 'Failed to remove relation', 'error')
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-slate-100 text-left">
-            <th className="py-2 px-2 text-slate-500 font-medium">From table</th>
-            <th className="py-2 px-2 text-slate-500 font-medium">Via column</th>
-            <th className="py-2 px-2 text-slate-500 font-medium">To table</th>
-            <th className="py-2 px-2 text-slate-500 font-medium">Type</th>
-          </tr>
-        </thead>
-        <tbody>
-          {relations.map((r, i) => (
-            <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-              <td className="py-1.5 px-2 font-mono text-slate-700">{r.from_table}</td>
-              <td className="py-1.5 px-2 font-mono text-teal-600">{r.via_column || '—'}</td>
-              <td className="py-1.5 px-2 font-mono text-slate-700">{r.to_table}</td>
-              <td className="py-1.5 px-2 text-slate-400 text-[11px]">{r.edge_type}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      {relations.length === 0 && !showForm ? (
+        <div className="py-8 text-center">
+          <p className="text-sm text-slate-400 mb-2">No relations detected yet.</p>
+          <p className="text-xs text-slate-400 mb-3 max-w-xs mx-auto">
+            Cross-source links are auto-inferred from column names ending in{' '}
+            <code className="bg-slate-100 px-1 rounded">_id</code>,{' '}
+            <code className="bg-slate-100 px-1 rounded">_ref</code>, or{' '}
+            <code className="bg-slate-100 px-1 rounded">_fk</code> after a pipeline run.
+            You can also define joins manually.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+              className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
+            >
+              Connect a data source <ArrowRight className="w-3 h-3" />
+            </button>
+            {entities.length > 0 && (
+              <button
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-1 text-xs text-slate-600 border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 font-medium"
+              >
+                <Plus className="w-3 h-3" /> Add manually
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 text-left">
+                  <th className="py-2 px-2 text-slate-500 font-medium">From table</th>
+                  <th className="py-2 px-2 text-slate-500 font-medium">Via column</th>
+                  <th className="py-2 px-2 text-slate-500 font-medium">To table</th>
+                  <th className="py-2 px-2 text-slate-500 font-medium">Type</th>
+                  <th className="py-2 px-2 text-slate-500 font-medium w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {relations.map((r, i) => (
+                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="py-1.5 px-2 font-mono text-slate-700">{r.from_table}</td>
+                    <td className="py-1.5 px-2 font-mono text-teal-600">{r.via_column || '—'}</td>
+                    <td className="py-1.5 px-2 font-mono text-slate-700">{r.to_table}</td>
+                    <td className="py-1.5 px-2 text-[11px]">
+                      {r.is_manual ? (
+                        <span className="bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">manual</span>
+                      ) : (
+                        <span className="text-slate-400">{r.edge_type}</span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-2">
+                      {r.is_manual && r.id != null && (
+                        <button
+                          onClick={() => handleDelete(r)}
+                          disabled={deleting === r.id}
+                          title="Remove this relation"
+                          className="text-slate-300 hover:text-red-400 transition-colors disabled:opacity-40"
+                        >
+                          {deleting === r.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Trash2 className="w-3 h-3" />}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!showForm && entities.length > 0 && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 font-medium"
+            >
+              <Plus className="w-3 h-3" /> Add relation
+            </button>
+          )}
+        </>
+      )}
+
+      {showForm && (
+        <form onSubmit={handleAdd} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-slate-700">Define a join between two tables</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">From table *</label>
+              <select
+                value={form.from_table}
+                onChange={ev => setForm(f => ({ ...f, from_table: ev.target.value }))}
+                required
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+              >
+                <option value="">Select table…</option>
+                {tableNames.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">To table *</label>
+              <select
+                value={form.to_table}
+                onChange={ev => setForm(f => ({ ...f, to_table: ev.target.value }))}
+                required
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+              >
+                <option value="">Select table…</option>
+                {tableNames.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">Join column</label>
+              <input
+                type="text"
+                value={form.via_column}
+                onChange={ev => setForm(f => ({ ...f, via_column: ev.target.value }))}
+                placeholder="e.g. customer_id"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">Type</label>
+              <select
+                value={form.edge_type}
+                onChange={ev => setForm(f => ({ ...f, edge_type: ev.target.value }))}
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400"
+              >
+                <option value="FK">FK (foreign key)</option>
+                <option value="JOIN">JOIN</option>
+                <option value="REF">REF (reference)</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="submit"
+              disabled={saving || !form.from_table || !form.to_table}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              {saving ? 'Saving…' : 'Add relation'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setForm({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' }) }}
+              className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
