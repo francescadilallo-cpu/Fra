@@ -921,18 +921,28 @@ export default function OntologyBuilder() {
   const [nodes, setNodes] = useState<Node[]>(initial.nodes)
   const [edges, setEdges] = useState<Edge[]>(initial.edges)
 
-  // Reset (reload from storage) when sector changes
+  // Reset canvas when sector changes, or sync from backend when liveConfig loads/updates.
+  // useState only captures initial.nodes once; this effect keeps the canvas in sync.
   const lastSectorRef = useRef(sectorId)
+  const lastLiveConfigRef = useRef<LiveConfig | null>(null)
   useEffect(() => {
-    if (lastSectorRef.current !== sectorId) {
+    const sectorChanged = lastSectorRef.current !== sectorId
+    const liveConfigChanged = !IS_DEMO_MODE && liveConfig !== lastLiveConfigRef.current
+    if (sectorChanged) {
       lastSectorRef.current = sectorId
+      lastLiveConfigRef.current = liveConfig
       const s = buildInitialState(sector, sectorId, liveConfig)
       setNodes(s.nodes)
       setEdges(s.edges)
       setMessages([WELCOME])
       setPending([])
+    } else if (liveConfigChanged) {
+      lastLiveConfigRef.current = liveConfig
+      const s = buildInitialState(sector, sectorId, liveConfig)
+      setNodes(s.nodes)
+      setEdges(s.edges)
     }
-  }, [sectorId, sector, liveConfig])
+  }, [sectorId, sector, liveConfig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const WELCOME: ChatMessage = useMemo(
     () => ({

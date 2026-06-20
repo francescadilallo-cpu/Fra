@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10ar)
+
+### Fix: OntologyBuilder canvas stays empty for live users until sector switch
+
+- `frontend/src/components/OntologyBuilder.tsx` — canvas sync `useEffect`
+
+  **Bug**: `useState<Node[]>(initial.nodes)` only runs once (on first render). When a live user opens OntologyBuilder, `liveConfig=null` on mount so `initial.nodes=[]`. The async `getLiveConfig()` resolves and sets `liveConfig`, which recomputes `initial` via `useMemo` — but does NOT update the `useState`. The existing `useEffect([sectorId, sector, liveConfig])` only updated nodes/edges when the *sector* changed, not when `liveConfig` changed. Result: live users always saw an empty canvas until they switched sectors.
+
+  **Fix**: Added `lastLiveConfigRef` to track the previous `liveConfig`. When `liveConfig` changes without a sector change (initial load or `pipeline-run-updated`), the effect now syncs nodes/edges from the new `buildInitialState()` result. Sector changes still reset messages and pending (same as before).
+
+---
+
 ## 2026-06-20 (session 10aq)
 
 ### Frontend: dispatch pipeline-run-updated after addSource (connector + CSV) and removeSource
