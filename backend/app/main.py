@@ -1978,7 +1978,7 @@ def rebuild_knowledge_graph(
         _audit(
             request,
             current_user,
-            "Rebuilt knowledge graph",
+            "Rebuilt data model",
             f"{status['kg_nodes']:,} nodes · {status['kg_edges']:,} edges",
             category="data",
         )
