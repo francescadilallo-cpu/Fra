@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 3)
+
+### Polish: final jargon pass — 5 more live-user strings fixed
+
+- `frontend/src/components/OntologyGraph.tsx`
+  - Page heading "Ontology" → "Entity Graph" (main `<h1>`, shown to all users)
+  - Empty state guidance: "Ontology Builder AI" → "Builder AI"; "run the pipeline" → "run setup"
+
+- `frontend/src/components/AgentsView.tsx`
+  - "built on your ontology" → "built on your data model" (shown when user has custom agents)
+  - "Semantic Layer Activity Log" → "Agent Activity Log" (always-visible footer log)
+
+- `frontend/src/components/ConfigurationView.tsx`
+  - Sector templates description: "ontology, mappings and connectors" → "entity definitions, mappings and connectors"
+
+- `frontend/src/components/ProcessView.tsx`
+  - `buildLiveLogs` (live-user pipeline): "Building Knowledge Graph..." → "Building data model..."; "knowledge nodes created" → "entities indexed"
+
+---
+
 ## 2026-06-20 (session cont. 2)
 
 ### Fix + improve: connector error wrapping; jargon in backend API errors and frontend empty states
