@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10au)
+
+### Audit: comprehensive live/demo isolation review — no new bugs found
+
+Full read-through of all 20+ frontend components and all backend API endpoints, verifying:
+
+- **Demo content isolation**: Every `DEMO_*` / `DEMO_*` constant is guarded by `IS_DEMO_MODE` or `isDemoWorkspace`. `WORKFLOWS` in `AgentWorkflows.tsx` returns `[]` for live mode. `OnboardingWizard.tsx` collapses to 1 step for live users (`TOTAL_STEPS = IS_DEMO_MODE ? 5 : 1`). `UseCasesView.tsx` filters out the AdventureWorks case (`uc.id !== 'adventureworks'`). `DEMO_CONTEXT_DOCS` in `SemanticDraftView.tsx` is only used as a demo-mode fallback.
+- **Raw exception sanitization**: All backend HTTP 500 responses use `_safe_ingest_error()` or fixed strings. Agentic router uses `_safe_msg` pattern (only `ValueError`/`AgentSemanticValidationError` messages pass through; everything else → "Action execution failed — see audit log for details"). Template CRUD exposes only developer-crafted `ValueError`/`KeyError` messages. `backendErrorMessage()` on the frontend shows backend `detail` when present, falls back to generic text.
+- **Hidden demo tables**: `/api/data/{table}`, `/api/semantic/coverage`, `/api/semantic/sources`, `/api/semantic/live-config`, `/api/data/store/status`, `/api/semantic/ask`, `/api/semantic/build`, `/api/semantic/draft`, `/api/kg/build`, `/api/semantic/system-prompt` all call `_hidden_demo_tables(current_user)` and filter accordingly.
+- **Empty states / CTAs**: All live-user empty states have actionable CTAs (e.g., "Connect a data source", "Get started"). `SemanticDraftView.tsx` dispatches to Data Sources tab. `OntologyGraph.tsx` offers "Connect a data source" and "Build manually with AI" buttons.
+- **Audit log**: `AuditLogSection` in `AdminSections.tsx` uses backend `listAuditEntries()` for live mode; `DEMO_AUDIT` is only used when `IS_DEMO_MODE`.
+
+No code changes were required. All isolation contracts are being upheld.
+
+---
+
 ## 2026-06-20 (session 10at)
 
 ### Backend: fix freshness_status mismatch between backend and frontend
