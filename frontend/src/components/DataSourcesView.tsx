@@ -729,6 +729,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       clearTimeout(t2); clearTimeout(t3); clearTimeout(timeoutId)
       setBuildStep(4)
       globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
       navTimerRef.current = setTimeout(() => {
         setBuilding(false); setBuildStep(0)
         onNavigate?.('sembuilder' as NavTab)

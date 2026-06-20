@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ao)
+
+### Frontend: DataSourcesView build now dispatches pipeline-run-updated
+
+- `frontend/src/components/DataSourcesView.tsx` — `handleBuildSemanticLayer()`
+
+  When a user builds the semantic layer from the "Data Sources" tab (after connecting a first source), the success path did not dispatch `pipeline-run-updated`. All the views that now listen to this event (Dashboard, SemanticDraftView, OntologyGraph, SemanticLayerView, AgentsView, OverviewScreen, DataExplorer, OntologyBuilder, MappingView, QueryInterface) would remain stale until a page reload. Now dispatches `pipeline-run-updated` immediately after the build API call succeeds so all dependent views refresh atomically.
+
+---
+
 ## 2026-06-19 (continued — session 10an)
 
 ### Frontend: refresh QueryInterface example questions on pipeline-run-updated
