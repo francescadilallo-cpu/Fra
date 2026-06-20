@@ -102,7 +102,7 @@ export default function CommandPalette({ onNavigate }: Props) {
       { tab: 'data',      label: 'Data Explorer',   icon: Table2,            kw: 'browse table records' },
       { tab: 'query',     label: 'Query AI',        icon: MessageSquare,     kw: 'ask question nlp sql chat' },
       { tab: 'sembuilder', label: 'Data Model',        icon: Network,          kw: 'erp field mapping definitions metrics bridges' },
-      { tab: 'process',   label: 'Process',         icon: Workflow,          kw: 'pipeline lifecycle funnel' },
+      { tab: 'process',   label: 'Setup',           icon: Workflow,          kw: 'pipeline setup lifecycle funnel' },
       { tab: 'config',    label: 'Configuration',   icon: Settings,          kw: 'settings admin users tokens' },
     ]
 
