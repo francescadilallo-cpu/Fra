@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10be — continued)
+
+### Improve: CSV ingester auto-converts Google Sheets URLs; PG ingester table-not-found error
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_csv`, `_ingest_postgresql`
+
+  **CSV URL / Google Sheets**: Users who paste a standard Google Sheets sharing URL (`.../edit#gid=0`) received a cryptic DuckDB parse error because the URL returns HTML. Fixed:
+  1. Sheets edit/view URLs are auto-converted to `/export?format=csv&gid=...` at ingest time — users can paste the sharing link directly without knowing the export URL pattern.
+  2. Any URL that returns `text/html` content-type now raises a clear error: "URL returned HTML instead of CSV — the file may require login or the link may not be publicly shared."
+
+  **PostgreSQL table-not-found**: When a table in the `tables` list didn't exist in the database, `psycopg2.ProgrammingError` was swallowed and replaced with the generic "Ingestion failed" fallback. Now raises: "Table 'my_table' not found in schema 'public' — check that the table exists and the schema name is correct."
+
+---
+
 ## 2026-06-20 (session 10be)
 
 ### Fix: JSON ingester — better error messages for malformed files and missing records_key
