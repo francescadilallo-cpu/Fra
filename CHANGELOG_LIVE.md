@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10bd)
+
+### Improve: remove developer jargon from live-user UI text
+
+- `frontend/src/components/DataSourcesView.tsx` — header subtitle, build CTA subtitle, ingest overlay, upload section tag
+- `frontend/src/components/MappingView.tsx` — mapping table column headers
+- `backend/app/connectors/duckdb_source_manager.py` — SQLite ingester error handling (committed separately)
+
+  **DataSourcesView**: Four places used developer terminology visible to all users:
+  - Header subtitle: "data ingests into DuckDB" → "data is ingested" (DuckDB is an implementation detail)
+  - Build CTA subtitle: "auto-extracted from schema" → "auto-discovered from your data"
+  - Upload section tag: "auto-mapping to your ontology" → "fields auto-matched to your data model"
+  - Ingest overlay: "Ingesting to DuckDB…" → "Processing your data…"
+
+  **MappingView**: Field mapping table column headers used ontology jargon:
+  - "Ontology Class" → "Entity"
+  - "Ontology Property (click to edit)" → "Mapped Property (click to edit)"
+  - "URI" → "Schema URI"
+
+---
+
 ## 2026-06-20 (session 10bc)
 
 ### Improve: MappingView proper empty state + QueryInterface onboarding CTA

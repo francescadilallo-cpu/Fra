@@ -799,7 +799,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {workspaceLabel(sector.name)} · Connect business systems or upload files — data ingests into DuckDB and becomes queryable instantly
+          {workspaceLabel(sector.name)} · Connect business systems or upload files — data is ingested and becomes queryable instantly
         </p>
       </div>
 
@@ -864,7 +864,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                 <div>
                   <p className="text-sm font-semibold text-teal-900">Ready to build your Semantic Layer?</p>
                   <p className="text-xs text-teal-700 mt-0.5">
-                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relations, and metrics auto-extracted from schema
+                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered from your data
                   </p>
                 </div>
                 <button
@@ -927,7 +927,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="flex items-center gap-2 mb-3">
             <Upload className="w-4 h-4 text-slate-500" />
             <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Upload File</h2>
-            <span className="text-xs text-slate-400">· auto-mapping to your ontology</span>
+            <span className="text-xs text-slate-400">· fields auto-matched to your data model</span>
           </div>
           <UploadPanel
             upload={upload} onUpload={handleFile} onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
@@ -952,7 +952,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <div className="bg-white rounded-xl shadow-2xl px-6 py-5 flex items-center gap-3">
             <Loader2 className="w-5 h-5 text-teal-500 animate-spin" />
             <div>
-              <p className="text-sm font-semibold text-slate-900">Ingesting to DuckDB…</p>
+              <p className="text-sm font-semibold text-slate-900">Processing your data…</p>
               <p className="text-xs text-slate-500 mt-0.5">Mapping fields · validating · indexing</p>
             </div>
           </div>
