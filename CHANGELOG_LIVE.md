@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 6)
+
+### Polish: final jargon sweep — backend audit log + command palette + mapping tab
+
+- **backend/app/main.py**: `_audit()` message "Rebuilt knowledge graph" → "Rebuilt data model" (visible to live users in AuditLogSection)
+- **CommandPalette.tsx**: Command label "Run Semantic Pipeline" → "Run Setup"; nav item label "Process" → "Setup" (matches sidebar)
+- **MappingView.tsx**: Tab label "Semantic Definitions" → "Field Definitions"
+
+All other remaining "semantic"/"ontology"/"Knowledge Graph"/"pipeline" occurrences verified as demo-only (gated by `IS_DEMO_MODE`), internal code identifiers, API docs/logs, or the intentional OWL/RDF developer export.
+
+---
+
 ## 2026-06-20 (session cont. 5)
 
 ### Polish: "pipeline" / "Knowledge Graph" / "Process" consistency pass + live workspace name fix
