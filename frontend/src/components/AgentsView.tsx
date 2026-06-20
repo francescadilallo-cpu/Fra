@@ -989,7 +989,7 @@ function ExecutiveActionsPanel() {
         const r = result.resync_result
         toast(
           result.status === 'SYNCED'
-            ? `Approved · ${r?.nodes_patched ?? 0} KG nodes updated · ${r?.duration_ms ?? 0}ms`
+            ? `Approved · ${r?.nodes_patched ?? 0} records updated · ${r?.duration_ms ?? 0}ms`
             : result.status === 'SYNC_FAILED'
               ? 'Executed but re-sync failed — check audit log'
               : 'Approved and executed',
@@ -1099,7 +1099,7 @@ function ExecutiveActionsPanel() {
                   <p className="text-xs font-mono text-slate-700 truncate">{a.command}</p>
                   {isSynced && a.resync_result && (
                     <p className="text-[10px] text-teal-600 mt-0.5">
-                      {a.resync_result.nodes_patched} KG nodes · {a.resync_result.cache_keys_invalidated} cache keys · {a.resync_result.duration_ms}ms
+                      {a.resync_result.nodes_patched} records · {a.resync_result.cache_keys_invalidated} cache keys · {a.resync_result.duration_ms}ms
                     </p>
                   )}
                   {isFailed && (

@@ -234,7 +234,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
                 {[
                   { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run setup` : 'Connect your first source') },
                   { label: 'Entities',          value: String(entityCount),             sub: `${edgeCount} relationships` },
-                  { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} knowledge nodes` : 'Run setup to build' },
+                  { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} records indexed` : 'Run setup to build' },
                 ].map(s => (
                   <div key={s.label} className="border border-slate-200 rounded-lg px-3 py-2.5 bg-white">
                     <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
@@ -439,7 +439,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
                   ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run setup to activate`
                   : 'Connect your data sources — databases, files, SaaS connectors',
               semBuilt
-                ? `Data model ready — ${kgNodes.toLocaleString('en-US')} knowledge nodes`
+                ? `Data model ready — ${kgNodes.toLocaleString('en-US')} records indexed`
                 : 'Build your data model — entities, relationships, and metrics auto-discovered',
               'Natural language Query AI — ask questions in plain English',
               'Define agents to monitor data quality and business KPIs',
