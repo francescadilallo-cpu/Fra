@@ -1285,10 +1285,19 @@ class DuckDBSourceManager:
                     safe_bt = table.replace("`", "``")
                     safe_dbt = table.replace('"', '""')
                     with my_conn.cursor() as cur:
-                        if limit > 0:
-                            cur.execute(f"SELECT * FROM `{safe_bt}` LIMIT {limit + 1}")
-                        else:
-                            cur.execute(f"SELECT * FROM `{safe_bt}`")
+                        try:
+                            if limit > 0:
+                                cur.execute(
+                                    f"SELECT * FROM `{safe_bt}` LIMIT {limit + 1}"
+                                )
+                            else:
+                                cur.execute(f"SELECT * FROM `{safe_bt}`")
+                        except pymysql.ProgrammingError as exc:
+                            raise ValueError(
+                                f"Table '{table}' not found in MySQL database — "
+                                f"check that the table exists and the database name is correct. "
+                                f"(MySQL: {exc})"
+                            ) from exc
                         # pymysql SSDictCursor supports fetchmany for chunked streaming
                         n, truncated = self._stream_cursor_into_table(
                             conn, cur, safe_dbt, row_limit=limit
@@ -1341,10 +1350,16 @@ class DuckDBSourceManager:
         )
         safe_table = table.replace('"', '""')
         safe_path = str(path).replace("'", "''")
-        conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-            f"SELECT * FROM read_parquet('{safe_path}')"
-        )
+        try:
+            conn.execute(
+                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                f"SELECT * FROM read_parquet('{safe_path}')"
+            )
+        except Exception as exc:
+            raise ValueError(
+                f"Cannot read Parquet file '{path.name}': {exc} — "
+                "the file may be corrupted or not a valid Parquet file."
+            ) from exc
         _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
         n = _row[0] if _row is not None else 0
         self._row_counts[f"{cfg.id}.{table}"] = n
