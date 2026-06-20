@@ -1970,7 +1970,7 @@ def rebuild_knowledge_graph(
                 status_code=500,
                 detail=_safe_ingest_error(
                     exc,
-                    fallback="Knowledge graph rebuild failed — please check your source configuration and try again",
+                    fallback="Data model rebuild failed — please check your source configuration and try again",
                 ),
             ) from exc
         hidden = _hidden_demo_tables(current_user)
@@ -2725,7 +2725,7 @@ async def build_semantic_layer(
                 status_code=500,
                 detail=_safe_ingest_error(
                     exc,
-                    fallback="Semantic layer build failed — please check your source configuration and try again",
+                    fallback="Data model build failed — please check your source configuration and try again",
                 ),
             ) from exc
         # Auto-generate templates from the freshly-built schema (always from
