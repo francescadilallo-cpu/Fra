@@ -110,31 +110,31 @@ const TEMPLATE_LOG_STEPS: Record<AgentTemplate, (entities: string[]) => string[]
     ...entities.map((e, i) => `READ ${e} → ${200 + i * 140} records loaded`),
     'Computing statistical baselines and z-scores…',
     'Detecting anomalies and outliers…',
-    'WRITE anomaly report → Knowledge Graph',
+    'WRITE anomaly report → data model',
   ],
   alert: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${150 + i * 90} records loaded`),
     'Evaluating alert threshold conditions…',
     'Preparing notifications for triggered rules…',
-    'WRITE alert log → Knowledge Graph',
+    'WRITE alert log → data model',
   ],
   reconciler: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${280 + i * 120} records loaded`),
     'Cross-referencing keys across entity sets…',
     'Identifying mismatches and orphan records…',
-    'WRITE reconciliation report → Knowledge Graph',
+    'WRITE reconciliation report → data model',
   ],
   validator: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${310 + i * 100} records loaded`),
     'Checking completeness and required fields…',
     'Validating data types and constraint rules…',
-    'WRITE validation summary → Knowledge Graph',
+    'WRITE validation summary → data model',
   ],
   enricher: (entities) => [
     ...entities.map((e, i) => `READ ${e} → ${190 + i * 110} records loaded`),
     'Fetching external enrichment data…',
     'Augmenting records with derived attributes…',
-    'WRITE enriched records → Knowledge Graph',
+    'WRITE enriched records → data model',
   ],
 }
 
