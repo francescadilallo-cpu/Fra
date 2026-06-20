@@ -27,6 +27,24 @@ work is traceable across sessions and the git history is easy to reconcile.
 - `frontend/src/components/DataExplorer.tsx`
   - "run the pipeline — entities are auto-discovered from your schema" → "run setup — entities are auto-extracted from your tables"
 
+- `frontend/src/components/Layout.tsx`
+  - Sidebar nav labels (Build section, visible to all users):
+    - "Ontology" → "Entity Graph"
+    - "Ontology Builder" → "Builder AI"
+    - "Knowledge Graph" → "Data Model"
+
+- Cross-component label consistency update (all references to old nav labels):
+  - `Dashboard.tsx` — card heading "Knowledge Graph" → "Data Model"
+  - `ProcessView.tsx` — "KG Nodes Created" → "Entities Indexed", "KG Edges Indexed" → "Relationships", "ontology classes" → "entity types", "instances in Knowledge Graph" → "entity instances indexed", "Semantic layer ready" → "Data model ready", "View Ontology" → "View Data Model"
+  - `OverviewScreen.tsx` — step titles updated; status badges "Ontology" → "Entity graph", "Knowledge Graph" → "Data model"
+  - `QueryInterface.tsx` — "Knowledge Graph → Definitions" → "Data Model → Definitions"
+  - `SemanticDraftView.tsx` — "Metrics tab in the Knowledge Graph" → "Metrics tab in Data Model"
+  - `CommandPalette.tsx` — "Ontology" → "Entity Graph", `sembuilder` → "Data Model"
+  - `AccessGate.tsx` — demo option description: "semantic ambiguities, Knowledge Graph already built" → "data ambiguities, Data Model already built"
+
+- `frontend/src/components/OntologyBuilder.tsx`
+  - Fix pre-existing TypeScript unused parameter warning (`sectorId` → `_sectorId` in `buildAddClassIntent`)
+
 ---
 
 ## 2026-06-20 (session cont.)
