@@ -412,7 +412,7 @@ export default function DataExplorer() {
           )}
         </div>
         <p className="text-slate-500 mt-1 text-sm">
-          {workspaceLabel(sector.name)} · Browse live data for each entity
+          {workspaceLabel(sector.name)} · {IS_DEMO_MODE ? 'Browse live data for each entity' : 'Entity schema browser · use Query AI to run SQL against your live data'}
           {selected && rowCount > 0 && (
             <span className="ml-2 text-teal-600 font-medium">{rowCount.toLocaleString('en-US')} records in production DB</span>
           )}
@@ -425,16 +425,24 @@ export default function DataExplorer() {
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-xs space-y-3">
               <Database className="w-10 h-10 mx-auto text-slate-300" />
-              <p className="text-sm font-semibold text-slate-700">No entities in your ontology yet</p>
-              <p className="text-xs text-slate-500">
-                Build your ontology first to explore data here.{' '}
-                <button
-                  onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sembuilder' } }))}
-                  className="underline font-medium text-teal-600 hover:text-teal-700"
-                >
-                  Go to Ontology Builder
-                </button>
+              <p className="text-sm font-semibold text-slate-700">No entities discovered yet</p>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Connect a data source and run the pipeline — entities are auto-discovered from your schema.
               </p>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+                  className="text-xs border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  1. Connect a source →
+                </button>
+                <button
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
+                  className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                >
+                  2. Run Pipeline →
+                </button>
+              </div>
             </div>
           </div>
         ) : (

@@ -793,7 +793,7 @@ export default function ContextTab() {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-slate-900">Context</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Enrich the semantic layer with documents and definitions. User context takes priority over default YAML metadata.
+          Enrich the semantic layer with business knowledge. Uploaded documents and manual definitions take priority over auto-extracted schema information.
         </p>
       </div>
 
