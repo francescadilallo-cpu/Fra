@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 7)
+
+### Polish: UX sweep — ProcessView heading, AdminSections notification text
+
+- **ProcessView.tsx**: Page H1 "Process" → "Setup" (matches sidebar nav); lifecycle empty state "Process stages" → "Lifecycle stages" (matches section heading)
+- **AdminSections.tsx**: Notification channels description "pipeline events" → "setup events"
+
+Also verified as demo-only (no changes needed): fatturato disambiguation in QueryInterface (gated by `!IS_DEMO_MODE`); demo source names in OverviewScreen (gated by `isAW`); DEMO_AUDIT entries in AdminSections (gated by `IS_DEMO_MODE`); all AGENTS[sectorId] entries with "semantic layer" / "Knowledge Graph"; queryEngine.ts AW responses.
+
+---
+
 ## 2026-06-20 (session cont. 6)
 
 ### Polish: final jargon sweep — backend audit log + command palette + mapping tab
