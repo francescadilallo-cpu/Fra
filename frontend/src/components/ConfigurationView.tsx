@@ -532,7 +532,7 @@ export default function ConfigurationView() {
           Sector Templates
         </h2>
         <p className="text-xs text-slate-500">
-          Switch between pre-configured templates to accelerate deployment. Each template includes ontology, mappings and connectors.
+          Switch between pre-configured templates to accelerate deployment. Each template includes entity definitions, mappings and connectors.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
           {(Object.keys(SECTORS) as SectorId[]).map(id => {

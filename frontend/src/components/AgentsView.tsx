@@ -1616,7 +1616,7 @@ export default function AgentsView() {
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-4 h-4 text-violet-500" />
                 <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">My Agents</h2>
-                <span className="text-xs text-slate-400">· built on your ontology · {customAgents.length} defined</span>
+                <span className="text-xs text-slate-400">· built on your data model · {customAgents.length} defined</span>
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {customAgents.map(def => {
@@ -1725,7 +1725,7 @@ export default function AgentsView() {
           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-teal-400" />
-              <span className="text-xs font-mono text-slate-400">Semantic Layer Activity Log</span>
+              <span className="text-xs font-mono text-slate-400">Agent Activity Log</span>
             </div>
             <button
               onClick={() => setLog([])}

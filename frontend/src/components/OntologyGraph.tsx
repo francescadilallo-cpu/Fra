@@ -228,7 +228,7 @@ function EntitiesView() {
           <Table2 className="w-8 h-8 text-slate-200 mx-auto mb-3" />
           <p className="text-sm text-slate-500 font-medium mb-1">No entities yet</p>
           <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed mb-4">
-            Connect a data source and run the pipeline, or build entities manually with the Ontology Builder AI.
+            Connect a data source and run setup, or build entities manually with Builder AI.
           </p>
           <div className="flex justify-center gap-2">
             <button
@@ -672,7 +672,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
   return (
     <div className="flex flex-col h-full">
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-slate-900">Ontology</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Entity Graph</h1>
         <p className="text-slate-500 mt-1 text-sm">
           {sector.ontologyTitle} · {graphNodes.length} classes · {graphEdges.length} object properties
           {IS_DEMO_MODE
