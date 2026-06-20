@@ -1407,11 +1407,18 @@ def test_system_prompt_live_mode_excludes_demo_tables(client, live_mode_headers)
         assert demo_table not in live_prompt, (
             f"demo table '{demo_table}' must not appear in live-mode system prompt"
         )
-    # Ensure the live prompt is shorter / simpler than the demo one.
+    # Ensure AW-specific content (entities, columns, metrics) is absent from
+    # the live prompt. Length comparison is too brittle — the live prompt can
+    # legitimately be longer when its generic instructions are more detailed.
     demo_prompt = demo_resp.json()["prompt"]
-    assert len(live_prompt) <= len(demo_prompt), (
-        "live prompt must not be longer than demo prompt (demo schema leaked)"
-    )
+    for aw_phrase in ("fatturato", "SalesOrderID", "AdventureWorks", "CustomerRef"):
+        assert aw_phrase not in live_prompt, (
+            f"AW-specific phrase '{aw_phrase}' must not appear in live-mode system prompt"
+        )
+    # The demo prompt must still contain AW-specific content (sanity check).
+    assert any(
+        p in demo_prompt for p in ("fatturato", "SalesOrderID", "AdventureWorks")
+    ), "demo prompt should contain AW-specific content"
 
 
 # ── Live onboarding end-to-end ─────────────────────────────────────────────────
