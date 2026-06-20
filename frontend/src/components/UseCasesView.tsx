@@ -225,7 +225,7 @@ function FindingRow({ finding, onNavigate }: { finding: Finding; onNavigate?: (t
           className={`mt-1.5 ml-6 text-[10px] font-medium flex items-center gap-1 hover:underline ${cfg.text} opacity-70 hover:opacity-100`}
         >
           <ExternalLink className="w-3 h-3" />
-          {finding.queryLink ? 'Try in Query AI →' : 'Explore in Semantic Layer →'}
+          {finding.queryLink ? 'Try in Query AI →' : 'Explore in Knowledge Graph →'}
         </button>
       )}
     </div>

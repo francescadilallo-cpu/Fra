@@ -2378,14 +2378,14 @@ export default function SemanticLayerView() {
 
             {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
-              <StatCard label="Ontology Entities"  value={nodeCount.toString()} sub="semantic concepts" />
-              <StatCard label="Verified Metrics"    value={metricsCount.toString()} sub="reusable measures" />
-              <StatCard label="KG Nodes"
+              <StatCard label="Entities"         value={nodeCount.toString()} sub="business concepts" />
+              <StatCard label="Verified Metrics" value={metricsCount.toString()} sub="reusable measures" />
+              <StatCard label="Knowledge Nodes"
                 value={isDemoWorkspace ? '193,062' : (kgStatus?.kg_nodes ?? totalRows).toLocaleString()}
                 sub="entity instances" accent />
-              <StatCard label="KG Edges"
+              <StatCard label="Knowledge Edges"
                 value={isDemoWorkspace ? '313,193' : (kgStatus?.kg_edges ?? edgeCount * 8).toLocaleString()}
-                sub="semantic relations" accent />
+                sub="data relationships" accent />
             </div>
 
             {/* Completeness score */}
@@ -2912,8 +2912,8 @@ export default function SemanticLayerView() {
         {/* ── ENTITIES ── */}
         {section === 'entities' && (
           <div className="px-8 py-7 space-y-5">
-            <SectionHeader icon={Network} title="Semantic Entities"
-              desc="Each entity abstracts a physical table — expand to view fields, click Edit to set semantic → physical mappings"
+            <SectionHeader icon={Network} title="Entities"
+              desc="Each entity maps to a data table — expand to view fields, click Edit to configure field definitions"
               action={
                 <button onClick={() => setShowAddEntity(v => !v)}
                   className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
@@ -3273,7 +3273,7 @@ export default function SemanticLayerView() {
                   <div className="text-center py-12 text-slate-400">
                     <Table2 className="w-8 h-8 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-medium">No field mappings yet</p>
-                    <p className="text-xs mt-1">Build the semantic layer from Data Sources to auto-generate mappings from your schema.</p>
+                    <p className="text-xs mt-1">Connect a data source and run setup to auto-generate field mappings from your data.</p>
                   </div>
                 ) : Object.keys(groupedMappings).length === 0 ? (
                   <div className="text-center py-12 text-slate-400 text-sm">No mappings match your search.</div>

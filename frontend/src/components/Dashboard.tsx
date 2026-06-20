@@ -265,8 +265,8 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: 'Entities',   value: status.entities.length,             color: 'text-teal-600',   bg: 'bg-teal-50' },
-              { label: 'KG Nodes',   value: status.kg_nodes.toLocaleString(),   color: 'text-blue-600',   bg: 'bg-blue-50' },
-              { label: 'KG Edges',   value: status.kg_edges.toLocaleString(),   color: 'text-violet-600', bg: 'bg-violet-50' },
+              { label: 'Know. Nodes', value: status.kg_nodes.toLocaleString(),   color: 'text-blue-600',   bg: 'bg-blue-50' },
+              { label: 'Know. Edges', value: status.kg_edges.toLocaleString(),   color: 'text-violet-600', bg: 'bg-violet-50' },
               { label: 'Metadata',   value: status.metadata_rows.toLocaleString(), color: 'text-amber-600', bg: 'bg-amber-50' },
             ].map(s => (
               <div key={s.label} className={`${s.bg} rounded-lg p-3 text-center`}>
@@ -459,7 +459,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   const dateRangeStat = (liveConfig?.kpi_stats ?? []).find(k => k.type === 'date_range')
   const liveKpis = [
     {
-      label: funnel[0]?.stage ?? 'Records ingested',
+      label: funnel[0]?.stage ?? 'Records loaded',
       value: `${(funnel[0]?.count ?? totalRecords).toLocaleString('en-US')}`,
       icon: FileText,
       color: 'text-blue-600', bg: 'bg-blue-50',

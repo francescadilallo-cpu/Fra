@@ -126,19 +126,19 @@ function buildLiveLogs(
     map: tables.length === 0
       ? [{ text: 'No mappings to resolve', type: 'warn' }]
       : [
-          { text: 'Loading semantic mappings...', type: 'info' },
-          { text: 'Discovering column types and keys...', type: 'info' },
+          { text: 'Discovering fields and column types...', type: 'info' },
+          { text: 'Matching fields to your data model...', type: 'info' },
           { text: `✓ ${total.toLocaleString()} rows mapped`, type: 'ok' },
         ],
     enrich: [
-      { text: 'Building Knowledge Graph nodes and edges...', type: 'info' },
-      { text: `✓ ${kgNodes.toLocaleString()} KG nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
+      { text: 'Building Knowledge Graph...', type: 'info' },
+      { text: `✓ ${kgNodes.toLocaleString()} knowledge nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
       { text: `✓ ${kgEdges.toLocaleString()} relationships indexed`, type: kgEdges > 0 ? 'ok' : 'info' },
     ],
     index: [
-      { text: 'Writing to semantic layer index...', type: 'info' },
-      { text: '✓ Ontology entities registered', type: 'ok' },
-      { text: '✓ Semantic layer ready', type: 'ok' },
+      { text: 'Registering entities and metrics...', type: 'info' },
+      { text: '✓ Entities and metrics registered', type: 'ok' },
+      { text: '✓ Data model ready', type: 'ok' },
     ],
   }
 }
