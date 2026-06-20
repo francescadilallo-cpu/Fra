@@ -1773,9 +1773,9 @@ function RelationsSection({ relationsData, onNavigate }: {
         <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 space-y-2">
           {relationsData.length === 0 ? (
             <>
-              <p className="text-xs text-slate-400">No relations found in the semantic layer yet.</p>
+              <p className="text-xs text-slate-400">No relationships found yet.</p>
               <p className="text-[11px] text-slate-400">
-                Build the semantic layer to auto-populate entity relations, or define FK edges in the{' '}
+                Run the setup to discover relationships automatically, or define them in the{' '}
                 <button onClick={() => onNavigate('entities')} className="text-teal-600 hover:underline">Entities</button> section.
               </p>
             </>

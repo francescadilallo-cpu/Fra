@@ -178,7 +178,7 @@ function EmptyState() {
             <GitBranch className="w-5 h-5 text-violet-600" />
           </div>
           <p className="text-xs font-semibold text-slate-700">Relations</p>
-          <p className="text-[11px] text-slate-400 leading-tight">FK edges<br />auto-detected</p>
+          <p className="text-[11px] text-slate-400 leading-tight">Relationships<br />auto-detected</p>
         </div>
         <div className="text-center space-y-2">
           <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center mx-auto">
@@ -321,7 +321,7 @@ function EntityCard({ entity, onSaved }: { entity: DraftEntity; onSaved: () => v
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600 block mb-1">
-                  Context notes <span className="text-slate-400 font-normal">(injected into LLM prompts)</span>
+                  Context notes <span className="text-slate-400 font-normal">(used when generating AI queries)</span>
                 </label>
                 <textarea
                   value={ctxNotes}
@@ -768,7 +768,7 @@ function ContextDocsTab({ docs, onUpdate }: { docs: ContextDoc[]; onUpdate: () =
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Context documents are injected into LLM prompts when generating SQL. Add business rules, glossary definitions, or domain constraints.
+        Context documents guide AI query generation. Add business rules, glossary definitions, or domain constraints.
       </p>
 
       {effectiveDocs.map(d => (

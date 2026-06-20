@@ -341,7 +341,7 @@ function ConnectedSourcesPanel({
       <div className="bg-white border border-slate-200 border-dashed rounded-xl p-8 text-center">
         <Database className="w-8 h-8 text-slate-300 mx-auto mb-2" />
         <p className="text-sm text-slate-500 font-medium">{IS_DEMO_MODE ? 'No additional sources connected' : 'No sources connected yet'}</p>
-        <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file below to start ingesting.</p>
+        <p className="text-xs text-slate-400 mt-1">Connect a system or upload a file below to get started.</p>
       </div>
     )
   }
@@ -366,7 +366,7 @@ function ConnectedSourcesPanel({
                   ? `${s.row_count.toLocaleString('en-US')} records · synced ${relativeTime(s.last_sync_at)}`
                   : s.last_sync_at
                     ? `synced ${relativeTime(s.last_sync_at)} · 0 records`
-                    : s.status === 'pending' ? 'Run the pipeline to ingest data' : 'Not yet synced'}
+                    : s.status === 'pending' ? 'Run setup to load data' : 'Not yet synced'}
               </p>
               {s.error_msg && (
                 <p className="text-[10px] text-red-500 mt-0.5 line-clamp-3" title={s.error_msg}>{s.error_msg}</p>
@@ -774,7 +774,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       await buildSemanticLayer(controller.signal)
       clearTimeout(t2); clearTimeout(t3); clearTimeout(timeoutId)
       setBuildStep(4)
-      globalToast(`Semantic layer built — ${sources.length} source${sources.length !== 1 ? 's' : ''} ingested`, 'success')
+      globalToast(`Your data is ready — ${sources.length} source${sources.length !== 1 ? 's' : ''} connected`, 'success')
       window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
       navTimerRef.current = setTimeout(() => {
         setBuilding(false); setBuildStep(0)
@@ -799,7 +799,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {workspaceLabel(sector.name)} · Connect business systems or upload files — data is ingested and becomes queryable instantly
+          {workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly
         </p>
       </div>
 

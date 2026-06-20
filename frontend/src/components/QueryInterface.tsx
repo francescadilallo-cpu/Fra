@@ -780,7 +780,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Key className="w-3.5 h-3.5 text-teal-400" />
-          <span className="text-xs font-semibold text-white">LLM Provider</span>
+          <span className="text-xs font-semibold text-white">AI Provider</span>
           <span className="text-[10px] text-slate-400">— key stored in your browser only</span>
         </div>
         <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
@@ -1071,7 +1071,7 @@ export default function QueryInterface() {
                 }`}
               >
                 {isLLMActive
-                  ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'} active</>
+                  ? <><Zap className="w-3.5 h-3.5 text-teal-500" />{PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'AI'} active</>
                   : <><Key className="w-3.5 h-3.5" />Add API Key</>}
               </button>
             )}
@@ -1261,7 +1261,7 @@ export default function QueryInterface() {
             <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin text-teal-500" />
-                <span>{isLLMActive ? `Asking ${PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'LLM'}…` : 'Querying semantic layer…'}</span>
+                <span>{isLLMActive ? `Asking ${PROVIDERS.find(p => p.id === creds.provider)?.label ?? 'AI'}…` : 'Processing your question…'}</span>
               </div>
             </div>
           </div>

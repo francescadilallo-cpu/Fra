@@ -10,6 +10,45 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10bf)
+
+### Fix + improve: MySQL/Parquet ingester errors; jargon cleanup across 6 frontend files
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_mysql`, `_ingest_parquet`
+
+  **MySQL table-not-found**: `pymysql.ProgrammingError` (table doesn't exist) was uncaught and produced the generic "Ingestion failed" fallback. Now raises a clear ValueError: "Table 'my_table' not found in MySQL database — check that the table exists and the database name is correct."
+
+  **Parquet read errors**: A corrupted or non-Parquet file would raise a raw DuckDB exception string. Now wrapped in a ValueError: "Cannot read Parquet file 'foo.parquet': … — the file may be corrupted or not a valid Parquet file."
+
+- `frontend/src/components/DataSourcesView.tsx` — empty state, source status, success toast, header subtitle
+- `frontend/src/components/SemanticLayerView.tsx` — relations empty state
+- `frontend/src/components/SemanticDraftView.tsx` — stat chip, context notes label, context doc description
+- `frontend/src/components/QueryInterface.tsx` — AI provider label and loading text
+- `frontend/src/components/OverviewScreen.tsx` — step 1 description
+- `frontend/src/components/ComplianceView.tsx` — live-user empty state guidance
+- `frontend/src/components/AgentBuilder.tsx` — event trigger labels
+
+  Jargon removed across all files:
+  - "FK edges" → "Relationships"
+  - "injected into LLM prompts" → "used when generating AI queries"
+  - "Context documents are injected into LLM prompts when generating SQL" → "Context documents guide AI query generation"
+  - "Querying semantic layer…" → "Processing your question…"
+  - "LLM Provider" → "AI Provider"
+  - "LLM active" / "LLM" fallback → "AI active" / "AI"
+  - "ingest into the semantic layer" → "start querying your data"
+  - "start ingesting" → "get started"
+  - "Run the pipeline to ingest data" → "Run setup to load data"
+  - "Semantic layer built — N sources ingested" → "Your data is ready — N sources connected" (success toast)
+  - "data is ingested and becomes queryable instantly" → "data loads automatically and becomes queryable instantly"
+  - "No relations found in the semantic layer yet" → "No relationships found yet"
+  - "Build the semantic layer to auto-populate entity relations, or define FK edges" → "Run the setup to discover relationships automatically, or define them"
+  - "build the semantic layer from your connected data sources" → "connect your data sources and run the setup wizard"
+  - "Connect a data source to build your ontology" → "Connect a data source to get started"
+  - "When a new ontology entity is added" → "When a new entity type is added to the data model"
+  - "When the data pipeline completes" → "When data processing completes"
+
+---
+
 ## 2026-06-20 (session 10be — continued)
 
 ### Improve: CSV ingester auto-converts Google Sheets URLs; PG ingester table-not-found error

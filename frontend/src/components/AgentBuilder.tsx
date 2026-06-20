@@ -195,8 +195,8 @@ const SCHEDULE_LABELS: Record<ScheduleInterval, string> = {
 }
 
 const EVENT_LABELS: Record<EventTriggerKind, string> = {
-  'new-entity':        'When a new ontology entity is added',
-  'pipeline-complete': 'When the data pipeline completes',
+  'new-entity':        'When a new entity type is added to the data model',
+  'pipeline-complete': 'When data processing completes',
   'critical-finding':  'When another agent finds something critical',
 }
 

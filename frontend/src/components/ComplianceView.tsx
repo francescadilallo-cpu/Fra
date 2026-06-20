@@ -364,13 +364,13 @@ export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavT
                         {!IS_DEMO_MODE && (
                           <>
                             <p className="text-xs text-gray-400 mb-3 max-w-sm mx-auto">
-                              Compliance classifications appear here once you build the semantic layer from your connected data sources.
+                              Compliance classifications appear here once you connect your data sources and run the setup wizard.
                             </p>
                             <button
                               onClick={() => onNavigate?.('sources')}
                               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium"
                             >
-                              Connect a data source to build your ontology <ArrowRight size={12} />
+                              Connect a data source to get started <ArrowRight size={12} />
                             </button>
                           </>
                         )}

@@ -23,7 +23,7 @@ const JOURNEY: {
   {
     step: 1, section: 'CONNECT',
     tab: 'sources',      icon: Plug,           title: 'Data Sources',
-    desc: 'Connect your data sources. Configure mappings, validate quality, and ingest into the semantic layer.',
+    desc: 'Connect your data sources. Configure mappings, validate quality, and start querying your data.',
     aw: '3 AW sources active: ERP 152k rows · CRM 59k · HR+PIM 794',
   },
   {
