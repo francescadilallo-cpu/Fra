@@ -1390,7 +1390,7 @@ export default function OntologyBuilder() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">
-            {nodes.length} classes · {edges.length} relations
+            {nodes.length} entities · {edges.length} relationships
           </span>
           {savedCount > 0 && (
             <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-full font-medium flex items-center gap-1">

@@ -674,7 +674,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Entity Graph</h1>
         <p className="text-slate-500 mt-1 text-sm">
-          {sector.ontologyTitle} · {graphNodes.length} classes · {graphEdges.length} object properties
+          {sector.ontologyTitle} · {graphNodes.length} entities · {graphEdges.length} relationships
           {IS_DEMO_MODE
             ? extendedOntology.nodes.length > sector.ontology.nodes.length && (
                 <span className="ml-2 inline-flex items-center gap-1 text-xs bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full font-medium">
