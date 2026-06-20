@@ -427,7 +427,7 @@ export default function DataExplorer() {
               <Database className="w-10 h-10 mx-auto text-slate-300" />
               <p className="text-sm font-semibold text-slate-700">No entities discovered yet</p>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Connect a data source and run the pipeline — entities are auto-discovered from your schema.
+                Connect a data source and run setup — entities are auto-extracted from your tables.
               </p>
               <div className="flex items-center justify-center gap-2 pt-1">
                 <button
