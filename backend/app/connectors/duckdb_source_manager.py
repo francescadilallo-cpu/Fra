@@ -864,8 +864,9 @@ class DuckDBSourceManager:
 
     def _ingest_csv(self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig) -> None:
         import io
+        import tempfile
 
-        # Support inline CSV (uploaded from browser) or file path
+        # Support inline CSV (uploaded from browser), HTTP(S) URL, or local file path
         _MAX_INLINE_BYTES = 5 * 1024 * 1024  # 5 MB guard against OOM
         inline = cfg.params.get("inline_csv")
         table = cfg.params.get("table_name") or "imported_data"
@@ -884,9 +885,32 @@ class DuckDBSourceManager:
             )
             n = len(df)
         else:
-            path = _safe_data_path(cfg.params.get("path", ""))
-            if not path.exists():
-                raise FileNotFoundError(f"CSV not found: {path}")
+            raw_path = cfg.params.get("path", "")
+            # URL path: download to a temp file, then read locally
+            if raw_path.startswith(("http://", "https://")):
+                import httpx
+
+                try:
+                    resp = httpx.get(raw_path, follow_redirects=True, timeout=30)
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    raise ValueError(
+                        f"Failed to download CSV from URL (HTTP {exc.response.status_code}): {raw_path}"
+                    ) from exc
+                except httpx.RequestError as exc:
+                    raise ValueError(
+                        f"Could not reach URL — check the address and network access: {raw_path}"
+                    ) from exc
+                with tempfile.NamedTemporaryFile(
+                    suffix=".csv", delete=False, mode="wb"
+                ) as tmp:
+                    tmp.write(resp.content)
+                    tmp_path = tmp.name
+                path = Path(tmp_path)
+            else:
+                path = _safe_data_path(raw_path)
+                if not path.exists():
+                    raise FileNotFoundError(f"CSV not found: {path}")
             table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
             safe_table = table.replace('"', '""')
             delimiter = cfg.params.get("delimiter", ",")
