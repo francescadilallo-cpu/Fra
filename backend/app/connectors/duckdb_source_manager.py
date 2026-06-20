@@ -887,6 +887,7 @@ class DuckDBSourceManager:
         else:
             raw_path = cfg.params.get("path", "")
             # URL path: download to a temp file, then read locally
+            tmp_path: str | None = None
             if raw_path.startswith(("http://", "https://")):
                 import httpx
 
@@ -911,21 +912,27 @@ class DuckDBSourceManager:
                 path = _safe_data_path(raw_path)
                 if not path.exists():
                     raise FileNotFoundError(f"CSV not found: {path}")
-            table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
-            safe_table = table.replace('"', '""')
-            delimiter = cfg.params.get("delimiter", ",")
-            safe_path = str(path).replace("'", "''")
-            safe_delim = delimiter.replace("'", "''")
-            # Stream the file straight into DuckDB — DuckDB parses it natively
-            # (parallel, out-of-core) instead of materialising the whole file in
-            # a pandas DataFrame in Python memory.
-            conn.execute(
-                f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-                f"SELECT * FROM read_csv_auto('{safe_path}', "
-                f"delim='{safe_delim}', header=true)"
-            )
-            _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
-            n = _row[0] if _row is not None else 0
+            try:
+                table = table or path.stem.replace("-", "_").replace(" ", "_").lower()
+                safe_table = table.replace('"', '""')
+                delimiter = cfg.params.get("delimiter", ",")
+                safe_path = str(path).replace("'", "''")
+                safe_delim = delimiter.replace("'", "''")
+                # Stream the file straight into DuckDB — DuckDB parses it natively
+                # (parallel, out-of-core) instead of materialising the whole file in
+                # a pandas DataFrame in Python memory.
+                conn.execute(
+                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                    f"SELECT * FROM read_csv_auto('{safe_path}', "
+                    f"delim='{safe_delim}', header=true)"
+                )
+                _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
+                n = _row[0] if _row is not None else 0
+            finally:
+                if tmp_path:
+                    import os
+
+                    os.unlink(tmp_path)
         self._row_counts[f"{cfg.id}.{table}"] = n
         logger.info("CSV  %-25s %7d rows", table, n)
         if table not in cfg.target_tables:
