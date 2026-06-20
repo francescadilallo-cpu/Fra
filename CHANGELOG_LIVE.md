@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10aw)
+
+### Improve: smarter example questions for fresh live workspaces
+
+- `backend/app/main.py` — `list_example_questions()`, `_refresh_catalog_and_kg_after_rebuild()`
+
+  **Problem 1**: The generated fallback questions for live users with no templates used raw table names (e.g., `csv_abc12345`) and were generic ("How many records are in X?", "Show me the first 10 rows from X"). Not useful.
+
+  **Fix 1**: Questions now use `user_description` if set (e.g., "Sales Orders") otherwise the entity name. Detects column patterns to generate smarter questions: date columns → "Show me X records from the last 30 days", amount/revenue columns → "What is the total [column] in X?".
+
+  **Problem 2**: Auto-template generation (`generate_templates_from_draft`) only ran during a full `/api/semantic/build`. Source add, remove, and sync operations called `_refresh_catalog_and_kg_after_rebuild()` without regenerating templates, leaving the QueryInterface with stale or empty example questions after a CSV upload.
+
+  **Fix 2**: Added `generate_templates_from_draft()` + `catalog.upsert_auto_templates()` + `layer.set_templates()` at the end of `_refresh_catalog_and_kg_after_rebuild()`. Templates now refresh automatically on every source change, not just on explicit builds.
+
+---
+
 ## 2026-06-20 (session 10av)
 
 ### Fix: live onboarding lands users on Data Sources tab after completion

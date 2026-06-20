@@ -707,6 +707,22 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
     if _semantic_state.get("loaded"):
         _semantic_state["built_at"] = datetime.utcnow().isoformat()
 
+    # Auto-generate query templates from the freshly-built schema so that
+    # the QueryInterface has meaningful example questions immediately after
+    # a source is added, synced, or removed — not only after a full build.
+    catalog = _semantic_state.get("catalog")
+    layer = _semantic_state.get("layer")
+    if catalog is not None and layer is not None:
+        try:
+            draft = _get_semantic_draft()
+            auto_tpls = generate_templates_from_draft(draft)
+            n = catalog.upsert_auto_templates(auto_tpls)
+            if n:
+                logger.info("Auto-refreshed %d query templates after source rebuild", n)
+            layer.set_templates(catalog.list_templates())
+        except Exception as exc:
+            logger.warning("Auto-template refresh after rebuild failed: %s", exc)
+
 
 def _sync_context_docs_to_layer() -> None:
     """Push context_doc registry entries into the semantic layer LLM prompt."""
@@ -3047,24 +3063,80 @@ def list_example_questions(request: Request) -> list[dict[str, str]]:
         ]
         active = [t for t in templates if t.get("is_active", True)]
         if not active:
-            # No user-created templates yet — generate generic exploratory
-            # questions from the discovered entity names so the UI isn't blank.
+            # No user-created templates yet — generate business-readable
+            # exploratory questions from the discovered entities.
             generated: list[dict[str, str]] = []
             for entity in live_entities[:4]:
-                ename = entity.get("name") or entity.get("table", "")
+                # Prefer user_description (if set) > name > table as display label
+                raw_name = entity.get("name") or entity.get("table", "")
+                user_desc = entity.get("user_description", "").strip()
+                ename = user_desc if user_desc else raw_name
+                cols_lower = [c.lower() for c in entity.get("columns", [])]
                 generated.append(
                     {
-                        "question": f"How many records are in {ename}?",
+                        "question": f"How many {ename} records are there?",
                         "description": f"Total row count for {ename}",
                     }
                 )
-                cols = entity.get("columns", [])
-                if cols:
-                    col_sample = ", ".join(cols[:3])
+                # Date/period column → suggest a time-based question
+                date_cols = [
+                    c
+                    for c in cols_lower
+                    if any(
+                        k in c
+                        for k in (
+                            "date",
+                            "year",
+                            "month",
+                            "period",
+                            "created",
+                            "updated",
+                            "timestamp",
+                            "data",
+                        )
+                    )
+                ]
+                if date_cols:
                     generated.append(
                         {
-                            "question": f"Show me the first 10 rows from {ename}",
-                            "description": f"Sample data — columns: {col_sample}…",
+                            "question": f"Show me {ename} records from the last 30 days",
+                            "description": f"Recent {ename} filtered by {date_cols[0]}",
+                        }
+                    )
+                else:
+                    # Fallback: show a sample
+                    generated.append(
+                        {
+                            "question": f"Show me a sample of {ename}",
+                            "description": f"First 10 rows from {ename}",
+                        }
+                    )
+                # Amount/value column → suggest an aggregation question
+                amount_cols = [
+                    c
+                    for c in cols_lower
+                    if any(
+                        k in c
+                        for k in (
+                            "amount",
+                            "total",
+                            "value",
+                            "revenue",
+                            "price",
+                            "cost",
+                            "importo",
+                            "valore",
+                            "fatturato",
+                            "qty",
+                            "quantity",
+                        )
+                    )
+                ]
+                if amount_cols:
+                    generated.append(
+                        {
+                            "question": f"What is the total {amount_cols[0]} in {ename}?",
+                            "description": f"Sum of {amount_cols[0]} across all {ename} records",
                         }
                     )
             return generated[:12]
