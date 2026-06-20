@@ -131,8 +131,8 @@ function buildLiveLogs(
           { text: `✓ ${total.toLocaleString()} rows mapped`, type: 'ok' },
         ],
     enrich: [
-      { text: 'Building Knowledge Graph...', type: 'info' },
-      { text: `✓ ${kgNodes.toLocaleString()} knowledge nodes created`, type: kgNodes > 0 ? 'ok' : 'info' },
+      { text: 'Building data model...', type: 'info' },
+      { text: `✓ ${kgNodes.toLocaleString()} entities indexed`, type: kgNodes > 0 ? 'ok' : 'info' },
       { text: `✓ ${kgEdges.toLocaleString()} relationships indexed`, type: kgEdges > 0 ? 'ok' : 'info' },
     ],
     index: [
