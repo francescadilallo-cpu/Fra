@@ -10,6 +10,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10az)
+
+### Improve: QueryInterface error hints + Dashboard empty-state for fresh live workspaces
+
+- `frontend/src/components/QueryInterface.tsx` — error bubble
+- `frontend/src/components/Dashboard.tsx` — KPI section
+
+  **QueryInterface**: Extended the HTTP-status navCTA logic:
+  - 404 (table reference stale) now also shows "Run Pipeline →" CTA (same as 503), prompting a rebuild.
+  - 422 (ontology violation — the question doesn't match the data model) now shows an inline tip: "Try using the exact table or column names from your data model, or rephrase to ask about a specific entity." Previously the user saw an opaque error with no guidance.
+
+  **Dashboard**: Added a teal "Your workspace is empty" banner that appears below the KPI grid for live users when `totalRecords === 0` and no entities are in the semantic layer. Banner includes a "Connect a source →" button that navigates directly to the Data Sources tab. Eliminates the confusing "Records ingested: 0" KPI-only state fresh users used to land on.
+
+---
+
 ## 2026-06-20 (session 10ay)
 
 ### Feature: MySQL data source connector (live ingestion)

@@ -605,9 +605,10 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
   if (message.role === 'error') {
     const navCTA = !IS_DEMO_MODE && message.httpStatus === 409
       ? { label: 'Connect a data source →', tab: 'sources' }
-      : !IS_DEMO_MODE && message.httpStatus === 503
+      : !IS_DEMO_MODE && (message.httpStatus === 503 || message.httpStatus === 404)
         ? { label: 'Run Pipeline →', tab: 'process' }
         : null
+    const showRephaseHint = !IS_DEMO_MODE && message.httpStatus === 422
 
     return (
       <div className="flex gap-3 items-start">
@@ -616,6 +617,11 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
         </div>
         <div className="max-w-[85%] bg-red-500/10 border border-red-500/20 rounded-2xl rounded-tl-sm px-4 py-3 space-y-2">
           <p className="text-sm text-red-400">{message.content}</p>
+          {showRephaseHint && (
+            <p className="text-xs text-slate-400">
+              Tip: try using the exact table or column names from your data model, or rephrase to ask about a specific entity.
+            </p>
+          )}
           {navCTA && (
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: navCTA.tab } }))}

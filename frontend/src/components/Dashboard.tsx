@@ -439,6 +439,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   // Live: KPI cards derive from real backend data — funnel stage names
   // (status breakdown of the user's order table) and draft entity totals.
   const totalRecords = draft?.entities.reduce((s, e) => s + (e.record_count || 0), 0) ?? 0
+  const isEmptyWorkspace = !IS_DEMO_MODE && totalRecords === 0 && (draft?.entities.length ?? 0) === 0
   const kpiStatCards = (liveConfig?.kpi_stats ?? [])
     .filter(k => k.type === 'sum')
     .slice(0, 2)
@@ -681,6 +682,22 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           )
         })}
       </div>
+
+      {/* Empty workspace prompt for fresh live users */}
+      {isEmptyWorkspace && (
+        <div className="bg-teal-50 border border-teal-200 rounded-xl px-6 py-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-teal-900">Your workspace is empty</p>
+            <p className="text-xs text-teal-700 mt-0.5">Connect a data source to start seeing real metrics on this dashboard.</p>
+          </div>
+          <button
+            onClick={() => onNavigate?.('sources')}
+            className="flex-shrink-0 text-xs font-medium px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            Connect a source →
+          </button>
+        </div>
+      )}
 
       {/* Trend chart — synthetic series, demo only */}
       {showSynthetic && <TrendChart values={trendSeries} label={tc.label} unit={tc.unit} />}
