@@ -87,15 +87,15 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   'google-sheets': {
     connector_type: 'csv',
     params_schema: [
-      { key: 'path', label: 'CSV Export URL or file path', type: 'url', placeholder: 'https://docs.google.com/spreadsheets/d/.../export?format=csv', required: true, hint: 'File → Download → CSV, then paste that URL' },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'my_sheet', required: true },
+      { key: 'path', label: 'Google Sheets URL', type: 'url', placeholder: 'https://docs.google.com/spreadsheets/d/…/edit', required: true, hint: 'Paste the sharing URL — sharing/edit links are auto-converted to CSV export' },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'my_sheet', required: true },
     ],
   },
   airtable: {
     connector_type: 'csv',
     params_schema: [
       { key: 'path', label: 'CSV export file path', type: 'text', placeholder: '/data/airtable_export.csv', required: true },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'airtable_records', required: true },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'airtable_records', required: true },
     ],
   },
   'sqlite-file': {
@@ -109,7 +109,7 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
     connector_type: 'excel',
     params_schema: [
       { key: 'path', label: 'Excel file path or URL', type: 'text', placeholder: '/data/report.xlsx', required: true },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'excel_data', required: true },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'excel_data', required: true },
       { key: 'sheet', label: 'Sheet name (default: first sheet)', type: 'text', placeholder: 'Sheet1', required: false },
     ],
   },
@@ -117,14 +117,14 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
     connector_type: 'parquet',
     params_schema: [
       { key: 'path', label: 'Parquet file path', type: 'text', placeholder: '/data/events.parquet', required: true },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'parquet_data', required: true },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'parquet_data', required: true },
     ],
   },
   'json-file': {
     connector_type: 'json',
     params_schema: [
       { key: 'path', label: 'JSON file path', type: 'text', placeholder: '/data/records.json', required: true, hint: 'Top-level array or NDJSON supported' },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'json_data', required: true },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'json_data', required: true },
     ],
   },
   shopify:            { connector_type: 'shopify',            params_schema: [], waitlist_only: true },
@@ -152,7 +152,7 @@ export function getConnectorBackendDef(connectorId: string): ConnectorBackendDef
     connector_type: connectorId.replace(/-/g, '_'),
     params_schema: [
       { key: 'path', label: 'File path or URL', type: 'text', placeholder: '/data/export.csv', required: true },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'imported_data', required: true },
+      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'imported_data', required: true },
     ],
   }
 }
