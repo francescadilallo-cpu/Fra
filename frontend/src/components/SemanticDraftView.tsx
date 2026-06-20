@@ -161,7 +161,7 @@ function EmptyState() {
         <h3 className="text-lg font-bold text-slate-800">Build Your Data Model</h3>
         <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
           Auto-extract business entities, relationships, and metrics from your data sources.
-          The AI uses this knowledge graph to answer natural-language questions accurately.
+          The AI uses this data model to answer natural-language questions accurately.
         </p>
       </div>
 

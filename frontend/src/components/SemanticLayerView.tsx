@@ -1486,7 +1486,7 @@ function MappingTableGroup({ table, rows, savedEdits, onSave }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-white">
-                {['DB Field', 'Ontology Class', 'Ontology Property (click to edit)', 'Type', 'URI'].map(h => (
+                {['DB Field', 'Entity', 'Entity Field (click to edit)', 'Type', 'URI'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] text-slate-400 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -2245,7 +2245,7 @@ export default function SemanticLayerView() {
         <div className="px-4 pt-4 pb-3 border-b border-slate-200 flex-shrink-0">
           <div className="flex items-center gap-2 mb-2">
             <Network className="w-4 h-4 text-teal-600" />
-            <span className="text-sm font-bold text-slate-900">Semantic Layer</span>
+            <span className="text-sm font-bold text-slate-900">Data Model</span>
           </div>
           {/* Global search */}
           <div className="relative">
@@ -2367,7 +2367,7 @@ export default function SemanticLayerView() {
             <SemanticDraftView />
 
             <SectionHeader icon={Layers} title="Overview"
-              desc="Semantic layer status, coverage score, and data quality"
+              desc="Data model status, coverage score, and data quality"
               action={
                 <button onClick={exportYAML}
                   className="flex items-center gap-1.5 text-xs bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors font-medium shadow-sm">
