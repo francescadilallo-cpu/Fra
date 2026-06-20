@@ -232,7 +232,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run pipeline` : 'Connect your first source') },
+                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run setup` : 'Connect your first source') },
                   { label: 'Entities',          value: String(entityCount),             sub: `${edgeCount} relationships` },
                   { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} knowledge nodes` : 'Run setup to build' },
                 ].map(s => (
@@ -436,7 +436,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               connectors.length > 0
                 ? `${connectors.length} data source${connectors.length !== 1 ? 's' : ''} connected — ${connectors.slice(0, 3).join(', ')}`
                 : registeredSources.length > 0
-                  ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run pipeline to activate`
+                  ? `${registeredSources.length} data source${registeredSources.length !== 1 ? 's' : ''} registered — run setup to activate`
                   : 'Connect your data sources — databases, files, SaaS connectors',
               semBuilt
                 ? `Data model ready — ${kgNodes.toLocaleString('en-US')} knowledge nodes`

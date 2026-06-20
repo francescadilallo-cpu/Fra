@@ -778,12 +778,12 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
         {funnel.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">Funnel metrics will be derived from your transaction data once the pipeline runs.</p>
+            <p className="text-sm text-slate-400">Funnel metrics will be derived from your transaction data once setup runs.</p>
             <button
               onClick={() => onNavigate?.('process')}
               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
             >
-              Run pipeline →
+              Run setup →
             </button>
           </div>
         ) : (
