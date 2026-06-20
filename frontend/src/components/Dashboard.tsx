@@ -863,7 +863,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
             </span>
             {pipelineLastRun && (
               <span className="ml-auto text-[10px] bg-teal-50 text-teal-600 border border-teal-100 rounded-full px-2 py-0.5">
-                ✓ Pipeline synced
+                ✓ Synced
               </span>
             )}
           </div>

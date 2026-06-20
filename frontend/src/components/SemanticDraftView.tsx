@@ -432,7 +432,7 @@ function RelationsTab({
             Cross-source links are auto-inferred from column names ending in{' '}
             <code className="bg-slate-100 px-1 rounded">_id</code>,{' '}
             <code className="bg-slate-100 px-1 rounded">_ref</code>, or{' '}
-            <code className="bg-slate-100 px-1 rounded">_fk</code> after a pipeline run.
+            <code className="bg-slate-100 px-1 rounded">_fk</code> after running setup.
             You can also define joins manually.
           </p>
           <div className="flex items-center justify-center gap-3">

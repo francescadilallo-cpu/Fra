@@ -545,7 +545,7 @@ export default function MappingView() {
                   <div>
                     <p className="text-sm font-semibold text-slate-600 mb-1">No field mappings yet</p>
                     <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                      Field mappings are auto-generated when you build the semantic layer. Connect a data source and run the pipeline.
+                      Field mappings are auto-generated when you build the data model. Connect a data source and run setup.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
