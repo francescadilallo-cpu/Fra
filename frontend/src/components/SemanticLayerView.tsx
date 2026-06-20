@@ -2542,9 +2542,9 @@ export default function SemanticLayerView() {
                         <p className="text-sm font-semibold text-slate-900 capitalize">{item.label}</p>
                         <p className="text-xs text-slate-400 mt-0.5">{
                           i === 0 ? 'Register your databases, CSVs and APIs' :
-                          i === 1 ? 'Connect semantic names to physical tables' :
-                          i === 2 ? 'Join data across different source systems' :
-                          'Resolve terms that map to multiple fields'
+                          i === 1 ? 'Map entity names to your data tables' :
+                          i === 2 ? 'Link data across different source systems' :
+                          'Clarify terms with conflicting definitions'
                         }</p>
                         <span className={`mt-1.5 inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                           item.done ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'
