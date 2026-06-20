@@ -561,7 +561,7 @@ export default function ConfigurationView() {
                 <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5">
                   <div className="text-center">
                     <p className="text-sm font-bold text-slate-700">{stats?.classes}</p>
-                    <p className="text-[9px] text-slate-400 uppercase tracking-wide">classes</p>
+                    <p className="text-[9px] text-slate-400 uppercase tracking-wide">entities</p>
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-bold text-slate-700">{stats?.mappings}</p>

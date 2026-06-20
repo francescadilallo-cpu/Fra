@@ -3260,7 +3260,7 @@ export default function SemanticLayerView() {
                   <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                     <input value={defSearch} onChange={e => setDefSearch(e.target.value)}
-                      placeholder="Search fields, classes, tables…"
+                      placeholder="Search fields, entities, tables…"
                       className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 focus:border-teal-400 rounded-lg outline-none transition-colors" />
                   </div>
                   <p className="text-xs text-slate-500">{allMappings.length} fields · {new Set(allMappings.map(r => r.table)).size} tables</p>
