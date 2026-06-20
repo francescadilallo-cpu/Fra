@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10aq)
+
+### Frontend: dispatch pipeline-run-updated after addSource (connector + CSV) and removeSource
+
+- `frontend/src/components/DataSourcesView.tsx` — `submitCredentials()`, CSV ingest block, `disconnectSource()`
+
+  The backend `POST /api/sources` calls `mgr.rebuild()` and `_refresh_catalog_and_kg_after_rebuild()` for all implemented connector types, rebuilding the in-memory knowledge graph and catalog. Similarly, `DELETE /api/sources/{id}` always rebuilds. The frontend was missing `pipeline-run-updated` dispatches after all three operations — only `syncById()` and `handleBuildSemanticLayer()` dispatched the event. Added dispatches to all three paths so every view that listens (Dashboard, DataExplorer, AgentsView, OntologyGraph, SemanticLayerView, etc.) refreshes immediately when a source is added, removed, or CSV-ingested.
+
+---
+
 ## 2026-06-19 (continued — session 10ap)
 
 ### Frontend: dispatch pipeline-run-updated after individual source sync

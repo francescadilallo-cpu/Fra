@@ -608,6 +608,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             : `${credentialModal.name} registered — sync coming soon`,
         newSource.status === 'error' ? 'error' : 'ok',
       )
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     } catch (err: unknown) {
       showToast(backendErrorMessage(err) || 'Connection failed', 'error')
     } finally {
@@ -623,6 +624,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       await removeSource(sourceId)
       setSources(prev => prev.filter(s => s.id !== sourceId))
       showToast(`${src?.label ?? sourceId} disconnected`)
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     } catch (err: unknown) {
       showToast(backendErrorMessage(err) || 'Disconnect failed', 'error')
     }
@@ -694,6 +696,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       })
       setSources(prev => [...prev.filter(s => s.id !== newSource.id), newSource])
       showToast(`Ingested ${upload.rows.length.toLocaleString('en-US')} rows from ${upload.filename}`)
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
       setUpload(null)
     } catch (err: unknown) {
       showToast(backendErrorMessage(err) || 'Ingest failed', 'error')
