@@ -98,6 +98,35 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
       { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'airtable_records', required: true },
     ],
   },
+  'sqlite-file': {
+    connector_type: 'sqlite',
+    params_schema: [
+      { key: 'path', label: 'SQLite file path', type: 'text', placeholder: '/data/mydb.sqlite', required: true },
+      { key: 'tables', label: 'Tables (comma-separated, leave blank for all)', type: 'text', placeholder: 'orders,customers', required: false, hint: 'Leave empty to import all tables' },
+    ],
+  },
+  'excel-file': {
+    connector_type: 'excel',
+    params_schema: [
+      { key: 'path', label: 'Excel file path or URL', type: 'text', placeholder: '/data/report.xlsx', required: true },
+      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'excel_data', required: true },
+      { key: 'sheet', label: 'Sheet name (default: first sheet)', type: 'text', placeholder: 'Sheet1', required: false },
+    ],
+  },
+  'parquet-file': {
+    connector_type: 'parquet',
+    params_schema: [
+      { key: 'path', label: 'Parquet file path', type: 'text', placeholder: '/data/events.parquet', required: true },
+      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'parquet_data', required: true },
+    ],
+  },
+  'json-file': {
+    connector_type: 'json',
+    params_schema: [
+      { key: 'path', label: 'JSON file path or URL', type: 'text', placeholder: '/data/records.json', required: true },
+      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'json_data', required: true },
+    ],
+  },
   shopify:            { connector_type: 'shopify',            params_schema: [], waitlist_only: true },
   woocommerce:        { connector_type: 'woocommerce',        params_schema: [], waitlist_only: true },
   magento:            { connector_type: 'magento',            params_schema: [], waitlist_only: true },

@@ -60,10 +60,14 @@ export const CONNECTORS: ConnectorDef[] = [
   // ── Database ───────────────────────────────────────────────────────────────
   { id: 'postgresql',       name: 'PostgreSQL',       logo: 'Pg', bg: 'bg-blue-800',   fg: 'text-white', category: 'database',    description: 'Open-source relational database',       status: 'available' },
   { id: 'mysql',            name: 'MySQL',            logo: 'My', bg: 'bg-amber-600',  fg: 'text-white', category: 'database',    description: 'Popular relational database',            status: 'available' },
+  { id: 'sqlite-file',      name: 'SQLite File',      logo: '🗄', bg: 'bg-slate-600',  fg: 'text-white', category: 'database',    description: 'Embed SQLite database file (.db / .sqlite)', status: 'available' },
 
   // ── Cloud / File ───────────────────────────────────────────────────────────
   { id: 'google-sheets',    name: 'Google Sheets',    logo: '📊', bg: 'bg-green-50',   fg: 'text-green-700', category: 'cloud',  description: 'Cloud spreadsheets',                    status: 'available' },
   { id: 'airtable',         name: 'Airtable',         logo: 'A',  bg: 'bg-yellow-400', fg: 'text-slate-900', category: 'cloud', description: 'Hybrid database + spreadsheet',          status: 'beta' },
+  { id: 'excel-file',       name: 'Excel File',       logo: '📗', bg: 'bg-emerald-600',fg: 'text-white', category: 'cloud',      description: 'Import .xlsx / .xls workbooks',         status: 'available' },
+  { id: 'parquet-file',     name: 'Parquet File',     logo: '▤',  bg: 'bg-indigo-600', fg: 'text-white', category: 'cloud',      description: 'Column-oriented analytics data format', status: 'available' },
+  { id: 'json-file',        name: 'JSON File',        logo: '{}', bg: 'bg-amber-500',  fg: 'text-white', category: 'cloud',      description: 'JSON / NDJSON records from file or URL', status: 'available' },
 
   // ── Logistics ──────────────────────────────────────────────────────────────
   { id: 'brt',              name: 'BRT',              logo: 'B',  bg: 'bg-yellow-500', fg: 'text-slate-900', category: 'logistics', description: 'Italian express courier',             status: 'coming-soon', italian: true },
