@@ -1674,10 +1674,10 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'overview',     label: 'Overview',    Icon: Layers,           desc: 'Stats & quality' },
   { id: 'playground',   label: 'Playground',  Icon: Play,             desc: 'Test NL queries', group: 'Tools' },
   { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
-  { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
-  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
+  { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Business entities' },
+  { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-source connections' },
   { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source field links' },
-  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Disambiguation', group: 'Semantics' },
+  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Conflict rules', group: 'Semantics' },
   { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
   { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },
   { id: 'segments',     label: 'Segments',    Icon: Filter,           desc: 'Saved filters' },
@@ -3241,7 +3241,7 @@ export default function SemanticLayerView() {
             <div className="flex items-center gap-1 border-b border-slate-200">
               {([
                 { id: 'mappings'    as const, label: 'Field Mappings',       Icon: Table2       },
-                { id: 'definitions' as const, label: 'Semantic Definitions', Icon: BookOpen     },
+                { id: 'definitions' as const, label: 'Field Definitions',    Icon: BookOpen     },
                 { id: 'ambiguity'   as const, label: 'Ambiguity Log',        Icon: AlertTriangle },
               ]).map(({ id, label, Icon }) => (
                 <button key={id} onClick={() => setDefTab(id)}

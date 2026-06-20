@@ -641,7 +641,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
   }, [])
 
   const tabs: { id: SubTab; label: string; icon: typeof GitBranch }[] = [
-    { id: 'graph',        label: 'Ontology Graph',      icon: GitBranch },
+    { id: 'graph',        label: 'Entity Graph',        icon: GitBranch },
     { id: 'entities',     label: 'Entities',            icon: Table2 },
     { id: 'architecture', label: 'System Architecture', icon: Layers },
     { id: 'code',         label: 'OWL/RDF Code',        icon: Code2 },
