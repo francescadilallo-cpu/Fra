@@ -527,8 +527,10 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
                     <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${CONFIDENCE_COLORS[s.confidence]}`}>{s.confidence}</span>
                   </td>
                   <td className="px-3 py-2">
-                    <button onClick={() => onToggle(s.column)} disabled={s.confidence === 'none'}
-                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${accepted ? 'bg-teal-600 text-white' : s.confidence === 'none' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                    <button
+                      onClick={() => onToggle(s.column)}
+                      title={s.confidence === 'none' ? 'No ontology match found — click to include anyway' : undefined}
+                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${accepted ? 'bg-teal-600 text-white' : s.confidence === 'none' ? 'border border-dashed border-slate-300 text-slate-300 hover:border-slate-400 hover:text-slate-400' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                       {accepted && <Check className="w-3.5 h-3.5" />}
                     </button>
                   </td>
@@ -540,7 +542,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
       </div>
       <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 bg-slate-50/50">
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <AlertCircle className="w-3.5 h-3.5 text-slate-400" />Toggle mappings to include/exclude columns
+          <AlertCircle className="w-3.5 h-3.5 text-slate-400" />Toggle to include/exclude columns — unmatched columns (dashed) can still be included
         </div>
         <button onClick={onIngest} disabled={acceptedCount === 0}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${acceptedCount > 0 ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>

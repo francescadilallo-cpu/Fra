@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10ax)
+
+### Fix: CSV column mapping allows manual override for unmatched columns
+
+- `frontend/src/components/DataSourcesView.tsx` — `UploadPanel`
+
+  **Problem**: The CSV column mapping table disabled the include/exclude toggle for columns with `confidence === 'none'` (no ontology match found). If all columns scored `none` — likely for a fresh live workspace with no ontology built yet — the "Ingest" button stayed disabled and users were stuck with no way to proceed.
+
+  **Fix**: Removed `disabled` from the toggle button for `none`-confidence columns. They now show a dashed border to signal "no auto-match, but you can include manually". A hover tooltip explains: "No ontology match found — click to include anyway". The footer hint text also updated to mention unmatched columns are togglable. Users can now always ingest a CSV regardless of whether the semantic layer has been built.
+
+---
+
 ## 2026-06-20 (session 10aw)
 
 ### Improve: smarter example questions for fresh live workspaces
