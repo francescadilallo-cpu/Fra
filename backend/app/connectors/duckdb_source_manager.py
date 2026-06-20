@@ -1182,6 +1182,12 @@ class DuckDBSourceManager:
                         n, truncated = self._stream_cursor_into_table(
                             conn, cur, safe_table, row_limit=limit
                         )
+                    except psycopg2.ProgrammingError as exc:
+                        raise ValueError(
+                            f"Table '{table}' not found in schema '{schema}' — "
+                            f"check that the table exists and the schema name is correct. "
+                            f"(PostgreSQL: {exc})"
+                        ) from exc
                     finally:
                         cur.close()
                     if truncated:
