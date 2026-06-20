@@ -2932,7 +2932,7 @@ export default function SemanticLayerView() {
                 <div>
                   <p className="text-sm font-semibold text-slate-600 mb-1">No entities yet</p>
                   <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-                    Connect a data source and run the semantic pipeline — entities are auto-extracted from your tables. Or add them manually using the button above.
+                    Connect a data source and run setup — entities are auto-extracted from your tables. Or add them manually using the button above.
                   </p>
                 </div>
                 <button
@@ -3078,7 +3078,7 @@ export default function SemanticLayerView() {
                   kgStatus !== null ? (
                     <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">No metrics were auto-extracted from your pipeline. Define them manually using the button above.</p>
                   ) : (
-                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
+                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run setup first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
                   )
                 ) : (
                   <p className="text-xs mt-1">Click "Define metric" to add your first business measure.</p>
@@ -3148,7 +3148,7 @@ export default function SemanticLayerView() {
                 <SlidersHorizontal className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">No hierarchies defined yet</p>
                 {!IS_DEMO_MODE && useBackendData && kgStatus === null ? (
-                  <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run the semantic pipeline to auto-extract dimension hierarchies, or define them manually using the button above.</p>
+                  <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run setup to auto-extract dimension hierarchies, or define them manually using the button above.</p>
                 ) : (
                   <p className="text-xs mt-1">Click "Add hierarchy" to define a drill-down path.</p>
                 )}

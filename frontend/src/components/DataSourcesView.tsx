@@ -537,7 +537,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
                   <td className="px-3 py-2">
                     <button
                       onClick={() => onToggle(s.column)}
-                      title={s.confidence === 'none' ? 'No ontology match found — click to include anyway' : undefined}
+                      title={s.confidence === 'none' ? 'No entity match found — click to include anyway' : undefined}
                       className={`w-6 h-6 rounded flex items-center justify-center transition-all ${accepted ? 'bg-teal-600 text-white' : s.confidence === 'none' ? 'border border-dashed border-slate-300 text-slate-300 hover:border-slate-400 hover:text-slate-400' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                       {accepted && <Check className="w-3.5 h-3.5" />}
                     </button>
