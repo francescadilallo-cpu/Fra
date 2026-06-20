@@ -12,10 +12,11 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ## 2026-06-20 (session cont. 3)
 
-### Polish: final jargon pass — 5 more live-user strings fixed
+### Polish: final jargon pass — live-user strings across 8 files
 
 - `frontend/src/components/OntologyGraph.tsx`
   - Page heading "Ontology" → "Entity Graph" (main `<h1>`, shown to all users)
+  - Subline "N classes · N object properties" → "N entities · N relationships"
   - Empty state guidance: "Ontology Builder AI" → "Builder AI"; "run the pipeline" → "run setup"
 
 - `frontend/src/components/AgentsView.tsx`
@@ -27,6 +28,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 - `frontend/src/components/ProcessView.tsx`
   - `buildLiveLogs` (live-user pipeline): "Building Knowledge Graph..." → "Building data model..."; "knowledge nodes created" → "entities indexed"
+
+- `frontend/src/components/Dashboard.tsx`
+  - Data Model stat cards: "Know. Nodes" → "Nodes", "Know. Edges" → "Edges"
+
+- `frontend/src/components/OntologyBuilder.tsx`
+  - Page header stat line "N classes · N relations" → "N entities · N relationships"
+
+- `backend/app/main.py`
+  - `_safe_ingest_error` fallback for build endpoint: "Semantic layer build failed" → "Data model build failed"
+  - `_safe_ingest_error` fallback for sync/reload: "Knowledge graph rebuild failed" → "Data model rebuild failed"
 
 ---
 
