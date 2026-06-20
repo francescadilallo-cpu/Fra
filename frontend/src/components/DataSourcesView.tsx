@@ -641,6 +641,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       const updated = await syncSource(sourceId)
       setSources(prev => prev.map(s => s.id === sourceId ? updated : s))
       showToast(`${updated.label} synced · ${updated.row_count.toLocaleString('en-US')} records`)
+      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     } catch (err: unknown) {
       const msg = backendErrorMessage(err) || 'Sync failed'
       setSources(prev => prev.map(s => s.id === sourceId ? { ...s, status: 'error', error_msg: msg } : s))

@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-19 (continued — session 10ap)
+
+### Frontend: dispatch pipeline-run-updated after individual source sync
+
+- `frontend/src/components/DataSourcesView.tsx` — `syncById()`
+
+  When a user syncs a single source via the "Sync now" button, the backend re-ingests that source and updates entity row counts. The `pipeline-run-updated` event was not dispatched, so DataExplorer row counts, AgentsView liveRowCounts, and Dashboard storeStatus remained stale. Now dispatches immediately on successful sync so all listeners refresh.
+
+---
+
 ## 2026-06-19 (continued — session 10ao)
 
 ### Frontend: DataSourcesView build now dispatches pipeline-run-updated
