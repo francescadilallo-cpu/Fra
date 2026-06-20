@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10be)
+
+### Fix: JSON ingester — better error messages for malformed files and missing records_key
+
+- `backend/app/connectors/duckdb_source_manager.py` — `_ingest_json_file`
+
+  Three improvements:
+  1. `json.JSONDecodeError` (which IS a ValueError subclass) now produces a readable message: "JSON file 'foo.json' is not valid JSON: …" instead of a raw Python traceback.
+  2. If `records_key` is configured but the key doesn't exist in the JSON object, the error now lists available top-level keys: "records_key 'data' not found. Available: 'results', 'items'".
+  3. The "not a list" error now names the file and shows the actual type it found, making it easier to diagnose nested-object payloads.
+
+---
+
 ## 2026-06-20 (session 10bd)
 
 ### Improve: remove developer jargon from live-user UI text

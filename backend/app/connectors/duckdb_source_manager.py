@@ -975,13 +975,30 @@ class DuckDBSourceManager:
                     exc,
                 )
 
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        records = (
-            raw if isinstance(raw, list) else raw.get(records_key or "records", raw)
-        )
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"JSON file '{path.name}' is not valid JSON: {exc}"
+            ) from exc
+        if records_key:
+            records = raw.get(records_key) if isinstance(raw, dict) else None
+            if records is None:
+                available = (
+                    ", ".join(f"'{k}'" for k in raw.keys())
+                    if isinstance(raw, dict)
+                    else "(not an object)"
+                )
+                raise ValueError(
+                    f"JSON file '{path.name}': records_key '{records_key}' not found. "
+                    f"Available top-level keys: {available}"
+                )
+        else:
+            records = raw if isinstance(raw, list) else raw.get("records", raw)
         if not isinstance(records, list):
             raise ValueError(
-                "JSON must be a top-level array or contain a list under 'records_key'"
+                f"JSON file '{path.name}' must be a top-level array or an object containing a list "
+                f"under '{records_key or 'records'}' — got {type(records).__name__}"
             )
         df = pd.DataFrame(records)
         conn.execute(f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS SELECT * FROM df')
