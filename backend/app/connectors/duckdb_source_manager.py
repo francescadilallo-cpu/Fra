@@ -890,9 +890,32 @@ class DuckDBSourceManager:
             tmp_path: str | None = None
             if raw_path.startswith(("http://", "https://")):
                 import httpx
+                import re as _re
+
+                # Auto-convert Google Sheets view/edit URLs to CSV export URLs so
+                # users can paste the sharing link directly without needing to know
+                # the /export?format=csv URL pattern.
+                download_url = raw_path
+                _gs_match = _re.match(
+                    r"https://docs\.google\.com/spreadsheets/d/([^/]+)/(?:edit|view|pub)",
+                    raw_path,
+                )
+                if _gs_match and "export" not in raw_path:
+                    sheet_id = _gs_match.group(1)
+                    # Preserve gid param if present (e.g. #gid=12345 or ?gid=12345)
+                    gid_match = _re.search(r"[?&#]gid=(\d+)", raw_path)
+                    gid_suffix = f"&gid={gid_match.group(1)}" if gid_match else ""
+                    download_url = (
+                        f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+                        f"/export?format=csv{gid_suffix}"
+                    )
+                    logger.info(
+                        "Google Sheets URL auto-converted to CSV export: %s",
+                        download_url,
+                    )
 
                 try:
-                    resp = httpx.get(raw_path, follow_redirects=True, timeout=30)
+                    resp = httpx.get(download_url, follow_redirects=True, timeout=30)
                     resp.raise_for_status()
                 except httpx.HTTPStatusError as exc:
                     raise ValueError(
@@ -902,6 +925,13 @@ class DuckDBSourceManager:
                     raise ValueError(
                         f"Could not reach URL — check the address and network access: {raw_path}"
                     ) from exc
+                # Sanity-check: reject clearly non-CSV responses (HTML login pages etc.)
+                content_type = resp.headers.get("content-type", "")
+                if "text/html" in content_type and "text/csv" not in content_type:
+                    raise ValueError(
+                        f"URL returned HTML instead of CSV — the file may require login "
+                        f"or the link may not be publicly shared: {raw_path}"
+                    )
                 with tempfile.NamedTemporaryFile(
                     suffix=".csv", delete=False, mode="wb"
                 ) as tmp:
