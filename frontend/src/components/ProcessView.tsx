@@ -571,7 +571,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
   return (
     <div className="p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Process</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Setup</h1>
         <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
       </div>
 
@@ -729,7 +729,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         {processStages.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and setup has run.</p>
+            <p className="text-sm text-slate-400">Lifecycle stages will appear here once data sources are connected and setup has run.</p>
             <button
               onClick={() => onNavigate?.('sources')}
               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"
