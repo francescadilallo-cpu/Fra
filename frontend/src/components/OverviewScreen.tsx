@@ -108,7 +108,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
   // (sellable) product — derive it from the user's real sources instead.
   const kgCountFragment = kgNodes > 0
     ? `${kgNodes.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges`
-    : 'Build the layer to generate the graph'
+    : 'Run setup to generate the graph'
   const kgGraphDesc = IS_DEMO_MODE
     ? `The semantic bridges (PLACED_BY, SOLD_BY, OF_PRODUCT) link ERP↔CRM↔HR↔PIM. ${kgCountFragment}, reliable joins.`
     : connectors.length > 1
@@ -389,7 +389,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             {[
               {
                 icon: Network, color: 'border-l-teal-500', bg: 'bg-teal-50',
-                title: 'Cross-source Knowledge Graph',
+                title: 'Cross-source Entity Graph',
                 desc: kgGraphDesc,
               },
               {
