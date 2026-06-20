@@ -518,7 +518,7 @@ export default function ConfigurationView() {
           Configured AI Agents
         </h2>
         <p className="text-xs text-slate-500">
-          Agents operating on the semantic layer of <strong className="text-teal-700">{SECTORS[sectorId].name}</strong>.
+          Agents configured for <strong className="text-teal-700">{SECTORS[sectorId].name}</strong>.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
           {agents.map(a => <AgentCard key={a.name} {...a} />)}

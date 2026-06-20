@@ -1813,8 +1813,8 @@ def semantic_ask(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
-                "The semantic layer is not ready yet. "
-                "Connect a data source and build the pipeline to enable querying."
+                "The data model is not ready yet. "
+                "Connect a data source and run setup to enable querying."
             ),
         )
 

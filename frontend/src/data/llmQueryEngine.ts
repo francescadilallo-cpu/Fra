@@ -218,7 +218,7 @@ async function callGemini(question: string, apiKey: string): Promise<EngineResul
 // ── Main entry ────────────────────────────────────────────────────────────────
 
 function validateKey(key: string, provider: LLMProvider): void {
-  if (!key) throw new Error('API key is empty — open the LLM panel and enter your key.')
+  if (!key) throw new Error('API key is empty — open the AI provider panel and enter your key.')
   if (provider === 'groq' && !key.startsWith('gsk_'))
     throw new Error('Groq key must start with "gsk_". Get one free at console.groq.com/keys')
   if (provider === 'anthropic' && !key.startsWith('sk-ant'))
