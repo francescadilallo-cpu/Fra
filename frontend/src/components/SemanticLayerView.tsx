@@ -2380,20 +2380,20 @@ export default function SemanticLayerView() {
             <div className="grid grid-cols-4 gap-4">
               <StatCard label="Entities"         value={nodeCount.toString()} sub="business concepts" />
               <StatCard label="Verified Metrics" value={metricsCount.toString()} sub="reusable measures" />
-              <StatCard label="Knowledge Nodes"
+              <StatCard label="Records Indexed"
                 value={isDemoWorkspace ? '193,062' : (kgStatus?.kg_nodes ?? totalRows).toLocaleString()}
                 sub="entity instances" accent />
-              <StatCard label="Knowledge Edges"
+              <StatCard label="Relationships"
                 value={isDemoWorkspace ? '313,193' : (kgStatus?.kg_edges ?? edgeCount * 8).toLocaleString()}
-                sub="data relationships" accent />
+                sub="data connections" accent />
             </div>
 
             {/* Completeness score */}
             <div className="bg-white border border-slate-200 rounded-2xl p-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Semantic Coverage</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">How well your data layer is defined for AI query resolution</p>
+                  <h3 className="text-sm font-bold text-slate-900">Data Model Coverage</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">How well your data model is defined for AI query resolution</p>
                 </div>
                 <div className="text-right">
                   <div className={`text-3xl font-black ${coverageScore >= 80 ? 'text-teal-600' : coverageScore >= 50 ? 'text-amber-500' : 'text-slate-400'}`}>{coverageScore}%</div>
