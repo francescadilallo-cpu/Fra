@@ -701,6 +701,27 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             ))}
           </div>
         )}
+
+        {/* Next steps after successful live pipeline run */}
+        {runState === 'done' && !IS_DEMO_MODE && (
+          <div className="mx-6 mb-5 flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <p className="text-xs text-slate-600 font-medium">Semantic layer ready — start exploring your data</p>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => onNavigate?.('sembuilder' as NavTab)}
+                className="text-xs font-medium px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                View Ontology
+              </button>
+              <button
+                onClick={() => onNavigate?.('query' as NavTab)}
+                className="text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+              >
+                Ask Questions →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Lifecycle stages ──────────────────────────────────────────────── */}

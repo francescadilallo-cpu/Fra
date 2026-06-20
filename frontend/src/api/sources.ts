@@ -123,7 +123,7 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   'json-file': {
     connector_type: 'json',
     params_schema: [
-      { key: 'path', label: 'JSON file path or URL', type: 'text', placeholder: '/data/records.json', required: true },
+      { key: 'path', label: 'JSON file path', type: 'text', placeholder: '/data/records.json', required: true, hint: 'Top-level array or NDJSON supported' },
       { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'json_data', required: true },
     ],
   },
