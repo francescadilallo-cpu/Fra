@@ -10,6 +10,24 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont.)
+
+### Improve: extended jargon sweep — 10 more files cleaned
+
+- `backend/app/main.py` — 503 message "The semantic layer is not ready yet" → "The data model is not ready yet"; size error "ontology extension" → "data model extension"
+- `frontend/src/components/OntologyBuilder.tsx` — Builder AI title, bot welcome message for live users, AI message text (rationale, duplicate checks), analyzing spinner, reset dialog
+- `frontend/src/components/OnboardingWizard.tsx` — step 1 tagline "The semantic layer for European businesses" → "AI-powered data platform..."
+- `frontend/src/components/ConfigurationView.tsx` — agents section subtitle
+- `frontend/src/data/llmQueryEngine.ts` — empty key error "LLM panel" → "AI provider panel"
+- `frontend/src/components/SemanticLayerView.tsx` — 8 additional strings (bridge desc, definitions empty state, ambiguity count, setup guide heading, sources empty state×2, query templates desc, bridges page desc)
+- `frontend/src/components/ProcessView.tsx` — "Synced from semantic layer" → "Data model synced"
+- `frontend/src/components/AgentsView.tsx` — agent start log, agents subtitle
+- `frontend/src/components/DataSourcesView.tsx` — waitlist panel text
+- `frontend/src/components/OverviewScreen.tsx` — live-user CTA heading
+- `frontend/src/data/reportGenerator.ts` — 3 strings in downloaded report (recommendations, KPI sub-label, report section)
+
+---
+
 ## 2026-06-20 (session 10bf)
 
 ### Fix + improve: MySQL/Parquet ingester errors; jargon cleanup across 6 frontend files
