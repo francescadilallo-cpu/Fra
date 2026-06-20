@@ -559,7 +559,7 @@ export default function MappingView() {
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
                       className="text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 font-medium transition-colors"
                     >
-                      Run Pipeline →
+                      Run Setup →
                     </button>
                   </div>
                 </div>

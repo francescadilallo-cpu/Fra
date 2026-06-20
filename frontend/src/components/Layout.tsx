@@ -46,7 +46,7 @@ const NAV_ENTRIES: NavEntry[] = [
 
   { kind: 'section', label: 'More' },
   { kind: 'item', id: 'usecases',    label: 'Use Cases',         icon: Briefcase },
-  { kind: 'item', id: 'process',     label: 'Process',           icon: Workflow },
+  { kind: 'item', id: 'process',     label: 'Setup',             icon: Workflow },
   { kind: 'item', id: 'config',      label: 'Configuration',     icon: Settings },
 ]
 

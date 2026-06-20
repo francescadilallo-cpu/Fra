@@ -601,7 +601,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
                 className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
               >
                 <Play className="w-3.5 h-3.5" />
-                {runState === 'done' ? 'Re-run Pipeline' : 'Run Pipeline'}
+                {runState === 'done' ? 'Re-run Setup' : 'Run Setup'}
               </button>
             )}
           </div>

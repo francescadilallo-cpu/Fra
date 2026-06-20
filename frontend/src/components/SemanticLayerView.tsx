@@ -2517,7 +2517,7 @@ export default function SemanticLayerView() {
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
                       className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
                     >
-                      Run Pipeline →
+                      Run Setup →
                     </button>
                   )}
                 </div>

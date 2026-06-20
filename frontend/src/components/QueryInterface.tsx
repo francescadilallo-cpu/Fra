@@ -606,7 +606,7 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
     const navCTA = !IS_DEMO_MODE && message.httpStatus === 409
       ? { label: 'Connect a data source →', tab: 'sources' }
       : !IS_DEMO_MODE && (message.httpStatus === 503 || message.httpStatus === 404)
-        ? { label: 'Run Pipeline →', tab: 'process' }
+        ? { label: 'Run Setup →', tab: 'process' }
         : null
     const showRephaseHint = !IS_DEMO_MODE && message.httpStatus === 422
 

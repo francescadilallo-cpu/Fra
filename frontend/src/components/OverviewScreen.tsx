@@ -183,7 +183,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               Query AI →
             </button>
             <button onClick={() => onNavigate('process')} className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
-              Run Pipeline →
+              Run Setup →
             </button>
           </div>
         </div>
@@ -257,7 +257,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </button>
             ) : (registeredSources.length > 0 || connectors.length > 0) ? (
               <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-                Run Pipeline →
+                Run Setup →
               </button>
             ) : (
               <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
@@ -461,7 +461,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </button>
             ) : (registeredSources.length > 0 || connectors.length > 0) ? (
               <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
-                Run Pipeline →
+                Run Setup →
               </button>
             ) : (
               <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">

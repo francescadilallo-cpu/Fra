@@ -802,7 +802,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
                 <p className="text-xs text-slate-400">No entities yet</p>
                 {(liveConfig?.connectors?.length ?? 0) > 0 ? (
                   <button onClick={() => onNavigate?.('process')} className="text-xs text-teal-600 hover:underline mt-1">
-                    Run Pipeline →
+                    Run Setup →
                   </button>
                 ) : (
                   <button onClick={() => onNavigate?.('sources')} className="text-xs text-teal-600 hover:underline mt-1">
