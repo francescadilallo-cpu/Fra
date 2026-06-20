@@ -1676,7 +1676,7 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'sources',      label: 'Sources',     Icon: Database,         desc: 'Data systems', group: 'Model' },
   { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Semantic concepts' },
   { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-system joins' },
-  { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source FK links' },
+  { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source field links' },
   { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Disambiguation', group: 'Semantics' },
   { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
   { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },

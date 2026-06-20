@@ -233,7 +233,7 @@ function EntitiesTab({ entities, onUpdate }: { entities: DraftEntity[]; onUpdate
     <div className="py-8 text-center">
       <p className="text-sm text-slate-400 mb-2">No entities detected yet.</p>
       <p className="text-xs text-slate-400 mb-3 max-w-xs mx-auto">
-        Entities are extracted automatically when you connect a data source and run the pipeline.
+        Entities are extracted automatically when you connect a data source and run setup.
       </p>
       <button
         onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}

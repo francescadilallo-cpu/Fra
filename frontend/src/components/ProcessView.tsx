@@ -614,7 +614,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             <div>
               <p className="text-xs font-semibold text-amber-800">No data sources connected yet</p>
               <p className="text-xs text-amber-700 mt-0.5">
-                Connect a source before running the pipeline.{' '}
+                Connect a source before running setup.{' '}
                 <button onClick={() => onNavigate?.('sources')} className="underline font-medium">Go to Sources →</button>
               </p>
             </div>
@@ -729,7 +729,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         {processStages.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and the pipeline has run.</p>
+            <p className="text-sm text-slate-400">Process stages will appear here once data sources are connected and setup has run.</p>
             <button
               onClick={() => onNavigate?.('sources')}
               className="inline-flex items-center gap-1 text-xs text-teal-600 hover:underline font-medium mt-2"

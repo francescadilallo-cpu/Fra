@@ -438,7 +438,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
               Which data entities will this agent read from?
             </p>
             {availableEntities.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run the pipeline, or build entities manually in the Ontology Builder.</p>
+              <p className="text-xs text-slate-400 italic">No entities yet — connect a data source and run setup, or build entities manually in the Builder AI.</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {availableEntities.map(entity => {
