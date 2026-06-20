@@ -137,7 +137,7 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
                   <div>
                     <p className="text-sm font-semibold text-slate-800 mb-0.5">Demo — AdventureWorks</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Explore with pre-loaded bicycle manufacturing data — 4 connected sources, real semantic ambiguities, Knowledge Graph already built.
+                      Explore with pre-loaded bicycle manufacturing data — 4 connected sources, real data ambiguities, Data Model already built.
                     </p>
                   </div>
                 </div>
