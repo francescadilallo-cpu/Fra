@@ -364,7 +364,7 @@ export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavT
                         {!IS_DEMO_MODE && (
                           <>
                             <p className="text-xs text-gray-400 mb-3 max-w-sm mx-auto">
-                              Compliance classifications appear here once you connect your data sources and run the setup wizard.
+                              Compliance classifications appear here once you connect your data sources and run setup.
                             </p>
                             <button
                               onClick={() => onNavigate?.('sources')}
