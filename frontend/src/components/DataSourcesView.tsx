@@ -357,11 +357,14 @@ function ConnectedSourcesPanel({
                 <StatusBadge status={s.status} />
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {s.row_count > 0 ? `${s.row_count.toLocaleString('en-US')} records · ` : ''}
-                synced {relativeTime(s.last_sync_at)}
+                {s.row_count > 0
+                  ? `${s.row_count.toLocaleString('en-US')} records · synced ${relativeTime(s.last_sync_at)}`
+                  : s.last_sync_at
+                    ? `synced ${relativeTime(s.last_sync_at)} · 0 records`
+                    : s.status === 'pending' ? 'Run the pipeline to ingest data' : 'Not yet synced'}
               </p>
               {s.error_msg && (
-                <p className="text-[10px] text-red-500 mt-0.5 truncate">{s.error_msg}</p>
+                <p className="text-[10px] text-red-500 mt-0.5 line-clamp-3" title={s.error_msg}>{s.error_msg}</p>
               )}
             </div>
             <button onClick={() => onSync(s.id)}

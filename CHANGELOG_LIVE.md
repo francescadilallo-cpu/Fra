@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10bb)
+
+### Improve: SemanticLayerView setup guide + DataSourcesView error UX
+
+- `frontend/src/components/SemanticLayerView.tsx` — setup guide condition
+- `frontend/src/components/DataSourcesView.tsx` — source card text
+
+  **SemanticLayerView**: Setup guide was hidden as soon as `sourcesCount > 0` (first source connected), leaving the user with "0 Entities" and "0 KG Nodes" stat cards and no guidance. Changed condition to `!isDemoWorkspace && nodeCount === 0` — the guide now stays visible until the semantic layer has actually been built (entities > 0). When sources exist but no entities yet, the header shows a "Run Pipeline →" button and the subtitle changes to "N sources connected — run the pipeline to auto-discover entities."
+
+  **DataSourcesView**: Error message for broken sources was `truncate` (single line, cut off). Changed to `line-clamp-3` with `title` tooltip so users can read the full DSN/connection error without expanding. Also fixed the "synced never" text for pending-but-not-yet-synced sources: now shows "Run the pipeline to ingest data" (pending), "Not yet synced" (other unsynced), or the actual row count + relative time if synced.
+
+---
+
 ## 2026-06-20 (session 10ba)
 
 ### Feature: Relations tab — add/delete user-defined joins in SemanticDraftView

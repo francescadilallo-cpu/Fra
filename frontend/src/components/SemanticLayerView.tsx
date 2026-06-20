@@ -2504,15 +2504,28 @@ export default function SemanticLayerView() {
               </div>
             )}
 
-            {/* Setup guide (always shown when no live data yet) */}
-            {sourcesCount === 0 && (
+            {/* Setup guide — shown until the semantic layer has been built (entities > 0) */}
+            {!isDemoWorkspace && nodeCount === 0 && (
               <div className="bg-gradient-to-br from-teal-50 to-slate-50 border border-teal-200 rounded-2xl p-6">
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap className="w-4 h-4 text-teal-600" />
-                  <h3 className="text-base font-bold text-slate-900">Build your semantic layer — step by step</h3>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-teal-600" />
+                    <h3 className="text-base font-bold text-slate-900">Build your semantic layer — step by step</h3>
+                  </div>
+                  {backendSources.length > 0 && (
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
+                      className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                    >
+                      Run Pipeline →
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500 mb-5">
-                  Follow these four steps to give AI agents a unified, queryable view of your company's data.
+                  {backendSources.length > 0
+                    ? `${backendSources.length} source${backendSources.length !== 1 ? 's' : ''} connected — run the pipeline to auto-discover entities and build the semantic layer.`
+                    : 'Follow these four steps to give AI agents a unified, queryable view of your company\'s data.'
+                  }
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {progressItems.map((item, i) => (
