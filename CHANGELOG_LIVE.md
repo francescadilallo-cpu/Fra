@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10av)
+
+### Fix: live onboarding lands users on Data Sources tab after completion
+
+- `frontend/src/App.tsx` — `onComplete` callback and new `useEffect`
+
+  **Problem**: After the onboarding wizard completes for a live user, `window.location.reload()` resets all React state. The user was dropped on the Overview tab with no guidance on what to do next — they had to find the Data Sources tab on their own.
+
+  **Fix**: Set `sessionStorage.setItem('si-post-onboarding-tab', 'sources')` in `onComplete` (live mode only, before the reload). A new `useEffect` reads and clears this key after `granted=true`, then navigates directly to the Data Sources tab. Demo users are unaffected.
+
+### Fix: SaaS connectors show "in progress" panel instead of fake credential form
+
+- `frontend/src/api/sources.ts` — `ConnectorBackendDef` interface, `CONNECTOR_BACKEND_MAP`
+- `frontend/src/components/DataSourcesView.tsx` — `CredentialModal`
+
+  **Problem**: 18 connectors (Shopify, Stripe, TeamSystem, Salesforce, etc.) were marked `status: 'available'` in the UI. Clicking "Connect" opened a credential form. Submitting created a backend source record that stayed `status: 'pending'` forever — backend ingestion is not yet implemented for these connector types. Users thought they'd connected their data but nothing was ingested.
+
+  **Fix**: Added `waitlist_only?: boolean` to `ConnectorBackendDef`. All 18 unimplemented SaaS connector types are now marked `waitlist_only: true`. `CredentialModal` detects this flag and renders an informational panel instead of the credential form: explains to use CSV export as a workaround, and offers a "Notify me when ready" button (client-side state only, no API call). Connectors that actually work (PostgreSQL, Google Sheets via CSV, Airtable via CSV) are unchanged.
+
+---
+
 ## 2026-06-20 (session 10au)
 
 ### Audit: comprehensive live/demo isolation review — no new bugs found

@@ -96,6 +96,17 @@ export default function App() {
     if (granted) migrateExistingCompany(sectorId)
   }, [granted, sectorId])
 
+  // After live-mode onboarding completes and the page reloads, navigate the
+  // user directly to the Data Sources tab so they can connect their first source.
+  useEffect(() => {
+    if (!granted) return
+    const target = sessionStorage.getItem('si-post-onboarding-tab') as NavTab | null
+    if (target) {
+      sessionStorage.removeItem('si-post-onboarding-tab')
+      setActiveTab(target)
+    }
+  }, [granted])
+
   useEffect(() => {
     if (granted && !localStorage.getItem(ONBOARDING_KEY)) {
       setShowOnboarding(true)
@@ -194,6 +205,9 @@ export default function App() {
             setShowOnboarding(false)
             if (!IS_DEMO_MODE) {
               saveWorkspace(companyName, newSectorId).catch(() => {})
+              // After reload, navigate directly to Data Sources so the user
+              // can connect their first source without extra clicks.
+              sessionStorage.setItem('si-post-onboarding-tab', 'sources')
             }
             window.dispatchEvent(new CustomEvent('company-name-changed'))
             window.location.reload()

@@ -63,6 +63,9 @@ export interface ParamField {
 export interface ConnectorBackendDef {
   connector_type: string
   params_schema: ParamField[]
+  /** True when backend ingestion is not yet implemented for this connector type.
+   *  The credential modal will show a "register interest" panel instead of the form. */
+  waitlist_only?: boolean
 }
 
 export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
@@ -76,10 +79,8 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   },
   mysql: {
     connector_type: 'mysql',
-    params_schema: [
-      { key: 'dsn', label: 'Connection string', type: 'text', placeholder: 'mysql://user:pass@host:3306/db', required: true },
-      { key: 'tables', label: 'Tables (comma-separated)', type: 'text', placeholder: 'orders,customers', required: true },
-    ],
+    params_schema: [],
+    waitlist_only: true,
   },
   'google-sheets': {
     connector_type: 'csv',
@@ -95,132 +96,24 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
       { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'airtable_records', required: true },
     ],
   },
-  shopify: {
-    connector_type: 'shopify',
-    params_schema: [
-      { key: 'shop_url', label: 'Shop URL', type: 'url', placeholder: 'https://your-store.myshopify.com', required: true },
-      { key: 'api_key', label: 'Admin API access token', type: 'password', placeholder: 'shpat_...', required: true },
-    ],
-  },
-  woocommerce: {
-    connector_type: 'woocommerce',
-    params_schema: [
-      { key: 'url', label: 'Store URL', type: 'url', placeholder: 'https://yourstore.com', required: true },
-      { key: 'consumer_key', label: 'Consumer key', type: 'text', placeholder: 'ck_...', required: true },
-      { key: 'consumer_secret', label: 'Consumer secret', type: 'password', placeholder: 'cs_...', required: true },
-    ],
-  },
-  magento: {
-    connector_type: 'magento',
-    params_schema: [
-      { key: 'base_url', label: 'Store URL', type: 'url', placeholder: 'https://yourstore.com', required: true },
-      { key: 'access_token', label: 'Integration access token', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  stripe: {
-    connector_type: 'stripe',
-    params_schema: [
-      { key: 'api_key', label: 'Secret key', type: 'password', placeholder: 'sk_live_...', required: true },
-    ],
-  },
-  satispay: {
-    connector_type: 'satispay',
-    params_schema: [
-      { key: 'key_id', label: 'Key ID', type: 'text', placeholder: 'your-key-id', required: true },
-      { key: 'private_key', label: 'Private key (PEM)', type: 'password', placeholder: '-----BEGIN...', required: true },
-    ],
-  },
-  nexi: {
-    connector_type: 'nexi',
-    params_schema: [
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  salesforce: {
-    connector_type: 'salesforce',
-    params_schema: [
-      { key: 'instance_url', label: 'Instance URL', type: 'url', placeholder: 'https://yourorg.salesforce.com', required: true },
-      { key: 'access_token', label: 'Access token', type: 'password', placeholder: '00D...', required: true },
-    ],
-  },
-  hubspot: {
-    connector_type: 'hubspot',
-    params_schema: [
-      { key: 'api_key', label: 'Private app token', type: 'password', placeholder: 'pat-na1-...', required: true },
-    ],
-  },
-  teamsystem: {
-    connector_type: 'teamsystem',
-    params_schema: [
-      { key: 'api_url', label: 'API endpoint', type: 'url', placeholder: 'https://api.teamsystem.com', required: true },
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  zucchetti: {
-    connector_type: 'zucchetti',
-    params_schema: [
-      { key: 'api_url', label: 'API endpoint', type: 'url', placeholder: 'https://api.zucchetti.it', required: true },
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  'sap-b1': {
-    connector_type: 'sap_b1',
-    params_schema: [
-      { key: 'service_layer_url', label: 'Service Layer URL', type: 'url', placeholder: 'https://sap-server:50000/b1s/v1', required: true },
-      { key: 'username', label: 'Username', type: 'text', placeholder: 'manager', required: true },
-      { key: 'password', label: 'Password', type: 'password', placeholder: '', required: true },
-      { key: 'company_db', label: 'Company DB', type: 'text', placeholder: 'SBODEMOIT', required: true },
-    ],
-  },
-  odoo: {
-    connector_type: 'odoo',
-    params_schema: [
-      { key: 'url', label: 'Odoo URL', type: 'url', placeholder: 'https://yourinstance.odoo.com', required: true },
-      { key: 'db', label: 'Database', type: 'text', placeholder: 'mycompany', required: true },
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  'fatture-in-cloud': {
-    connector_type: 'fatture_in_cloud',
-    params_schema: [
-      { key: 'access_token', label: 'Access token', type: 'password', placeholder: '...', required: true },
-      { key: 'company_id', label: 'Company ID', type: 'text', placeholder: '12345', required: true },
-    ],
-  },
-  'aruba-fe': {
-    connector_type: 'aruba_fe',
-    params_schema: [
-      { key: 'username', label: 'Username', type: 'text', placeholder: 'user@company.it', required: true },
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  'danea-easyfatt': {
-    connector_type: 'danea_easyfatt',
-    params_schema: [
-      { key: 'path', label: 'Danea XML/CSV export path', type: 'text', placeholder: '/data/danea_export.csv', required: true },
-      { key: 'table_name', label: 'Table name', type: 'text', placeholder: 'danea_data', required: false },
-    ],
-  },
-  prestashop: {
-    connector_type: 'prestashop',
-    params_schema: [
-      { key: 'url', label: 'Store URL', type: 'url', placeholder: 'https://yourstore.com', required: true },
-      { key: 'api_key', label: 'API key', type: 'password', placeholder: '...', required: true },
-    ],
-  },
-  sdi: {
-    connector_type: 'sdi',
-    params_schema: [
-      { key: 'path', label: 'XML invoices folder', type: 'text', placeholder: '/data/fatture_sdi', required: true, hint: 'Folder containing SDI XML files (.xml or .zip)' },
-      { key: 'table_name', label: 'Table name in DuckDB', type: 'text', placeholder: 'sdi_invoices', required: false },
-    ],
-  },
-  'agenzia-entrate': {
-    connector_type: 'agenzia_entrate',
-    params_schema: [
-      { key: 'credentials_path', label: 'Credentials file path', type: 'text', placeholder: '/data/ae_credentials.json', required: true },
-    ],
-  },
+  shopify:            { connector_type: 'shopify',            params_schema: [], waitlist_only: true },
+  woocommerce:        { connector_type: 'woocommerce',        params_schema: [], waitlist_only: true },
+  magento:            { connector_type: 'magento',            params_schema: [], waitlist_only: true },
+  prestashop:         { connector_type: 'prestashop',         params_schema: [], waitlist_only: true },
+  stripe:             { connector_type: 'stripe',             params_schema: [], waitlist_only: true },
+  satispay:           { connector_type: 'satispay',           params_schema: [], waitlist_only: true },
+  nexi:               { connector_type: 'nexi',               params_schema: [], waitlist_only: true },
+  salesforce:         { connector_type: 'salesforce',         params_schema: [], waitlist_only: true },
+  hubspot:            { connector_type: 'hubspot',            params_schema: [], waitlist_only: true },
+  teamsystem:         { connector_type: 'teamsystem',         params_schema: [], waitlist_only: true },
+  zucchetti:          { connector_type: 'zucchetti',          params_schema: [], waitlist_only: true },
+  'sap-b1':           { connector_type: 'sap_b1',            params_schema: [], waitlist_only: true },
+  odoo:               { connector_type: 'odoo',               params_schema: [], waitlist_only: true },
+  'fatture-in-cloud': { connector_type: 'fatture_in_cloud',  params_schema: [], waitlist_only: true },
+  'aruba-fe':         { connector_type: 'aruba_fe',          params_schema: [], waitlist_only: true },
+  'danea-easyfatt':   { connector_type: 'danea_easyfatt',    params_schema: [], waitlist_only: true },
+  sdi:                { connector_type: 'sdi',                params_schema: [], waitlist_only: true },
+  'agenzia-entrate':  { connector_type: 'agenzia_entrate',   params_schema: [], waitlist_only: true },
 }
 
 export function getConnectorBackendDef(connectorId: string): ConnectorBackendDef {
