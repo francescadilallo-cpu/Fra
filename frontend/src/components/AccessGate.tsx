@@ -156,7 +156,7 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
                   <div>
                     <p className="text-sm font-semibold text-slate-800 mb-0.5">Live — Your data</p>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Start fresh with your own data sources. Connect ERP, CRM, HR or any file — the semantic layer builds from scratch.
+                      Start fresh with your own data sources. Connect ERP, CRM, HR or any file — your data model builds from scratch.
                     </p>
                   </div>
                 </div>

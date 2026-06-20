@@ -33,7 +33,7 @@ export function SemanticDraftView() {
         pollRef.current = setTimeout(loadDraft, 5_000)
       }
     } catch {
-      toast('Could not load semantic layer — backend may be offline', 'error')
+      toast('Could not load data model — backend may be offline', 'error')
     } finally {
       setLoading(false)
     }
@@ -75,7 +75,7 @@ export function SemanticDraftView() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-bold text-slate-800">Semantic Layer — Schema Config</h2>
+          <h2 className="text-sm font-bold text-slate-800">Data Model — Schema Config</h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Auto-extracted · {draft.entities.length} entities · {draft.relations.length} relations · {draft.metrics.length} metrics · edit to refine
           </p>
@@ -158,7 +158,7 @@ function EmptyState() {
       </div>
 
       <div className="space-y-2">
-        <h3 className="text-lg font-bold text-slate-800">Build Your Semantic Layer</h3>
+        <h3 className="text-lg font-bold text-slate-800">Build Your Data Model</h3>
         <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
           Auto-extract business entities, relationships, and metrics from your data sources.
           The AI uses this knowledge graph to answer natural-language questions accurately.
@@ -592,14 +592,14 @@ function MetricsTab({ metrics, onUpdate }: { metrics: DraftMetric[]; onUpdate: (
     <div className="py-8 text-center">
       <p className="text-sm text-slate-400 mb-2">No metrics defined yet.</p>
       <p className="text-xs text-slate-400">
-        Rebuild the semantic layer from{' '}
+        Run setup from{' '}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
           className="text-teal-600 hover:underline"
         >
           Data Sources
         </button>
-        {' '}to auto-extract KPIs, or add metrics manually using the Metrics tab in the Semantic Layer builder.
+        {' '}to auto-discover KPIs, or add metrics manually using the Metrics tab in the Knowledge Graph.
       </p>
     </div>
   )
@@ -857,7 +857,7 @@ function QueryTemplatesTab({
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Query Templates are auto-generated from your semantic layer at build time and matched by keywords.
+        Query Templates are auto-generated from your data model at build time and matched by keywords.
         You can add custom ones or edit any template — edited templates survive future rebuilds.
         Use <code className="font-mono bg-slate-100 px-1 rounded">{'{year}'}</code> and{' '}
         <code className="font-mono bg-slate-100 px-1 rounded">{'{limit}'}</code> as safe substitution tokens.

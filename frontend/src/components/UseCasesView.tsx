@@ -420,7 +420,7 @@ export default function UseCasesView({ onNavigate }: Props) {
             <span className="text-teal-600">Real companies, real data, real problems.</span>
           </h1>
           <p className="text-base text-slate-500 max-w-2xl">
-            Each case shows the complete journey: the concrete operational problem, the agents activated on the semantic layer, the automatically generated findings, and the results measured after 90 days.
+            Each case shows the complete journey: the concrete operational problem, the AI agents activated on your data, the automatically generated findings, and the results measured after 90 days.
           </p>
         </div>
       </section>
@@ -443,10 +443,10 @@ export default function UseCasesView({ onNavigate }: Props) {
           </h2>
           <div className="grid grid-cols-4 gap-4">
             {[
-              { step: '01', title: 'Ontology', desc: 'We define a semantic model of key business entities — a single source of truth for all systems.', color: 'border-l-teal-500' },
-              { step: '02', title: 'Connection', desc: 'Connectors automatically map fields from every ERP/CRM/MES system onto the ontology — no custom ETL.', color: 'border-l-blue-500' },
-              { step: '03', title: 'Agents', desc: 'AI agents operate directly on the semantic layer: finding anomalies, generating alerts, automating workflows.', color: 'border-l-violet-500' },
-              { step: '04', title: 'ROI', desc: 'Value is measurable: hours saved, revenue recovered, risks avoided — all traceable on the ontology.', color: 'border-l-amber-500' },
+              { step: '01', title: 'Data Model', desc: 'We define a shared data model of key business entities — a single source of truth across all systems.', color: 'border-l-teal-500' },
+              { step: '02', title: 'Connection', desc: 'Connectors automatically map fields from every ERP/CRM/MES system onto the data model — no custom ETL.', color: 'border-l-blue-500' },
+              { step: '03', title: 'Agents', desc: 'AI agents operate directly on your data: finding anomalies, generating alerts, automating workflows.', color: 'border-l-violet-500' },
+              { step: '04', title: 'ROI', desc: 'Value is measurable: hours saved, revenue recovered, risks avoided — all traceable in the data model.', color: 'border-l-amber-500' },
             ].map(({ step, title, desc, color }) => (
               <div key={step} className={`bg-white border border-slate-200 rounded-xl p-5 border-l-4 ${color}`}>
                 <p className="text-2xl font-extrabold text-slate-200 mb-2">{step}</p>
@@ -469,7 +469,7 @@ export default function UseCasesView({ onNavigate }: Props) {
             {[
               { value: `€${Math.round(totalValue / 1000)}K`, label: 'Total value generated/year', sub: `avg €${Math.round(totalValue / displayedCases.length / 1000)}K per client` },
               { value: '90 days',  label: 'Average time-to-value',                sub: 'from signature to measurable impact' },
-              { value: `${displayedCases.length} sectors`, label: [...new Set(displayedCases.map(uc => uc.sector.charAt(0).toUpperCase() + uc.sector.slice(1)))].join(' · '), sub: 'same semantic layer, vertical ontologies' },
+              { value: `${displayedCases.length} sectors`, label: [...new Set(displayedCases.map(uc => uc.sector.charAt(0).toUpperCase() + uc.sector.slice(1)))].join(' · '), sub: 'same platform, sector-specific models' },
               { value: '0 FTE',    label: 'Employees redeployed',                  sub: 'no job cuts — only higher-value work' },
             ].map(({ value, label, sub }) => (
               <div key={label} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">

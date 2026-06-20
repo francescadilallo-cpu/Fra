@@ -951,11 +951,17 @@ class DuckDBSourceManager:
                 # Stream the file straight into DuckDB — DuckDB parses it natively
                 # (parallel, out-of-core) instead of materialising the whole file in
                 # a pandas DataFrame in Python memory.
-                conn.execute(
-                    f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
-                    f"SELECT * FROM read_csv_auto('{safe_path}', "
-                    f"delim='{safe_delim}', header=true)"
-                )
+                try:
+                    conn.execute(
+                        f'CREATE TABLE IF NOT EXISTS "{safe_table}" AS '
+                        f"SELECT * FROM read_csv_auto('{safe_path}', "
+                        f"delim='{safe_delim}', header=true)"
+                    )
+                except Exception as exc:
+                    raise ValueError(
+                        f"Cannot parse CSV file '{path.name}': {exc} — "
+                        "check that the file has a header row and consistent columns."
+                    ) from exc
                 _row = conn.execute(f'SELECT COUNT(*) FROM "{safe_table}"').fetchone()
                 n = _row[0] if _row is not None else 0
             finally:
