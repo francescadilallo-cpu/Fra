@@ -890,7 +890,7 @@ export function NotificationsSection() {
             <Bell className="w-4 h-4 text-teal-600" />
             Notification Channels
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Where agent findings, pipeline events and governance alerts are delivered.</p>
+          <p className="text-xs text-slate-500 mt-1">Where agent findings, setup events and governance alerts are delivered.</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs bg-slate-100 text-slate-600 font-medium px-2 py-1 rounded-full">
