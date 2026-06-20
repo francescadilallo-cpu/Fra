@@ -207,15 +207,16 @@ interface Props {
   onSave: (agent: CustomAgentDef) => void
   availableEntities: string[]
   prefillEntity?: string
+  prefillTemplate?: AgentTemplate
 }
 
-export default function AgentBuilder({ onClose, onSave, availableEntities, prefillEntity }: Props) {
-  const [template, setTemplate] = useState<AgentTemplate>('monitor')
+export default function AgentBuilder({ onClose, onSave, availableEntities, prefillEntity, prefillTemplate }: Props) {
+  const [template, setTemplate] = useState<AgentTemplate>(prefillTemplate ?? 'monitor')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [selectedEntities, setSelectedEntities] = useState<string[]>(prefillEntity ? [prefillEntity] : [])
   const [findings, setFindings] = useState<CustomFinding[]>([])
-  const [actions, setActions] = useState<string[]>(DEFAULT_ACTIONS.monitor)
+  const [actions, setActions] = useState<string[]>(DEFAULT_ACTIONS[prefillTemplate ?? 'monitor'])
   const [newAction, setNewAction] = useState('')
   const [newFindingText, setNewFindingText] = useState('')
   const [newFindingSeverity, setNewFindingSeverity] = useState<CustomFinding['severity']>('info')

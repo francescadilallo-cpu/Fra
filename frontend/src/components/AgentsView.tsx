@@ -1022,7 +1022,7 @@ function ExecutiveActionsPanel() {
       {/* Command input */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
         <p className="text-[10px] text-slate-400 mb-2 font-mono">
-          E.g. "Update the delivery date of order 1 to 2026-12-31" · "Mark order 1 as shipped" · "Cancel order 2"
+          E.g. "Update [entity] field to [value]" · "Mark [entity] ID as [status]" · "Assign [entity] to [user]"
         </p>
         <div className="flex gap-2">
           <input
@@ -1167,6 +1167,7 @@ export default function AgentsView() {
   // ── Builder modal ──────────────────────────────────────────────────────────
   const [showBuilder, setShowBuilder] = useState(false)
   const [builderPrefill, setBuilderPrefill] = useState<string | undefined>()
+  const [builderPrefillTemplate, setBuilderPrefillTemplate] = useState<AgentTemplate | undefined>()
 
   // ── Core state ─────────────────────────────────────────────────────────────
   const [states, setStates] = useState<Record<string, AgentRunState>>(() =>
@@ -1511,7 +1512,9 @@ export default function AgentsView() {
             )}
           </div>
           <p className="text-slate-500 mt-1 text-sm">
-            Operational agents connected to the semantic layer · executing in parallel
+            {allAgents.length === 0 && !IS_DEMO_MODE
+              ? 'Build agents to automate monitoring, alerts, reconciliation, and data quality checks'
+              : 'Operational agents connected to the semantic layer · executing in parallel'}
             {completedCount > 0 && (
               <span className="ml-2 text-slate-400">
                 · {completedCount}/{allAgents.length} completed · {totalFindings} findings
@@ -1534,7 +1537,7 @@ export default function AgentsView() {
             </button>
           )}
           <button
-            onClick={() => { setBuilderPrefill(undefined); setShowBuilder(true) }}
+            onClick={() => { setBuilderPrefill(undefined); setBuilderPrefillTemplate(undefined); setShowBuilder(true) }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-teal-200 text-teal-700 hover:bg-teal-50 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -1647,18 +1650,60 @@ export default function AgentsView() {
           {/* Empty state for custom agents */}
           {customAgents.length === 0 && (
             <section>
-              <button
-                onClick={() => { setBuilderPrefill(undefined); setShowBuilder(true) }}
-                className="w-full border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50/30 rounded-xl py-8 flex flex-col items-center gap-3 transition-all group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-teal-100 flex items-center justify-center transition-colors">
-                  <Plus className="w-5 h-5 text-slate-400 group-hover:text-teal-600" />
+              {IS_DEMO_MODE ? (
+                <button
+                  onClick={() => { setBuilderPrefill(undefined); setBuilderPrefillTemplate(undefined); setShowBuilder(true) }}
+                  className="w-full border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50/30 rounded-xl py-8 flex flex-col items-center gap-3 transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 group-hover:bg-teal-100 flex items-center justify-center transition-colors">
+                    <Plus className="w-5 h-5 text-slate-400 group-hover:text-teal-600" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-600 group-hover:text-teal-700">Create your first agent</p>
+                    <p className="text-xs text-slate-400 mt-1">Build executive agents on your ontology entities</p>
+                  </div>
+                </button>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-4 h-4 text-violet-500" />
+                    <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">My Agents</h2>
+                    <span className="text-xs text-slate-400">· choose a template to get started</span>
+                  </div>
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 mb-3">
+                    {([
+                      { id: 'monitor',    Icon: Eye,        name: 'Monitor',     tagline: 'Watches for anomalies and trends in your data' },
+                      { id: 'alert',      Icon: Bell,       name: 'Alert',       tagline: 'Fires when metrics breach defined thresholds' },
+                      { id: 'reconciler', Icon: RefreshCw,  name: 'Reconciler',  tagline: 'Finds discrepancies across connected systems' },
+                      { id: 'validator',  Icon: ShieldCheck,name: 'Validator',   tagline: 'Checks record quality, completeness, and constraints' },
+                      { id: 'enricher',   Icon: Sparkles,   name: 'Enricher',    tagline: 'Augments records with external or derived data' },
+                    ] as const).map(({ id, Icon, name, tagline }) => (
+                      <button
+                        key={id}
+                        onClick={() => { setBuilderPrefillTemplate(id); setBuilderPrefill(undefined); setShowBuilder(true) }}
+                        className="text-left p-4 border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50/30 rounded-xl transition-all group"
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-slate-100 group-hover:bg-teal-100 flex items-center justify-center transition-colors flex-shrink-0">
+                            <Icon className="w-3.5 h-3.5 text-slate-500 group-hover:text-teal-600" style={{ width: '14px', height: '14px' }} />
+                          </div>
+                          <p className="text-sm font-semibold text-slate-700 group-hover:text-teal-700">{name}</p>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-snug">{tagline}</p>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => { setBuilderPrefillTemplate(undefined); setBuilderPrefill(undefined); setShowBuilder(true) }}
+                      className="p-4 border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50/30 rounded-xl transition-all group flex flex-col items-center justify-center gap-2"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 group-hover:bg-teal-100 flex items-center justify-center transition-colors">
+                        <Plus className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600" />
+                      </div>
+                      <p className="text-xs font-medium text-slate-500 group-hover:text-teal-700">Custom</p>
+                    </button>
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-600 group-hover:text-teal-700">Create your first agent</p>
-                  <p className="text-xs text-slate-400 mt-1">Build executive agents on your ontology entities</p>
-                </div>
-              </button>
+              )}
             </section>
           )}
         </div>
@@ -1667,10 +1712,11 @@ export default function AgentsView() {
         {/* Agent builder modal */}
         {showBuilder && (
           <AgentBuilder
-            onClose={() => { setShowBuilder(false); setBuilderPrefill(undefined) }}
+            onClose={() => { setShowBuilder(false); setBuilderPrefill(undefined); setBuilderPrefillTemplate(undefined) }}
             onSave={handleSaveCustomAgent}
             availableEntities={availableEntities}
             prefillEntity={builderPrefill}
+            prefillTemplate={builderPrefillTemplate}
           />
         )}
 
