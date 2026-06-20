@@ -457,7 +457,7 @@ function DisambiguationCard({ candidates, onChoose }: { candidates?: string[]; o
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">
           Your question contains a term that matches more than one metric or field in your data.
-          Try rephrasing with the exact field name, or define the term in <strong>Knowledge Graph → Definitions</strong> to avoid this in future queries.
+          Try rephrasing with the exact field name, or define the term in <strong>Data Model → Definitions</strong> to avoid this in future queries.
         </p>
       </div>
     )

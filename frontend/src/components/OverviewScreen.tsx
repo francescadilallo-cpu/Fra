@@ -28,19 +28,19 @@ const JOURNEY: {
   },
   {
     step: 2, section: 'BUILD',
-    tab: 'ontology',     icon: GitBranch,      title: 'Ontology',
+    tab: 'ontology',     icon: GitBranch,      title: 'Entity Graph',
     desc: 'Define your business entities and their properties. The graph shows relationships and cardinalities.',
     aw: '8 AW entities: Customer 19,829 · SalesOrder 31,465 · Product 504…',
   },
   {
     step: 3, section: 'BUILD',
-    tab: 'sembuilder',   icon: Network,        title: 'Knowledge Graph',
+    tab: 'sembuilder',   icon: Network,        title: 'Data Model',
     desc: 'Visualize how entities connect across sources. Document cross-source bridges.',
     aw: '193,062 nodes · 313,193 edges · 3 bridges ⚡ (PLACED_BY · SOLD_BY · OF_PRODUCT)',
   },
   {
     step: 4, section: 'BUILD',
-    tab: 'sembuilder',   icon: BookOpen,       title: 'Semantic Layer',
+    tab: 'sembuilder',   icon: BookOpen,       title: 'Definitions & Metrics',
     desc: 'Define the meaning of fields. Document ambiguities, map cross-source field synonyms, and certify metrics.',
     aw: '47 semantic definitions · 2 documented ambiguities · cross-source bridges',
   },
@@ -144,13 +144,13 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 bg-teal-400 rounded-full" />
-            <span className="text-xs text-slate-300">Ontology</span>
+            <span className="text-xs text-slate-300">Entity graph</span>
             <span className="text-xs font-semibold text-white ml-1">{entityCount} entities · {edgeCount} relationships</span>
           </div>
           {(isAW || kgNodes > 0) && (
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 bg-teal-400 rounded-full" />
-              <span className="text-xs text-slate-300">Knowledge Graph</span>
+              <span className="text-xs text-slate-300">Data model</span>
               <span className="text-xs font-semibold text-white ml-1">
                 {kgNodes > 0
                   ? `${kgNodes.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges`

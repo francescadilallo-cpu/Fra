@@ -599,7 +599,7 @@ function MetricsTab({ metrics, onUpdate }: { metrics: DraftMetric[]; onUpdate: (
         >
           Data Sources
         </button>
-        {' '}to auto-discover KPIs, or add metrics manually using the Metrics tab in the Knowledge Graph.
+        {' '}to auto-discover KPIs, or add metrics manually using the Metrics tab in the Data Model.
       </p>
     </div>
   )

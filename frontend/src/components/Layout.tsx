@@ -31,9 +31,9 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: 'item', id: 'data',        label: 'Data Explorer',     icon: Table2 },
 
   { kind: 'section', label: 'Build' },
-  { kind: 'item', id: 'ontology',    label: 'Ontology',          icon: GitBranch },
-  { kind: 'item', id: 'builder',     label: 'Ontology Builder',  icon: Wand2 },
-  { kind: 'item', id: 'sembuilder',  label: 'Knowledge Graph',   icon: Network },
+  { kind: 'item', id: 'ontology',    label: 'Entity Graph',      icon: GitBranch },
+  { kind: 'item', id: 'builder',     label: 'Builder AI',        icon: Wand2 },
+  { kind: 'item', id: 'sembuilder',  label: 'Data Model',        icon: Network },
   { kind: 'item', id: 'context',    label: 'Context',           icon: BookOpenCheck },
 
   { kind: 'section', label: 'Query & Act' },

@@ -233,7 +233,7 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <Layers className="w-4 h-4 text-teal-600" />
-          Knowledge Graph
+          Data Model
         </h2>
         <div className="flex items-center gap-2">
           <button

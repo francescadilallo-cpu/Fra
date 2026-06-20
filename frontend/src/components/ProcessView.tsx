@@ -685,11 +685,11 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
                 sub: `${(liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])).length} sources connected` },
               { label: 'Entities Mapped',
                 value: String(liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)),
-                sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} ontology classes` },
-              { label: 'KG Nodes Created',
+                sub: `${liveConfig?.ontology?.nodes?.length ?? (IS_DEMO_MODE ? summary.entities : 0)} entity types` },
+              { label: 'Entities Indexed',
                 value: IS_DEMO_MODE ? summary.enrichments : (kgStatus?.kg_nodes ?? 0).toLocaleString(),
-                sub: 'instances in Knowledge Graph' },
-              { label: 'KG Edges Indexed',
+                sub: 'entity instances indexed' },
+              { label: 'Relationships',
                 value: IS_DEMO_MODE ? summary.triples : (kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0).toLocaleString(),
                 sub: IS_DEMO_MODE ? '3 cross-source bridges' : `${kgStatus?.kg_edges ?? liveConfig?.ontology?.edges?.length ?? 0} cross-source relationships` },
             ].map(({ label, value, sub }) => (
@@ -705,13 +705,13 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         {/* Next steps after successful live pipeline run */}
         {runState === 'done' && !IS_DEMO_MODE && (
           <div className="mx-6 mb-5 flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-            <p className="text-xs text-slate-600 font-medium">Semantic layer ready — start exploring your data</p>
+            <p className="text-xs text-slate-600 font-medium">Data model ready — start exploring your data</p>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={() => onNavigate?.('sembuilder' as NavTab)}
                 className="text-xs font-medium px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
               >
-                View Ontology
+                View Data Model
               </button>
               <button
                 onClick={() => onNavigate?.('query' as NavTab)}

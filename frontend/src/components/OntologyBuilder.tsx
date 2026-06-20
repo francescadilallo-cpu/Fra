@@ -739,7 +739,7 @@ function parseUserPrompt(
 function buildAddClassIntent(
   nameRaw: string,
   propsRaw: string,
-  sectorId: string,
+  _sectorId: string,
   prefix: string,
   existing: { id: string; label: string }[],
   lowConfidence = false,

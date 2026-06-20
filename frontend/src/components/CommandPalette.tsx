@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Search, LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation,
   Settings, Wand2, BotMessageSquare, Download, Play, Factory, ShoppingCart, Heart,
-  Banknote, Plug, type LucideIcon,
+  Banknote, Plug, Network, type LucideIcon,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import type { NavTab } from '../types'
@@ -95,13 +95,13 @@ export default function CommandPalette({ onNavigate }: Props) {
     const navItems: Array<{ tab: NavTab; label: string; icon: LucideIcon; kw?: string }> = [
       { tab: 'overview',  label: 'Overview',        icon: Presentation,      kw: 'home start landing pitch' },
       { tab: 'dashboard', label: 'Dashboard',       icon: LayoutDashboard,   kw: 'kpi metrics chart' },
-      { tab: 'ontology',  label: 'Ontology',        icon: GitBranch,         kw: 'graph schema entities' },
-      { tab: 'builder',   label: 'Builder AI',      icon: Wand2,             kw: 'ai generate ontology editor' },
+      { tab: 'ontology',  label: 'Entity Graph',     icon: GitBranch,         kw: 'graph schema entities ontology' },
+      { tab: 'builder',   label: 'Builder AI',      icon: Wand2,             kw: 'ai generate entities editor' },
       { tab: 'agents',    label: 'Agents',          icon: BotMessageSquare,  kw: 'ai automation findings' },
       { tab: 'sources',   label: 'Data Sources',    icon: Plug,              kw: 'connect csv upload teamsystem shopify integrations' },
       { tab: 'data',      label: 'Data Explorer',   icon: Table2,            kw: 'browse table records' },
       { tab: 'query',     label: 'Query AI',        icon: MessageSquare,     kw: 'ask question nlp sql chat' },
-      { tab: 'sembuilder', label: 'Field Definitions', icon: Table2,           kw: 'erp field mapping semantic layer definitions' },
+      { tab: 'sembuilder', label: 'Data Model',        icon: Network,          kw: 'erp field mapping definitions metrics bridges' },
       { tab: 'process',   label: 'Process',         icon: Workflow,          kw: 'pipeline lifecycle funnel' },
       { tab: 'config',    label: 'Configuration',   icon: Settings,          kw: 'settings admin users tokens' },
     ]
