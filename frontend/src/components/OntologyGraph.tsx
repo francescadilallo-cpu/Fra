@@ -324,7 +324,7 @@ function ArchitectureDiagram() {
   const layers = [
     { name: 'CONSUMPTION LAYER', sub: 'Physical Channels · Digital Channels · Business Apps', bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-700' },
     { name: 'AGENTIC LAYER',     sub: 'Interface · Operational · Specialized Agent',     bg: 'bg-slate-100',   border: 'border-slate-300', text: 'text-slate-700' },
-    { name: 'SEMANTIC LAYER',    sub: 'Entities · Relations · Rules · MCP Server',         bg: 'bg-teal-50',     border: 'border-teal-400',  text: 'text-teal-800', highlight: true },
+    { name: 'DATA MODEL LAYER',  sub: 'Entities · Relations · Rules · MCP Server',         bg: 'bg-teal-50',     border: 'border-teal-400',  text: 'text-teal-800', highlight: true },
     { name: 'LEGACY SYSTEM LAYER', sub: 'ERP · CRM · MES · PDM · Other systems',          bg: 'bg-slate-50',    border: 'border-slate-200', text: 'text-slate-600' },
   ]
   const benefits = [

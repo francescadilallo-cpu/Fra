@@ -3076,7 +3076,7 @@ export default function SemanticLayerView() {
                 <p className="text-sm">No metrics defined yet</p>
                 {!IS_DEMO_MODE && useBackendData ? (
                   kgStatus !== null ? (
-                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">No metrics were auto-extracted from your pipeline. Define them manually using the button above.</p>
+                    <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">No metrics were auto-extracted from your data. Define them manually using the button above.</p>
                   ) : (
                     <p className="text-xs mt-1 max-w-xs mx-auto leading-relaxed">Run setup first — metrics will be auto-extracted from your data. You can also define custom ones manually above.</p>
                   )

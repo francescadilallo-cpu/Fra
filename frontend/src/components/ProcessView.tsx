@@ -581,7 +581,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
             <Activity className={`w-4 h-4 ${runState === 'running' ? 'text-teal-500 animate-pulse' : 'text-slate-400'}`} />
-            <h2 className="font-semibold text-slate-900">Setup Pipeline</h2>
+            <h2 className="font-semibold text-slate-900">Setup</h2>
             {lastRunAt && runState !== 'running' && (
               <span className="text-[11px] text-slate-400">· Last run at {lastRunAt} ({((lastRunDuration ?? 0) / 1000).toFixed(1)}s)</span>
             )}
