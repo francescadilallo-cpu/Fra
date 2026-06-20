@@ -467,7 +467,7 @@ export default function MappingView() {
 
   const TABS: { id: ActiveTab; label: string; icon: typeof Table2 }[] = [
     { id: 'mappings',    label: 'Field Mappings',         icon: Table2    },
-    { id: 'definitions', label: 'Semantic Definitions',   icon: BookOpen  },
+    { id: 'definitions', label: 'Field Definitions',      icon: BookOpen  },
     { id: 'ambiguity',   label: 'Ambiguity Log',          icon: AlertTriangle },
   ]
 

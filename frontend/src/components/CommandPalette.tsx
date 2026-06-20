@@ -138,7 +138,7 @@ export default function CommandPalette({ onNavigate }: Props) {
       },
       {
         id: 'action-pipeline',
-        label: 'Run Semantic Pipeline',
+        label: 'Run Setup',
         group: 'Actions',
         icon: Play,
         keywords: 'pipeline extract enrich index sync refresh',
