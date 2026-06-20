@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 2)
+
+### Fix + improve: connector error wrapping; jargon in backend API errors and frontend empty states
+
+- `backend/app/connectors/duckdb_source_manager.py`
+  - PostgreSQL DuckDB fallback (`except ImportError` path): raw DuckDB exceptions on connect and per-table read now wrapped in clear `ValueError` messages
+  - MySQL DuckDB fallback (`except ImportError` path): same fix — clear messages on connect failure and table-not-found
+
+- `backend/app/main.py`
+  - 8 endpoints returning "Semantic layer not ready — build it from Data Sources first" → "Data model not ready — connect a data source and run setup first"
+
+- `frontend/src/components/OntologyGraph.tsx`
+  - "No ontology built yet" → "No data model built yet" (live-user empty state in graph view)
+
+- `frontend/src/components/DataExplorer.tsx`
+  - "run the pipeline — entities are auto-discovered from your schema" → "run setup — entities are auto-extracted from your tables"
+
+---
+
 ## 2026-06-20 (session cont.)
 
 ### Improve: extended jargon sweep — 10 more files cleaned
