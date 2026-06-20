@@ -4246,7 +4246,7 @@ class OntologyExtensionPayload(BaseModel):
     @model_validator(mode="after")
     def _validate_size(self) -> "OntologyExtensionPayload":
         if len(json.dumps(self.payload)) > _ONTOLOGY_EXT_MAX_BYTES:
-            raise ValueError("ontology extension exceeds 1 MB limit")
+            raise ValueError("data model extension exceeds 1 MB limit")
         return self
 
 

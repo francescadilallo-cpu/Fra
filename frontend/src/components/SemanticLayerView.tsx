@@ -620,7 +620,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">A bridge is a semantic join between two entities that live in different physical systems. Bridges are persisted and visible in the ontology graph.</p>
+      <p className="text-xs text-slate-500">A bridge connects two entities that live in different data systems — it lets a single query pull matching records across both sources.</p>
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
@@ -1549,7 +1549,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       {defs.length === 0 && (
         <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
           <p className="text-sm font-semibold">No definitions yet</p>
-          <p className="text-xs mt-1">Build the semantic layer to auto-populate definitions from entity columns, or add them manually below.</p>
+          <p className="text-xs mt-1">Run setup to auto-populate definitions from your data, or add them manually below.</p>
         </div>
       )}
       <div className="flex items-center justify-between">
@@ -1635,7 +1635,7 @@ function AmbiguityLogPanel({ isDemoWorkspace }: { isDemoWorkspace: boolean }) {
   }
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time by the semantic layer</p>
+      <p className="text-xs text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time</p>
       {ambiguities.map((amb, i) => (
         <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
@@ -2510,7 +2510,7 @@ export default function SemanticLayerView() {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <Zap className="w-4 h-4 text-teal-600" />
-                    <h3 className="text-base font-bold text-slate-900">Build your semantic layer — step by step</h3>
+                    <h3 className="text-base font-bold text-slate-900">Build your data model — step by step</h3>
                   </div>
                   {backendSources.length > 0 && (
                     <button
@@ -2523,7 +2523,7 @@ export default function SemanticLayerView() {
                 </div>
                 <p className="text-sm text-slate-500 mb-5">
                   {backendSources.length > 0
-                    ? `${backendSources.length} source${backendSources.length !== 1 ? 's' : ''} connected — run the pipeline to auto-discover entities and build the semantic layer.`
+                    ? `${backendSources.length} source${backendSources.length !== 1 ? 's' : ''} connected — run setup to auto-discover entities and build your data model.`
                     : 'Follow these four steps to give AI agents a unified, queryable view of your company\'s data.'
                   }
                 </p>
@@ -2565,7 +2565,7 @@ export default function SemanticLayerView() {
                   <FileCode className="w-4 h-4 text-slate-400" /> Query Templates
                   <span className="text-xs text-slate-400 font-normal">— click "Try" to run in Query AI</span>
                 </h3>
-                <p className="text-xs text-slate-400 mb-3">Saved query templates from the semantic layer. Use these as starting points.</p>
+                <p className="text-xs text-slate-400 mb-3">Saved query templates from your data model. Use these as starting points.</p>
                 <div className="space-y-2">
                   {queryTemplates.slice(0, 6).map(t => (
                     <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4">
@@ -2873,7 +2873,7 @@ export default function SemanticLayerView() {
                     {!IS_DEMO_MODE && useBackendData && backendSources.length === 0 ? (
                       <>
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
-                          Connect a real data source first in the Sources tab, then document it here for the semantic layer.
+                          Connect a real data source first in the Sources tab, then document it here.
                         </p>
                         <div className="flex items-center justify-center gap-3 flex-wrap">
                           <button
@@ -2890,7 +2890,7 @@ export default function SemanticLayerView() {
                     ) : (
                       <>
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
-                          Document each database, CSV, API, or warehouse that feeds your semantic layer.
+                          Document each database, CSV, API, or warehouse you want to query.
                         </p>
                         <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
                           + Add first source
@@ -2965,7 +2965,7 @@ export default function SemanticLayerView() {
             <SectionHeader icon={GitBranch} title="Cross-source Bridges"
               desc="Semantic joins that connect entities living in different physical systems" />
             <p className="text-xs text-slate-500 leading-relaxed">
-              A bridge tells the semantic layer: <em>"field X in system A is the same concept as field Y in system B."</em>
+              A bridge tells the data model: <em>"field X in system A is the same concept as field Y in system B."</em>
               This enables a single query to pull data from multiple sources without knowing the underlying schema differences.
             </p>
 
