@@ -269,7 +269,7 @@ export default function CommandPalette({ onNavigate }: Props) {
             <span className="flex items-center gap-1"><kbd className="font-mono bg-white border border-slate-200 px-1 rounded">↵</kbd>select</span>
             <span className="flex items-center gap-1"><kbd className="font-mono bg-white border border-slate-200 px-1 rounded">esc</kbd>close</span>
           </div>
-          <span className="text-slate-500 font-semibold">SemanticIntelligence</span>
+          <span className="text-slate-500 font-semibold">DataIntelligence</span>
         </div>
       </div>
     </div>

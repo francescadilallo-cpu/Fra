@@ -104,8 +104,8 @@ function SemanticDefinitionsPanel() {
   if (!IS_DEMO_MODE && defs.length === 0) return (
     <div className="flex-1 px-8 py-16 flex flex-col items-center justify-center text-center gap-3">
       <BookOpen className="w-10 h-10 text-slate-200" />
-      <p className="text-sm font-medium text-slate-500">No semantic definitions yet</p>
-      <p className="text-xs text-slate-400 max-w-xs">Build the semantic layer to auto-generate field definitions, or add one manually below.</p>
+      <p className="text-sm font-medium text-slate-500">No field definitions yet</p>
+      <p className="text-xs text-slate-400 max-w-xs">Run setup to auto-generate field definitions, or add one manually below.</p>
       <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
         <Plus className="w-3.5 h-3.5" />Add first definition
       </button>
@@ -115,7 +115,7 @@ function SemanticDefinitionsPanel() {
   return (
     <div className="flex-1 px-8 py-6 space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{defs.length} semantic definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
+        <p className="text-sm text-slate-500">{defs.length} field definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
         <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />
           Add definition
@@ -124,7 +124,7 @@ function SemanticDefinitionsPanel() {
 
       {showAdd && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-semibold text-slate-700">New semantic definition</p>
+          <p className="text-xs font-semibold text-slate-700">New field definition</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-500 mb-1 block">Entity</label>
@@ -219,13 +219,13 @@ function AmbiguityLogPanel() {
     <div className="flex-1 px-8 py-16 flex flex-col items-center justify-center text-center gap-3">
       <AlertTriangle className="w-10 h-10 text-slate-200" />
       <p className="text-sm font-medium text-slate-500">No ambiguities documented</p>
-      <p className="text-xs text-slate-400 max-w-xs">Ambiguities are detected automatically when the semantic layer finds conflicting field definitions across sources.</p>
+      <p className="text-xs text-slate-400 max-w-xs">Ambiguities are detected automatically when the data model finds conflicting field definitions across sources.</p>
     </div>
   )
 
   return (
     <div className="flex-1 px-8 py-6 space-y-4">
-      <p className="text-sm text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time by the semantic layer</p>
+      <p className="text-sm text-slate-500">{ambiguities.length} documented ambiguities — resolved at query time by the data model</p>
       {ambiguities.map((amb, i) => (
         <div key={i} className="bg-white border border-amber-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
@@ -479,10 +479,10 @@ export default function MappingView() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <BookOpen className="w-5 h-5 text-teal-600" />
-              <h1 className="text-2xl font-bold text-slate-900">Semantic Layer</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Data Model</h1>
             </div>
             <p className="text-slate-400 mt-1 text-sm">
-              {workspaceLabel(sector.name)} · {totalTables} tables · {totalFields} field mappings · semantic definitions and ambiguities
+              {workspaceLabel(sector.name)} · {totalTables} tables · {totalFields} field mappings · field definitions and ambiguities
             </p>
           </div>
           <div className="flex items-center gap-3">

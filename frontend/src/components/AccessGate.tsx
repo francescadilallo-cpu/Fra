@@ -47,9 +47,9 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
             <Brain className="w-7 h-7 text-teal-400" />
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
-            Semantic<span className="text-teal-400">Intelligence</span>
+            Data<span className="text-teal-400">Intelligence</span>
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Semantic Data Layer Platform</p>
+          <p className="text-slate-500 text-sm mt-1">Data Intelligence Platform</p>
         </div>
 
         {/* Step 1 — Credentials */}

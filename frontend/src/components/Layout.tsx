@@ -373,10 +373,10 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
               <Brain className="w-4 h-4 text-teal-400" />
             </div>
             <span className="text-sm font-bold text-white tracking-tight">
-              Semantic<span className="text-teal-400">Intelligence</span>
+              Data<span className="text-teal-400">Intelligence</span>
             </span>
           </div>
-          <p className="mt-2.5 text-[11px] text-slate-500 leading-tight">Semantic Data Layer Platform</p>
+          <p className="mt-2.5 text-[11px] text-slate-500 leading-tight">Data Intelligence Platform</p>
         </div>
 
         {/* Nav */}
@@ -431,7 +431,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-teal-500 rounded-full" />
-            <span className="text-xs text-slate-500">SemanticIntelligence</span>
+            <span className="text-xs text-slate-500">DataIntelligence</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-600">v0.2{IS_DEMO_MODE ? ' · Multi-Sector' : ''}</p>
           <p className="text-[10px] text-slate-700" title="Build timestamp">build {__BUILD_ID__}</p>

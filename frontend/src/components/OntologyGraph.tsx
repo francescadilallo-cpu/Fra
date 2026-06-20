@@ -280,7 +280,7 @@ function EntitiesView() {
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-[10px] text-slate-400 uppercase tracking-wide border-b border-slate-100">
-                          <th className="text-left pb-1.5 font-medium pr-3">Semantic name</th>
+                          <th className="text-left pb-1.5 font-medium pr-3">Field name</th>
                           <th className="text-left pb-1.5 font-medium pr-3">Physical column</th>
                           <th className="text-left pb-1.5 font-medium pr-3">Type</th>
                           <th className="text-left pb-1.5 font-medium pr-3">Flags</th>
@@ -293,7 +293,7 @@ function EntitiesView() {
                             <td className="py-1.5 pr-3 font-mono text-slate-500">
                               {p.physicalName && p.physicalName !== p.name
                                 ? <span className="text-slate-600">{p.physicalName}</span>
-                                : <span className="text-slate-300 italic">= semantic</span>
+                                : <span className="text-slate-300 italic">= same name</span>
                               }
                             </td>
                             <td className="py-1.5 pr-3">
@@ -368,7 +368,7 @@ function ArchitectureDiagram() {
         </div>
       </div>
       <div className="bg-white border border-slate-200 rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-slate-900 mb-3">Semantic Layer Components</h3>
+        <h3 className="text-sm font-semibold text-slate-900 mb-3">Data Model Components</h3>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-slate-400 uppercase tracking-wide border-b border-slate-200">

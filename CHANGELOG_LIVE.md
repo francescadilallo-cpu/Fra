@@ -10,6 +10,71 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 4)
+
+### Polish: deep jargon sweep — "semantic" terminology eliminated from live-user UI
+
+**SemanticLayerView.tsx** (entity editor + field panel + query no-match):
+- `placeholder="= semantic name"` → `"= same as field name"` (physical column input)
+- `'Field mapping — semantic → physical'` → `'Business name → physical column'`
+- `'Field definitions — semantic → physical column'` → `'Field name → physical column'`
+- `"New semantic entity"` → `"New entity"`; description updated accordingly
+- `"Entity name (semantic)"` label → `"Entity name"`
+- `"Define how semantic field names map..."` → `"Define how field names map..."`
+- Column header `"Semantic name"` → `"Field name"` (new-entity form)
+- `"New semantic definition"` → `"New field definition"`
+- `"No semantic match found"` → `"No match found"`
+- `"in the Semantics section"` → `"in the Definitions section"`
+- `"Semantic name *"` (add-field row label) → `"Field name *"`
+- `"Semantic name (concept)"` (entity edit label) → `"Entity name"`
+- `"Semantic name (how you query)..."` description → `"Field name (how you query)..."`
+- Column header `"Semantic name"` (entity editor) → `"Field name"`
+- Nav group `'Semantics'` → `'Analytics'` (sidebar section heading)
+- Bridge section desc `"Semantic joins..."` → `"Joins..."`
+
+**OntologyBuilder.tsx** (property table):
+- Column header `"Semantic name"` → `"Field name"`
+- `placeholder="= semantic"` → `"= same as field name"`
+
+**OntologyGraph.tsx** (entity detail panel + architecture tab):
+- Table header `"Semantic name"` → `"Field name"` (entity property popup)
+- `"= semantic"` fallback → `"= same name"` (physical column equal to field name)
+- `"Semantic Layer Components"` section heading → `"Data Model Components"`
+
+**Layout.tsx** (sidebar brand):
+- `"Semantic<span>Intelligence</span>"` → `"Data<span>Intelligence</span>"`
+- `"Semantic Data Layer Platform"` → `"Data Intelligence Platform"`
+- `"SemanticIntelligence"` footer label → `"DataIntelligence"`
+
+**AccessGate.tsx** (login screen):
+- `"Semantic<span>Intelligence</span>"` → `"Data<span>Intelligence</span>"`
+- `"Semantic Data Layer Platform"` → `"Data Intelligence Platform"`
+
+**OnboardingWizard.tsx** (step 1, live-user facing):
+- `"Welcome to SemanticIntelligence"` → `"Welcome to DataIntelligence"`
+
+**CommandPalette.tsx** (footer branding):
+- `"SemanticIntelligence"` → `"DataIntelligence"`
+
+**MappingView.tsx** (field definitions / ambiguities view):
+- Page heading `"Semantic Layer"` → `"Data Model"`
+- Subline `"semantic definitions and ambiguities"` → `"field definitions and ambiguities"`
+- Empty state `"No semantic definitions yet"` → `"No field definitions yet"`
+- Empty state `"Build the semantic layer to auto-generate..."` → `"Run setup to auto-generate..."`
+- Counter `"{n} semantic definitions"` → `"{n} field definitions"`
+- Add form `"New semantic definition"` → `"New field definition"`
+- Ambiguity hint `"when the semantic layer finds conflicting..."` → `"when the data model finds conflicting..."`
+- Ambiguity count `"resolved at query time by the semantic layer"` → `"...by the data model"`
+
+**OverviewScreen.tsx** (hero + solution section):
+- H1 `"Semantic<span>Intelligence</span>"` → `"Data<span>Intelligence</span>"`
+- Hero subtitle `"The semantic layer that transforms..."` → `"The data model that transforms..."`
+- Section heading `"A semantic layer that unifies..."` → `"A unified data model that disambiguates..."`
+- Card title `"Semantic Definitions"` → `"Field Definitions"`
+- Problem card `"No reliable join without a semantic layer."` → `"...without a common data model."`
+
+---
+
 ## 2026-06-20 (session cont. 3)
 
 ### Polish: final jargon pass — live-user strings across 8 files

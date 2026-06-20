@@ -196,10 +196,10 @@ export default function OverviewScreen({ onNavigate }: Props) {
             {IS_DEMO_MODE ? `Demo — ${sector.name}` : 'Live workspace'}
           </span>
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
-            Semantic<span className="text-teal-600">Intelligence</span>
+            Data<span className="text-teal-600">Intelligence</span>
           </h1>
           <p className="text-lg text-slate-500 mb-6">
-            The semantic layer that transforms distributed, heterogeneous data into AI-queryable knowledge.
+            The data model that transforms distributed, heterogeneous data into AI-queryable knowledge.
           </p>
 
           {isAW ? (
@@ -342,7 +342,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
               <p className="text-3xl font-extrabold text-red-500 mb-2">{connectors.length > 0 ? connectors.length : registeredSources.length > 0 ? registeredSources.length : 'N'}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
-              <p className="text-xs text-slate-500">{liveConfig?.domain ?? (IS_DEMO_MODE ? sector.domain : 'Your data landscape')} — each with different keys, naming conventions, and schemas. No reliable join without a semantic layer.</p>
+              <p className="text-xs text-slate-500">{liveConfig?.domain ?? (IS_DEMO_MODE ? sector.domain : 'Your data landscape')} — each with different keys, naming conventions, and schemas. No reliable join without a common data model.</p>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
@@ -383,7 +383,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
         <div className="max-w-5xl">
           <span className="text-xs font-semibold tracking-widest text-teal-600 uppercase">The Solution</span>
           <h2 className="mt-3 text-2xl font-bold text-slate-900 mb-8">
-            A semantic layer that unifies, disambiguates, and empowers AI
+            A unified data model that disambiguates and empowers AI
           </h2>
           <div className="grid grid-cols-2 gap-6">
             {[
@@ -394,7 +394,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               },
               {
                 icon: BookOpen, color: 'border-l-violet-500', bg: 'bg-violet-50',
-                title: 'Semantic Definitions',
+                title: 'Field Definitions',
                 desc: semDefDesc,
               },
               {

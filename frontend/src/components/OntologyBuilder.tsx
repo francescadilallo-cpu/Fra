@@ -2228,7 +2228,7 @@ function EditEntityModal({
             <div className="border border-slate-200 rounded-lg overflow-hidden">
               {/* Table header */}
               <div className="grid grid-cols-[1fr_1fr_90px_28px_28px_28px] gap-x-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-                <span>Semantic name</span>
+                <span>Field name</span>
                 <span>Physical column</span>
                 <span>Type</span>
                 <span className="text-center">Req</span>
@@ -2250,7 +2250,7 @@ function EditEntityModal({
                     <input
                       value={p.physicalName ?? ''}
                       onChange={e => updateProperty(idx, { physicalName: e.target.value || undefined })}
-                      placeholder="= semantic"
+                      placeholder="= same as field name"
                       className="px-2 py-1 text-xs font-mono border border-slate-200 rounded focus:border-teal-400 outline-none w-full text-slate-500 placeholder:text-slate-300 placeholder:not-italic"
                     />
                     <select

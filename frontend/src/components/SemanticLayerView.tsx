@@ -146,14 +146,14 @@ function FieldEditor({ field, entityOptions, onChange, onRemove, isNew = false }
     <div className={`grid gap-1.5 p-2 rounded-lg ${isNew ? 'bg-teal-50 border border-teal-200' : 'bg-white border border-slate-200'}`}
       style={{ gridTemplateColumns: '1fr 1fr 90px auto auto auto' }}>
       <div>
-        {isNew && <p className="text-[10px] text-slate-400 mb-0.5">Semantic name *</p>}
+        {isNew && <p className="text-[10px] text-slate-400 mb-0.5">Field name *</p>}
         <input value={field.name} onChange={e => onChange({ ...field, name: e.target.value })}
           placeholder="e.g. customerId" className={`${inp} font-mono font-semibold`} />
       </div>
       <div>
         {isNew && <p className="text-[10px] text-slate-400 mb-0.5">Physical column</p>}
         <input value={field.physicalName} onChange={e => onChange({ ...field, physicalName: e.target.value })}
-          placeholder="= semantic name" className={`${inp} font-mono text-blue-700`} />
+          placeholder="= same as field name" className={`${inp} font-mono text-blue-700`} />
       </div>
       <div>
         {isNew && <p className="text-[10px] text-slate-400 mb-0.5">Type</p>}
@@ -259,7 +259,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
       {/* Identity */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Semantic name (concept)</label>
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Entity name</label>
           <input value={label} onChange={e => setLabel(e.target.value)}
             className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-white focus:border-teal-400 outline-none font-semibold text-slate-900" />
           <p className="text-[10px] text-slate-400 mt-0.5">What you call this entity in queries</p>
@@ -278,7 +278,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
         <div className="flex items-center justify-between mb-1.5">
           <div>
             <p className="text-[11px] font-semibold text-slate-700">Field mappings</p>
-            <p className="text-[10px] text-slate-400">Semantic name (how you query) → Physical column (actual DB name)</p>
+            <p className="text-[10px] text-slate-400">Field name (how you query) → Physical column (actual DB name)</p>
           </div>
           <button onClick={() => setAddingField(v => !v)}
             className="flex items-center gap-1 text-[11px] text-teal-600 hover:text-teal-700 font-medium transition-colors">
@@ -288,7 +288,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
 
         {/* Column headers */}
         <div className="grid gap-1.5 px-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 90px auto auto auto' }}>
-          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Semantic name</span>
+          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Field name</span>
           <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Physical column</span>
           <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Type</span>
           <span className="text-[10px] text-slate-400 font-semibold text-center">REQ</span>
@@ -384,7 +384,7 @@ function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions }: {
       {open && !editing && (
         <div className="border-t border-slate-100 px-4 py-3">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-2">
-            {awDetail ? 'Field mapping — semantic → physical' : 'Field definitions — semantic → physical column'}
+            {awDetail ? 'Business name → physical column' : 'Field name → physical column'}
           </p>
           <div className="space-y-1">
             {awDetail
@@ -459,13 +459,13 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
       <div>
-        <p className="text-sm font-semibold text-slate-900 mb-0.5">New semantic entity</p>
-        <p className="text-xs text-slate-400">Define an entity with semantic field names that map to your physical database schema.</p>
+        <p className="text-sm font-semibold text-slate-900 mb-0.5">New entity</p>
+        <p className="text-xs text-slate-400">Define an entity with field names that map to your physical database schema.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Entity name (semantic) <span className="text-red-400">*</span></label>
+          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Entity name <span className="text-red-400">*</span></label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Invoice, Patient, Contract"
             className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-semibold" />
         </div>
@@ -481,7 +481,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
         <div className="flex items-center justify-between mb-2">
           <div>
             <p className="text-[11px] font-semibold text-slate-700">Field mappings</p>
-            <p className="text-[10px] text-slate-400">Define how semantic field names map to physical columns in the database</p>
+            <p className="text-[10px] text-slate-400">Define how field names map to physical columns in the database</p>
           </div>
           <button onClick={() => setAddingField(v => !v)}
             className="flex items-center gap-1 text-[11px] text-teal-600 hover:text-teal-700 font-medium transition-colors">
@@ -492,7 +492,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
         {fields.length > 0 && (
           <div className="space-y-1 mb-2">
             <div className="grid gap-1.5 px-2 mb-1" style={{ gridTemplateColumns: '1fr 1fr 90px auto auto auto' }}>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Semantic name</span>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Field name</span>
               <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Physical column</span>
               <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Type</span>
               <span className="text-[10px] text-slate-400 font-semibold text-center">REQ</span>
@@ -1561,7 +1561,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       </div>
       {showAdd && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-          <p className="text-xs font-semibold text-slate-700">New semantic definition</p>
+          <p className="text-xs font-semibold text-slate-700">New field definition</p>
           <div className="grid grid-cols-3 gap-3">
             {(['entity', 'field', 'definition'] as const).map(f => (
               <div key={f}>
@@ -1677,7 +1677,7 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
   { id: 'entities',     label: 'Entities',    Icon: Network,          desc: 'Business entities' },
   { id: 'bridges',      label: 'Bridges',     Icon: GitBranch,        desc: 'Cross-source connections' },
   { id: 'relations',    label: 'Relations',   Icon: ArrowRight,       desc: 'Intra-source field links' },
-  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Conflict rules', group: 'Semantics' },
+  { id: 'rules',        label: 'Rules',       Icon: BookOpen,         desc: 'Conflict rules', group: 'Analytics' },
   { id: 'metrics',      label: 'Metrics',     Icon: BarChart2,        desc: 'Business measures' },
   { id: 'hierarchies',  label: 'Hierarchies', Icon: SlidersHorizontal,desc: 'Drill-down paths' },
   { id: 'segments',     label: 'Segments',    Icon: Filter,           desc: 'Saved filters' },
@@ -2753,10 +2753,10 @@ export default function SemanticLayerView() {
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-amber-800 mb-1">No semantic match found</p>
+                  <p className="text-sm font-semibold text-amber-800 mb-1">No match found</p>
                   <p className="text-xs text-amber-700">
                     No metric, hierarchy, or segment matched your query. Try one of the examples above,
-                    or define new metrics and segments in the Semantics section.
+                    or define new metrics and segments in the Definitions section.
                   </p>
                 </div>
               </div>
@@ -2963,7 +2963,7 @@ export default function SemanticLayerView() {
         {section === 'bridges' && (
           <div className="px-8 py-7 space-y-5">
             <SectionHeader icon={GitBranch} title="Cross-source Bridges"
-              desc="Semantic joins that connect entities living in different physical systems" />
+              desc="Joins that connect entities living in different physical systems" />
             <p className="text-xs text-slate-500 leading-relaxed">
               A bridge tells the data model: <em>"field X in system A is the same concept as field Y in system B."</em>
               This enables a single query to pull data from multiple sources without knowing the underlying schema differences.

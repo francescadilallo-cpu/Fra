@@ -91,7 +91,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                 <div className="bg-teal-50 rounded-full p-4">
                   <Brain size={40} className="text-teal-600" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 text-center">Welcome to SemanticIntelligence</h1>
+                <h1 className="text-2xl font-bold text-gray-900 text-center">Welcome to DataIntelligence</h1>
                 <p className="text-gray-500 text-sm text-center">AI-powered data platform for European businesses</p>
               </div>
               <div className="flex flex-col gap-1.5">
