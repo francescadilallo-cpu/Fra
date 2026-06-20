@@ -10,6 +10,23 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session cont. 5)
+
+### Polish: "pipeline" / "Knowledge Graph" / "Process" consistency pass + live workspace name fix
+
+- **ProcessView.tsx**: Nav label "Process" → "Setup"; run button "Run Pipeline" → "Run Setup" / "Re-run Setup"
+- **Layout.tsx**: Nav entry "Process" → "Setup"; sidebar brand updated to "DataIntelligence"
+- **Dashboard.tsx**: "Run Pipeline →" → "Run Setup →"; badge "✓ Pipeline synced" → "✓ Synced"
+- **OverviewScreen.tsx**: All "Run Pipeline →" → "Run Setup →"; "Cross-source Knowledge Graph" → "Cross-source Entity Graph"; "Build the layer to generate the graph" → "Run setup to generate the graph"
+- **SemanticLayerView.tsx**: "Run Pipeline →" → "Run Setup →"; "auto-extracted from your pipeline" → "from your data"
+- **MappingView.tsx**: "Run Pipeline →" → "Run Setup →"; "build the semantic layer... run the pipeline" → "build the data model... run setup"
+- **SemanticDraftView.tsx**: "after a pipeline run" → "after running setup"
+- **QueryInterface.tsx**: "Run Pipeline →" CTA label → "Run Setup →"
+- **AgentsView.tsx**: Custom agent `TEMPLATE_LOG_STEPS` "WRITE ... → Knowledge Graph" → "→ data model" (5 occurrences — live-user custom agents)
+- **OntologyGraph.tsx**: Entity Graph subline now shows `liveConfig.name` for live users instead of demo-specific "Manufacturing Sales Ontology — Cross-source" title; architecture layer "SEMANTIC LAYER" → "DATA MODEL LAYER"; "Data Model Components" section heading
+
+---
+
 ## 2026-06-20 (session cont. 4)
 
 ### Polish: deep jargon sweep — "semantic" terminology eliminated from live-user UI
