@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10at)
+
+### Backend: fix freshness_status mismatch between backend and frontend
+
+- `backend/app/main.py` — `semantic_sources()` (unified path and legacy fallback)
+
+  **Bug**: `FreshnessBadge` in `SemanticLayerView.tsx` only handles `'fresh' | 'warning' | 'stale'`. The backend's unified source path returned `'outdated'` for sources older than 7 days and `'unknown'` for the legacy fallback path. Both unrecognized values caused `colors[status]` and `labels[status]` to be `undefined`, silently rendering the badge with no class or text.
+
+  **Fix**: Updated backend to emit `'warning'` (1–7 days) and `'stale'` (7+ days) to match the frontend type contract. Legacy fallback path also updated from `'unknown'` to `'warning'`. All three returned values are now exactly `'fresh' | 'warning' | 'stale'`.
+
+---
+
 ## 2026-06-20 (session 10as)
 
 ### Backend: refresh built_at timestamp after each catalog/KG rebuild

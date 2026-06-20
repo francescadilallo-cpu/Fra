@@ -2310,10 +2310,10 @@ def semantic_sources(
             if built_at is not None:
                 age_h = (datetime.utcnow() - built_at).total_seconds() / 3600
                 freshness = (
-                    "fresh" if age_h < 24 else "stale" if age_h < 168 else "outdated"
+                    "fresh" if age_h < 24 else "warning" if age_h < 168 else "stale"
                 )
             else:
-                freshness = "unknown"
+                freshness = "warning"
             non_empty = sum(1 for c in record_counts.values() if c > 0)
             quality = round(100 * non_empty / max(len(tables), 1))
             return [
@@ -2363,7 +2363,7 @@ def semantic_sources(
                     "total_rows": total,
                     "loaded_at": meta.loaded_at.isoformat() if meta.loaded_at else None,
                     "quality_score": None,
-                    "freshness_status": "unknown",
+                    "freshness_status": "warning",
                 }
             )
         except Exception as exc:
