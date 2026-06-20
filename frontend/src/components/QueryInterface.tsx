@@ -1213,21 +1213,29 @@ export default function QueryInterface() {
               </div>
             )}
 
-            {/* No sources CTA for fresh live workspace */}
+            {/* No example questions CTA for fresh live workspace */}
             {!IS_DEMO_MODE && questionsLoaded && exampleQuestions.length === 0 && backendOnline === true && (
               <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-left w-full max-w-lg">
                 <Database className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-semibold text-slate-700">No data sources connected yet</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Connect a source to start querying your data here.{' '}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-slate-700">No example questions available yet</p>
+                  <p className="text-xs text-slate-500">
+                    You can still type any question below. To see suggested questions:
+                  </p>
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-                      className="underline font-medium text-teal-600 hover:text-teal-700"
+                      className="text-[11px] text-teal-600 border border-teal-200 rounded-md px-2.5 py-1 hover:bg-teal-50 font-medium transition-colors"
                     >
-                      Go to Sources
+                      1. Connect a source →
                     </button>
-                  </p>
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
+                      className="text-[11px] text-slate-500 border border-slate-200 rounded-md px-2.5 py-1 hover:bg-slate-100 font-medium transition-colors"
+                    >
+                      2. Run Pipeline →
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

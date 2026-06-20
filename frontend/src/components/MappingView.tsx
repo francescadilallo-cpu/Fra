@@ -539,7 +539,33 @@ export default function MappingView() {
           {/* Mapping tables */}
           <div className="flex-1 px-8 py-6 space-y-4">
             {Object.keys(grouped).length === 0 ? (
-              <div className="text-center py-16 text-slate-400 text-sm">No mappings match your search.</div>
+              allMappings.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-16 text-center">
+                  <Table2 className="w-10 h-10 text-slate-200" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-600 mb-1">No field mappings yet</p>
+                    <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                      Field mappings are auto-generated when you build the semantic layer. Connect a data source and run the pipeline.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
+                      className="text-xs text-teal-600 border border-teal-200 rounded-lg px-3 py-1.5 hover:bg-teal-50 font-medium transition-colors"
+                    >
+                      Connect a source →
+                    </button>
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
+                      className="text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 font-medium transition-colors"
+                    >
+                      Run Pipeline →
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-16 text-slate-400 text-sm">No mappings match your search.</div>
+              )
             ) : (
               Object.entries(grouped).map(([table, rows]) => (
                 <TableGroup

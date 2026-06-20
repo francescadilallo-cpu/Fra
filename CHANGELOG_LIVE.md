@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-20 (session 10bc)
+
+### Improve: MappingView proper empty state + QueryInterface onboarding CTA
+
+- `frontend/src/components/MappingView.tsx` — Field Mappings tab empty state
+- `frontend/src/components/QueryInterface.tsx` — no-questions CTA
+
+  **MappingView**: The "Field Mappings" tab showed a generic "No mappings match your search." for fresh workspaces with no ontology. Fixed: when `allMappings.length === 0` (no ontology at all), renders a proper empty state with "Connect a source →" and "Run Pipeline →" buttons. The generic "no results" message is preserved for the case where there ARE mappings but the search filter returns nothing.
+
+  **QueryInterface**: The empty-state card for `exampleQuestions.length === 0` said "No data sources connected yet" — which was wrong for users who HAVE sources but haven't built the semantic layer. Rewritten to: "No example questions available yet — you can still type any question" with two sequential CTAs: "1. Connect a source →" and "2. Run Pipeline →", covering both cases (no sources and no layer).
+
+---
+
 ## 2026-06-20 (session 10bb)
 
 ### Improve: SemanticLayerView setup guide + DataSourcesView error UX
