@@ -7,7 +7,7 @@ import { SECTORS, type SectorId } from '../data/sectors'
 import { useAgentStore, countFindings } from '../data/agentStore'
 import CommandPalette from './CommandPalette'
 import { showConfirm } from './ConfirmDialog'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import { getWorkspace } from '../api/workspace'
 
 interface Props {
@@ -352,7 +352,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
   useEffect(() => {
     const label = TAB_TITLES[activeTab] ?? activeTab
-    document.title = `${label} · ${sector.name} — Fra`
+    document.title = `${label} · ${workspaceLabel(sector.name)} — Fra`
   }, [activeTab, sector.name])
 
   function handleTabChange(tab: NavTab) {

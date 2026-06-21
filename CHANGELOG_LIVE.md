@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-21 (session cont. 8)
+
+### Polish: page title and Builder AI header use workspace name for live users
+
+- **Layout.tsx**: `document.title` was hardcoded to `sector.name` ("Manufacturing") for all users — now uses `workspaceLabel(sector.name)` so live users see their company name (from `si-company-name` localStorage) or "Live workspace" instead of "Manufacturing"
+- **OntologyBuilder.tsx**: Header subline "Build your **Manufacturing** data model…" → uses `workspaceLabel()` so live users see their company name
+
+Both files now import `workspaceLabel` from `../lib/demoMode` (already imported in other components).
+
+---
+
 ## 2026-06-20 (session cont. 7)
 
 ### Polish: UX sweep — ProcessView heading, AdminSections notification text

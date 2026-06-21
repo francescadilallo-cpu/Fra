@@ -19,7 +19,7 @@ import {
 import { SECTORS } from '../data/sectors'
 import { showConfirm } from './ConfirmDialog'
 import { getLiveConfig, type LiveConfig } from '../api/semantic'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 
 // ── Type color map (same as OntologyGraph) ───────────────────────────────────
 const TYPE_COLORS: Record<PropertyType, string> = {
@@ -1384,7 +1384,7 @@ export default function OntologyBuilder() {
             Builder AI
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Build your <strong className="text-teal-700">{sector.name}</strong> data model in natural language.
+            Build your <strong className="text-teal-700">{workspaceLabel(sector.name)}</strong> data model in natural language.
             The bot proposes changes, you approve.
           </p>
         </div>
