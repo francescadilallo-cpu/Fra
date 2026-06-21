@@ -5,7 +5,7 @@ import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Sear
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { getLiveConfig, type LiveConfig } from '../api/semantic'
-import { IS_DEMO_MODE } from '../lib/demoMode'
+import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { OntologyNodeData, OntologyNode, OntologyEdge, PropertyType, NavTab } from '../types'
 
 // ── Type color map ───────────────────────────────────────────────────────────
@@ -485,7 +485,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
 
   const mcpTool1 = `{
   "name": "query_semantic_layer",
-  "description": "Query the ${sector.name} semantic layer using natural language. Returns structured results from the unified ontology.",
+  "description": "Query the ${workspaceLabel(sector.name)} data model using natural language. Returns structured results from unified entities.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -534,7 +534,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          Code generated automatically from the active ontology ({sector.name}).
+          Code generated automatically from the active data model ({workspaceLabel(sector.name)}).
           Physical column mappings are annotated with <code className="bg-slate-100 px-1 rounded font-mono">si:physicalColumn</code>.
           Compatible with Protégé, RDFLib, Jena.
         </p>

@@ -16,7 +16,7 @@ import {
   type SemanticStatus, type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
 import { useSector } from '../contexts/SectorContext'
-import { modeScopedSector, IS_DEMO_MODE } from '../lib/demoMode'
+import { modeScopedSector, IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import {
   DEMO_SOURCES, DEMO_SOURCE_FRESHNESS, DEMO_BRIDGES, DEMO_ENTITY_DETAIL,
   DEMO_DISAMBIGUATION_RULES, DEMO_QUERY_EXAMPLES, DEMO_QUALITY_ISSUES, DEMO_RELATIONS,
@@ -2188,7 +2188,7 @@ export default function SemanticLayerView() {
     const layer = {
       semantic_layer: {
         version: 1,
-        sector: sector.name,
+        workspace: workspaceLabel(sector.name),
         sources: backendSources.length > 0
           ? backendSources.map(s => ({ id: s.id, name: s.name, type: s.source_type }))
           : userSources.map(s => ({ id: s.id, name: s.name, type: s.type })),

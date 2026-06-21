@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-21 (session cont. 9)
+
+### Polish: remaining sector.name → workspaceLabel() for live users
+
+- **OntologyBuilder.tsx**: Reset confirm dialog now shows workspace/company name instead of "Manufacturing"
+- **OntologyGraph.tsx**: Code view sub-tab — MCP tool description and OWL header now use workspace name; "semantic layer" → "data model" and "unified ontology" → "unified entities" in MCP tool description
+- **SemanticLayerView.tsx**: YAML export renamed key `sector:` → `workspace:` and value uses `workspaceLabel()` so live users' exports reflect their company name
+
+All three files now import `workspaceLabel` from `../lib/demoMode`.
+
+---
+
 ## 2026-06-21 (session cont. 8)
 
 ### Polish: page title and Builder AI header use workspace name for live users

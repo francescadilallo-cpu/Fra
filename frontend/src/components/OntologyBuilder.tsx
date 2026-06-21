@@ -1208,7 +1208,7 @@ export default function OntologyBuilder() {
   }, [pending, approve])
 
   const clearExtensions = useCallback(async () => {
-    const ok = await showConfirm(`All custom extensions for ${sector.name} will be permanently removed.`, { title: 'Reset data model?', dangerous: true })
+    const ok = await showConfirm(`All custom extensions for ${workspaceLabel(sector.name)} will be permanently removed.`, { title: 'Reset data model?', dangerous: true })
     if (!ok) return
     saveExtension(sectorId, { nodes: [], edges: [], addedProperties: [] })
     const s = buildInitialState(sector, sectorId, liveConfig)
