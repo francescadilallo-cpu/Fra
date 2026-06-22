@@ -2363,6 +2363,201 @@ def get_recent_webhooks(
         return list(reversed(_WEBHOOK_LOG))
 
 
+# ── Multi-agent workflow orchestration ───────────────────────────────────────
+
+_WORKFLOW_RUNS: OrderedDict[str, dict[str, Any]] = OrderedDict()
+_WORKFLOW_RUNS_LOCK = threading.Lock()
+_WORKFLOW_RUNS_MAX = 100
+
+
+class WorkflowStepRequest(BaseModel):
+    step_id: str = Field(min_length=1, max_length=128)
+    label: str = Field(min_length=1, max_length=256)
+    query: str = Field(min_length=1, max_length=2000)
+    depends_on: list[Annotated[str, Field(max_length=128)]] = Field(
+        default_factory=list, max_length=20
+    )
+
+
+class WorkflowRunRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=256)
+    steps: list[WorkflowStepRequest] = Field(min_length=1, max_length=20)
+
+
+def _dag_layers(steps: list[WorkflowStepRequest]) -> list[list[WorkflowStepRequest]]:
+    """Topological sort into parallel execution layers."""
+    placed: set[str] = set()
+    remaining = list(steps)
+    layers: list[list[WorkflowStepRequest]] = []
+    safety = 0
+    while remaining and safety < 40:
+        safety += 1
+        ready = [s for s in remaining if all(d in placed for d in s.depends_on)]
+        if not ready:
+            ready = remaining  # break cycle by flushing all
+        layers.append(ready)
+        for s in ready:
+            placed.add(s.step_id)
+            remaining.remove(s)
+    return layers
+
+
+def _run_workflow_bg(
+    run_id: str,
+    steps: list[WorkflowStepRequest],
+    hidden: frozenset[str],
+) -> None:
+    """Execute workflow steps in a background thread."""
+    prior_results: dict[str, str] = {}
+
+    def _mark(step_id: str, **kwargs: Any) -> None:
+        with _WORKFLOW_RUNS_LOCK:
+            run = _WORKFLOW_RUNS.get(run_id)
+            if run:
+                run["steps"][step_id].update(kwargs)
+
+    with _WORKFLOW_RUNS_LOCK:
+        run = _WORKFLOW_RUNS.get(run_id)
+        if run:
+            run["status"] = "running"
+
+    try:
+        for layer in _dag_layers(steps):
+            for step in layer:
+                _mark(step.step_id, status="running")
+                try:
+                    # Build query, optionally injecting context from upstream steps
+                    context_prefix = ""
+                    for dep in step.depends_on:
+                        if dep in prior_results:
+                            context_prefix += (
+                                f"[Previous step result: {prior_results[dep][:200]}]\n"
+                            )
+                    augmented = (
+                        context_prefix + step.query if context_prefix else step.query
+                    )
+
+                    _ensure_semantic_loaded()
+                    layer_obj = _semantic_state.get("layer")
+                    if layer_obj is None:
+                        raise RuntimeError("Semantic layer not ready")
+
+                    result = layer_obj.ask(
+                        augmented,
+                        context={"workflow_run_id": run_id, "step_id": step.step_id},
+                        hidden_tables=hidden,
+                    )
+                    answer_str = (
+                        str(result.answer)[:500] if result.answer is not None else ""
+                    )
+                    prior_results[step.step_id] = answer_str
+                    _mark(
+                        step.step_id,
+                        status="completed",
+                        result=answer_str,
+                        sql_used=result.sql_used,
+                        sources_touched=result.sources_touched,
+                        latency_ms=result.latency_ms,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Workflow %s step %s failed: %s", run_id, step.step_id, exc
+                    )
+                    _mark(step.step_id, status="error", error=str(exc)[:300])
+                    prior_results[step.step_id] = ""
+    finally:
+        with _WORKFLOW_RUNS_LOCK:
+            run = _WORKFLOW_RUNS.get(run_id)
+            if run:
+                step_statuses = [run["steps"][s]["status"] for s in run["steps"]]
+                run["status"] = "error" if "error" in step_statuses else "completed"
+                run["completed_at"] = datetime.utcnow().isoformat()
+
+
+@app.post("/api/agent/workflow/run", tags=["agents"])
+def start_workflow_run(
+    body: WorkflowRunRequest,
+    current_user: UserPrincipal = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Start a multi-agent workflow. Steps execute in dependency order; independent steps run sequentially."""
+    run_id = f"wfr_{uuid.uuid4().hex[:12]}"
+    run_state: dict[str, Any] = {
+        "run_id": run_id,
+        "name": body.name,
+        "status": "queued",
+        "started_at": datetime.utcnow().isoformat(),
+        "completed_at": None,
+        "steps": {
+            s.step_id: {
+                "step_id": s.step_id,
+                "label": s.label,
+                "query": s.query,
+                "depends_on": s.depends_on,
+                "status": "queued",
+                "result": None,
+                "error": None,
+                "sql_used": None,
+                "sources_touched": [],
+                "latency_ms": None,
+            }
+            for s in body.steps
+        },
+    }
+    with _WORKFLOW_RUNS_LOCK:
+        if len(_WORKFLOW_RUNS) >= _WORKFLOW_RUNS_MAX:
+            _WORKFLOW_RUNS.popitem(last=False)
+        _WORKFLOW_RUNS[run_id] = run_state
+        _WORKFLOW_RUNS.move_to_end(run_id)
+
+    hidden = _hidden_demo_tables(current_user)
+    threading.Thread(
+        target=_run_workflow_bg,
+        args=(run_id, body.steps, hidden),
+        daemon=True,
+    ).start()
+
+    return {"run_id": run_id, "status": "queued", "step_count": len(body.steps)}
+
+
+@app.get("/api/agent/workflow/list", tags=["agents"])
+def list_workflow_runs(
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """List recent workflow runs (newest first, up to 20)."""
+    with _WORKFLOW_RUNS_LOCK:
+        runs = list(reversed(list(_WORKFLOW_RUNS.values())))
+    return [
+        {
+            "run_id": r["run_id"],
+            "name": r["name"],
+            "status": r["status"],
+            "started_at": r["started_at"],
+            "completed_at": r.get("completed_at"),
+            "step_count": len(r["steps"]),
+            "steps_done": sum(
+                1 for s in r["steps"].values() if s["status"] == "completed"
+            ),
+            "steps_error": sum(
+                1 for s in r["steps"].values() if s["status"] == "error"
+            ),
+        }
+        for r in runs[:20]
+    ]
+
+
+@app.get("/api/agent/workflow/{run_id}", tags=["agents"])
+def get_workflow_run(
+    run_id: str = _ApiPath(..., min_length=1, max_length=128),
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Get the full status and step results of a workflow run."""
+    with _WORKFLOW_RUNS_LOCK:
+        run = _WORKFLOW_RUNS.get(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    return run
+
+
 # ── KG rebuild (admin) ────────────────────────────────────────────────────────
 
 

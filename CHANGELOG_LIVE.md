@@ -10,6 +10,52 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Step 8: Multi-agent workflow orchestration)
+
+Users can now define and run multi-step agent workflows where each step is a
+natural-language data query and results from upstream steps are injected as
+context for downstream ones — true chained reasoning across the data model.
+
+### Backend (`main.py`)
+
+- **In-memory workflow run store** (`_WORKFLOW_RUNS`, max 100 runs, LRU) with
+  thread-safe access.
+- **`_dag_layers()`** — topological sort that resolves step dependencies into
+  parallel execution layers (breaks cycles gracefully).
+- **`_run_workflow_bg()`** — background thread executor: iterates DAG layers,
+  marks each step `running`, calls `layer.ask()` directly with the step's NL
+  query, injects prior step results as context prefix for downstream steps,
+  marks each step `completed` or `error`, sets overall run status on finish.
+- **`POST /api/agent/workflow/run`** — accepts `{name, steps[]}` where each
+  step has `{step_id, label, query, depends_on[]}`. Creates a run record,
+  spawns a daemon thread, returns `{run_id, status, step_count}` immediately.
+- **`GET /api/agent/workflow/list`** — last 20 runs (newest first) as
+  summaries: `{run_id, name, status, step_count, steps_done, steps_error, …}`.
+- **`GET /api/agent/workflow/{run_id}`** — full run with per-step
+  `{status, result, sql_used, sources_touched, latency_ms, error}` for
+  real-time polling.
+
+### Frontend
+
+- **`api/agents.ts`**: added `WorkflowStepResult`, `WorkflowRun`,
+  `WorkflowRunSummary`, `WorkflowStepInput` interfaces, `startWorkflowRun()`,
+  `getWorkflowRun()`, `listWorkflowRuns()` wrappers.
+- **`components/AgentWorkflows.tsx`**: no changes — demo simulation unchanged.
+- **`components/AgentsView.tsx`**:
+  - "Create Workflow" button in the header (live users only, violet style).
+  - `WorkflowBuilderModal` — modal with name field + dynamic step list (each
+    step: label + NL query textarea). Steps execute sequentially by default
+    (each depends on the previous). "Run Workflow" disabled until all queries
+    are filled.
+  - `WorkflowRunCard` — expandable card showing run status, progress, and per-
+    step results with query, answer, latency, and SQL used.
+  - "Workflow Runs" section in the agent body (live, only shown when runs
+    exist): active run auto-expands; past runs can be expanded on demand to
+    fetch full results; active run polled every 1.5 s until terminal.
+  - `handleRunWorkflow()` — calls backend, sets active run, starts polling.
+
+---
+
 ## 2026-06-22 (Step 7: Integration with external agents)
 
 Makes the platform callable by external AI agents (Claude, GPT, n8n, custom

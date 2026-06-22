@@ -135,3 +135,57 @@ export const getWebhookLog = (): Promise<WebhookLogEntry[]> =>
 
 export const getAgentTools = (): Promise<AgentToolDef[]> =>
   http.get<AgentToolDef[]>('/api/agents/tools').then(r => r.data)
+
+// ── Multi-agent workflow orchestration ────────────────────────────────────────
+
+export interface WorkflowStepResult {
+  step_id: string
+  label: string
+  query: string
+  depends_on: string[]
+  status: 'queued' | 'running' | 'completed' | 'error'
+  result: string | null
+  error: string | null
+  sql_used: string | null
+  sources_touched: string[]
+  latency_ms: number | null
+}
+
+export interface WorkflowRun {
+  run_id: string
+  name: string
+  status: 'queued' | 'running' | 'completed' | 'error'
+  started_at: string
+  completed_at: string | null
+  steps: Record<string, WorkflowStepResult>
+}
+
+export interface WorkflowRunSummary {
+  run_id: string
+  name: string
+  status: 'queued' | 'running' | 'completed' | 'error'
+  started_at: string
+  completed_at: string | null
+  step_count: number
+  steps_done: number
+  steps_error: number
+}
+
+export interface WorkflowStepInput {
+  step_id: string
+  label: string
+  query: string
+  depends_on: string[]
+}
+
+export const startWorkflowRun = (
+  name: string,
+  steps: WorkflowStepInput[],
+): Promise<{ run_id: string; status: string; step_count: number }> =>
+  http.post('/api/agent/workflow/run', { name, steps }).then(r => r.data)
+
+export const getWorkflowRun = (runId: string): Promise<WorkflowRun> =>
+  http.get<WorkflowRun>(`/api/agent/workflow/${encodeURIComponent(runId)}`).then(r => r.data)
+
+export const listWorkflowRuns = (): Promise<WorkflowRunSummary[]> =>
+  http.get<WorkflowRunSummary[]>('/api/agent/workflow/list').then(r => r.data)

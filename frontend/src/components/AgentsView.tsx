@@ -12,8 +12,8 @@ import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getAuthToken } from '../api/client'
-import { executeAgentCommand, approveAgentAction, listAgentActions, getWebhookLog } from '../api/agents'
-import type { AgentAction, WebhookLogEntry } from '../api/agents'
+import { executeAgentCommand, approveAgentAction, listAgentActions, getWebhookLog, startWorkflowRun, getWorkflowRun, listWorkflowRuns } from '../api/agents'
+import type { AgentAction, WebhookLogEntry, WorkflowRun, WorkflowRunSummary, WorkflowStepInput } from '../api/agents'
 import { getLiveConfig, backendErrorMessage, type LiveConfig } from '../api/semantic'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
@@ -1131,6 +1131,186 @@ function ExecutiveActionsPanel() {
   )
 }
 
+// ── Workflow builder modal ─────────────────────────────────────────────────────
+
+interface StepDraft { id: string; label: string; query: string }
+
+function WorkflowBuilderModal({ onClose, onSubmit }: {
+  onClose: () => void
+  onSubmit: (name: string, steps: StepDraft[]) => void
+}) {
+  const [name, setName] = useState('')
+  const [steps, setSteps] = useState<StepDraft[]>([
+    { id: '1', label: '', query: '' },
+    { id: '2', label: '', query: '' },
+  ])
+
+  function addStep() {
+    setSteps(prev => [...prev, { id: String(Date.now()), label: '', query: '' }])
+  }
+  function removeStep(id: string) {
+    setSteps(prev => prev.filter(s => s.id !== id))
+  }
+  function updateStep(id: string, field: 'label' | 'query', value: string) {
+    setSteps(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s))
+  }
+
+  const valid = name.trim().length > 0 && steps.length > 0 && steps.every(s => s.query.trim())
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+            <WorkflowIcon className="w-4 h-4 text-teal-600" />
+            Create Workflow
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <Plus className="w-4 h-4 rotate-45" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">Workflow name</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Daily Data Quality Check"
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:border-teal-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-slate-700">Steps (sequential)</label>
+              {steps.length < 10 && (
+                <button onClick={addStep} className="text-xs text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add step
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {steps.map((step, i) => (
+                <div key={step.id} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Step {i + 1}</span>
+                    {steps.length > 1 && (
+                      <button onClick={() => removeStep(step.id)} className="text-slate-300 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    value={step.label}
+                    onChange={e => updateStep(step.id, 'label', e.target.value)}
+                    placeholder={`Step ${i + 1} label (optional)`}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:border-teal-400 outline-none text-slate-700"
+                  />
+                  <textarea
+                    value={step.query}
+                    onChange={e => updateStep(step.id, 'query', e.target.value)}
+                    placeholder="Natural language question, e.g. 'Show total revenue by product category'"
+                    rows={2}
+                    className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 focus:border-teal-400 outline-none resize-none text-slate-700"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Each step receives the previous step's result as context — use this for drill-down analysis.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 flex-shrink-0">
+          <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+          <button
+            onClick={() => { if (valid) { onSubmit(name.trim(), steps); onClose() } }}
+            disabled={!valid}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Play className="w-3.5 h-3.5" />
+            Run Workflow
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Workflow run result card ────────────────────────────────────────────────────
+
+function WorkflowRunCard({ run, onExpand, expanded }: {
+  run: WorkflowRunSummary | WorkflowRun
+  onExpand: () => void
+  expanded: boolean
+}) {
+  const isSummary = !('steps' in run && typeof run.steps === 'object' && !Array.isArray(run.steps))
+  const fullRun = !isSummary ? (run as WorkflowRun) : null
+  const summary = run as WorkflowRunSummary
+  const statusColor = {
+    queued: 'bg-slate-100 text-slate-600',
+    running: 'bg-blue-100 text-blue-700',
+    completed: 'bg-teal-100 text-teal-700',
+    error: 'bg-red-100 text-red-700',
+  }[run.status]
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+      <button
+        onClick={onExpand}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-800 truncate">{run.name}</span>
+            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${statusColor} ${run.status === 'running' ? 'animate-pulse' : ''}`}>
+              {run.status}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {new Date(run.started_at).toLocaleString()} ·{' '}
+            {summary.steps_done ?? 0}/{summary.step_count} steps done
+            {(summary.steps_error ?? 0) > 0 && (
+              <span className="text-red-500 ml-1">· {summary.steps_error} errors</span>
+            )}
+          </p>
+        </div>
+        {expanded ? <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
+      </button>
+
+      {expanded && fullRun && (
+        <div className="border-t border-slate-100 divide-y divide-slate-100">
+          {Object.values(fullRun.steps).map(step => (
+            <div key={step.step_id} className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                {step.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin flex-shrink-0" />}
+                {step.status === 'completed' && <CheckCircle2 className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />}
+                {step.status === 'error' && <Activity className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                {step.status === 'queued' && <Clock className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />}
+                <span className="text-xs font-semibold text-slate-700">{step.label || step.step_id}</span>
+                {step.latency_ms != null && (
+                  <span className="text-[10px] text-slate-400 ml-auto">{step.latency_ms.toFixed(0)}ms</span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 font-mono truncate mb-1">{step.query}</p>
+              {step.result && (
+                <p className="text-xs text-slate-700 bg-slate-50 rounded px-2 py-1.5 leading-relaxed line-clamp-3">
+                  {step.result}
+                </p>
+              )}
+              {step.error && (
+                <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1.5">{step.error}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Integration code snippets ─────────────────────────────────────────────────
 
 function IntegrationSnippets({ snippets, copiedKey, onCopy }: {
@@ -1186,6 +1366,67 @@ export default function AgentsView() {
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   useEffect(() => { if (!IS_DEMO_MODE) getLiveConfig().then(setLiveConfig).catch(() => {}) }, [])
 
+  // ── Workflow orchestration (live mode) ────────────────────────────────────
+  const [showWorkflowBuilder, setShowWorkflowBuilder] = useState(false)
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>([])
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [activeRun, setActiveRun] = useState<WorkflowRun | null>(null)
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    listWorkflowRuns().then(setWorkflowRuns).catch(() => {})
+  }, [])
+
+  // Poll active run until done
+  useEffect(() => {
+    if (!activeRunId) return
+    const id = setInterval(async () => {
+      try {
+        const run = await getWorkflowRun(activeRunId)
+        setActiveRun(run)
+        const stepStatuses = Object.values(run.steps).map(s => s.status)
+        const allDone = stepStatuses.every(s => s === 'completed' || s === 'error')
+        if (allDone || run.status === 'completed' || run.status === 'error') {
+          clearInterval(id)
+          setActiveRunId(null)
+          listWorkflowRuns().then(setWorkflowRuns).catch(() => {})
+        }
+      } catch { /* ignore */ }
+    }, 1500)
+    return () => clearInterval(id)
+  }, [activeRunId])
+
+  async function handleRunWorkflow(name: string, steps: StepDraft[]) {
+    try {
+      const stepInputs: WorkflowStepInput[] = steps.map((s, i) => ({
+        step_id: s.id,
+        label: s.label || `Step ${i + 1}`,
+        query: s.query,
+        depends_on: i > 0 ? [steps[i - 1].id] : [],
+      }))
+      const { run_id } = await startWorkflowRun(name, stepInputs)
+      setActiveRunId(run_id)
+      setExpandedRunId(run_id)
+      const initial = await getWorkflowRun(run_id)
+      setActiveRun(initial)
+      const summary: WorkflowRunSummary = {
+        run_id,
+        name,
+        status: 'running',
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        step_count: steps.length,
+        steps_done: 0,
+        steps_error: 0,
+      }
+      setWorkflowRuns(prev => [summary, ...prev])
+    } catch (e) {
+      toast(`Workflow failed to start: ${String(e)}`, 'success')
+    }
+  }
+
+  // ── Webhook / integrations panel ──────────────────────────────────────────
   const [webhookLog, setWebhookLog] = useState<WebhookLogEntry[]>([])
   const [showIntegrations, setShowIntegrations] = useState(false)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -1558,6 +1799,12 @@ export default function AgentsView() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {showWorkflowBuilder && (
+        <WorkflowBuilderModal
+          onClose={() => setShowWorkflowBuilder(false)}
+          onSubmit={handleRunWorkflow}
+        />
+      )}
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 flex items-start justify-between gap-4">
         <div>
@@ -1585,6 +1832,15 @@ export default function AgentsView() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {!IS_DEMO_MODE && (
+            <button
+              onClick={() => setShowWorkflowBuilder(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-violet-200 text-violet-700 hover:bg-violet-50 transition-colors"
+            >
+              <WorkflowIcon className="w-4 h-4" />
+              Create Workflow
+            </button>
+          )}
           {totalFindings > 0 && (
             <button
               onClick={exportFindingsCSV}
@@ -1806,6 +2062,48 @@ export default function AgentsView() {
               ))
             )}
           </div>
+
+          {/* Workflow Runs (live mode) */}
+          {!IS_DEMO_MODE && (workflowRuns.length > 0 || activeRun) && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <WorkflowIcon className="w-4 h-4 text-violet-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Workflow Runs</h2>
+                {activeRunId && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded animate-pulse">
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" /> live
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {activeRun && (
+                  <WorkflowRunCard
+                    run={activeRun}
+                    onExpand={() => setExpandedRunId(v => v === activeRun.run_id ? null : activeRun.run_id)}
+                    expanded={expandedRunId === activeRun.run_id}
+                  />
+                )}
+                {workflowRuns
+                  .filter(r => r.run_id !== activeRun?.run_id)
+                  .slice(0, 5)
+                  .map(r => (
+                    <WorkflowRunCard
+                      key={r.run_id}
+                      run={r}
+                      onExpand={async () => {
+                        if (expandedRunId === r.run_id) { setExpandedRunId(null); return }
+                        setExpandedRunId(r.run_id)
+                        try {
+                          const full = await getWorkflowRun(r.run_id)
+                          setActiveRun(full)
+                        } catch { /* ignore */ }
+                      }}
+                      expanded={expandedRunId === r.run_id}
+                    />
+                  ))}
+              </div>
+            </section>
+          )}
 
           {/* External Integrations */}
           {!IS_DEMO_MODE && (() => {
