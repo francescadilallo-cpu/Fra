@@ -10,6 +10,55 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Step 6: Easy config + conversational AI)
+
+Two features that together make the product feel like a proper AI assistant for
+non-technical users.
+
+### Conversational memory (multi-turn Q&A)
+
+The query engine now remembers previous turns within a session so follow-up
+questions ("what about last quarter?", "narrow to Europe only") resolve
+correctly.
+
+**Backend (`main.py`):**
+- Added in-memory conversation session store: `_CONV_SESSIONS` (OrderedDict,
+  max 500 sessions × 6 turns each, LRU eviction). Thread-safe via `_CONV_LOCK`.
+- `_conv_get(session_id)` — load prior turns as a list.
+- `_conv_append(session_id, q, a)` — persist a new Q&A pair.
+- `_conv_augment(question, history)` — prepend up to 4 prior turns as
+  `[Previous conversation] … [New question]` preamble so the LLM pipeline
+  resolves follow-ups without any architectural changes to `layer.ask()`.
+- In `semantic_ask()`: loads history when `session_id` is provided, passes
+  augmented question to `layer.ask()`, skips the response cache for in-
+  conversation requests (answers are context-dependent), saves each
+  successful turn to the session store after responding.
+
+**Frontend (`api/semantic.ts`, `components/QueryInterface.tsx`):**
+- `ask()` now accepts an optional `sessionId` parameter (passed as
+  `session_id` in the request body).
+- `QueryInterface`: generates a UUID `sessionId` on mount. Passes it to every
+  `ask()` call. "Clear" button replaced with "New chat" that resets both
+  messages and sessionId (clears server-side memory for the old session).
+- "In conversation" indicator (violet pulse badge) appears in the header when
+  ≥ 2 questions have been asked in the current session.
+
+### Easy LLM provider config
+
+**Backend (`main.py`):**
+- New `GET /api/config/llm-status` endpoint — returns
+  `{provider: "groq"|"anthropic"|null, model: str, configured: bool}`.
+  No API key values are exposed.
+
+**Frontend (`api/semantic.ts`, `components/ConfigurationView.tsx`):**
+- `getLlmStatus()` wrapper added to `semantic.ts`.
+- ConfigurationView has a new "AI Provider" section (live users only) that
+  fetches status on mount and shows:
+  - Green "active" card with provider name + model when configured.
+  - Amber warning card with env var instructions when no key is set.
+
+---
+
 ## 2026-06-22 (Smart Connect — Step 5: structural context auto-generated)
 
 When the user applies Smart Connect proposals, the backend silently generates a

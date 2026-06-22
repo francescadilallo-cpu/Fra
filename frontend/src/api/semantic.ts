@@ -259,8 +259,19 @@ export const deleteSegment = (id: string): Promise<void> =>
 
 // ── Query ─────────────────────────────────────────────────────────────────────
 
-export const ask = (question: string, sectorId = 'manufacturing'): Promise<AskResult> =>
-  http.post<AskResult>('/api/ask', { question, sector_id: sectorId }).then(r => r.data)
+export const ask = (question: string, sectorId = 'manufacturing', sessionId?: string): Promise<AskResult> =>
+  http.post<AskResult>('/api/ask', { question, sector_id: sectorId, ...(sessionId ? { session_id: sessionId } : {}) }).then(r => r.data)
+
+// ── LLM config status ─────────────────────────────────────────────────────────
+
+export interface LlmStatus {
+  provider: 'groq' | 'anthropic' | null
+  model: string
+  configured: boolean
+}
+
+export const getLlmStatus = (): Promise<LlmStatus> =>
+  http.get<LlmStatus>('/api/config/llm-status').then(r => r.data)
 
 // ── Adapters: backend → frontend EngineResult ─────────────────────────────────
 

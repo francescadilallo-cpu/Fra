@@ -861,6 +861,7 @@ export default function QueryInterface() {
   const ontology = useExtendedOntology(sectorId)
 
   const [messages, setMessages] = useState<Message[]>([])
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID())
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [history, setHistory] = useState<string[]>(() => loadHistory(sectorId))
@@ -872,6 +873,11 @@ export default function QueryInterface() {
   const [exampleQuestions, setExampleQuestions] = useState<ExampleQuestion[]>([])
   const [questionsLoaded, setQuestionsLoaded] = useState(false)
   const queryCount = messages.filter(m => m.role === 'user').length
+
+  function newConversation() {
+    setMessages([])
+    setSessionId(crypto.randomUUID())
+  }
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -956,7 +962,7 @@ export default function QueryInterface() {
         // Backend path — real data, server-side query execution.
         // Re-throw the original error so the outer handler can inspect the
         // HTTP status (e.g. 401, 409) and extract the backend detail correctly.
-        const raw = await ask(question, sectorId)
+        const raw = await ask(question, sectorId, sessionId)
         result = adaptAskResult(raw)
       } else if (isLLMActive) {
         // Browser LLM path — direct provider call (Groq/Gemini/Claude)
@@ -1036,6 +1042,13 @@ export default function QueryInterface() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Conversation context indicator */}
+            {queryCount >= 2 && canUseBackend && useBackend && (
+              <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs text-violet-700 bg-violet-50 border border-violet-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                In conversation
+              </div>
+            )}
             {/* Backend status indicator — shown for all sectors */}
             <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
               backendOnline === null ? 'bg-slate-50 border-slate-200 text-slate-400' :
@@ -1053,12 +1066,12 @@ export default function QueryInterface() {
             </div>
             {queryCount > 0 && (
               <button
-                onClick={() => setMessages([])}
-                title="Clear conversation"
+                onClick={newConversation}
+                title="Start a new conversation (clears memory)"
                 className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs text-slate-400 hover:text-slate-600 border border-slate-200 hover:border-slate-300 transition-all"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Clear
+                New chat
               </button>
             )}
             {(!canUseBackend || !useBackend) && (

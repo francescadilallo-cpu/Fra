@@ -13,7 +13,7 @@ import os
 import re
 import threading
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque as _deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -175,6 +175,40 @@ _IN_PROCESS_CACHE_MAX = 256
 # query stays cached under sustained load instead of being evicted FIFO-style.
 _in_process_cache: OrderedDict[str, str] = OrderedDict()
 _in_process_cache_lock = threading.Lock()
+
+# ── Conversation session store ────────────────────────────────────────────────
+_CONV_SESSIONS: OrderedDict[str, "_deque[dict[str, str]]"] = OrderedDict()
+_CONV_LOCK = threading.Lock()
+_CONV_MAX_TURNS = 6
+_CONV_MAX_SESSIONS = 500
+
+
+def _conv_get(session_id: str) -> list[dict[str, str]]:
+    with _CONV_LOCK:
+        dq = _CONV_SESSIONS.get(session_id)
+        return list(dq) if dq else []
+
+
+def _conv_append(session_id: str, q: str, a: str) -> None:
+    with _CONV_LOCK:
+        if session_id not in _CONV_SESSIONS:
+            if len(_CONV_SESSIONS) >= _CONV_MAX_SESSIONS:
+                _CONV_SESSIONS.popitem(last=False)
+            _CONV_SESSIONS[session_id] = _deque(maxlen=_CONV_MAX_TURNS)
+        _CONV_SESSIONS[session_id].append({"q": q[:500], "a": a[:400]})
+        _CONV_SESSIONS.move_to_end(session_id)
+
+
+def _conv_augment(question: str, history: list[dict[str, str]]) -> str:
+    """Prepend prior Q&A turns so the LLM can resolve follow-up questions."""
+    if not history:
+        return question
+    lines = ["[Previous conversation]"]
+    for turn in history[-4:]:
+        lines.append(f"User: {turn['q']}")
+        lines.append(f"Assistant: {turn['a']}")
+    lines.append(f"[New question]\n{question}")
+    return "\n".join(lines)
 
 
 def _rate_limit_handler(_: Request, __: RateLimitExceeded) -> JSONResponse:
@@ -2045,25 +2079,30 @@ def semantic_ask(
                     ),
                 )
 
+    conv_history = _conv_get(req.session_id) if req.session_id else []
+    augmented_question = _conv_augment(question, conv_history)
+
     merged_context = {"session_id": req.session_id, **(req.context or {})}
     redis_client = _get_semantic_redis_client()
     cache_key = _semantic_cache_key(
         question, merged_context, redis_client, mode=_current_user.mode
     )
-    if redis_client is not None:
-        try:
-            cached_payload = redis_client.get(cache_key)
-            if isinstance(cached_payload, str) and cached_payload.strip():
-                return SemanticAskResponse.model_validate_json(cached_payload)
-        except Exception:
-            pass
-    else:
-        with _in_process_cache_lock:
-            hit = _in_process_cache.get(cache_key)
-            if hit is not None:
-                _in_process_cache.move_to_end(cache_key)
-        if hit:
-            return SemanticAskResponse.model_validate_json(hit)
+    # Skip cache for in-conversation requests — answers depend on prior context
+    if not conv_history:
+        if redis_client is not None:
+            try:
+                cached_payload = redis_client.get(cache_key)
+                if isinstance(cached_payload, str) and cached_payload.strip():
+                    return SemanticAskResponse.model_validate_json(cached_payload)
+            except Exception:
+                pass
+        else:
+            with _in_process_cache_lock:
+                hit = _in_process_cache.get(cache_key)
+                if hit is not None:
+                    _in_process_cache.move_to_end(cache_key)
+            if hit:
+                return SemanticAskResponse.model_validate_json(hit)
 
     _ensure_semantic_loaded()
     layer = _semantic_state.get("layer")
@@ -2119,7 +2158,7 @@ def semantic_ask(
 
     try:
         result = layer.ask(
-            question,
+            augmented_question,
             context=merged_context,
             docs_override=merged_docs,
             hidden_tables=hidden,
@@ -2152,6 +2191,10 @@ def semantic_ask(
                     _in_process_cache.popitem(last=False)
                 _in_process_cache[cache_key] = response_json
                 _in_process_cache.move_to_end(cache_key)
+        if req.session_id:
+            _conv_append(
+                req.session_id, question, str(response_model.answer or "")[:400]
+            )
         return response_model
     except AmbiguityError as e:
         return SemanticAskResponse(
@@ -2189,6 +2232,26 @@ def semantic_ask(
             status_code=500,
             detail="An unexpected error occurred while processing your question. Please try again.",
         ) from exc
+
+
+# ── LLM provider status ───────────────────────────────────────────────────────
+
+
+@app.get("/api/config/llm-status", tags=["config"])
+def get_llm_status(
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return which LLM provider is configured on the server (no key values exposed)."""
+    from .semantic.layer import _llm_intent_provider
+
+    provider = _llm_intent_provider()
+    if provider == "groq":
+        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+    elif provider == "anthropic":
+        model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip()
+    else:
+        model = ""
+    return {"provider": provider, "model": model, "configured": provider is not None}
 
 
 # ── KG rebuild (admin) ────────────────────────────────────────────────────────

@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Loader2, CheckCircle2, XCircle, Plus, AlertTriangle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Loader2, CheckCircle2, XCircle, Plus, AlertTriangle, Cpu } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection, WorkspaceSection } from './AdminSections'
 import { IS_DEMO_MODE } from '../lib/demoMode'
+import { getLlmStatus, type LlmStatus } from '../api/semantic'
 
 // ── Connectors ────────────────────────────────────────────────────────────────
 
@@ -325,6 +326,13 @@ function AWConfigSources() {
 export default function ConfigurationView() {
   const { sectorId, setSector } = useSector()
 
+  // LLM provider status (live users only)
+  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null)
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    getLlmStatus().then(setLlmStatus).catch(() => {})
+  }, [])
+
   // Connector test states
   const [testStates, setTestStates] = useState<Record<string, TestState>>({})
   const [latencies, setLatencies] = useState<Record<string, number>>({})
@@ -395,6 +403,47 @@ export default function ConfigurationView() {
             : 'Governance rules, agent configuration, workspace settings and API tokens.'}
         </p>
       </div>
+
+      {/* Section 0: AI Provider (live users only) */}
+      {!IS_DEMO_MODE && (
+        <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+          <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
+            <Cpu className="w-4 h-4 text-teal-600" />
+            AI Provider
+          </h2>
+          <p className="text-xs text-slate-500 mb-4">
+            The LLM used for Smart Connect analysis, schema context generation, and query intent mapping.
+          </p>
+          {llmStatus === null ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking…
+            </div>
+          ) : llmStatus.configured ? (
+            <div className="flex items-center gap-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-teal-800 capitalize">
+                  {llmStatus.provider} — active
+                </p>
+                <p className="text-xs text-teal-600 font-mono mt-0.5">{llmStatus.model}</p>
+              </div>
+              <CheckCircle2 className="w-4 h-4 text-teal-500 ml-auto" />
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">No LLM configured</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Set <code className="font-mono bg-amber-100 px-1 rounded">GROQ_API_KEY</code> or{' '}
+                  <code className="font-mono bg-amber-100 px-1 rounded">ANTHROPIC_API_KEY</code> on the server to
+                  enable AI-powered analysis. Smart Connect will fall back to basic schema detection.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Section 1: Connectors */}
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
