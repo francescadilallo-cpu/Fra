@@ -1754,12 +1754,24 @@ def _live_semantic_status() -> dict[str, Any]:
     source_ids = [s.id for s in live_srcs]
 
     entities: list[str] = []
+    seen: set[str] = set()
+
+    # 1. Table names from synced live sources — each source.target_tables holds
+    #    the DuckDB table names created during ingestion (e.g. "orders").
+    for src in live_srcs:
+        for tname in src.target_tables or []:
+            bare = tname.split(".")[-1]  # strip DuckDB namespace prefix if present
+            if bare and bare not in seen:
+                seen.add(bare)
+                entities.append(bare)
+
+    # 2. Named entities the user has approved via Smart Connect or hand-built
+    #    in their ontology extension.
     conn = _ontology_ext_db()
     try:
         rows = conn.execute(
             "SELECT payload FROM ontology_extensions WHERE workspace_id LIKE 'live-%' ORDER BY updated_at DESC"
         ).fetchall()
-        seen: set[str] = set()
         for row in rows:
             try:
                 payload = json.loads(row["payload"])
