@@ -699,6 +699,9 @@ class DuckDBSourceManager:
         self._row_counts = {}
         for cfg in self._registry.list():
             try:
+                # Reset so ingesters repopulate target_tables fresh — mirrors
+                # what _ingest_incremental() does to avoid stale names.
+                cfg.target_tables = []
                 self._ingest_source(conn, cfg)
                 now = datetime.utcnow().isoformat()
                 self._registry.patch(
@@ -706,6 +709,7 @@ class DuckDBSourceManager:
                     status="active",
                     error_msg=None,
                     last_sync_at=now,
+                    target_tables=cfg.target_tables,
                     row_count=sum(
                         v
                         for k, v in self._row_counts.items()
