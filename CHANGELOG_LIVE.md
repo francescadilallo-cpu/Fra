@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-21 (session cont. 10)
+
+### Fix: first live login fails when a stale demo token is in localStorage
+
+**Root cause:** `login()` used `api.post()` which has the request interceptor that
+automatically adds `Authorization: Bearer <token>` to every request. If the user had
+a previous demo session (token still in localStorage but sessionStorage cleared), the
+login request was sent with the old token in the header. On failure the response
+interceptor's `handle401` cleared the token + fired `logout-requested` as a side
+effect. Second attempt had no stale token → worked.
+
+**Fixes:**
+- **`api/client.ts`**: `login()` now uses `axios.post` directly (bare instance, no
+  interceptors) so no stale Authorization header is ever sent, and a backend 401
+  for wrong credentials does not trigger the logout side-effect.
+- **`components/AccessGate.tsx`**: error messages now distinguish 401 (wrong
+  credentials) from 429 (rate limit), 503 (service unavailable), and network errors
+  — instead of always showing "Invalid credentials".
+
+---
+
 ## 2026-06-21 (session cont. 9)
 
 ### Polish: remaining sector.name → workspaceLabel() for live users

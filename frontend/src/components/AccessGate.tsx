@@ -27,9 +27,20 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
     try {
       await login(username.trim(), password, mode)
       onGrant()
-    } catch {
+    } catch (err: unknown) {
       setShake(true)
-      setError('Invalid credentials — please go back and try again.')
+      const status = (err as { response?: { status?: number } })?.response?.status
+      if (status === 401) {
+        setError('Username or password incorrect.')
+      } else if (status === 429) {
+        setError('Too many attempts — please wait a moment and try again.')
+      } else if (status === 503) {
+        setError('Service temporarily unavailable — please try again in a few seconds.')
+      } else if (!status) {
+        setError('Cannot reach the server — check your connection and try again.')
+      } else {
+        setError(`Login failed (${status}) — please try again.`)
+      }
       setStep('credentials')
       setPassword('')
       setTimeout(() => setShake(false), 500)

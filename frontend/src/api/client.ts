@@ -105,9 +105,15 @@ export const login = async (username: string, password: string, mode: 'demo' | '
   form.set('password', password)
   form.set('mode', mode)
 
-  const response = await api.post<LoginResponse>('/api/auth/token', form.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  })
+  // Use a bare axios instance — no Authorization header, no 401-logout interceptor.
+  // A stale or demo token in localStorage must not pollute the login request, and
+  // a backend 401 (wrong credentials) must not trigger a logout side-effect.
+  const response = await axios.post<LoginResponse>(
+    `${BASE_URL}/api/auth/token`,
+    form.toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 60_000 },
+  )
   setAuthToken(response.data.access_token)
 }
+
 
