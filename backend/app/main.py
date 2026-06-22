@@ -1877,6 +1877,131 @@ def get_source_profiles(
     return profile_only(schema_info, live_tables)
 
 
+def _generate_context_markdown(schema_info: dict) -> tuple[str, bool]:
+    """Return (markdown_doc, llm_used) describing the given tables.
+
+    Calls the LLM for plain-language descriptions; falls back to a
+    template when no provider is configured.
+    """
+    from .semantic.layer import complete_json_llm
+
+    _MAX_T = 15
+    _MAX_C = 20
+    _MAX_SAMPLE = 2
+
+    # Build a compact schema summary for the prompt
+    lines: list[str] = []
+    for tname, info in list(schema_info.items())[:_MAX_T]:
+        cols = (info.get("columns") or [])[:_MAX_C]
+        col_str = ", ".join(f"{c['name']}:{c.get('type', '')}" for c in cols)
+        lines.append(f"TABLE: {tname}\nCOLUMNS: {col_str}")
+        for i, row in enumerate((info.get("sample") or [])[:_MAX_SAMPLE], 1):
+            vals = ", ".join(f"{k}={str(v)[:30]}" for k, v in list(row.items())[:6])
+            lines.append(f"  sample{i}: {vals}")
+
+    system = (
+        "You are a data documentation specialist. For each table write: "
+        "(1) one clear sentence describing what it represents in business terms, "
+        "(2) a one-phrase description for each column. "
+        "Be plain and business-focused — avoid SQL jargon. "
+        "Respond with JSON only:\n"
+        '{"tables":[{"name":"","description":"","columns":[{"name":"","description":""}]}]}'
+    )
+    user_content = "Describe these tables:\n\n" + "\n\n".join(lines)
+
+    llm_used = False
+    table_docs: list[dict] | None = None
+    try:
+        raw = complete_json_llm(system, user_content, max_tokens=1400)
+        if raw and isinstance(raw.get("tables"), list):
+            table_docs = raw["tables"]
+            llm_used = True
+    except Exception:
+        pass
+
+    if not table_docs:
+        table_docs = [
+            {
+                "name": tname,
+                "description": f"Data table: {tname.replace('_', ' ')}.",
+                "columns": [
+                    {"name": c["name"], "description": c["name"].replace("_", " ")}
+                    for c in (info.get("columns") or [])[:_MAX_C]
+                ],
+            }
+            for tname, info in list(schema_info.items())[:_MAX_T]
+        ]
+
+    md_lines = [
+        "# Schema Context",
+        "",
+        "_Auto-generated from connected data sources — edit as needed._",
+    ]
+    for t in table_docs:
+        md_lines += [f"\n## {t['name']}", f"{t.get('description', '')}"]
+        cols = t.get("columns") or []
+        if cols:
+            md_lines += ["", "| Column | Description |", "|--------|-------------|"]
+            for col in cols:
+                md_lines.append(f"| `{col['name']}` | {col.get('description', '')} |")
+
+    return "\n".join(md_lines), llm_used
+
+
+@app.post("/api/semantic/auto-context", tags=["semantic"])
+def generate_auto_context(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Auto-generate and save a structural context doc from connected live tables.
+
+    Uses the LLM to produce plain-language table/column descriptions and saves
+    the result as a context document so the NL query engine can use it.
+    Idempotent: replaces any previously auto-generated context doc.
+    Returns ``{doc_id, title, content, llm_used}``.
+    """
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.source_registry import SourceConfig, get_source_registry
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    hidden = _hidden_demo_tables(current_user)
+    try:
+        schema_info = mgr.get_schema_info()
+    except Exception:
+        return {"doc_id": None, "content": "", "llm_used": False}
+
+    live_tables = {t: v for t, v in schema_info.items() if t not in hidden}
+    if not live_tables:
+        return {"doc_id": None, "content": "", "llm_used": False}
+
+    content, llm_used = _generate_context_markdown(live_tables)
+
+    # Remove any previous auto-generated context doc (idempotent)
+    registry = get_source_registry()
+    for src in registry.list():
+        if src.connector_type == "context_doc" and src.label.startswith("[Auto] "):
+            try:
+                registry.remove(src.id)
+            except Exception:
+                pass
+
+    doc_id = f"auto_ctx_{datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')}"
+    title = "[Auto] Schema Context"
+    registry.upsert(
+        SourceConfig(
+            id=doc_id,
+            connector_type="context_doc",
+            label=title,
+            params={"content": content},
+            target_tables=[],
+            status="active",
+        )
+    )
+    _sync_context_docs_to_layer()
+    _bump_semantic_cache_namespace()
+
+    return {"doc_id": doc_id, "title": title, "content": content, "llm_used": llm_used}
+
+
 @app.post("/api/semantic/ask")
 @limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def semantic_ask(

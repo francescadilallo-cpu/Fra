@@ -11,7 +11,7 @@
 
 import { useState, useCallback } from 'react'
 import { Sparkles, Loader2, CheckCircle2, ChevronRight, BarChart2, Link2, Box, AlertCircle, RotateCcw } from 'lucide-react'
-import { analyzeSources, createMetric, addRelation, type AnalyzeResult, type EntityProposal, type MetricProposal, type RelationProposal } from '../api/semantic'
+import { analyzeSources, createMetric, addRelation, generateAutoContext, type AnalyzeResult, type EntityProposal, type MetricProposal, type RelationProposal } from '../api/semantic'
 import { loadExtension, saveExtension } from '../data/ontologyExtensions'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -243,6 +243,8 @@ export default function SmartConnectPanel({ sectorId, onApplied }: Props) {
     window.dispatchEvent(new CustomEvent('ontology-entity-added'))
     window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
     onApplied?.()
+    // Fire-and-forget: generate plain-language schema context for the NL query engine
+    generateAutoContext().catch(() => { /* non-critical */ })
   }, [result, selEntities, selMetrics, selRelations, sectorId, onApplied])
 
   // ── Toggle helpers ────────────────────────────────────────────────────────

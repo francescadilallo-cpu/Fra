@@ -10,6 +10,37 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Smart Connect — Step 5: structural context auto-generated)
+
+When the user applies Smart Connect proposals, the backend silently generates a
+plain-language schema context document from all connected live tables and saves
+it as a `context_doc` in the registry. This doc is immediately synced into the
+NL query engine prompt so AI queries understand the user's data vocabulary.
+
+### Backend
+
+- **`main.py`**: added `_generate_context_markdown(schema_info)` helper — builds
+  LLM prompt from table schemas + sample rows, calls `complete_json_llm()` to
+  produce per-table and per-column descriptions, formats as Markdown.
+  Falls back to a template (`Data table: {name}` / column name humanization)
+  when no LLM key is configured.
+- **`main.py`**: new `POST /api/semantic/auto-context` endpoint — gets live
+  tables (excluding demo tables), generates context markdown, removes any
+  previous `[Auto]` context doc from the registry, saves the new one as
+  `connector_type="context_doc"` with id `auto_ctx_{timestamp}`, then calls
+  `_sync_context_docs_to_layer()` + `_bump_semantic_cache_namespace()` to make
+  it immediately available.
+
+### Frontend
+
+- **`api/semantic.ts`**: added `generateAutoContext()` — `POST
+  /api/semantic/auto-context`. Returns `{doc_id, title, content, llm_used}`.
+- **`components/SmartConnectPanel.tsx`**: fire-and-forget call to
+  `generateAutoContext()` at the end of `applyProposals()`, after the done
+  state is set — non-critical, errors are swallowed so they never block the UI.
+
+---
+
 ## 2026-06-22 (Smart Connect — Step 4: quality inline at source connection)
 
 Data quality profile shown automatically in the Connected Sources panel — no

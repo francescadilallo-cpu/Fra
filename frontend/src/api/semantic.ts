@@ -213,6 +213,17 @@ export const analyzeSources = (): Promise<AnalyzeResult> =>
 export const getSourceProfiles = (): Promise<Record<string, TableProfile>> =>
   http.get<Record<string, TableProfile>>('/api/semantic/profiles').then(r => r.data)
 
+export interface AutoContextResult {
+  doc_id: string | null
+  title: string
+  content: string
+  llm_used: boolean
+}
+
+/** Generate and save auto-context doc describing tables in plain language. */
+export const generateAutoContext = (): Promise<AutoContextResult> =>
+  http.post<AutoContextResult>('/api/semantic/auto-context').then(r => r.data)
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 export const getMetrics = (sectorId = 'manufacturing'): Promise<BackendMetric[]> =>
