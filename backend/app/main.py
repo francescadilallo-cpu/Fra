@@ -1751,7 +1751,7 @@ def _live_semantic_status() -> dict[str, Any]:
     from .connectors.source_registry import get_source_registry
 
     live_srcs = [s for s in get_source_registry().list() if not s.is_default]
-    source_ids = [s.source_id for s in live_srcs]
+    source_ids = [s.id for s in live_srcs]
 
     entities: list[str] = []
     conn = _ontology_ext_db()
