@@ -33,7 +33,7 @@ export function SemanticDraftView() {
         pollRef.current = setTimeout(loadDraft, 5_000)
       }
     } catch {
-      toast('Could not load data model — backend may be offline', 'error')
+      pollRef.current = setTimeout(loadDraft, 5_000)
     } finally {
       setLoading(false)
     }

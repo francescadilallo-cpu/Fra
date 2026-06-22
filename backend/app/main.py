@@ -1742,11 +1742,57 @@ def _semantic_status_payload(hidden: frozenset[str] = frozenset()) -> dict[str, 
     }
 
 
+def _live_semantic_status() -> dict[str, Any]:
+    """Build semantic status for live users without loading the demo KG.
+
+    Live users have their own sources in the registry and their own entities in
+    the ontology_extensions table — the demo KG is irrelevant to them.
+    """
+    from .connectors.source_registry import get_source_registry
+
+    live_srcs = [s for s in get_source_registry().list() if not s.is_default]
+    source_ids = [s.source_id for s in live_srcs]
+
+    entities: list[str] = []
+    conn = _ontology_ext_db()
+    try:
+        rows = conn.execute(
+            "SELECT payload FROM ontology_extensions WHERE workspace_id LIKE 'live-%' ORDER BY updated_at DESC"
+        ).fetchall()
+        seen: set[str] = set()
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+                for node in payload.get("nodes", []):
+                    name = node.get("label") or node.get("id", "")
+                    if name and name not in seen:
+                        seen.add(name)
+                        entities.append(name)
+            except (ValueError, TypeError):
+                pass
+    finally:
+        conn.close()
+
+    return {
+        "loaded": bool(live_srcs) or bool(entities),
+        "entities": entities,
+        "kg_nodes": 0,
+        "kg_edges": 0,
+        "metadata_rows": 0,
+        "sources": source_ids,
+        "dedup_count": 0,
+    }
+
+
 @app.get("/api/semantic/status")
 def semantic_status(
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> dict[str, Any]:
     """Return the current status of the semantic layer (loaded/not loaded)."""
+    # Live users have their own workspace data — skip the demo KG entirely so
+    # we don't load 200-300 MB of demo data into a memory-constrained server.
+    if current_user.mode == "live":
+        return _live_semantic_status()
     # Build the stack if this is the first semantic call after a restart —
     # otherwise a freshly-booted backend answers loaded=false/0 entities and
     # the dashboard shows "Not built yet" even though all the data is there.
@@ -2331,6 +2377,9 @@ def semantic_sources(
     current_user: UserPrincipal = Depends(require_roles("user", "admin")),
 ) -> list[dict[str, Any]]:
     """Return real data source metadata with freshness."""
+    # Live users have no demo tables — skip demo KG load entirely.
+    if current_user.mode == "live":
+        return []
     _ensure_semantic_loaded()
     mgr = _semantic_state.get("mgr")
     hidden = _hidden_demo_tables(current_user)

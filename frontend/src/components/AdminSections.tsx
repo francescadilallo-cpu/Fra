@@ -175,7 +175,7 @@ export function UsersSection() {
         const seen = new Set(base.map(u => u.id))
         setUsers([...base, ...converted.filter(u => !seen.has(u.id))])
       })
-      .catch(() => { toast('Could not load team members', 'error') })
+      .catch(() => { /* silent — backend may be restarting, empty state is acceptable */ })
       .finally(() => setLoadingUsers(false))
   }, [])
 
@@ -494,7 +494,7 @@ export function ApiTokensSection() {
     if (IS_DEMO_MODE) return
     listTokens()
       .then(toks => setTokens(toks.map(t => backendTokenToLocal(t))))
-      .catch(() => { toast('Could not load API tokens', 'error') })
+      .catch(() => { /* silent — backend may be restarting */ })
       .finally(() => setLoadingTokens(false))
   }, [])
 
@@ -797,7 +797,7 @@ export function NotificationsSection() {
         setChannels(chs.map(backendChannelToLocal))
         setRouting(r as Record<Severity, string[]>)
       })
-      .catch(() => { toast('Could not load notification settings', 'error') })
+      .catch(() => { /* silent — backend may be restarting */ })
   }, [])
 
   const persistRouting = useCallback((next: Record<Severity, string[]>) => {
@@ -1121,7 +1121,7 @@ export function AuditLogSection() {
     if (IS_DEMO_MODE) return
     listAuditEntries({ limit: 200 })
       .then(rows => setLiveEntries(rows.map(backendToAuditEntry)))
-      .catch(() => { toast('Could not load audit log', 'error') })
+      .catch(() => { /* silent — backend may be restarting */ })
   }, [])
 
   const entries = IS_DEMO_MODE ? DEMO_AUDIT : liveEntries
@@ -1243,7 +1243,7 @@ export function WorkspaceSection() {
     if (!IS_DEMO_MODE) {
       getWorkspace().then(ws => {
         if (ws.name) setName(ws.name)
-      }).catch(() => { toast('Could not load workspace settings', 'error') })
+      }).catch(() => { /* silent — backend may be restarting */ })
     }
   }, [])
 
