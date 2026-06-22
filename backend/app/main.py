@@ -1142,25 +1142,29 @@ async def lifespan(app: FastAPI):
 
     get_source_manager(_SCENARIO_PATH)
 
-    # Kick off the semantic stack build in a background thread so the server
-    # starts accepting traffic immediately (passes the platform health check)
-    # rather than blocking in the lifespan until the KG is ready.  When the
-    # first semantic request arrives it either finds the stack already loaded
-    # (fast path) or waits briefly for the background thread to finish
-    # (the _semantic_init_lock ensures only one build ever runs).
-    def _background_warmup() -> None:
-        try:
-            _ensure_semantic_loaded()
-        except Exception as exc:
-            logger.error(
-                "Background semantic stack warmup failed: %s", exc, exc_info=True
-            )
+    # FRA_SKIP_WARMUP=true disables the background KG build at startup.
+    # Useful on memory-constrained deployments (e.g. Render Starter 512 MB):
+    # the demo KG (~200-300 MB) will be built lazily on the first query
+    # instead of immediately consuming RAM on every boot.
+    if os.getenv("FRA_SKIP_WARMUP", "").strip().lower() not in ("1", "true", "yes"):
 
-    import threading as _threading  # noqa: PLC0415
+        def _background_warmup() -> None:
+            try:
+                _ensure_semantic_loaded()
+            except Exception as exc:
+                logger.error(
+                    "Background semantic stack warmup failed: %s", exc, exc_info=True
+                )
 
-    _threading.Thread(
-        target=_background_warmup, daemon=True, name="semantic-warmup"
-    ).start()
+        import threading as _threading  # noqa: PLC0415
+
+        _threading.Thread(
+            target=_background_warmup, daemon=True, name="semantic-warmup"
+        ).start()
+    else:
+        logger.info(
+            "FRA_SKIP_WARMUP is set — demo KG warmup skipped (lazy load on first query)"
+        )
 
     yield
 
