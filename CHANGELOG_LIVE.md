@@ -10,6 +10,40 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Smart Connect — Step 1: proposal engine)
+
+First step of the Fase 1 "Smart Connect" rebuild: turn a connected raw data
+source into a *proposed* business data model the user can review and approve,
+instead of building entities/metrics by hand.
+
+### Backend — proposal engine (read-only, persists nothing)
+
+- **`semantic/analyzer.py`** (new): profiles each connected table from the sample
+  rows already fetched by `get_schema_info()` (null rates, distinct-in-sample,
+  primary-key candidates, a 0–100 quality score), then asks the LLM to propose
+  entities (business name + description + PK), 3–6 business metrics (with SQL
+  formulas), and foreign-key relations. Output is validated/clamped to a strict
+  contract; phantom tables, self-relations and empty metrics are dropped.
+  Degrades gracefully to a deterministic one-entity-per-table fallback when no
+  LLM provider is configured.
+- **`semantic/layer.py`**: added `complete_json_llm()` — a public, provider-
+  agnostic JSON completion wrapper (Groq preferred, Anthropic fallback) reusing
+  the existing dispatch, so the analyzer doesn't duplicate transport logic.
+- **`main.py`**: new `POST /api/semantic/analyze`. Reads only the caller's live
+  tables (demo tables filtered out), so it stays light on memory — never loads
+  the demo KG. Returns `{tables, proposal, llm_used, source_count}`.
+
+### Frontend — typed client (UI lands in Step 2)
+
+- **`api/semantic.ts`**: `analyzeSources()` plus full TypeScript types
+  (`AnalyzeResult`, `EntityProposal`, `MetricProposal`, `RelationProposal`,
+  `TableProfile`, `ColumnProfile`).
+
+Next (Step 2): a "Review & Approve" screen that renders these proposals with
+confidence scores and lets the user approve/edit/discard before applying.
+
+---
+
 ## 2026-06-21 (session cont. 10)
 
 ### Fix: first live login fails when a stale demo token is in localStorage

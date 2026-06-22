@@ -152,6 +152,63 @@ export const semanticStatus = (): Promise<SemanticStatus> =>
 export const semanticSources = (): Promise<BackendSource[]> =>
   http.get<BackendSource[]>('/api/semantic/sources').then(r => r.data)
 
+// ── Smart Connect (analyze → propose → approve) ────────────────────────────────
+
+export interface ColumnProfile {
+  name: string
+  type: string
+  null_rate: number
+  distinct_in_sample: number
+  looks_unique: boolean
+}
+
+export interface TableProfile {
+  row_count: number
+  column_count: number
+  columns: ColumnProfile[]
+  high_null_columns: string[]
+  quality_score: number
+}
+
+export interface EntityProposal {
+  table: string
+  name: string
+  description: string
+  primary_key: string
+  confidence: number
+}
+
+export interface MetricProposal {
+  name: string
+  description: string
+  formula: string
+  unit: string
+  confidence: number
+}
+
+export interface RelationProposal {
+  from_table: string
+  to_table: string
+  via_column: string
+  description: string
+  confidence: number
+}
+
+export interface AnalyzeResult {
+  tables: Record<string, TableProfile>
+  proposal: {
+    entities: EntityProposal[]
+    metrics: MetricProposal[]
+    relations: RelationProposal[]
+  }
+  llm_used: boolean
+  source_count: number
+}
+
+/** Profile connected sources and get an AI-proposed data model for review. */
+export const analyzeSources = (): Promise<AnalyzeResult> =>
+  http.post<AnalyzeResult>('/api/semantic/analyze').then(r => r.data)
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 export const getMetrics = (sectorId = 'manufacturing'): Promise<BackendMetric[]> =>

@@ -1800,6 +1800,45 @@ def semantic_status(
     return _semantic_status_payload(_hidden_demo_tables(current_user))
 
 
+@app.post("/api/semantic/analyze", tags=["semantic"])
+def analyze_connected_sources(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Smart Connect: profile the caller's connected sources and propose a data
+    model (entities, metrics, relations) for review.
+
+    Read-only — persists nothing. The user reviews the proposals and applies the
+    subset they want via the apply endpoint. Reads only the live tables (demo
+    tables are filtered out) so it stays light on memory.
+    """
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .semantic.analyzer import analyze
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    hidden = _hidden_demo_tables(current_user)
+    try:
+        schema_info = mgr.get_schema_info()
+    except Exception as exc:
+        logger.error("Smart Connect: schema discovery failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not read your data sources — please retry in a moment.",
+        ) from exc
+
+    live_tables = [t for t in schema_info if t not in hidden]
+    if not live_tables:
+        return {
+            "tables": {},
+            "proposal": {"entities": [], "metrics": [], "relations": []},
+            "llm_used": False,
+            "source_count": 0,
+        }
+
+    result = analyze(schema_info, live_tables)
+    result["source_count"] = len(live_tables)
+    return result
+
+
 @app.post("/api/semantic/ask")
 @limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def semantic_ask(

@@ -361,6 +361,26 @@ def _extract_json_payload(text: str) -> dict[str, Any]:
     raise ValueError("Could not parse JSON payload from model output")
 
 
+def complete_json_llm(
+    system_prompt: str, user_content: str, max_tokens: int = 800
+) -> dict[str, Any] | None:
+    """Provider-agnostic JSON completion used by Smart Connect analysis.
+
+    Picks the configured provider (Groq preferred, Anthropic fallback), runs a
+    JSON-mode completion, and returns the parsed object. Returns ``None`` when
+    no LLM provider is configured so callers can degrade gracefully. Raises on
+    provider/transport errors or unparseable output.
+    """
+    provider = _llm_intent_provider()
+    if provider is None:
+        return None
+    if provider == "groq":
+        raw_text = _complete_json_via_groq(system_prompt, user_content, max_tokens)
+    else:
+        raw_text = _complete_json_via_anthropic(system_prompt, user_content, max_tokens)
+    return _extract_json_payload(raw_text)
+
+
 # ── Rule-based intent parser ──────────────────────────────────────────────────
 
 
