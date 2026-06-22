@@ -115,3 +115,23 @@ export const updateAgent = (id: string, agent: CustomAgentDef): Promise<CustomAg
 
 export const deleteAgentRemote = (id: string): Promise<void> =>
   http.delete(`/api/agents/custom/${encodeURIComponent(id)}`).then(() => undefined)
+
+// ── External agent integration ─────────────────────────────────────────────────
+
+export interface WebhookLogEntry {
+  ts: string
+  caller: string
+  question: string
+}
+
+export interface AgentToolDef {
+  name: string
+  description: string
+  input_schema: Record<string, unknown>
+}
+
+export const getWebhookLog = (): Promise<WebhookLogEntry[]> =>
+  http.get<WebhookLogEntry[]>('/api/webhooks/recent').then(r => r.data)
+
+export const getAgentTools = (): Promise<AgentToolDef[]> =>
+  http.get<AgentToolDef[]>('/api/agents/tools').then(r => r.data)

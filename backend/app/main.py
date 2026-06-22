@@ -2254,6 +2254,115 @@ def get_llm_status(
     return {"provider": provider, "model": model, "configured": provider is not None}
 
 
+# ── External agent integration ───────────────────────────────────────────────
+
+_WEBHOOK_LOG: list[dict[str, Any]] = []
+_WEBHOOK_LOG_LOCK = threading.Lock()
+_WEBHOOK_LOG_MAX = 50
+
+
+def _webhook_log_append(caller: str, question: str) -> None:
+    with _WEBHOOK_LOG_LOCK:
+        _WEBHOOK_LOG.append(
+            {
+                "ts": datetime.utcnow().isoformat(),
+                "caller": caller,
+                "question": question[:200],
+            }
+        )
+        if len(_WEBHOOK_LOG) > _WEBHOOK_LOG_MAX:
+            _WEBHOOK_LOG.pop(0)
+
+
+@app.get("/api/agents/tools", tags=["agents"])
+def get_agent_tools(
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """Return Anthropic/OpenAI-compatible tool definitions for this workspace.
+
+    External agents can fetch this manifest and pass it directly to an LLM's
+    ``tools`` parameter so the model can call our query and metadata endpoints
+    automatically.
+    """
+    return [
+        {
+            "name": "query_data",
+            "description": (
+                "Query business data in natural language. Returns structured rows, "
+                "a human-readable summary, and the SQL used. Supports follow-up "
+                "questions via session_id."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "Natural language question about your data",
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Optional session ID to maintain conversation context across calls",
+                    },
+                },
+                "required": ["question"],
+            },
+        },
+        {
+            "name": "list_entities",
+            "description": "List all data entities (tables) available in the workspace with row counts and column names.",
+            "input_schema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "get_metrics",
+            "description": "Get all business metrics defined in the data model, including their SQL formulas.",
+            "input_schema": {"type": "object", "properties": {}},
+        },
+    ]
+
+
+class WebhookQueryRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    session_id: str | None = Field(default=None, max_length=128)
+
+
+@app.post("/api/webhooks/query", tags=["webhooks"])
+@limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
+def webhook_query(
+    request: Request,
+    body: WebhookQueryRequest,
+    current_user: UserPrincipal = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Webhook endpoint for external agent data queries.
+
+    Accepts the same auth as the main API (JWT or API bearer token).
+    Delegates to the semantic ask pipeline and returns a simplified payload
+    suitable for external agent consumption.
+    """
+    _webhook_log_append(
+        current_user.email or current_user.user_id or "api", body.question
+    )
+    ask_req = SemanticAskRequest(question=body.question, session_id=body.session_id)
+    response = semantic_ask(request, ask_req, current_user)
+    return {
+        "answer": response.answer,
+        "summary": str(response.answer) if response.answer is not None else "",
+        "sql_used": response.sql_used,
+        "sources_touched": response.sources_touched,
+        "latency_ms": response.latency_ms,
+        "disambiguation_required": response.disambiguation_required,
+        "candidates": response.candidates,
+    }
+
+
+@app.get("/api/webhooks/recent", tags=["webhooks"])
+def get_recent_webhooks(
+    _current_user: UserPrincipal = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """Return the most recent webhook calls (newest first)."""
+    with _WEBHOOK_LOG_LOCK:
+        return list(reversed(_WEBHOOK_LOG))
+
+
 # ── KG rebuild (admin) ────────────────────────────────────────────────────────
 
 

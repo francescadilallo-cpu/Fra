@@ -4,6 +4,7 @@ import {
   TrendingUp, ShieldCheck, Package, Users, BarChart3,
   Activity, RefreshCw, Eye, FileText, Heart, CreditCard, CheckCircle2,
   Bell, Sparkles, Plus, Trash2, Clock, Download, Loader2,
+  Globe, Copy, Link2, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS } from '../data/sectors'
@@ -11,8 +12,8 @@ import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getAuthToken } from '../api/client'
-import { executeAgentCommand, approveAgentAction, listAgentActions } from '../api/agents'
-import type { AgentAction } from '../api/agents'
+import { executeAgentCommand, approveAgentAction, listAgentActions, getWebhookLog } from '../api/agents'
+import type { AgentAction, WebhookLogEntry } from '../api/agents'
 import { getLiveConfig, backendErrorMessage, type LiveConfig } from '../api/semantic'
 import { loadExtension } from '../data/ontologyExtensions'
 import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
@@ -1130,6 +1131,48 @@ function ExecutiveActionsPanel() {
   )
 }
 
+// ── Integration code snippets ─────────────────────────────────────────────────
+
+function IntegrationSnippets({ snippets, copiedKey, onCopy }: {
+  snippets: Record<string, string>
+  copiedKey: string | null
+  onCopy: (text: string, key: string) => void
+}) {
+  const tabs = Object.keys(snippets)
+  const [activeTab, setActiveTab] = useState(tabs[0])
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <div className="flex border-b border-slate-100 bg-slate-50">
+        {tabs.map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-xs font-medium transition-colors ${
+              activeTab === tab
+                ? 'text-teal-700 border-b-2 border-teal-500 bg-white'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+        <button
+          onClick={() => onCopy(snippets[activeTab], `snippet-${activeTab}`)}
+          className="ml-auto px-3 flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-600 transition-colors"
+          title="Copy snippet"
+        >
+          {copiedKey === `snippet-${activeTab}`
+            ? <><CheckCircle2 className="w-3 h-3 text-teal-500" /> Copied</>
+            : <><Copy className="w-3 h-3" /> Copy</>}
+        </button>
+      </div>
+      <pre className="bg-slate-900 text-slate-200 text-[11px] font-mono p-4 overflow-x-auto leading-relaxed max-h-56 overflow-y-auto">
+        {snippets[activeTab]}
+      </pre>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AgentsView() {
   const { sectorId } = useSector()
@@ -1142,6 +1185,22 @@ export default function AgentsView() {
   const customAgentsDefs = useCustomAgents(sectorId)
   const [liveConfig, setLiveConfig] = useState<LiveConfig | null>(null)
   useEffect(() => { if (!IS_DEMO_MODE) getLiveConfig().then(setLiveConfig).catch(() => {}) }, [])
+
+  const [webhookLog, setWebhookLog] = useState<WebhookLogEntry[]>([])
+  const [showIntegrations, setShowIntegrations] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (!showIntegrations || IS_DEMO_MODE) return
+    getWebhookLog().then(setWebhookLog).catch(() => {})
+    const id = setInterval(() => getWebhookLog().then(setWebhookLog).catch(() => {}), 10_000)
+    return () => clearInterval(id)
+  }, [showIntegrations])
+
+  function copyText(text: string, key: string) {
+    navigator.clipboard.writeText(text).catch(() => {})
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), 1500)
+  }
   useEffect(() => {
     if (IS_DEMO_MODE) return
     const refresh = () => getLiveConfig().then(setLiveConfig).catch(() => {})
@@ -1747,6 +1806,128 @@ export default function AgentsView() {
               ))
             )}
           </div>
+
+          {/* External Integrations */}
+          {!IS_DEMO_MODE && (() => {
+            const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000'
+            const webhookUrl = `${BASE}/api/webhooks/query`
+            const toolsUrl = `${BASE}/api/agents/tools`
+            const pythonSnippet = `import requests
+
+headers = {"Authorization": "Bearer YOUR_API_TOKEN"}
+
+# Ask a question
+res = requests.post(
+    "${webhookUrl}",
+    json={"question": "What is total revenue this year?"},
+    headers=headers,
+)
+print(res.json()["answer"])
+
+# Follow-up in the same session
+res2 = requests.post(
+    "${webhookUrl}",
+    json={"question": "Break it down by product category",
+          "session_id": res.json().get("session_id", "my-session")},
+    headers=headers,
+)
+print(res2.json()["answer"])`
+            const claudeSnippet = `import anthropic, requests
+
+headers = {"Authorization": "Bearer YOUR_API_TOKEN"}
+tools = requests.get("${toolsUrl}", headers=headers).json()
+
+client = anthropic.Anthropic()
+response = client.messages.create(
+    model="claude-opus-4-8",
+    max_tokens=1024,
+    tools=tools,
+    messages=[{"role": "user",
+               "content": "What were the top 5 customers by revenue?"}],
+)
+print(response.content)`
+            const snippets: Record<string, string> = { Python: pythonSnippet, 'Claude Agent': claudeSnippet }
+            return (
+              <section className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                <button
+                  onClick={() => setShowIntegrations(v => !v)}
+                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Globe className="w-4 h-4 text-teal-600" />
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-slate-800">External Integrations</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Webhook endpoint · OpenAI/Anthropic tool manifest · code snippets
+                      </p>
+                    </div>
+                  </div>
+                  {showIntegrations
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </button>
+
+                {showIntegrations && (
+                  <div className="border-t border-slate-100 px-5 py-4 space-y-5">
+                    {/* Endpoints */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {[
+                        { label: 'Webhook query endpoint', method: 'POST', url: webhookUrl, key: 'wh' },
+                        { label: 'Tool manifest (OpenAI/Anthropic)', method: 'GET', url: toolsUrl, key: 'tm' },
+                      ].map(ep => (
+                        <div key={ep.key} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <p className="text-xs font-semibold text-slate-700">{ep.label}</p>
+                            <button
+                              onClick={() => copyText(ep.url, ep.key)}
+                              className="text-slate-400 hover:text-teal-600 transition-colors flex-shrink-0"
+                              title="Copy URL"
+                            >
+                              {copiedKey === ep.key
+                                ? <CheckCircle2 className="w-3.5 h-3.5 text-teal-500" />
+                                : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold font-mono bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded flex-shrink-0">
+                              {ep.method}
+                            </span>
+                            <code className="text-[11px] font-mono text-slate-600 truncate">{ep.url}</code>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Code snippets */}
+                    <IntegrationSnippets snippets={snippets} copiedKey={copiedKey} onCopy={copyText} />
+
+                    {/* Recent webhook calls */}
+                    {webhookLog.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                          <Link2 className="w-3 h-3" /> Recent calls ({webhookLog.length})
+                        </p>
+                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                          {webhookLog.slice(0, 8).map((entry, i) => (
+                            <div key={i} className="flex items-center gap-3 px-3 py-2 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                              <span className="text-[10px] font-mono text-slate-400 flex-shrink-0 w-20">
+                                {new Date(entry.ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </span>
+                              <span className="text-[10px] text-slate-400 flex-shrink-0 w-24 truncate">{entry.caller}</span>
+                              <span className="text-xs text-slate-700 truncate">{entry.question}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!IS_DEMO_MODE && webhookLog.length === 0 && (
+                      <p className="text-xs text-slate-400 italic">No webhook calls yet — calls from external agents will appear here.</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )
+          })()}
         </div>
       </div>
     </div>

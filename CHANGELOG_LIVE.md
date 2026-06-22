@@ -10,6 +10,42 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Step 7: Integration with external agents)
+
+Makes the platform callable by external AI agents (Claude, GPT, n8n, custom
+code) so it can be embedded as a data intelligence tool inside any agent loop.
+
+### Backend (`main.py`)
+
+- **In-memory webhook call log** (`_WEBHOOK_LOG`, max 50 entries, thread-safe)
+  with `_webhook_log_append()` helper.
+- **`GET /api/agents/tools`** — returns an Anthropic/OpenAI-compatible tool
+  manifest (array of tool definitions: `query_data`, `list_entities`,
+  `get_metrics`). External agents fetch this URL and pass the result directly
+  to an LLM's `tools` parameter.
+- **`POST /api/webhooks/query`** — simplified data query endpoint for external
+  agents. Accepts `{question, session_id?}` with any valid auth (JWT or API
+  bearer token), delegates to the semantic ask pipeline, logs the call, and
+  returns `{answer, summary, sql_used, sources_touched, latency_ms, …}`.
+- **`GET /api/webhooks/recent`** — returns last 50 webhook calls (newest
+  first), for display in the Integrations panel.
+
+### Frontend
+
+- **`api/agents.ts`**: added `WebhookLogEntry`, `AgentToolDef` interfaces,
+  `getWebhookLog()`, `getAgentTools()` API wrappers.
+- **`components/AgentsView.tsx`**: new "External Integrations" collapsible
+  section at the bottom of the Agent Orchestration page (live users only):
+  - Two endpoint URL cards (webhook query + tool manifest) with copy buttons.
+  - Code snippet panel with tabs: **Python** (direct REST call with
+    follow-up session) and **Claude Agent** (fetch tools manifest, pass to
+    `client.messages.create`).
+  - Live "Recent calls" table — auto-refreshes every 10 s while the panel is
+    open.
+  - `IntegrationSnippets` sub-component for the tabbed snippet view.
+
+---
+
 ## 2026-06-22 (Step 6: Easy config + conversational AI)
 
 Two features that together make the product feel like a proper AI assistant for
