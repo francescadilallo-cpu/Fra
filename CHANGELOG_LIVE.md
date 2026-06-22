@@ -10,6 +10,49 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (UX rebuild — Phase 1: navigation + progress spine)
+
+First phase of the UX rebuild that turns the 13-tab cockpit into a guided
+journey. Goal: make the platform usable, user-friendly, and sellable by giving
+new users an obvious path rather than a flat feature list.
+
+### New — shared journey progress (`data/journeyProgress.ts`)
+
+- **`useJourneyProgress()`** hook — single source of truth for the four
+  activation milestones: **Connect → Build → Ask → Automate**. Detection is
+  derived from real state: registered (non-default) sources, `semanticStatus`
+  loaded, agent runs, and a localStorage flag for "asked a question".
+  Refreshes on `pipeline-run-updated` and `journey-progress-updated` events.
+- **`markQuestionAsked()`** — called from QueryInterface when a user sends a
+  question, advancing the "Ask" milestone.
+
+### Sidebar restructure (`components/Layout.tsx`)
+
+- The 13 tabs are regrouped from 6 flat sections into **5 value stages** that
+  match the buyer's mental model: **Connect · Model · Ask · Automate · Govern**
+  (plus Home and, in demo, Use Cases).
+- **Collapsible stages** with persisted state (`si-nav-collapsed`). Advanced
+  stages (Model, Govern) collapse by default — progressive disclosure keeps the
+  first run uncluttered. The stage containing the active tab always stays open.
+- **Persistent progress spine** at the top of the nav: a "Getting started X/4"
+  bar with the next action always one click away ("Next: Connect data →"), and
+  a "You're all set" state when complete.
+- Stage headers show a teal check once their milestone is done.
+
+### Deep-linkable tabs (`App.tsx`)
+
+- The active tab now syncs to the URL hash (`#/query`, `#/sources`, …) via
+  `history.replaceState`, and a `hashchange` listener restores it — so tabs are
+  shareable and the browser back/forward buttons navigate between them. Initial
+  tab is read from the hash on load (post-onboarding redirect still wins).
+
+### Wiring (`components/QueryInterface.tsx`)
+
+- `sendMessage()` calls `markQuestionAsked()` so the spine advances the moment
+  the user asks their first question.
+
+---
+
 ## 2026-06-22 (Step 8: Multi-agent workflow orchestration)
 
 Users can now define and run multi-step agent workflows where each step is a

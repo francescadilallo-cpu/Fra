@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, Briefcase, Network, BookOpenCheck, Sparkles, Database } from 'lucide-react'
+import { LayoutDashboard, GitBranch, MessageSquare, Table2, Workflow, Presentation, Settings, ChevronDown, ChevronRight, Brain, Wand2, BotMessageSquare, Command, Plug, ShieldCheck, LogOut, Building2, Plus, Trash2, Check, CheckCircle2, ArrowRight, Briefcase, Network, BookOpenCheck, Sparkles, Database } from 'lucide-react'
 import { listCompanies, getCurrentCompanyId, switchToCompany, deleteCompany, type Company } from '../data/companies'
 import type { NavTab } from '../types'
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { useAgentStore, countFindings } from '../data/agentStore'
+import { useJourneyProgress, type JourneyProgress } from '../data/journeyProgress'
 import CommandPalette from './CommandPalette'
 import { showConfirm } from './ConfirmDialog'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
@@ -16,39 +17,119 @@ interface Props {
   children: ReactNode
 }
 
-const NEW_BADGE_TABS: Partial<Record<NavTab, string>> = {}
+// ── Navigation: five value stages mapping the user's journey ──────────────────
+// The 13 features are grouped into the buyer's mental model rather than a flat
+// list. Each stage maps (where applicable) to a journey milestone so the stage
+// header can show a completion check. Advanced stages collapse by default.
 
-type NavEntry =
-  | { kind: 'item'; id: NavTab; label: string; icon: typeof LayoutDashboard }
-  | { kind: 'section'; label: string }
+type NavItemDef = { id: NavTab; label: string; icon: typeof LayoutDashboard }
 
-const NAV_ENTRIES: NavEntry[] = [
-  { kind: 'section', label: 'Start' },
-  { kind: 'item', id: 'overview',    label: 'Overview',          icon: Presentation },
+interface NavStage {
+  id: 'connect' | 'model' | 'ask' | 'automate' | 'govern'
+  label: string
+  items: NavItemDef[]
+}
 
-  { kind: 'section', label: 'Connect' },
-  { kind: 'item', id: 'sources',     label: 'Data Sources',      icon: Plug },
-  { kind: 'item', id: 'data',        label: 'Data Explorer',     icon: Table2 },
-
-  { kind: 'section', label: 'Build' },
-  { kind: 'item', id: 'ontology',    label: 'Entity Graph',      icon: GitBranch },
-  { kind: 'item', id: 'builder',     label: 'Builder AI',        icon: Wand2 },
-  { kind: 'item', id: 'sembuilder',  label: 'Data Model',        icon: Network },
-  { kind: 'item', id: 'context',    label: 'Context',           icon: BookOpenCheck },
-
-  { kind: 'section', label: 'Query & Act' },
-  { kind: 'item', id: 'query',       label: 'Query AI',          icon: MessageSquare },
-  { kind: 'item', id: 'agents',      label: 'Agents',            icon: BotMessageSquare },
-
-  { kind: 'section', label: 'Monitor' },
-  { kind: 'item', id: 'dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
-  { kind: 'item', id: 'compliance',  label: 'Compliance',        icon: ShieldCheck },
-
-  { kind: 'section', label: 'More' },
-  { kind: 'item', id: 'usecases',    label: 'Use Cases',         icon: Briefcase },
-  { kind: 'item', id: 'process',     label: 'Setup',             icon: Workflow },
-  { kind: 'item', id: 'config',      label: 'Configuration',     icon: Settings },
+const NAV_STAGES: NavStage[] = [
+  {
+    id: 'connect',
+    label: 'Connect',
+    items: [
+      { id: 'sources', label: 'Data Sources',  icon: Plug },
+      { id: 'data',    label: 'Data Explorer',  icon: Table2 },
+    ],
+  },
+  {
+    id: 'model',
+    label: 'Model',
+    items: [
+      { id: 'ontology',   label: 'Entity Graph', icon: GitBranch },
+      { id: 'builder',    label: 'Builder AI',   icon: Wand2 },
+      { id: 'sembuilder', label: 'Data Model',   icon: Network },
+      { id: 'context',    label: 'Context',      icon: BookOpenCheck },
+      { id: 'process',    label: 'Setup',        icon: Workflow },
+    ],
+  },
+  {
+    id: 'ask',
+    label: 'Ask',
+    items: [
+      { id: 'query',     label: 'Query AI',  icon: MessageSquare },
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    id: 'automate',
+    label: 'Automate',
+    items: [
+      { id: 'agents', label: 'Agents', icon: BotMessageSquare },
+    ],
+  },
+  {
+    id: 'govern',
+    label: 'Govern',
+    items: [
+      { id: 'compliance', label: 'Compliance',    icon: ShieldCheck },
+      { id: 'config',     label: 'Configuration', icon: Settings },
+    ],
+  },
 ]
+
+// Stages collapsed by default on first run (progressive disclosure: advanced
+// model + admin tabs stay tucked away until the user goes looking for them).
+const DEFAULT_COLLAPSED = ['model', 'govern']
+
+function NavItem({ item, activeTab, onClick }: { item: NavItemDef; activeTab: NavTab; onClick: (t: NavTab) => void }) {
+  const isActive = activeTab === item.id
+  const Icon = item.icon
+  return (
+    <button
+      onClick={() => onClick(item.id)}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+        isActive
+          ? 'bg-teal-500/10 text-teal-300 font-medium ring-1 ring-teal-500/20'
+          : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+      }`}
+    >
+      <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-teal-400' : ''}`} />
+      {item.label}
+    </button>
+  )
+}
+
+function ProgressSpine({ journey, onNavigate }: { journey: JourneyProgress; onNavigate: (t: NavTab) => void }) {
+  const { doneCount, total, nextStep } = journey
+  const pct = Math.round((doneCount / total) * 100)
+  const allDone = doneCount === total
+
+  return (
+    <div className="mx-2 mb-1 rounded-xl bg-white/5 ring-1 ring-white/10 px-3 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Getting started</span>
+        <span className="text-[10px] font-bold text-teal-300">{doneCount}/{total}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden mb-2.5">
+        <div className="h-full bg-teal-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+      </div>
+      {allDone ? (
+        <div className="flex items-center gap-1.5 text-[11px] text-teal-300 font-medium">
+          <CheckCircle2 className="w-3.5 h-3.5" /> You&apos;re all set
+        </div>
+      ) : nextStep ? (
+        <button
+          onClick={() => onNavigate(nextStep.tab)}
+          className="w-full flex items-center gap-2 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 ring-1 ring-teal-500/25 px-2.5 py-1.5 text-left transition-colors group"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-teal-200 leading-tight">Next: {nextStep.label}</p>
+            <p className="text-[10px] text-slate-400 truncate">{nextStep.hint}</p>
+          </div>
+          <ArrowRight className="w-3.5 h-3.5 text-teal-300 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 function SectorSwitcher() {
   const { sectorId, sector, setSector } = useSector()
@@ -342,13 +423,28 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
   )
 }
 
+const ALL_NAV_ITEMS: NavItemDef[] = [
+  { id: 'overview', label: 'Home',      icon: Presentation },
+  { id: 'usecases', label: 'Use Cases', icon: Briefcase },
+  ...NAV_STAGES.flatMap(s => s.items),
+]
+
 const TAB_TITLES = Object.fromEntries(
-  NAV_ENTRIES.filter(e => e.kind === 'item').map(e => [(e as { id: NavTab; label: string }).id, (e as { label: string }).label])
+  ALL_NAV_ITEMS.map(i => [i.id, i.label]),
 ) as Partial<Record<NavTab, string>>
 
 export default function Layout({ activeTab, onTabChange, children }: Props) {
   const { sector } = useSector()
-  const [visitedTabs, setVisitedTabs] = useState<Set<NavTab>>(() => new Set([activeTab]))
+  const journey = useJourneyProgress()
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('si-nav-collapsed')
+      if (saved) return new Set(JSON.parse(saved) as string[])
+    } catch {
+      /* ignore */
+    }
+    return new Set(DEFAULT_COLLAPSED)
+  })
 
   useEffect(() => {
     const label = TAB_TITLES[activeTab] ?? activeTab
@@ -356,9 +452,27 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
   }, [activeTab, sector.name])
 
   function handleTabChange(tab: NavTab) {
-    setVisitedTabs(prev => new Set([...prev, tab]))
     onTabChange(tab)
   }
+
+  function toggleStage(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      try {
+        localStorage.setItem('si-nav-collapsed', JSON.stringify([...next]))
+      } catch {
+        /* quota — non-critical */
+      }
+      return next
+    })
+  }
+
+  // The stage holding the active tab is always shown expanded, regardless of
+  // the collapsed preference, so the current location is never hidden.
+  const activeStageId = NAV_STAGES.find(s => s.items.some(it => it.id === activeTab))?.id
+  const stageDone = (id: NavStage['id']) => journey.steps.find(st => st.id === id)?.done ?? false
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
@@ -381,38 +495,46 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 overflow-y-auto sidebar-scrollbar">
-          {NAV_ENTRIES.filter(e => IS_DEMO_MODE || e.kind !== 'item' || e.id !== 'usecases').map((entry, i) => {
-            if (entry.kind === 'section') {
+          {/* Progress spine */}
+          <ProgressSpine journey={journey} onNavigate={handleTabChange} />
+
+          {/* Home + (demo) Use Cases */}
+          <div className="mt-2 space-y-0.5">
+            <NavItem item={{ id: 'overview', label: 'Home', icon: Presentation }} activeTab={activeTab} onClick={handleTabChange} />
+            {IS_DEMO_MODE && (
+              <NavItem item={{ id: 'usecases', label: 'Use Cases', icon: Briefcase }} activeTab={activeTab} onClick={handleTabChange} />
+            )}
+          </div>
+
+          {/* Value stages */}
+          <div className="mt-2">
+            {NAV_STAGES.map((stage, si) => {
+              const open = !collapsed.has(stage.id) || stage.id === activeStageId
+              const done = stageDone(stage.id)
               return (
-                <p key={`s-${i}`} className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 first:pt-1">
-                  {entry.label}
-                </p>
+                <div key={stage.id} className="mt-1">
+                  <button
+                    onClick={() => toggleStage(stage.id)}
+                    className="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 group"
+                  >
+                    <span className="text-[10px] font-bold text-slate-600 tabular-nums">{si + 1}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-slate-300 transition-colors">
+                      {stage.label}
+                    </span>
+                    {done && <CheckCircle2 className="w-3 h-3 text-teal-500/70 flex-shrink-0" />}
+                    <ChevronRight className={`w-3 h-3 text-slate-600 ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
+                  </button>
+                  {open && (
+                    <div className="space-y-0.5">
+                      {stage.items.map(item => (
+                        <NavItem key={item.id} item={item} activeTab={activeTab} onClick={handleTabChange} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )
-            }
-            const { id, label, icon: Icon } = entry
-            const badgeColor = NEW_BADGE_TABS[id]
-            const showNew = badgeColor !== undefined && !visitedTabs.has(id)
-            const isActive = activeTab === id
-            return (
-              <button
-                key={id}
-                onClick={() => handleTabChange(id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
-                  isActive
-                    ? 'bg-teal-500/10 text-teal-300 font-medium ring-1 ring-teal-500/20'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
-                }`}
-              >
-                <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-teal-400' : ''}`} />
-                {label}
-                {showNew && (
-                  <span className={`ml-auto text-[9px] font-bold ${badgeColor} text-white rounded-md px-1.5 py-0.5 leading-none`}>
-                    NEW
-                  </span>
-                )}
-              </button>
-            )
-          })}
+            })}
+          </div>
         </nav>
 
         {/* Footer */}

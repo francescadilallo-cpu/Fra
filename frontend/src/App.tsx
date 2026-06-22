@@ -32,6 +32,17 @@ const ContextTab = lazy(() => import('./components/ContextTab'))
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
+// Tabs that can be deep-linked via the URL hash (#/query, #/sources, …).
+const VALID_TABS: NavTab[] = [
+  'overview', 'usecases', 'sembuilder', 'dashboard', 'ontology', 'builder',
+  'agents', 'sources', 'data', 'query', 'process', 'config', 'compliance', 'context',
+]
+
+function tabFromHash(): NavTab | null {
+  const raw = window.location.hash.replace(/^#\/?/, '') as NavTab
+  return VALID_TABS.includes(raw) ? raw : null
+}
+
 function TabFallback() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -87,7 +98,7 @@ function addCustomEntityToOntology(sectorId: SectorId, rawName: string) {
 
 export default function App() {
   const [granted, setGranted] = useState(() => sessionStorage.getItem(SESSION_KEY) === '1' && Boolean(getAuthToken()))
-  const [activeTab, setActiveTab] = useState<NavTab>('overview')
+  const [activeTab, setActiveTab] = useState<NavTab>(() => tabFromHash() ?? 'overview')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const { setSector, sectorId } = useSector()
 
@@ -112,6 +123,24 @@ export default function App() {
       setShowOnboarding(true)
     }
   }, [granted])
+
+  // Keep the URL hash in sync with the active tab so tabs are deep-linkable
+  // and the browser back/forward buttons navigate between them.
+  useEffect(() => {
+    const desired = `#/${activeTab}`
+    if (window.location.hash !== desired) {
+      window.history.replaceState(null, '', desired)
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const t = tabFromHash()
+      if (t) setActiveTab(t)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   useEffect(() => {
     const handler = (e: Event) => {

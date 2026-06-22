@@ -9,6 +9,7 @@ import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQues
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
+import { markQuestionAsked } from '../data/journeyProgress'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -952,6 +953,7 @@ export default function QueryInterface() {
     }
     setMessages((prev) => [...prev, userMsg])
     setHistory(prev => saveToHistory(sectorId, question, prev))
+    markQuestionAsked()
     setInput('')
     setLoading(true)
 
