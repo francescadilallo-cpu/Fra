@@ -209,6 +209,10 @@ export interface AnalyzeResult {
 export const analyzeSources = (): Promise<AnalyzeResult> =>
   http.post<AnalyzeResult>('/api/semantic/analyze').then(r => r.data)
 
+/** Fast quality profiles only — no LLM call. Used for inline quality display. */
+export const getSourceProfiles = (): Promise<Record<string, TableProfile>> =>
+  http.get<Record<string, TableProfile>>('/api/semantic/profiles').then(r => r.data)
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 export const getMetrics = (sectorId = 'manufacturing'): Promise<BackendMetric[]> =>

@@ -253,3 +253,10 @@ def analyze(schema_info: dict[str, dict], table_names: list[str]) -> dict[str, A
         proposal = _fallback_proposal(tables, profiles)
 
     return {"tables": profiles, "proposal": proposal, "llm_used": llm_used}
+
+
+def profile_only(
+    schema_info: dict[str, dict], table_names: list[str]
+) -> dict[str, Any]:
+    """Quality profiles without LLM — fast stats-only analysis for inline display."""
+    return {t: profile_table(schema_info[t]) for t in table_names if t in schema_info}

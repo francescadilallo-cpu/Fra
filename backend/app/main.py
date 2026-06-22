@@ -1839,6 +1839,32 @@ def analyze_connected_sources(
     return result
 
 
+@app.get("/api/semantic/profiles", tags=["semantic"])
+def get_source_profiles(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Quality profiles for the caller's live tables — no LLM, fast stats only.
+
+    Returns ``{table_name: TableProfile}`` for all user-connected tables.
+    Used for inline quality display in the Data Sources view.
+    """
+    if current_user.mode != "live":
+        return {}
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .semantic.analyzer import profile_only
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    try:
+        schema_info = mgr.get_schema_info()
+    except Exception:
+        return {}
+    hidden = _hidden_demo_tables(current_user)
+    live_tables = [t for t in schema_info if t not in hidden]
+    if not live_tables:
+        return {}
+    return profile_only(schema_info, live_tables)
+
+
 @app.post("/api/semantic/ask")
 @limiter.limit(SEMANTIC_RATE_LIMIT, key_func=_semantic_limit_key)
 def semantic_ask(

@@ -2,7 +2,7 @@ import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
-  Database, AlertTriangle, Clock,
+  Database, AlertTriangle, Clock, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -15,7 +15,8 @@ import {
   type BackendSource, type ParamField,
 } from '../api/sources'
 import { Mail } from 'lucide-react'
-import { buildSemanticLayer, semanticSources, backendErrorMessage } from '../api/semantic'
+import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles } from '../api/semantic'
+import type { TableProfile } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
@@ -295,6 +296,19 @@ function StatusBadge({ status }: { status: BackendSource['status'] }) {
   )
 }
 
+// ── Quality badge ─────────────────────────────────────────────────────────────
+
+function QualityBadge({ score }: { score: number }) {
+  const cls = score >= 85 ? 'bg-teal-50 text-teal-700 border-teal-200'
+            : score >= 60 ? 'bg-amber-50 text-amber-700 border-amber-200'
+            : 'bg-red-50 text-red-600 border-red-200'
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${cls}`}>
+      Q·{score}
+    </span>
+  )
+}
+
 // ── Connector logo ────────────────────────────────────────────────────────────
 
 function ConnectorLogo({ c, size = 'md' }: { c: ConnectorDef; size?: 'sm' | 'md' }) {
@@ -329,12 +343,18 @@ function relativeTime(iso: string | null): string {
 }
 
 function ConnectedSourcesPanel({
-  sources, onDisconnect, onSync,
+  sources, onDisconnect, onSync, tableProfiles,
 }: {
   sources: BackendSource[]
   onDisconnect: (id: string) => void
   onSync: (id: string) => void
+  tableProfiles: Record<string, TableProfile>
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpand = (id: string) => setExpanded(prev => {
+    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
+  })
+
   const userSources = sources.filter(s => !s.is_default)
   if (userSources.length === 0) {
     return (
@@ -349,38 +369,94 @@ function ConnectedSourcesPanel({
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
       {userSources.map((s, i) => {
         const c = connectorById(s.id.split('-')[0]) ?? connectorById(s.connector_type)
+        const tables = s.target_tables ?? []
+        const profs = tables.map(t => tableProfiles[t]).filter((p): p is TableProfile => !!p)
+        const avgQ = profs.length > 0
+          ? Math.round(profs.reduce((a, p) => a + p.quality_score, 0) / profs.length)
+          : undefined
+        const totalHighNull = profs.reduce((a, p) => a + p.high_null_columns.length, 0)
+        const isExpanded = expanded.has(s.id)
+
         return (
-          <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-slate-100' : ''}`}>
-            {c ? <ConnectorLogo c={c} size="sm" /> : (
-              <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold flex-shrink-0">
-                <Database className="w-3.5 h-3.5" />
+          <div key={s.id} className={i > 0 ? 'border-t border-slate-100' : ''}>
+            <div className="flex items-center gap-3 px-4 py-3">
+              {c ? <ConnectorLogo c={c} size="sm" /> : (
+                <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold flex-shrink-0">
+                  <Database className="w-3.5 h-3.5" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{s.label}</p>
+                  <StatusBadge status={s.status} />
+                  {avgQ !== undefined && <QualityBadge score={avgQ} />}
+                  {totalHighNull > 0 && (
+                    <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
+                      ⚠ {totalHighNull} high-null {totalHighNull === 1 ? 'col' : 'cols'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {s.row_count > 0
+                    ? `${s.row_count.toLocaleString('en-US')} records · synced ${relativeTime(s.last_sync_at)}`
+                    : s.last_sync_at
+                      ? `synced ${relativeTime(s.last_sync_at)} · 0 records`
+                      : s.status === 'pending' ? 'Run setup to load data' : 'Not yet synced'}
+                </p>
+                {s.error_msg && (
+                  <p className="text-[10px] text-red-500 mt-0.5 line-clamp-3" title={s.error_msg}>{s.error_msg}</p>
+                )}
               </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm font-semibold text-slate-900 truncate">{s.label}</p>
-                <StatusBadge status={s.status} />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {s.row_count > 0
-                  ? `${s.row_count.toLocaleString('en-US')} records · synced ${relativeTime(s.last_sync_at)}`
-                  : s.last_sync_at
-                    ? `synced ${relativeTime(s.last_sync_at)} · 0 records`
-                    : s.status === 'pending' ? 'Run setup to load data' : 'Not yet synced'}
-              </p>
-              {s.error_msg && (
-                <p className="text-[10px] text-red-500 mt-0.5 line-clamp-3" title={s.error_msg}>{s.error_msg}</p>
+              {profs.length > 0 && (
+                <button onClick={() => toggleExpand(s.id)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded hover:bg-slate-50"
+                  title={isExpanded ? 'Hide quality detail' : 'Show quality detail'}>
+                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              <button onClick={() => onSync(s.id)}
+                className="text-slate-400 hover:text-teal-600 transition-colors p-1.5 rounded hover:bg-slate-50" title="Sync now">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+              {!s.is_default && (
+                <button onClick={() => onDisconnect(s.id)}
+                  className="text-slate-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50" title="Disconnect">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-            <button onClick={() => onSync(s.id)}
-              className="text-slate-400 hover:text-teal-600 transition-colors p-1.5 rounded hover:bg-slate-50" title="Sync now">
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-            {!s.is_default && (
-              <button onClick={() => onDisconnect(s.id)}
-                className="text-slate-400 hover:text-red-600 transition-colors p-1.5 rounded hover:bg-red-50" title="Disconnect">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+
+            {/* Expandable quality detail */}
+            {isExpanded && profs.length > 0 && (
+              <div className="px-4 pb-3 border-t border-slate-50 bg-slate-50/50">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide pt-2.5 mb-2">Data Quality</p>
+                <div className="space-y-2">
+                  {tables.map(t => {
+                    const p = tableProfiles[t]
+                    if (!p) return null
+                    return (
+                      <div key={t} className="flex items-center gap-2.5 text-[11px]">
+                        <span className="font-mono text-slate-500 w-36 truncate flex-shrink-0">{t}</span>
+                        <div className="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden flex-shrink-0">
+                          <div
+                            className={`h-full rounded-full ${p.quality_score >= 85 ? 'bg-teal-400' : p.quality_score >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${p.quality_score}%` }}
+                          />
+                        </div>
+                        <span className="text-slate-500 font-medium w-8 flex-shrink-0">{p.quality_score}%</span>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-slate-400">{p.row_count.toLocaleString('en-US')} rows</span>
+                        {p.high_null_columns.length > 0 && (
+                          <span className="text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[180px]"
+                            title={p.high_null_columns.join(', ')}>
+                            ⚠ {p.high_null_columns.slice(0, 2).join(', ')}{p.high_null_columns.length > 2 ? ` +${p.high_null_columns.length - 2}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             )}
           </div>
         )
@@ -572,6 +648,9 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const [sourcesLoading, setSourcesLoading] = useState(false)
   const [sourcesError, setSourcesError] = useState<string | null>(null)
 
+  // ── Quality profiles
+  const [tableProfiles, setTableProfiles] = useState<Record<string, TableProfile>>({})
+
   // ── UI state
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<ConnectorCategory | 'all' | 'italian'>('all')
@@ -588,6 +667,14 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const showToast = useCallback((msg: string, type: 'ok' | 'error' = 'ok') => {
     globalToast(msg, type === 'error' ? 'error' : 'success')
   }, [])
+
+  // ── Auto-profile when user sources become active
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const hasActive = sources.some(s => !s.is_default && s.status === 'active')
+    if (!hasActive) return
+    getSourceProfiles().then(setTableProfiles).catch(() => {})
+  }, [sources])
 
   // ── Load sources from backend on mount
   useEffect(() => {
@@ -833,6 +920,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             sources={sources}
             onDisconnect={disconnectSource}
             onSync={syncById}
+            tableProfiles={tableProfiles}
           />
         </section>
 

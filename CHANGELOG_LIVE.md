@@ -10,6 +10,53 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-22 (Smart Connect — Step 4: quality inline at source connection)
+
+Data quality profile shown automatically in the Connected Sources panel — no
+extra clicks, no navigation needed.
+
+### Backend — stats-only profiling endpoint
+
+- **`semantic/analyzer.py`**: added `profile_only()` — like `analyze()` but
+  skips the LLM entirely. Returns `{table_name: TableProfile}` in milliseconds.
+- **`main.py`**: new `GET /api/semantic/profiles`. Only runs for live users.
+  Returns quality profiles for all user-connected tables without triggering any
+  LLM call. Safe to auto-call on page load.
+
+### Frontend — inline quality display
+
+- **`api/semantic.ts`**: added `getSourceProfiles()` wrapper for the new
+  endpoint.
+- **`components/DataSourcesView.tsx`**:
+  - `QualityBadge` component — color-coded `Q·{score}` chip (green ≥85, amber
+    ≥60, red <60).
+  - `ConnectedSourcesPanel` now accepts `tableProfiles` prop: shows quality
+    badge + high-null column warning per source row, and a `›` chevron button
+    that expands a per-table quality breakdown (score bar, row count, high-null
+    column names).
+  - Auto-profiling `useEffect`: fires `getSourceProfiles()` silently whenever
+    user sources change (non-default, active), updates `tableProfiles` state.
+    Guard: `IS_DEMO_MODE` is false (demo users never hit the endpoint).
+
+---
+
+## 2026-06-22 (Smart Connect — Steps 2 & 3: Review & Approve UI + apply)
+
+### `components/SmartConnectPanel.tsx` (new)
+Full review-and-approve workflow for Smart Connect proposals. States: idle →
+loading → review → applying → done (error on failure). Review screen shows
+quality strip (table-by-table score bars) + 3 tabs (Entities / Metrics /
+Connections) with pre-checked checkboxes and confidence badges. "Apply N
+proposals" button saves entities to ontology extension, metrics to
+`sl_metrics` (type `derived`, formula → `expression`), relations to
+`manual_relations`.
+
+### `components/ProcessView.tsx`
+Injects `<SmartConnectPanel>` above the pipeline card when:
+`!IS_DEMO_MODE && liveConfig?.connectors.length > 0 && runState !== 'running'`.
+
+---
+
 ## 2026-06-22 (Smart Connect — Step 1: proposal engine)
 
 First step of the Fase 1 "Smart Connect" rebuild: turn a connected raw data
