@@ -27,7 +27,7 @@ export interface SavedExtension {
     position: { x: number; y: number }
     db_table?: string
   }[]
-  edges: { id: string; source: string; target: string; label: string }[]
+  edges: { id: string; source: string; target: string; label: string; fromField?: string; toField?: string }[]
   addedProperties: { nodeId: string; property: OntologyProperty | string }[]  // string for backward compat
   // Modifications to existing base entities (keyed by node ID)
   baseOverrides?: Record<string, NodeOverride>

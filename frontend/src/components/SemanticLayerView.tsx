@@ -4,6 +4,7 @@ import {
   Network, MessageSquare, ChevronDown, ChevronRight, ArrowRight,
   BookOpen, FileCode, Play, Layers, Server, Trash2, Edit3, Save,
   Table2, Pencil, Check, Search, Tag, BarChart2, Filter, SlidersHorizontal, TrendingUp, Sigma,
+  Loader2,
 } from 'lucide-react'
 import {
   checkBackend, semanticSources, semanticStatus,
@@ -11,10 +12,11 @@ import {
   getHierarchies, createHierarchy, deleteHierarchy as apiDeleteHierarchy,
   getSegments, createSegment, deleteSegment as apiDeleteSegment,
   ask as backendAsk, adaptAskResult,
-  getDraft, listQueryTemplates,
+  getDraft, listQueryTemplates, addRelation, backendErrorMessage,
   type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
   type SemanticStatus, type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
+import { toast } from './Toast'
 import { useSector } from '../contexts/SectorContext'
 import { modeScopedSector, IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import {
@@ -594,9 +596,11 @@ function buildRelationGroups(
 
 // ── Bridges Builder ───────────────────────────────────────────────────────────
 
+const EMPTY_BRIDGE = { from: '', fromField: '', label: '', to: '', toField: '' }
+
 function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityOptions: string[] }) {
   const [edges, setEdges] = useState(() => loadExtension(sectorId).edges)
-  const [form, setForm] = useState({ from: '', to: '', label: '' })
+  const [form, setForm] = useState(EMPTY_BRIDGE)
 
   useEffect(() => {
     const refresh = () => setEdges(loadExtension(sectorId).edges)
@@ -607,56 +611,102 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
   function add() {
     if (!form.from || !form.to || !form.label) return
     const ext = loadExtension(sectorId)
-    ext.edges.push({ id: `custom-${Date.now()}`, source: form.from, target: form.to, label: form.label })
+    ext.edges.push({
+      id: `custom-${Date.now()}`,
+      source: form.from, fromField: form.fromField.trim() || undefined,
+      label: form.label,
+      target: form.to, toField: form.toField.trim() || undefined,
+    })
     saveExtension(sectorId, ext)
-    setForm({ from: '', to: '', label: '' })
+    window.dispatchEvent(new CustomEvent('ontology-builder-changed'))
+    setForm(EMPTY_BRIDGE)
   }
 
   function remove(id: string) {
     const ext = loadExtension(sectorId)
     ext.edges = ext.edges.filter(e => e.id !== id)
     saveExtension(sectorId, ext)
+    window.dispatchEvent(new CustomEvent('ontology-builder-changed'))
   }
 
+  const canAdd = form.from && form.to && form.label
+
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-slate-500">A bridge connects two entities that live in different data systems — it lets a single query pull matching records across both sources.</p>
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">From entity</label>
-          <select value={form.from} onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none">
-            <option value="">Select…</option>
-            {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500 leading-relaxed">
+        A bridge connects entities from <strong>different data systems</strong> — it tells the query engine how to join them.
+        Specify the join columns so the AI knows exactly which fields match.
+      </p>
+
+      {/* Form */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">New bridge</p>
+        {/* Row 1: from entity + field */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-slate-500 mb-0.5 block">From entity *</label>
+            <select value={form.from} onChange={e => setForm(f => ({ ...f, from: e.target.value }))}
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+              <option value="">Select…</option>
+              {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-500 mb-0.5 block">FK column (from)</label>
+            <input value={form.fromField} onChange={e => setForm(f => ({ ...f, fromField: e.target.value }))}
+              placeholder="e.g. customerId"
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
+          </div>
         </div>
+        {/* Row 2: label */}
         <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">Bridge label</label>
+          <label className="text-[11px] text-slate-500 mb-0.5 block">Relation label *</label>
           <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value.toUpperCase() }))}
             placeholder="e.g. BELONGS_TO"
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none font-mono" />
+            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
         </div>
-        <div>
-          <label className="text-[11px] font-medium text-slate-600 mb-1 block">To entity</label>
-          <select value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
-            className="w-full text-xs border border-slate-200 rounded-lg px-2 py-2 bg-slate-50 focus:border-teal-400 outline-none">
-            <option value="">Select…</option>
-            {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
+        {/* Row 3: to entity + field */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-slate-500 mb-0.5 block">To entity *</label>
+            <select value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value }))}
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+              <option value="">Select…</option>
+              {entityOptions.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-500 mb-0.5 block">PK / matching column (to)</label>
+            <input value={form.toField} onChange={e => setForm(f => ({ ...f, toField: e.target.value }))}
+              placeholder="e.g. id or accountNumber"
+              className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
+          </div>
         </div>
+        <button onClick={add} disabled={!canAdd}
+          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+          <Plus className="w-3.5 h-3.5" />Add bridge
+        </button>
       </div>
-      <button onClick={add} disabled={!form.from || !form.to || !form.label}
-        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
-        Add bridge
-      </button>
+
+      {/* Existing bridges */}
       {edges.length > 0 && (
         <div className="space-y-2">
           {edges.map(e => (
-            <div key={e.id} className="flex items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
-              <span className="text-slate-700 font-semibold flex-1">{e.source}</span>
-              <span className="text-violet-600 font-bold font-mono">— {e.label} →</span>
-              <span className="text-slate-700 font-semibold flex-1 text-right">{e.target}</span>
-              <button onClick={() => remove(e.id)} className="text-slate-300 hover:text-red-400 transition-colors ml-2">
+            <div key={e.id} className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-2.5">
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-semibold text-slate-800">{e.source}</span>
+                {e.fromField && <span className="text-[10px] font-mono text-slate-500">.{e.fromField}</span>}
+              </div>
+              <div className="flex-1 flex items-center justify-center gap-1">
+                <div className="flex-1 h-px bg-violet-200" />
+                <span className="text-[10px] font-bold text-violet-600 font-mono px-1.5 py-0.5 bg-violet-100 rounded">{e.label}</span>
+                <div className="flex-1 h-px bg-violet-200" />
+              </div>
+              <div className="flex flex-col items-end min-w-0">
+                <span className="text-xs font-semibold text-slate-800">{e.target}</span>
+                {e.toField && <span className="text-[10px] font-mono text-slate-500">.{e.toField}</span>}
+              </div>
+              <button onClick={() => remove(e.id)} className="text-slate-300 hover:text-red-400 transition-colors ml-1 flex-shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1686,14 +1736,19 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
 
 // ── Relations Section ─────────────────────────────────────────────────────────
 
-function RelationsSection({ relationsData, onNavigate }: {
+function RelationsSection({ relationsData, onNavigate, entityTables, onRelationAdded }: {
   relationsData: typeof AW_RELATIONS
   onNavigate: (s: SLSection) => void
+  entityTables: string[]
+  onRelationAdded: () => void
 }) {
   const [filterSource, setFilterSource] = useState<string>('all')
   const [filterCard, setFilterCard] = useState<string>('all')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' })
 
   const totalRelations = relationsData.reduce((a, g) => a + g.relations.length, 0)
   const oneToN = relationsData.flatMap(g => g.relations).filter(r => r.cardinality === '1:N').length
@@ -1716,10 +1771,89 @@ function RelationsSection({ relationsData, onNavigate }: {
     setCollapsed(c => ({ ...c, [key]: !c[key] }))
   }
 
+  async function handleAddRelation(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.from_table || !form.to_table) return
+    setSaving(true)
+    try {
+      await addRelation(form)
+      setForm({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' })
+      setShowForm(false)
+      onRelationAdded()
+      toast('Relation added', 'success')
+    } catch (err) {
+      toast(backendErrorMessage(err) || 'Failed to add relation', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="px-8 py-7 space-y-5">
-      <SectionHeader icon={ArrowRight} title="Intra-source Relations"
-        desc="Foreign-key relationships within each data source" />
+      <div className="flex items-start justify-between gap-4">
+        <SectionHeader icon={ArrowRight} title="Intra-source Relations"
+          desc="Foreign-key relationships within each data source" />
+        {entityTables.length > 0 && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium flex-shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New relation'}
+          </button>
+        )}
+      </div>
+
+      {/* Inline add form */}
+      {showForm && (
+        <form onSubmit={handleAddRelation} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+          <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Define a join between two tables</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">From table *</label>
+              <select value={form.from_table} onChange={ev => setForm(f => ({ ...f, from_table: ev.target.value }))} required
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+                <option value="">Select table…</option>
+                {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">To table *</label>
+              <select value={form.to_table} onChange={ev => setForm(f => ({ ...f, to_table: ev.target.value }))} required
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+                <option value="">Select table…</option>
+                {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">Join column</label>
+              <input type="text" value={form.via_column} onChange={ev => setForm(f => ({ ...f, via_column: ev.target.value }))}
+                placeholder="e.g. territory_id"
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-500 mb-0.5 block">Type</label>
+              <select value={form.edge_type} onChange={ev => setForm(f => ({ ...f, edge_type: ev.target.value }))}
+                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+                <option value="FK">FK (foreign key)</option>
+                <option value="JOIN">JOIN</option>
+                <option value="REF">REF (reference)</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="submit" disabled={saving || !form.from_table || !form.to_table}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors font-medium">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              {saving ? 'Saving…' : 'Add relation'}
+            </button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Stats bar */}
       <div className="grid grid-cols-4 gap-3">
@@ -2985,7 +3119,12 @@ export default function SemanticLayerView() {
 
         {/* ── RELATIONS ── */}
         {section === 'relations' && (
-          <RelationsSection relationsData={relationsData} onNavigate={setSection} />
+          <RelationsSection
+            relationsData={relationsData}
+            onNavigate={setSection}
+            entityTables={draft?.entities.map(e => e.table) ?? []}
+            onRelationAdded={loadFromBackend}
+          />
         )}
 
         {/* ── RULES ── */}
