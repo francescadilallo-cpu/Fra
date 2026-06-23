@@ -1770,6 +1770,39 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
   )
 }
 
+// ── Stage header (unified section header tied to the rail) ──────────────────
+
+function StageHeader({
+  token, phase, title, status, trailing,
+}: {
+  token: string
+  phase: string
+  title: string
+  status?: StepStatus
+  trailing?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2.5 mb-3">
+      <span
+        className={`flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full t-micro font-bold flex-shrink-0 ${
+          status === 'done'
+            ? 'bg-teal-600 text-white'
+            : status === 'current'
+            ? 'bg-white ring-2 ring-teal-500 text-teal-600'
+            : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
+        }`}
+      >
+        {status === 'done' ? <Check className="w-3.5 h-3.5" /> : token}
+      </span>
+      <div className="flex-1 min-w-0">
+        <span className="eyebrow text-slate-400">{phase}</span>
+        <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+      </div>
+      {trailing}
+    </div>
+  )
+}
+
 // ── Guided empty state (no sources yet) ─────────────────────────────────────
 
 const PHASE_PREVIEW: { phase: string; title: string; desc: string; icon: typeof Database }[] = [
@@ -2185,6 +2218,12 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     }))
   }, [sources, tableProfiles, qualityRules, extNodeCount, reviewItems, semBuilt])
 
+  const statusByN = useMemo(() => {
+    const m: Record<number, StepStatus> = {}
+    workbenchSteps.forEach(s => { m[s.n] = s.status })
+    return m
+  }, [workbenchSteps])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -2239,16 +2278,15 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             (the GuidedEmptyState above covers that case) */}
         {(IS_DEMO_MODE || sources.filter(s => !s.is_default).length > 0) && (
           <section id="wb-sources" className="scroll-mt-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-slate-500" />
-                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connected Sources</h2>
-                {sourcesLoading
-                  ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                  : <span className="text-xs text-slate-400">· {sources.filter(s => !s.is_default).length} active</span>
-                }
-              </div>
-            </div>
+            <StageHeader
+              token="2–4"
+              phase="Setup → Build"
+              title="Sources, Profiling & Quality"
+              status={statusByN[3]}
+              trailing={sourcesLoading
+                ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                : <span className="t-mini text-slate-400">{sources.filter(s => !s.is_default).length} active</span>}
+            />
             <ConnectedSourcesPanel
               sources={sources}
               onDisconnect={disconnectSource}
@@ -2266,11 +2304,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Step 5: AI-Assisted Ontology Generation */}
         {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
           <section id="wb-step5" className="scroll-mt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Brain className="w-4 h-4 text-violet-500" />
-              <h2 className="text-sm font-bold text-slate-800">AI Data Model</h2>
-              <span className="eyebrow text-slate-400">Step 5 · Build</span>
-            </div>
+            <StageHeader token="5" phase="Build" title="AI Data Model" status={statusByN[5]} />
             <OntologyGenerationPanel
               sectorId={sectorId}
               onNavigateToOntology={() => onNavigate?.('sembuilder')}
@@ -2281,11 +2315,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Step 6: Human Review & Maintainment */}
         {!IS_DEMO_MODE && reviewItems.length > 0 && (
           <section id="wb-step6" className="scroll-mt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <ClipboardCheck className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-800">Human Review</h2>
-              <span className="eyebrow text-slate-400">Step 6 · Build</span>
-            </div>
+            <StageHeader token="6" phase="Build" title="Human Review" status={statusByN[6]} />
             <ReviewPanel
               items={reviewItems}
               onUpdate={handleUpdateReview}
@@ -2330,11 +2360,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           const allReady = checks.every(c => c.done)
           return (
             <section id="wb-step7" className="scroll-mt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Rocket className="w-4 h-4 text-slate-500" />
-                <h2 className="text-sm font-bold text-slate-800">Activation</h2>
-                <span className="eyebrow text-slate-400">Step 7 · Operate</span>
-              </div>
+              <StageHeader token="7" phase="Operate" title="Activation" status={statusByN[7]} />
               <ActivationReadinessPanel
                 checks={checks}
                 allReady={allReady}
@@ -2348,11 +2374,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Step 8: Continuous Evolution */}
         {!IS_DEMO_MODE && semBuilt && (
           <section id="wb-step8" className="scroll-mt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-800">Continuous Evolution</h2>
-              <span className="eyebrow text-slate-400">Step 8 · Operate</span>
-            </div>
+            <StageHeader token="8" phase="Operate" title="Continuous Evolution" status={statusByN[8]} />
             <ContinuousEvolutionPanel
               sources={sources.filter(s => !s.is_default)}
               feedbackItems={feedbackItems}
@@ -2407,11 +2429,34 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Connector hub */}
         <section id="wb-connect" className="scroll-mt-4">
           <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Plug className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connect a New Source</h2>
-              <span className="text-xs text-slate-400">· {CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
-            </div>
+            {IS_DEMO_MODE ? (
+              <div className="flex items-center gap-2">
+                <Plug className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connect a New Source</h2>
+                <span className="text-xs text-slate-400">· {CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`flex items-center justify-center w-6 h-6 rounded-full t-micro font-bold flex-shrink-0 ${
+                    statusByN[2] === 'done'
+                      ? 'bg-teal-600 text-white'
+                      : statusByN[2] === 'current'
+                      ? 'bg-white ring-2 ring-teal-500 text-teal-600'
+                      : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
+                  }`}
+                >
+                  {statusByN[2] === 'done' ? <Check className="w-3.5 h-3.5" /> : '2'}
+                </span>
+                <div>
+                  <span className="eyebrow text-slate-400">Setup</span>
+                  <h2 className="text-sm font-bold text-slate-800 leading-tight">
+                    Connect a Source
+                    <span className="ml-2 t-mini font-normal text-slate-400">{CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
+                  </h2>
+                </div>
+              </div>
+            )}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input value={search} onChange={e => setSearch(e.target.value)}

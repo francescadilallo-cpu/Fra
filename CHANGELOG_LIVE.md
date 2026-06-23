@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 2d: Unified Stage Headers)
+
+### `DataSourcesView.tsx`
+- **`StageHeader`** — header di sezione unificato: token numerato circolare
+  (teal+check se done, ring teal se current, grigio se upcoming) che richiama
+  i nodi del rail, eyebrow di fase e titolo. Stato derivato da `statusByN`.
+- Applicato a tutte le sezioni live (Sources/Profiling/Quality 2–4, Data Model 5,
+  Review 6, Activation 7, Evolution 8) + connector hub (Step 2 · Setup).
+- La pagina ora si legge come un unico workbench con numerazione coerente
+  end-to-end, non sezioni con stili scollegati. Demo mode invariato.
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 2c: Rail Hero + Workbench Header)
 
 Rende il redesign nettamente più visibile (il rail precedente era troppo timido).
