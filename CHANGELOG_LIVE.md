@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 2b: Guided Empty State)
+
+### `DataSourcesView.tsx`
+- **`GuidedEmptyState`** — quando un utente live non ha ancora sorgenti, al posto
+  del placeholder vuoto compare un hero orientativo: titolo, sottotitolo e una
+  preview a 3 card delle fasi (Setup → Build → Operate) con icona, numero e
+  descrizione, più CTA "Connect your first source" che fa scroll al connector hub.
+  Risolve il problema "il nuovo utente non sa cosa siano gli 8 step".
+- La sezione "Connected Sources" è ora nascosta in live mode quando vuota
+  (l'hero la sostituisce) — niente doppio empty-state.
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 2a: Workbench Pipeline Rail)
 
 Il cuore del redesign: DataSourcesView smette di essere uno scroll di pannelli

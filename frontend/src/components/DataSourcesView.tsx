@@ -1728,6 +1728,47 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
   )
 }
 
+// ── Guided empty state (no sources yet) ─────────────────────────────────────
+
+const PHASE_PREVIEW: { phase: string; title: string; desc: string; icon: typeof Database }[] = [
+  { phase: 'Setup',   title: 'Connect sources',   desc: 'Link your ERP, CRM, files — data loads automatically.', icon: Plug },
+  { phase: 'Build',   title: 'AI builds the model', desc: 'Profiling, quality, and an ontology proposed from your data.', icon: Brain },
+  { phase: 'Operate', title: 'Activate & ask',      desc: 'Go live and query everything in plain language.', icon: Rocket },
+]
+
+function GuidedEmptyState({ onConnect }: { onConnect: () => void }) {
+  return (
+    <div className="panel panel-accent">
+      <div className="px-6 py-6 bg-gradient-to-br from-teal-50/80 to-white">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="eyebrow text-teal-600">Get started</span>
+        </div>
+        <h3 className="text-lg font-bold text-slate-900">Turn your business systems into answers</h3>
+        <p className="text-sm text-slate-500 mt-1 max-w-xl">
+          Connect your first source and the platform walks you through an 8-step
+          pipeline — from raw tables to a queryable, governed data model.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+          {PHASE_PREVIEW.map((p, i) => (
+            <div key={p.phase} className="bg-white border border-slate-200 rounded-lg p-3.5 relative">
+              <span className="absolute top-3 right-3 t-micro font-bold text-slate-300">0{i + 1}</span>
+              <p.icon className="w-4 h-4 text-teal-600" />
+              <p className="eyebrow text-slate-400 mt-2">{p.phase}</p>
+              <p className="text-sm font-semibold text-slate-800 mt-0.5">{p.title}</p>
+              <p className="t-mini text-slate-500 mt-1 leading-snug">{p.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onConnect} className="btn btn-primary mt-5">
+          <Plug className="w-4 h-4" /> Connect your first source
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
@@ -2120,6 +2161,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           <WorkbenchRail steps={workbenchSteps} onJump={jumpTo} />
         )}
 
+        {/* Guided empty state — no user sources connected yet */}
+        {!IS_DEMO_MODE && !sourcesLoading && sources.filter(s => !s.is_default).length === 0 && (
+          <GuidedEmptyState onConnect={() => jumpTo('wb-connect')} />
+        )}
+
         {/* AW active sources (manufacturing demo only) */}
         {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWSourcesPanel />}
 
@@ -2131,30 +2177,33 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           </div>
         )}
 
-        {/* Connected sources from backend */}
-        <section id="wb-sources" className="scroll-mt-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-slate-500" />
-              <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connected Sources</h2>
-              {sourcesLoading
-                ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                : <span className="text-xs text-slate-400">· {sources.filter(s => !s.is_default).length} active</span>
-              }
+        {/* Connected sources from backend — hidden in live mode when empty
+            (the GuidedEmptyState above covers that case) */}
+        {(IS_DEMO_MODE || sources.filter(s => !s.is_default).length > 0) && (
+          <section id="wb-sources" className="scroll-mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connected Sources</h2>
+                {sourcesLoading
+                  ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
+                  : <span className="text-xs text-slate-400">· {sources.filter(s => !s.is_default).length} active</span>
+                }
+              </div>
             </div>
-          </div>
-          <ConnectedSourcesPanel
-            sources={sources}
-            onDisconnect={disconnectSource}
-            onSync={syncById}
-            tableProfiles={tableProfiles}
-            profilingLoading={profilingLoading}
-            onRefreshProfiles={refreshProfiles}
-            qualityRules={qualityRules}
-            onUpdateRule={handleUpdateRule}
-            onRemoveRule={handleRemoveRule}
-          />
-        </section>
+            <ConnectedSourcesPanel
+              sources={sources}
+              onDisconnect={disconnectSource}
+              onSync={syncById}
+              tableProfiles={tableProfiles}
+              profilingLoading={profilingLoading}
+              onRefreshProfiles={refreshProfiles}
+              qualityRules={qualityRules}
+              onUpdateRule={handleUpdateRule}
+              onRemoveRule={handleRemoveRule}
+            />
+          </section>
+        )}
 
         {/* Step 5: AI-Assisted Ontology Generation */}
         {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
