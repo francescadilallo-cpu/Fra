@@ -3,7 +3,7 @@ import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
   Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
-  Sparkles, Brain, Link2,
+  Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -25,6 +25,9 @@ import {
   getRuleForColumn, effectiveQualityScore, type QualityRule,
 } from '../data/qualityRules'
 import { loadExtension, saveExtension } from '../data/ontologyExtensions'
+import {
+  loadReviewQueue, addReviewItems, updateReviewItem, certifyAll, type ReviewItem, type ReviewStatus,
+} from '../data/changeReviewQueue'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -426,6 +429,14 @@ function OntologyGenerationPanel({
           .catch(() => {})
       ))
 
+      // Submit applied items to the review queue for Step 6 certification
+      const reviewItems: Parameters<typeof addReviewItems>[1] = [
+        ...entitiesToAdd.map(e => ({ kind: 'entity' as const, name: e.name, description: e.description, tableKey: e.table, source: 'ai_proposal' as const })),
+        ...metricsToAdd.map(m => ({ kind: 'metric' as const, name: m.name, description: m.description, source: 'ai_proposal' as const })),
+        ...relationsToAdd.map(r => ({ kind: 'relation' as const, name: `${r.from_table} → ${r.to_table}`, description: r.description, tableKey: r.from_table, source: 'ai_proposal' as const })),
+      ]
+      if (reviewItems.length > 0) addReviewItems(sectorId, reviewItems)
+
       setAppliedCount(count)
       window.dispatchEvent(new CustomEvent('ontology-entity-added'))
       setGenState('done')
@@ -635,6 +646,169 @@ function OntologyGenerationPanel({
           {genState === 'applying' ? 'Applying…' : `Apply ${totalSelected} item${totalSelected !== 1 ? 's' : ''}`}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Review & Certification panel (Step 6) ────────────────────────────────────
+
+function ReviewStatusBadge({ status }: { status: ReviewStatus }) {
+  if (status === 'certified') return (
+    <span className="flex items-center gap-1 text-[9px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-1.5 py-0.5">
+      <CheckCircle2 className="w-2.5 h-2.5" />Certified
+    </span>
+  )
+  if (status === 'flagged') return (
+    <span className="flex items-center gap-1 text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-1.5 py-0.5">
+      <Flag className="w-2.5 h-2.5" />Flagged
+    </span>
+  )
+  return (
+    <span className="flex items-center gap-1 text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 rounded-full px-1.5 py-0.5">
+      <Clock className="w-2.5 h-2.5" />Pending
+    </span>
+  )
+}
+
+function ReviewPanel({
+  items, onUpdate, onCertifyAll,
+}: {
+  items: ReviewItem[]
+  onUpdate: (id: string, status: ReviewStatus, notes: string) => void
+  onCertifyAll: () => void
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [noteText, setNoteText] = useState('')
+
+  const pendingCount = items.filter(i => i.status === 'pending').length
+  const certifiedCount = items.filter(i => i.status === 'certified').length
+  const flaggedCount = items.filter(i => i.status === 'flagged').length
+
+  if (items.length === 0) return null
+
+  function openNote(item: ReviewItem) {
+    setNoteText(item.notes)
+    setEditingId(item.id)
+  }
+
+  const kindIcon = (kind: ReviewItem['kind']) => {
+    if (kind === 'entity') return <Database className="w-3 h-3 text-slate-400" />
+    if (kind === 'metric') return <Zap className="w-3 h-3 text-slate-400" />
+    return <Link2 className="w-3 h-3 text-slate-400" />
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+        <ClipboardCheck className="w-4 h-4 text-slate-500" />
+        <span className="text-sm font-semibold text-slate-800">Review Queue</span>
+        <div className="flex items-center gap-2 ml-1">
+          {pendingCount > 0 && (
+            <span className="text-[10px] bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5 font-medium">{pendingCount} pending</span>
+          )}
+          {certifiedCount > 0 && (
+            <span className="text-[10px] bg-teal-50 text-teal-700 rounded-full px-1.5 py-0.5 font-medium">{certifiedCount} certified</span>
+          )}
+          {flaggedCount > 0 && (
+            <span className="text-[10px] bg-amber-50 text-amber-700 rounded-full px-1.5 py-0.5 font-medium">{flaggedCount} flagged</span>
+          )}
+        </div>
+        {pendingCount > 0 && (
+          <button
+            onClick={onCertifyAll}
+            className="ml-auto flex items-center gap-1 text-[10px] bg-teal-600 text-white px-2.5 py-1 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+          >
+            <CheckCircle2 className="w-3 h-3" />Certify all
+          </button>
+        )}
+      </div>
+
+      {/* Items */}
+      <div className="divide-y divide-slate-50">
+        {items.map(item => (
+          <div key={item.id} className="px-4 py-3">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex-shrink-0">{kindIcon(item.kind)}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-800">{item.name}</span>
+                  <span className="text-[9px] bg-slate-100 text-slate-400 rounded px-1 py-0.5 capitalize">{item.kind}</span>
+                  <span className="text-[9px] text-slate-400">·</span>
+                  <span className="text-[9px] text-slate-400">
+                    {new Date(item.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  </span>
+                  <ReviewStatusBadge status={item.status} />
+                </div>
+                {item.description && (
+                  <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.description}</p>
+                )}
+                {item.notes && (
+                  <p className="text-[10px] text-slate-400 italic mt-0.5">"{item.notes}"</p>
+                )}
+              </div>
+              {/* Actions */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {item.status !== 'certified' && (
+                  <button
+                    onClick={() => onUpdate(item.id, 'certified', item.notes)}
+                    className="p-1 rounded hover:bg-teal-50 text-slate-400 hover:text-teal-600 transition-colors"
+                    title="Certify"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {item.status !== 'flagged' && (
+                  <button
+                    onClick={() => onUpdate(item.id, 'flagged', item.notes)}
+                    className="p-1 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
+                    title="Flag for review"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => editingId === item.id ? setEditingId(null) : openNote(item)}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Add note"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            {/* Inline note editor */}
+            {editingId === item.id && (
+              <div className="mt-2 flex items-center gap-2 pl-6">
+                <input
+                  type="text"
+                  placeholder="Add a note…"
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { onUpdate(item.id, item.status, noteText); setEditingId(null) }
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  autoFocus
+                  className="flex-1 text-[10px] px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-400"
+                />
+                <button
+                  onClick={() => { onUpdate(item.id, item.status, noteText); setEditingId(null) }}
+                  className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700"
+                >Save</button>
+                <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400">Cancel</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      {certifiedCount === items.length && items.length > 0 && (
+        <div className="px-4 py-2.5 bg-teal-50 border-t border-teal-100 flex items-center gap-2">
+          <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
+          <span className="text-[10px] text-teal-700 font-medium">All items certified — ready for activation.</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -1349,6 +1523,27 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     })
   }, [])
 
+  // ── Review queue (Step 6, live mode)
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>(() =>
+    IS_DEMO_MODE ? [] : loadReviewQueue(sectorId)
+  )
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const handler = () => setReviewItems(loadReviewQueue(sectorId))
+    window.addEventListener('review-queue-updated', handler)
+    return () => window.removeEventListener('review-queue-updated', handler)
+  }, [sectorId])
+
+  const handleUpdateReview = useCallback((id: string, status: ReviewStatus, notes: string) => {
+    updateReviewItem(sectorId, id, status, notes)
+    setReviewItems(loadReviewQueue(sectorId))
+  }, [sectorId])
+
+  const handleCertifyAll = useCallback(() => {
+    certifyAll(sectorId)
+    setReviewItems(loadReviewQueue(sectorId))
+  }, [sectorId])
+
   // ── Source plan (live mode)
   const [plan, setPlan] = useState<SourcePlanEntry[]>(() => loadSourcePlan())
   useEffect(() => {
@@ -1669,6 +1864,22 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             <OntologyGenerationPanel
               sectorId={sectorId}
               onNavigateToOntology={() => onNavigate?.('sembuilder')}
+            />
+          </section>
+        )}
+
+        {/* Step 6: Human Review & Maintainment */}
+        {!IS_DEMO_MODE && reviewItems.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <ClipboardCheck className="w-4 h-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-800">Human Review</h2>
+              <span className="text-[10px] text-slate-400">Step 6 of 8</span>
+            </div>
+            <ReviewPanel
+              items={reviewItems}
+              onUpdate={handleUpdateReview}
+              onCertifyAll={handleCertifyAll}
             />
           </section>
         )}

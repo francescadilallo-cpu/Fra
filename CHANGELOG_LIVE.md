@@ -10,6 +10,47 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 6: Human Review & Maintainment)
+
+Implements **Step 6** of the 8-step Customer Experience Process — a persistent
+review queue so humans can certify (or flag) AI-generated ontology items before
+the data model goes live.
+
+### New — `data/changeReviewQueue.ts`
+
+- `ReviewItem` type: kind (entity/metric/relation), name, description, source
+  (`ai_proposal | manual | csv_upload`), submittedAt, status (`pending |
+  certified | flagged`), notes, certifiedAt.
+- `loadReviewQueue(sectorId)` / `saveReviewQueue(sectorId, items)` — localStorage
+  keyed by sector (`fra:review-queue:{sectorId}`); fires `review-queue-updated`
+  on write.
+- `addReviewItems()` — deduplicates by `kind:name` and bulk-appends new pending
+  items.
+- `updateReviewItem()` — sets status + notes + certifiedAt on a single item.
+- `certifyAll()` — bulk-certifies all pending items.
+
+### Updated — `DataSourcesView.tsx`
+
+- Step 5 (`OntologyGenerationPanel`) now calls `addReviewItems()` after a
+  successful apply, submitting every approved entity/metric/relation to the
+  review queue.
+- **`ReviewStatusBadge` component** — teal "Certified", amber "Flagged",
+  slate "Pending" chips.
+- **`ReviewPanel` component** — shows the review queue with:
+  - Summary chips (N pending / N certified / N flagged) in the header.
+  - "Certify all" button in the header when pending items exist.
+  - Per-item row: kind icon, name, kind chip, date, status badge, description,
+    inline note preview.
+  - Per-item action buttons: Certify (✓), Flag (⚑), Note (💬).
+  - Inline note editor (input + Save/Cancel).
+  - "All items certified — ready for activation" footer banner.
+- Main view: `reviewItems` state, `review-queue-updated` listener,
+  `handleUpdateReview` + `handleCertifyAll` callbacks.
+- Step 6 section ("Human Review · Step 6 of 8") appears below Step 5 in live
+  mode whenever the review queue is non-empty.
+
+---
+
 ## 2026-06-23 (Step 5: AI-Assisted Ontology Generation)
 
 Implements **Step 5** of the 8-step Customer Experience Process — inline AI
