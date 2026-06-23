@@ -2244,6 +2244,13 @@ Full systematic sweep of every component and backend endpoint not covered by pri
 
 ---
 
+## 2026-06-23 (3)
+
+### Fix OOM crashes on Render free tier — cap KG memory and defer warmup
+- `backend/Dockerfile`
+  - Added `FRA_KG_NODE_LIMIT=5000` and `FRA_KG_EDGE_LIMIT=5000`: the networkx Knowledge Graph was allowed to load up to 200k nodes (~400 MB) by default, reliably exhausting Render's 512 MB free-tier limit. The new caps keep the KG at ~15-25 MB total, leaving ~450 MB for DuckDB, the semantic layer, and the Python runtime.
+  - Added `FRA_SKIP_WARMUP=true`: defers the background KG build from server startup to the first query, eliminating boot-time memory spikes that were causing the process to be killed before Render's health-check passed.
+
 ## 2026-06-23 (2)
 
 ### Fix "New relation" button always hidden when draft entities are not yet loaded
