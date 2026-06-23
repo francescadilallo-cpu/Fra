@@ -7,10 +7,11 @@ import { semanticStatus, getLiveConfig, semanticSources, type SemanticStatus, ty
 import { listSources, type BackendSource } from '../api/sources'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import type { NavTab } from '../types'
+import GuidedSetup from './GuidedSetup'
 
 interface Props { onNavigate: (tab: NavTab) => void }
 
-// ── Guided journey steps (matches the nav) ────────────────────────────────────
+// ── Guided journey steps (demo mode only) ─────────────────────────────────────
 const JOURNEY: {
   step: number
   section: string
@@ -104,8 +105,6 @@ export default function OverviewScreen({ onNavigate }: Props) {
   // Sector connectors are demo content; live shows only what the backend reports
   const connectors = liveConfig?.connectors ?? (IS_DEMO_MODE ? sector.connectors : [])
 
-  // Solution-card copy must never leak AdventureWorks specifics into the live
-  // (sellable) product — derive it from the user's real sources instead.
   const kgCountFragment = kgNodes > 0
     ? `${kgNodes.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges`
     : 'Run setup to generate the graph'
@@ -118,16 +117,13 @@ export default function OverviewScreen({ onNavigate }: Props) {
     ? 'Every field has a formal definition. Ambiguities like "fatturato" are documented and resolved at query time by the AI engine.'
     : 'Every field has a formal definition. Ambiguous terms are documented and resolved at query time by the AI engine — so the same word never returns two different numbers.'
 
-  // Derive journey step completion from real system state
   const semBuilt = semStatus?.loaded === true
   const agentsRan = agentRuns.length > 0
-  // step 1 = sources, 2 = ontology, 3&4 = sembuilder, 5 = query, 6 = agents
   function stepDone(step: number): boolean {
-    // Step 1 (sources): done if any non-default source is registered — regardless of pipeline state
     if (step === 1) return registeredSources.length > 0 || isAW || semBuilt
     if (step === 2) return semBuilt || isAW
     if (step <= 4) return semBuilt
-    if (step === 5) return false  // can't auto-detect
+    if (step === 5) return false
     if (step === 6) return agentsRan
     return false
   }
@@ -189,11 +185,12 @@ export default function OverviewScreen({ onNavigate }: Props) {
         </div>
       </div>
 
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
+      {/* ── Hero: GuidedSetup for live users, rich demo content for demo ───── */}
+      {IS_DEMO_MODE ? (
       <section className="px-4 md:px-8 lg:px-12 py-14 border-b border-slate-100">
         <div className="max-w-4xl">
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
-            {IS_DEMO_MODE ? `Demo — ${sector.name}` : 'Live workspace'}
+            {`Demo — ${sector.name}`}
           </span>
           <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
             Data<span className="text-teal-600">Intelligence</span>
@@ -212,10 +209,10 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </p>
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { label: 'ERP — OrionSales', value: `${(tableCounts.sales_order_header ?? (IS_DEMO_MODE ? 31465 : 0)).toLocaleString()} orders`,  sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
-                  { label: 'CRM — ClientHub',  value: `${((tableCounts.account ?? (IS_DEMO_MODE ? 20201 : 0)) - (semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0))).toLocaleString()} clients`, sub: `SQLite (${semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)} dedup)`, color: 'text-teal-600 bg-teal-50 border-teal-200' },
-                  { label: 'HR — Employees',   value: `${(tableCounts.dipendenti_hr ?? (IS_DEMO_MODE ? 290 : 0)).toLocaleString()} employees`, sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
-                  { label: 'PIM — Catalog',    value: `${(tableCounts.product_catalog_pim ?? (IS_DEMO_MODE ? 504 : 0)).toLocaleString()} products`, sub: 'JSON',              color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                  { label: 'ERP — OrionSales', value: `${(tableCounts.sales_order_header ?? 31465).toLocaleString()} orders`,  sub: 'PostgreSQL / DuckDB',  color: 'text-blue-600 bg-blue-50 border-blue-200' },
+                  { label: 'CRM — ClientHub',  value: `${((tableCounts.account ?? 20201) - (semStatus?.dedup_count ?? 372)).toLocaleString()} clients`, sub: `SQLite (${semStatus?.dedup_count ?? 372} dedup)`, color: 'text-teal-600 bg-teal-50 border-teal-200' },
+                  { label: 'HR — Employees',   value: `${(tableCounts.dipendenti_hr ?? 290).toLocaleString()} employees`, sub: 'CSV Italian schema',   color: 'text-violet-600 bg-violet-50 border-violet-200' },
+                  { label: 'PIM — Catalog',    value: `${(tableCounts.product_catalog_pim ?? 504).toLocaleString()} products`, sub: 'JSON',              color: 'text-amber-600 bg-amber-50 border-amber-200' },
                 ].map(s => (
                   <div key={s.label} className={`border rounded-lg px-3 py-2.5 ${s.color}`}>
                     <p className="text-[11px] font-semibold">{s.label}</p>
@@ -228,13 +225,13 @@ export default function OverviewScreen({ onNavigate }: Props) {
           ) : (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-                {IS_DEMO_MODE ? `Active sector — ${sector.name}` : 'Workspace status'}
+                {`Active sector — ${sector.name}`}
               </p>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Data Sources',    value: String(connectors.length || registeredSources.length),  sub: IS_DEMO_MODE ? sector.domain : (connectors.length > 0 ? connectors.slice(0, 3).join(' · ') : registeredSources.length > 0 ? `${registeredSources.length} registered — run setup` : 'Connect your first source') },
-                  { label: 'Entities',          value: String(entityCount),             sub: `${edgeCount} relationships` },
-                  { label: 'Data Model',       value: semBuilt ? 'Built' : 'Pending',   sub: semBuilt ? `${kgNodes.toLocaleString()} records indexed` : 'Run setup to build' },
+                  { label: 'Data Sources', value: String(connectors.length), sub: sector.domain },
+                  { label: 'Entities',     value: String(entityCount),       sub: `${edgeCount} relationships` },
+                  { label: 'Data Model',   value: semBuilt ? 'Built' : 'Pending', sub: semBuilt ? `${kgNodes.toLocaleString()} records indexed` : 'Run setup to build' },
                 ].map(s => (
                   <div key={s.label} className="border border-slate-200 rounded-lg px-3 py-2.5 bg-white">
                     <p className="text-[11px] font-semibold text-slate-500">{s.label}</p>
@@ -247,31 +244,25 @@ export default function OverviewScreen({ onNavigate }: Props) {
           )}
 
           <div className="flex items-center gap-3">
-            {IS_DEMO_MODE ? (
-              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-                Start from Connect →
-              </button>
-            ) : semBuilt ? (
-              <button onClick={() => onNavigate('query')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-                Query Your Data →
-              </button>
-            ) : (registeredSources.length > 0 || connectors.length > 0) ? (
-              <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-                Run Setup →
-              </button>
-            ) : (
-              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
-                Connect First Source →
-              </button>
-            )}
+            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+              Start from Connect →
+            </button>
             <button onClick={() => onNavigate('dashboard')} className="border border-slate-200 text-slate-600 rounded-lg px-6 py-3 text-sm font-semibold hover:border-teal-300 hover:text-teal-700 transition-colors">
               Go to Dashboard
             </button>
           </div>
         </div>
       </section>
+      ) : (
+      <section className="px-4 md:px-8 lg:px-12 py-8 border-b border-slate-100">
+        <div className="max-w-3xl">
+          <GuidedSetup onNavigate={onNavigate} />
+        </div>
+      </section>
+      )}
 
-      {/* ── Guided journey ─────────────────────────────────────────────────── */}
+      {/* ── Guided journey — demo mode only ────────────────────────────────── */}
+      {IS_DEMO_MODE && (
       <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100 bg-slate-50">
         <div className="max-w-5xl">
           <div className="flex items-center gap-3 mb-2">
@@ -311,16 +302,6 @@ export default function OverviewScreen({ onNavigate }: Props) {
                   {isAW && aw && (
                     <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{aw}</p>
                   )}
-                  {!IS_DEMO_MODE && (() => {
-                    const srcCount = registeredSources.length || connectors.length
-                    if (step === 1 && srcCount > 0)
-                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{srcCount} source{srcCount !== 1 ? 's' : ''} connected</p>
-                    if (step === 2 && entityCount > 0)
-                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{entityCount} entit{entityCount !== 1 ? 'ies' : 'y'} · {edgeCount} relationship{edgeCount !== 1 ? 's' : ''}</p>
-                    if ((step === 3 || step === 4) && kgNodes > 0)
-                      return <p className="text-[11px] text-teal-600 font-mono bg-teal-50 rounded px-2 py-1 leading-snug">{kgNodes.toLocaleString()} nodes · {edgeCount.toLocaleString()} edges</p>
-                    return null
-                  })()}
                   <div className="mt-2 flex items-center gap-1 text-[11px] font-medium text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
                     Open <ArrowRight className="w-3 h-3" />
                   </div>
@@ -330,6 +311,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </div>
         </div>
       </section>
+      )}
 
       {/* ── Problem → Solution ─────────────────────────────────────────────── */}
       <section className="px-4 md:px-8 lg:px-12 py-12 border-b border-slate-100">
@@ -347,7 +329,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
               {isAW ? (
                 <>
-                  <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? (IS_DEMO_MODE ? 372 : 0)}</p>
+                  <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? 372}</p>
                   <p className="text-sm font-semibold text-slate-900 mb-1">duplicates in the CRM</p>
                   <p className="text-xs text-slate-500">Accounts with accountId &lt; 0 from a legacy migration. Without dedup, every customer analysis is overestimated.</p>
                 </>

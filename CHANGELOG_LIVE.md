@@ -10,6 +10,43 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX rebuild — Phases 2–4: Smart Setup, smart empty states, adaptive home)
+
+### Phase 2 — Unified Smart Setup flow (`components/GuidedSetup.tsx`)
+
+- New **`GuidedSetup`** component driven entirely by `useJourneyProgress()`.
+- Renders four step rows (Connect → Build → Ask → Automate) with three visual
+  states: **done** (teal circle, quiet "Open" link), **current** (ringed circle,
+  primary teal CTA button), **upcoming** (grey, no action).
+- Each step shows: numbered circle, icon, label, one-line detail, and CTA.
+- Progress bar shows `doneCount / total` with a smooth CSS transition.
+- When all four milestones are done, shows a celebration card with
+  `PartyPopper` and "Ask a question" / "Agents" shortcuts.
+- Loading state: skeleton placeholder — avoids layout shift on first render.
+
+### Phase 4 — Adaptive Home (`components/OverviewScreen.tsx`)
+
+- **Live users** now land on `GuidedSetup` as the primary content in the hero
+  section — no more generic product marketing as the first thing a new user sees.
+- The 6-step journey card grid is **demo-only**; live users get `GuidedSetup`
+  which covers the same navigation in a cleaner, progress-driven layout.
+- Demo mode hero and journey grid are completely unchanged.
+- The Problem → Solution → CTA sections remain for both modes (explain value
+  while the user sets up their workspace).
+- `isAW` guard in demo hero now only reads demo-seeded table counts directly
+  (removed the `?? (IS_DEMO_MODE ? n : 0)` fallback noise since those branches
+  only ever run in demo mode).
+
+### Phase 3 — Smart empty state (`components/Dashboard.tsx`)
+
+- The "workspace is empty" banner now uses `useJourneyProgress().nextStep` to
+  surface the correct next action dynamically — rather than always pointing to
+  "Connect a source" regardless of where the user actually is in setup.
+- Button label and destination tab update automatically as each milestone is
+  completed (e.g. post-connect it switches to "Build your model → process").
+
+---
+
 ## 2026-06-22 (UX rebuild — Phase 1: navigation + progress spine)
 
 First phase of the UX rebuild that turns the 13-tab cockpit into a guided
