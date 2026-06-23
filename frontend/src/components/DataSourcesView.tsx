@@ -817,7 +817,7 @@ function ReviewPanel({
   )
 }
 
-// ── Activation readiness checklist (Step 7) ──────────────────────────────────
+// ── Readiness check type (used inline in Step 7 wizard) ──────────────────────
 
 interface ReadinessCheck {
   label: string
@@ -825,73 +825,6 @@ interface ReadinessCheck {
   hint: string
   actionLabel?: string
   onAction?: () => void
-}
-
-function ActivationReadinessPanel({
-  checks, allReady, onActivate, activating,
-}: {
-  checks: ReadinessCheck[]
-  allReady: boolean
-  onActivate: () => void
-  activating: boolean
-}) {
-  const doneCount = checks.filter(c => c.done).length
-  return (
-    <div className={`rounded-xl border overflow-hidden ${allReady ? 'border-teal-300 bg-gradient-to-r from-teal-50 to-emerald-50' : 'border-slate-200 bg-white'}`}>
-      {/* Header */}
-      <div className={`flex items-center gap-3 px-4 py-3 ${allReady ? 'bg-teal-50/60' : 'bg-slate-50'} border-b ${allReady ? 'border-teal-200' : 'border-slate-100'}`}>
-        <Rocket className={`w-4 h-4 ${allReady ? 'text-teal-600' : 'text-slate-400'}`} />
-        <span className="text-sm font-semibold text-slate-800">Activation Readiness</span>
-        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${doneCount === checks.length ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
-          {doneCount}/{checks.length}
-        </span>
-      </div>
-
-      {/* Checklist */}
-      <div className="divide-y divide-slate-50">
-        {checks.map(c => (
-          <div key={c.label} className="flex items-center gap-3 px-4 py-2.5">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${c.done ? 'bg-teal-100' : 'bg-slate-100'}`}>
-              {c.done
-                ? <Check className="w-3 h-3 text-teal-600" />
-                : <span className="w-2 h-2 rounded-full bg-slate-300" />
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`text-xs font-medium ${c.done ? 'text-teal-800' : 'text-slate-700'}`}>{c.label}</p>
-              {!c.done && <p className="text-[10px] text-slate-400 mt-0.5">{c.hint}</p>}
-            </div>
-            {!c.done && c.actionLabel && c.onAction && (
-              <button
-                onClick={c.onAction}
-                className="text-[10px] text-teal-600 hover:text-teal-800 font-medium flex-shrink-0 transition-colors"
-              >
-                {c.actionLabel} →
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Activate CTA */}
-      {allReady && (
-        <div className="px-4 py-3 bg-teal-50 border-t border-teal-200 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-teal-800">Ready to activate!</p>
-            <p className="text-[10px] text-teal-600 mt-0.5">Build your semantic layer and start querying your data.</p>
-          </div>
-          <button
-            onClick={onActivate}
-            disabled={activating}
-            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-semibold disabled:opacity-60"
-          >
-            {activating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-            {activating ? 'Building…' : 'Build & Activate'}
-          </button>
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ── Continuous evolution panel (Step 8) ──────────────────────────────────────
@@ -1657,7 +1590,7 @@ const STEP_DETAIL: Record<number, { icon: typeof Database; desc: string; cta: st
   8: { icon: TrendingUp,     desc: 'Monitor freshness and report issues — the model keeps improving.', cta: 'Open monitoring' },
 }
 
-function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anchor: string) => void }) {
+function WorkbenchRail({ steps, onNavigate, activeViewStep }: { steps: WorkbenchStep[]; onNavigate: (step: number) => void; activeViewStep: number }) {
   const doneCount = steps.filter(s => s.status === 'done').length
   const current = steps.find(s => s.status === 'current')
   const allDone = doneCount === steps.length
@@ -1714,7 +1647,7 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
                 />
               )}
               <button
-                onClick={() => onJump(s.anchor)}
+                onClick={() => onNavigate(s.n)}
                 title={`${s.n}. ${s.label}`}
                 className="relative z-10 group flex flex-col items-center gap-1.5 min-w-0 w-full"
               >
@@ -1725,7 +1658,7 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
                       : s.status === 'current'
                       ? 'bg-white ring-2 ring-teal-500 text-teal-600 shadow-sm scale-110'
                       : 'bg-white ring-1 ring-slate-200 text-slate-300'
-                  }`}
+                  } ${s.n === activeViewStep && s.status !== 'current' ? 'ring-2 ring-teal-300 ring-offset-1' : ''}`}
                 >
                   {s.status === 'done'
                     ? <Check className="w-4 h-4" />
@@ -1733,13 +1666,18 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
                 </span>
                 <span
                   className={`t-micro text-center leading-tight px-0.5 truncate max-w-full ${
-                    s.status === 'done' ? 'text-teal-700 font-medium'
-                    : s.status === 'current' ? 'text-slate-800 font-semibold'
-                    : 'text-slate-400'
+                    s.n === activeViewStep
+                      ? 'text-teal-700 font-bold'
+                      : s.status === 'done' ? 'text-teal-700 font-medium'
+                      : s.status === 'current' ? 'text-slate-800 font-semibold'
+                      : 'text-slate-400'
                   } group-hover:text-teal-600`}
                 >
                   {s.label}
                 </span>
+                {s.n === activeViewStep && (
+                  <span className="w-1 h-1 rounded-full bg-teal-500 flex-shrink-0" />
+                )}
               </button>
             </div>
           )
@@ -1761,7 +1699,7 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
             <span className="eyebrow text-teal-600">You're here · Step {current.n}</span>
             <p className="t-mini text-slate-600 mt-0.5 leading-snug">{STEP_DETAIL[current.n].desc}</p>
           </div>
-          <button onClick={() => onJump(current.anchor)} className="btn btn-primary btn-sm flex-shrink-0">
+          <button onClick={() => onNavigate(current.n)} className="btn btn-primary btn-sm flex-shrink-0">
             {STEP_DETAIL[current.n].cta} →
           </button>
         </div>
@@ -1770,109 +1708,13 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
   )
 }
 
-// ── Stage primitives (section headers tied to the rail) ─────────────────────
-
-function StatusToken({ token, status }: { token: string; status?: StepStatus }) {
-  return (
-    <span
-      className={`flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full t-micro font-bold flex-shrink-0 ${
-        status === 'done'
-          ? 'bg-teal-600 text-white'
-          : status === 'current'
-          ? 'bg-white ring-2 ring-teal-500 text-teal-600'
-          : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
-      }`}
-    >
-      {status === 'done' ? <Check className="w-3.5 h-3.5" /> : token}
-    </span>
-  )
-}
-
-/**
- * A collapsible stage: completed (`done`) steps start collapsed showing only a
- * one-line summary, keeping the workbench focused on the current step. Current
- * and upcoming steps start expanded.
- */
-function CollapsibleStage({
-  token, phase, title, status, summary, trailing, children,
-}: {
-  token: string
-  phase: string
-  title: string
-  status?: StepStatus
-  summary?: React.ReactNode
-  trailing?: React.ReactNode
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(status !== 'done')
-  return (
-    <>
-      <div className="flex items-center gap-2.5 mb-3">
-        <StatusToken token={token} status={status} />
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="flex-1 flex items-center gap-2 text-left min-w-0 group"
-        >
-          <div className="flex-shrink-0">
-            <span className="eyebrow text-slate-400">{phase}</span>
-            <h2 className="text-sm font-bold text-slate-800 leading-tight group-hover:text-teal-700 transition-colors">{title}</h2>
-          </div>
-          {!open && summary && (
-            <span className="flex-1 t-mini text-slate-500 truncate min-w-0">{summary}</span>
-          )}
-          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-            {trailing}
-            {open
-              ? <ChevronDown className="w-4 h-4 text-slate-400" />
-              : <ChevronRight className="w-4 h-4 text-slate-400" />}
-          </div>
-        </button>
-      </div>
-      {open && children}
-    </>
-  )
-}
-
-// ── Guided empty state (no sources yet) ─────────────────────────────────────
+// ── Phase preview (used in Step 1 wizard content) ─────────────────────────────
 
 const PHASE_PREVIEW: { phase: string; title: string; desc: string; icon: typeof Database }[] = [
-  { phase: 'Setup',   title: 'Connect sources',   desc: 'Link your ERP, CRM, files — data loads automatically.', icon: Plug },
+  { phase: 'Setup',   title: 'Connect sources',    desc: 'Link your ERP, CRM, files — data loads automatically.', icon: Plug },
   { phase: 'Build',   title: 'AI builds the model', desc: 'Profiling, quality, and an ontology proposed from your data.', icon: Brain },
-  { phase: 'Operate', title: 'Activate & ask',      desc: 'Go live and query everything in plain language.', icon: Rocket },
+  { phase: 'Operate', title: 'Activate & ask',       desc: 'Go live and query everything in plain language.', icon: Rocket },
 ]
-
-function GuidedEmptyState({ onConnect }: { onConnect: () => void }) {
-  return (
-    <div className="panel panel-accent">
-      <div className="px-6 py-6 bg-gradient-to-br from-teal-50/80 to-white">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="eyebrow text-teal-600">Get started</span>
-        </div>
-        <h3 className="text-lg font-bold text-slate-900">Turn your business systems into answers</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-xl">
-          Connect your first source and the platform walks you through an 8-step
-          pipeline — from raw tables to a queryable, governed data model.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-          {PHASE_PREVIEW.map((p, i) => (
-            <div key={p.phase} className="bg-white border border-slate-200 rounded-lg p-3.5 relative">
-              <span className="absolute top-3 right-3 t-micro font-bold text-slate-300">0{i + 1}</span>
-              <p.icon className="w-4 h-4 text-teal-600" />
-              <p className="eyebrow text-slate-400 mt-2">{p.phase}</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">{p.title}</p>
-              <p className="t-mini text-slate-500 mt-1 leading-snug">{p.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={onConnect} className="btn btn-primary mt-5">
-          <Plug className="w-4 h-4" /> Connect your first source
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -2213,9 +2055,6 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
   // ── Workbench rail: derive the 8-step pipeline status from live signals.
   const scrollRef = useRef<HTMLDivElement>(null)
-  const jumpTo = useCallback((anchor: string) => {
-    scrollRef.current?.querySelector(`#${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
 
   const workbenchSteps = useMemo<WorkbenchStep[]>(() => {
     const hasActiveSources = sources.some(s => !s.is_default && s.status === 'active')
@@ -2248,11 +2087,24 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     }))
   }, [sources, tableProfiles, qualityRules, extNodeCount, reviewItems, semBuilt])
 
-  const statusByN = useMemo(() => {
-    const m: Record<number, StepStatus> = {}
-    workbenchSteps.forEach(s => { m[s.n] = s.status })
-    return m
-  }, [workbenchSteps])
+  // ── Wizard navigation (live mode only) ──────────────────────────────────────
+  const [activeStep, setActiveStep] = useState(1)
+  const [userPicked, setUserPicked] = useState(false)
+
+  const currentStepN = useMemo(
+    () => workbenchSteps.find(s => s.status === 'current')?.n ?? 1,
+    [workbenchSteps]
+  )
+
+  // Auto-advance to current pipeline step until user explicitly navigates
+  useEffect(() => {
+    if (!IS_DEMO_MODE && !userPicked) setActiveStep(currentStepN)
+  }, [currentStepN, userPicked])
+
+  const handleStepNavigate = useCallback((stepN: number) => {
+    setActiveStep(Math.min(8, Math.max(1, stepN)))
+    setUserPicked(true)
+  }, [])
 
   // ── Celebrate when a pipeline step completes (skips the initial mount count).
   const prevDoneRef = useRef<number>(-1)
@@ -2301,281 +2153,429 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       </div>
 
       {/* Body */}
-      <div ref={scrollRef} className="flex-1 overflow-auto px-8 py-6 space-y-6">
+      <div ref={scrollRef} className="flex-1 overflow-auto">
 
-        {/* Workbench pipeline rail (live mode — orchestrates the 8-step flow) */}
-        {!IS_DEMO_MODE && (
-          <WorkbenchRail steps={workbenchSteps} onJump={jumpTo} />
-        )}
+        {IS_DEMO_MODE ? (
 
-        {/* Guided empty state — no user sources connected yet */}
-        {!IS_DEMO_MODE && !sourcesLoading && sources.filter(s => !s.is_default).length === 0 && (
-          <GuidedEmptyState onConnect={() => jumpTo('wb-connect')} />
-        )}
+          /* ── Demo mode: flat layout ──────────────────────────────────────── */
+          <div className="px-8 py-6 space-y-6">
 
-        {/* AW active sources (manufacturing demo only) */}
-        {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWSourcesPanel />}
+            {/* AW active sources (manufacturing demo only) */}
+            {sectorId === 'manufacturing' && <AWSourcesPanel />}
 
-        {/* Sources error */}
-        {sourcesError && (
-          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            {sourcesError}
-          </div>
-        )}
+            {/* Sources error */}
+            {sourcesError && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{sourcesError}
+              </div>
+            )}
 
-        {/* Connected sources from backend — hidden in live mode when empty
-            (the GuidedEmptyState above covers that case) */}
-        {(IS_DEMO_MODE || sources.filter(s => !s.is_default).length > 0) && (
-          <section id="wb-sources" className="scroll-mt-4">
-            <CollapsibleStage
-              token="2–4"
-              phase="Setup → Build"
-              title="Sources, Profiling & Quality"
-              status={statusByN[3]}
-              summary={`${sources.filter(s => !s.is_default).length} sources · ${Object.keys(tableProfiles).length} tables profiled`}
-              trailing={sourcesLoading
-                ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                : <span className="t-mini text-slate-400">{sources.filter(s => !s.is_default).length} active</span>}
-            >
-              <ConnectedSourcesPanel
-                sources={sources}
-                onDisconnect={disconnectSource}
-                onSync={syncById}
-                tableProfiles={tableProfiles}
-                profilingLoading={profilingLoading}
-                onRefreshProfiles={refreshProfiles}
-                qualityRules={qualityRules}
-                onUpdateRule={handleUpdateRule}
-                onRemoveRule={handleRemoveRule}
-              />
-            </CollapsibleStage>
-          </section>
-        )}
-
-        {/* Step 5: AI-Assisted Ontology Generation */}
-        {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
-          <section id="wb-step5" className="scroll-mt-4">
-            <CollapsibleStage
-              token="5"
-              phase="Build"
-              title="AI Data Model"
-              status={statusByN[5]}
-              summary={`${extNodeCount} ${extNodeCount === 1 ? 'entity' : 'entities'} in model`}
-            >
-              <OntologyGenerationPanel
-                sectorId={sectorId}
-                onNavigateToOntology={() => onNavigate?.('sembuilder')}
-              />
-            </CollapsibleStage>
-          </section>
-        )}
-
-        {/* Step 6: Human Review & Maintainment */}
-        {!IS_DEMO_MODE && reviewItems.length > 0 && (
-          <section id="wb-step6" className="scroll-mt-4">
-            <CollapsibleStage
-              token="6"
-              phase="Build"
-              title="Human Review"
-              status={statusByN[6]}
-              summary={`${reviewItems.filter(i => i.status === 'certified').length}/${reviewItems.length} certified`}
-            >
-              <ReviewPanel
-                items={reviewItems}
-                onUpdate={handleUpdateReview}
-                onCertifyAll={handleCertifyAll}
-              />
-            </CollapsibleStage>
-          </section>
-        )}
-
-        {/* Step 7: Activation & Onboarding */}
-        {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (() => {
-          const hasProfiled = Object.keys(tableProfiles).length > 0
-          const hasEntities = extNodeCount > 0
-          const allCertified = reviewItems.length === 0 || reviewItems.every(i => i.status !== 'pending')
-          const checks: ReadinessCheck[] = [
-            {
-              label: 'Data sources connected',
-              done: true,
-              hint: 'Connect at least one data source',
-              actionLabel: 'Connect source',
-            },
-            {
-              label: 'Sources profiled & quality reviewed',
-              done: hasProfiled,
-              hint: 'Expand a connected source to run profiling',
-            },
-            {
-              label: 'AI data model generated',
-              done: hasEntities,
-              hint: 'Run "Generate Data Model" in the AI Data Model section above',
-            },
-            {
-              label: 'Ontology items certified',
-              done: allCertified,
-              hint: 'Certify all items in the Human Review section above',
-            },
-            {
-              label: 'Semantic layer built',
-              done: semBuilt,
-              hint: 'Build the semantic layer to make data queryable',
-            },
-          ]
-          const allReady = checks.every(c => c.done)
-          const doneChecks = checks.filter(c => c.done).length
-          return (
-            <section id="wb-step7" className="scroll-mt-4">
-              <CollapsibleStage
-                token="7"
-                phase="Operate"
-                title="Activation"
-                status={statusByN[7]}
-                summary={semBuilt ? 'Semantic layer built' : `${doneChecks}/${checks.length} checks ready`}
-              >
-                <ActivationReadinessPanel
-                  checks={checks}
-                  allReady={allReady}
-                  onActivate={handleBuildSemanticLayer}
-                  activating={building}
-                />
-              </CollapsibleStage>
-            </section>
-          )
-        })()}
-
-        {/* Step 8: Continuous Evolution */}
-        {!IS_DEMO_MODE && semBuilt && (
-          <section id="wb-step8" className="scroll-mt-4">
-            <CollapsibleStage
-              token="8"
-              phase="Operate"
-              title="Continuous Evolution"
-              status={statusByN[8]}
-              summary={`${feedbackItems.filter(f => f.status === 'open').length} open · monitoring active`}
-            >
-              <ContinuousEvolutionPanel
-                sources={sources.filter(s => !s.is_default)}
-                feedbackItems={feedbackItems}
-                onAddFeedback={handleAddFeedback}
-                onResolve={handleResolveFeedback}
-              />
-            </CollapsibleStage>
-          </section>
-        )}
-
-        {/* Build progress (both modes) + idle trigger (demo only — live uses Step 7 Activation) */}
-        {sources.length > 0 && (building || IS_DEMO_MODE) && (
-          <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
-            {building ? (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-teal-800 mb-3">Building your data model…</p>
-                {BUILD_STEPS.map((step, i) => {
-                  const stepNum = i + 1
-                  const done = buildStep > stepNum || buildStep === 4
-                  const active = buildStep === stepNum
-                  return (
-                    <div key={i} className={`flex items-center gap-2.5 text-xs transition-colors ${done ? 'text-teal-700' : active ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
-                      {done
-                        ? <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" />
-                        : active
-                        ? <Loader2 className="w-4 h-4 animate-spin text-teal-500 flex-shrink-0" />
-                        : <div className="w-4 h-4 rounded-full border-2 border-slate-200 flex-shrink-0" />
-                      }
-                      <span>{step}</span>
+            {/* Build CTA / progress */}
+            {(sources.length > 0 || building) && (
+              <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
+                {building ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-teal-800 mb-3">Building your data model…</p>
+                    {BUILD_STEPS.map((step, i) => {
+                      const done = buildStep > i + 1 || buildStep === 4
+                      const active = buildStep === i + 1
+                      return (
+                        <div key={i} className={`flex items-center gap-2.5 text-xs ${done ? 'text-teal-700' : active ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
+                          {done ? <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" /> : active ? <Loader2 className="w-4 h-4 animate-spin text-teal-500 flex-shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200 flex-shrink-0" />}
+                          <span>{step}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
+                      <p className="text-xs text-teal-700 mt-0.5">{sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered</p>
                     </div>
+                    <button onClick={handleBuildSemanticLayer} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm">
+                      <Zap className="w-4 h-4" /> Build Data Model
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Connector hub */}
+            <section>
+              <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Plug className="w-4 h-4 text-slate-500" />
+                  <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connect a New Source</h2>
+                  <span className="text-xs text-slate-400">· {CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search connectors…"
+                    className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-teal-400 w-52" />
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
+                {allCategories.map(cat => {
+                  const isActive = categoryFilter === cat
+                  const label = cat === 'all' ? 'All' : cat === 'italian' ? '🇮🇹 Italian' : CATEGORY_LABELS[cat]
+                  return (
+                    <button key={cat} onClick={() => setCategoryFilter(cat)}
+                      className={`text-xs px-3 py-1 rounded-full transition-colors flex-shrink-0 ${isActive ? 'bg-slate-900 text-white font-medium' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                      {label}
+                    </button>
                   )
                 })}
               </div>
-            ) : (
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
-                  <p className="text-xs text-teal-700 mt-0.5">
-                    {sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered from your data
-                  </p>
-                </div>
-                <button
-                  onClick={handleBuildSemanticLayer}
-                  className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm"
-                >
-                  <Zap className="w-4 h-4" /> Build Data Model
-                </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {filteredConnectors.map(c => (
+                  <ConnectorCard key={c.id} c={c} connected={connectedIds.has(c.id)} connecting={connectingId === c.id}
+                    onConnect={() => openConnect(c)} onDisconnect={() => disconnectByConnectorId(c.id)} />
+                ))}
+              </div>
+              {filteredConnectors.length === 0 && <p className="text-center text-sm text-slate-400 py-8">No connectors match your search.</p>}
+            </section>
+
+            {/* Upload */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Upload className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Upload File</h2>
+                <span className="text-xs text-slate-400">· fields auto-matched to your data model</span>
+              </div>
+              <UploadPanel upload={upload} onUpload={handleFile}
+                onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
+                onClear={() => setUpload(null)} onIngest={ingestCsv} onLoadSample={loadSample} />
+            </section>
+
+          </div>
+
+        ) : (
+
+          /* ── Live mode: Wizard a step singolo ───────────────────────────── */
+          <div className="px-8 py-6 space-y-6">
+
+            {/* Pipeline navigation rail */}
+            <WorkbenchRail steps={workbenchSteps} onNavigate={handleStepNavigate} activeViewStep={activeStep} />
+
+            {/* Sources error */}
+            {sourcesError && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />{sourcesError}
               </div>
             )}
+
+            {/* Step content — only the active step is rendered */}
+            <div className="min-h-80">
+
+              {/* ── Step 1: Discovery ── */}
+              {activeStep === 1 && (
+                <div className="panel panel-accent overflow-hidden">
+                  <div className="px-6 py-6 bg-gradient-to-br from-teal-50/60 to-white">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-9 h-9 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Sparkles className="w-4 h-4 text-teal-600" />
+                      </div>
+                      <div>
+                        <p className="eyebrow text-teal-600">Step 1 · Setup</p>
+                        <h3 className="text-base font-bold text-slate-900">Workspace ready</h3>
+                      </div>
+                      <span className="ml-auto flex items-center gap-1.5 text-xs font-medium bg-teal-100 text-teal-700 border border-teal-200 rounded-full px-2.5 py-1">
+                        <Check className="w-3.5 h-3.5" />Complete
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-600 leading-relaxed">
+                      Your workspace is configured for <strong className="text-slate-800">{workspaceLabel(sector.name)}</strong>. The AI is tuned to your domain — entities, metrics, and vocabulary are pre-loaded.
+                    </p>
+                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {PHASE_PREVIEW.map((p, i) => (
+                        <div key={p.phase} className="bg-white border border-slate-200 rounded-lg p-3.5 relative">
+                          <span className="absolute top-3 right-3 t-micro font-bold text-slate-300">0{i + 1}</span>
+                          <p.icon className="w-4 h-4 text-teal-600" />
+                          <p className="eyebrow text-slate-400 mt-2">{p.phase}</p>
+                          <p className="text-sm font-semibold text-slate-800 mt-0.5">{p.title}</p>
+                          <p className="t-mini text-slate-500 mt-1 leading-snug">{p.desc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 2: Sources ── */}
+              {activeStep === 2 && (
+                <div className="space-y-5">
+                  {!sourcesLoading && sources.filter(s => !s.is_default).length === 0 && (
+                    <div className="panel panel-accent overflow-hidden">
+                      <div className="px-5 py-5 bg-gradient-to-br from-teal-50/60 to-white">
+                        <h3 className="text-sm font-bold text-slate-900 mb-1">Connect your first source</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed">Link your ERP, CRM, databases, or files. Data loads automatically and becomes queryable immediately.</p>
+                      </div>
+                    </div>
+                  )}
+                  {sources.filter(s => !s.is_default).length > 0 && (
+                    <ConnectedSourcesPanel
+                      sources={sources} onDisconnect={disconnectSource} onSync={syncById}
+                      tableProfiles={tableProfiles} profilingLoading={profilingLoading} onRefreshProfiles={refreshProfiles}
+                      qualityRules={qualityRules} onUpdateRule={handleUpdateRule} onRemoveRule={handleRemoveRule}
+                    />
+                  )}
+                  {/* Connector hub */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
+                      <div className="flex items-center gap-2.5">
+                        <Plug className="w-4 h-4 text-slate-500" />
+                        <h3 className="text-sm font-bold text-slate-800">Connect a Source</h3>
+                        <span className="t-mini text-slate-400">{CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
+                      </div>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search connectors…"
+                          className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-teal-400 w-52" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
+                      {allCategories.map(cat => {
+                        const isActive = categoryFilter === cat
+                        const label = cat === 'all' ? 'All' : cat === 'italian' ? '🇮🇹 Italian' : CATEGORY_LABELS[cat]
+                        return (
+                          <button key={cat} onClick={() => setCategoryFilter(cat)}
+                            className={`text-xs px-3 py-1 rounded-full transition-colors flex-shrink-0 ${isActive ? 'bg-slate-900 text-white font-medium' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {filteredConnectors.map(c => (
+                        <ConnectorCard key={c.id} c={c} connected={connectedIds.has(c.id)} connecting={connectingId === c.id}
+                          onConnect={() => openConnect(c)} onDisconnect={() => disconnectByConnectorId(c.id)} />
+                      ))}
+                    </div>
+                    {filteredConnectors.length === 0 && <p className="text-center text-sm text-slate-400 py-8">No connectors match your search.</p>}
+                  </div>
+                  {/* Upload */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Upload className="w-4 h-4 text-slate-500" />
+                      <h3 className="text-sm font-bold text-slate-700">Upload File</h3>
+                      <span className="text-xs text-slate-400">· fields auto-matched to your data model</span>
+                    </div>
+                    <UploadPanel upload={upload} onUpload={handleFile}
+                      onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
+                      onClear={() => setUpload(null)} onIngest={ingestCsv} />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Step 3: Profiling ── */}
+              {activeStep === 3 && (
+                <div className="space-y-4">
+                  {sources.filter(s => !s.is_default && s.status === 'active').length === 0 ? (
+                    <div className="panel p-8 text-center space-y-3">
+                      <Database className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-sm text-slate-500 font-medium">No active sources yet</p>
+                      <p className="text-xs text-slate-400">Connect a source in step 2, then come back to review profiling.</p>
+                      <button onClick={() => handleStepNavigate(2)} className="btn btn-secondary btn-sm mx-auto block">← Go to Sources</button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-500">Tables are profiled automatically after connection. Expand a source to see row counts, types, and null rates.</p>
+                      <ConnectedSourcesPanel
+                        sources={sources} onDisconnect={disconnectSource} onSync={syncById}
+                        tableProfiles={tableProfiles} profilingLoading={profilingLoading} onRefreshProfiles={refreshProfiles}
+                        qualityRules={qualityRules} onUpdateRule={handleUpdateRule} onRemoveRule={handleRemoveRule}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Step 4: Quality ── */}
+              {activeStep === 4 && (() => {
+                const allActiveTables = sources
+                  .filter(s => !s.is_default && s.status === 'active')
+                  .flatMap(s => s.target_tables ?? [])
+                return (
+                  <div className="space-y-4">
+                    {allActiveTables.length === 0 ? (
+                      <div className="panel p-8 text-center space-y-3">
+                        <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                        <p className="text-sm text-slate-500 font-medium">No tables profiled yet</p>
+                        <p className="text-xs text-slate-400">Profile your sources in step 3 first.</p>
+                        <button onClick={() => handleStepNavigate(3)} className="btn btn-secondary btn-sm mx-auto block">← Go to Profiling</button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-slate-500">Review column-level quality and set rules — mark expected nulls, override thresholds, certify columns.</p>
+                        <ProfilingPanel
+                          tables={allActiveTables} tableProfiles={tableProfiles} loading={profilingLoading}
+                          onRefresh={refreshProfiles} qualityRules={qualityRules}
+                          onUpdateRule={handleUpdateRule} onRemoveRule={handleRemoveRule}
+                        />
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── Step 5: AI Data Model ── */}
+              {activeStep === 5 && (
+                <div className="space-y-4">
+                  {sources.filter(s => !s.is_default && s.status === 'active').length === 0 ? (
+                    <div className="panel p-8 text-center space-y-3">
+                      <Brain className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-sm text-slate-500 font-medium">No active sources yet</p>
+                      <p className="text-xs text-slate-400">Connect a source first, then generate your data model here.</p>
+                      <button onClick={() => handleStepNavigate(2)} className="btn btn-secondary btn-sm mx-auto block">← Go to Sources</button>
+                    </div>
+                  ) : (
+                    <OntologyGenerationPanel sectorId={sectorId} onNavigateToOntology={() => onNavigate?.('sembuilder')} />
+                  )}
+                </div>
+              )}
+
+              {/* ── Step 6: Human Review ── */}
+              {activeStep === 6 && (
+                <div className="space-y-4">
+                  {reviewItems.length === 0 ? (
+                    <div className="panel p-8 text-center space-y-3">
+                      <ClipboardCheck className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-sm text-slate-500 font-medium">No items to review yet</p>
+                      <p className="text-xs text-slate-400">Generate a data model in step 5 — AI-proposed items will appear here for certification.</p>
+                      <button onClick={() => handleStepNavigate(5)} className="btn btn-secondary btn-sm mx-auto block">← Generate Data Model</button>
+                    </div>
+                  ) : (
+                    <ReviewPanel items={reviewItems} onUpdate={handleUpdateReview} onCertifyAll={handleCertifyAll} />
+                  )}
+                </div>
+              )}
+
+              {/* ── Step 7: Activation (only missing checks shown) ── */}
+              {activeStep === 7 && (() => {
+                const hasProfiled = Object.keys(tableProfiles).length > 0
+                const hasEntities = extNodeCount > 0
+                const allCertified = reviewItems.length === 0 || reviewItems.every(i => i.status !== 'pending')
+                const checks: ReadinessCheck[] = [
+                  { label: 'Data sources connected', done: sources.some(s => !s.is_default && s.status === 'active'), hint: 'Connect at least one data source', actionLabel: 'Connect source', onAction: () => handleStepNavigate(2) },
+                  { label: 'Sources profiled & quality reviewed', done: hasProfiled, hint: 'Go to Profiling to run analysis', actionLabel: 'Run profiling', onAction: () => handleStepNavigate(3) },
+                  { label: 'AI data model generated', done: hasEntities, hint: 'Generate entities and metrics from your data', actionLabel: 'Generate model', onAction: () => handleStepNavigate(5) },
+                  { label: 'Ontology items certified', done: allCertified, hint: 'Certify all proposed items in Human Review', actionLabel: 'Review items', onAction: () => handleStepNavigate(6) },
+                  { label: 'Semantic layer built', done: semBuilt, hint: 'Build the semantic layer to make data queryable' },
+                ]
+                const allReady = checks.every(c => c.done)
+                const missingChecks = checks.filter(c => !c.done)
+                const doneCount = checks.length - missingChecks.length
+                return (
+                  <div className="space-y-4">
+                    {allReady ? (
+                      <div className="rounded-xl border border-teal-300 bg-gradient-to-r from-teal-50 to-emerald-50 overflow-hidden">
+                        <div className="flex items-center gap-4 px-5 py-4">
+                          <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <Rocket className="w-5 h-5 text-teal-600" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-teal-800">All checks passed — ready to activate!</p>
+                            <p className="text-xs text-teal-600 mt-0.5">Build the semantic layer and start querying your data.</p>
+                          </div>
+                          <button onClick={handleBuildSemanticLayer} disabled={building} className="btn btn-primary flex-shrink-0">
+                            {building ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                            {building ? 'Building…' : 'Build & Activate'}
+                          </button>
+                        </div>
+                        {building && (
+                          <div className="px-5 pb-4 space-y-2 border-t border-teal-100 pt-3">
+                            {BUILD_STEPS.map((step, i) => {
+                              const done = buildStep > i + 1 || buildStep === 4
+                              const active = buildStep === i + 1
+                              return (
+                                <div key={i} className={`flex items-center gap-2.5 text-xs ${done ? 'text-teal-700' : active ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
+                                  {done ? <CheckCircle2 className="w-4 h-4 text-teal-500 flex-shrink-0" /> : active ? <Loader2 className="w-4 h-4 animate-spin text-teal-500 flex-shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-slate-200 flex-shrink-0" />}
+                                  <span>{step}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-700">{missingChecks.length} item{missingChecks.length !== 1 ? 's' : ''} remaining before activation</span>
+                          <span className="text-xs text-slate-400">({doneCount}/{checks.length} complete)</span>
+                        </div>
+                        <div className="panel overflow-hidden">
+                          <div className="divide-y divide-slate-50">
+                            {missingChecks.map(c => (
+                              <div key={c.label} className="flex items-center gap-3 px-4 py-3">
+                                <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                  <span className="w-2 h-2 rounded-full bg-slate-300" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-slate-700">{c.label}</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">{c.hint}</p>
+                                </div>
+                                {c.actionLabel && c.onAction && (
+                                  <button onClick={c.onAction} className="text-[10px] text-teal-600 hover:text-teal-800 font-medium flex-shrink-0 transition-colors">
+                                    {c.actionLabel} →
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── Step 8: Continuous Evolution ── */}
+              {activeStep === 8 && (
+                <div className="space-y-4">
+                  {!semBuilt ? (
+                    <div className="panel p-8 text-center space-y-3">
+                      <TrendingUp className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p className="text-sm text-slate-500 font-medium">Activate first</p>
+                      <p className="text-xs text-slate-400">Complete activation in step 7 to start monitoring and evolving your data model.</p>
+                      <button onClick={() => handleStepNavigate(7)} className="btn btn-secondary btn-sm mx-auto block">← Go to Activation</button>
+                    </div>
+                  ) : (
+                    <ContinuousEvolutionPanel
+                      sources={sources.filter(s => !s.is_default)}
+                      feedbackItems={feedbackItems}
+                      onAddFeedback={handleAddFeedback}
+                      onResolve={handleResolveFeedback}
+                    />
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Back / Next navigation */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+              <button
+                onClick={() => handleStepNavigate(activeStep - 1)}
+                disabled={activeStep === 1}
+                className="btn btn-secondary btn-sm disabled:opacity-30"
+              >
+                ← Back
+              </button>
+              <span className="t-mini text-slate-400">Step {activeStep} of {workbenchSteps.length}</span>
+              <button
+                onClick={() => handleStepNavigate(activeStep + 1)}
+                disabled={activeStep === workbenchSteps.length}
+                className="btn btn-primary btn-sm disabled:opacity-30"
+              >
+                Next →
+              </button>
+            </div>
+
           </div>
+
         )}
 
-        {/* Connector hub */}
-        <section id="wb-connect" className="scroll-mt-4">
-          <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
-            {IS_DEMO_MODE ? (
-              <div className="flex items-center gap-2">
-                <Plug className="w-4 h-4 text-slate-500" />
-                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Connect a New Source</h2>
-                <span className="text-xs text-slate-400">· {CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2.5">
-                <StatusToken token="2" status={statusByN[2]} />
-                <div>
-                  <span className="eyebrow text-slate-400">Setup</span>
-                  <h2 className="text-sm font-bold text-slate-800 leading-tight">
-                    Connect a Source
-                    <span className="ml-2 t-mini font-normal text-slate-400">{CONNECTORS.filter(c => c.status !== 'coming-soon').length} integrations</span>
-                  </h2>
-                </div>
-              </div>
-            )}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search connectors…"
-                className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-teal-400 w-52" />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1">
-            {allCategories.map(cat => {
-              const isActive = categoryFilter === cat
-              const label = cat === 'all' ? 'All' : cat === 'italian' ? '🇮🇹 Italian' : CATEGORY_LABELS[cat]
-              return (
-                <button key={cat} onClick={() => setCategoryFilter(cat)}
-                  className={`text-xs px-3 py-1 rounded-full transition-colors flex-shrink-0 ${isActive ? 'bg-slate-900 text-white font-medium' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300'}`}>
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {filteredConnectors.map(c => (
-              <ConnectorCard key={c.id} c={c}
-                connected={connectedIds.has(c.id)}
-                connecting={connectingId === c.id}
-                onConnect={() => openConnect(c)}
-                onDisconnect={() => disconnectByConnectorId(c.id)}
-              />
-            ))}
-          </div>
-          {filteredConnectors.length === 0 && (
-            <p className="text-center text-sm text-slate-400 py-8">No connectors match your search.</p>
-          )}
-        </section>
-
-        {/* Upload */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Upload className="w-4 h-4 text-slate-500" />
-            <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Upload File</h2>
-            <span className="text-xs text-slate-400">· fields auto-matched to your data model</span>
-          </div>
-          <UploadPanel
-            upload={upload} onUpload={handleFile} onToggle={col => setUpload(prev => prev ? { ...prev, accepted: { ...prev.accepted, [col]: !prev.accepted[col] } } : null)}
-            onClear={() => setUpload(null)} onIngest={ingestCsv} onLoadSample={IS_DEMO_MODE ? loadSample : undefined}
-          />
-        </section>
       </div>
 
       {/* Credential modal */}
