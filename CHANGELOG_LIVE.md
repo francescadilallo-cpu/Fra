@@ -10,6 +10,48 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 2: Source Inventory & Prioritization)
+
+Implements **Step 2** of the 8-step Customer Experience Process — "Mappa delle
+sorgenti dati con priorità per caso d'uso".
+
+### New — `data/sourcePlan.ts`
+
+- `SourcePlanEntry` type: connectorId, name, category, priority (H/M/L),
+  useCases[].
+- `loadSourcePlan()` / `saveSourcePlan()` — localStorage persistence
+  (`si-source-plan`), fires `source-plan-updated` event on write.
+- `SECTOR_SOURCE_SUGGESTIONS` — pre-mapped suggested sources per sector
+  (manufacturing / retail / healthcare / finance) with default priorities
+  and use-case tags.
+- `PRIORITY_COLORS` — shared teal/amber/slate token palette for H/M/L badges.
+
+### Updated — `OnboardingWizard.tsx`
+
+Live mode wizard grows from 1 step to 3 steps:
+1. Company + Sector (unchanged)
+2. **Source Inventory** — sector-specific source grid, each row has:
+   checkbox, logo initial, name, category chip, use-case tags, and an H/M/L
+   priority selector. Pre-selected with sector defaults; user deselects what
+   they don't have and adjusts priority.
+3. Summary — count of selected sources + entity count + AI model note.
+
+On completion, `saveSourcePlan()` persists the selected entries.
+Demo mode is completely unchanged (still 5 steps).
+
+### Updated — `DataSourcesView.tsx`
+
+- New `SourcePlanBanner` component (collapsible, default open) shows the
+  saved source plan at the top of the Sources view.
+- Entries grouped by priority (High → Medium → Low), each showing connected
+  vs. pending status derived from live `BackendSource.connector_type`.
+- "Connect →" button on each pending row opens the credential modal for
+  that connector directly (via `openPlanConnector` callback).
+- Reacts to `source-plan-updated` event to stay in sync with wizard.
+- Only renders for live mode users who have a non-empty plan.
+
+---
+
 ## 2026-06-23 (fix: replace PyJWT with pure-Python HS256 — restore test suite green)
 
 ### Root cause

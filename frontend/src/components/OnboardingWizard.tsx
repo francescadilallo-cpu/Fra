@@ -1,7 +1,11 @@
-import { useState } from 'react'
-import { Brain, ChevronRight, ChevronLeft, X, Check, Building2, Zap, Package, GitBranch } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Brain, ChevronRight, ChevronLeft, X, Check, Building2, Zap, Package, GitBranch, Database } from 'lucide-react'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { IS_DEMO_MODE } from '../lib/demoMode'
+import {
+  saveSourcePlan, SECTOR_SOURCE_SUGGESTIONS,
+  type SourcePlanEntry, type PlanPriority,
+} from '../data/sourcePlan'
 
 interface Props {
   onComplete: (companyName: string, sectorId: SectorId, customEntity: string) => void
@@ -36,9 +40,11 @@ const SECTOR_NAMES: Record<string, string> = {
   finance: 'Finance',
 }
 
-// Live workspaces collapse the wizard to a single step (company name + sector);
-// the five demo steps (ontology preview, connectors, …) are demo-only.
-const TOTAL_STEPS = IS_DEMO_MODE ? 5 : 1
+// Demo: 5 steps (ontology preview, connectors, agent, complete)
+// Live: 3 steps (company+sector, source inventory, summary)
+const TOTAL_STEPS = IS_DEMO_MODE ? 5 : 3
+
+const PRIORITY_LABELS: Record<PlanPriority, string> = { high: 'H', medium: 'M', low: 'L' }
 
 export default function OnboardingWizard({ onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
@@ -46,6 +52,18 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
   const [selectedSector, setSelectedSector] = useState<SectorId | null>(null)
   const [customEntity, setCustomEntity] = useState('')
   const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(new Set())
+
+  // Source plan state (live mode Step 2)
+  const [planSelected, setPlanSelected] = useState<Set<string>>(new Set())
+  const [planPriorities, setPlanPriorities] = useState<Record<string, PlanPriority>>({})
+
+  // Reset source plan defaults whenever sector changes
+  useEffect(() => {
+    if (!selectedSector) return
+    const suggestions = SECTOR_SOURCE_SUGGESTIONS[selectedSector] ?? []
+    setPlanSelected(new Set(suggestions.map(s => s.connectorId)))
+    setPlanPriorities(Object.fromEntries(suggestions.map(s => [s.connectorId, s.priority])))
+  }, [selectedSector])
 
   const toggleConnector = (name: string) => {
     setSelectedConnectors(prev => {
@@ -55,14 +73,38 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
     })
   }
 
+  const togglePlanEntry = (id: string) => {
+    setPlanSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const setPriority = (id: string, p: PlanPriority) => {
+    setPlanPriorities(prev => ({ ...prev, [id]: p }))
+  }
+
   const canAdvanceStep1 = companyName.trim().length > 0 && selectedSector !== null
 
   const handleComplete = () => {
+    // Persist the source plan before completing onboarding
+    if (!IS_DEMO_MODE && selectedSector) {
+      const suggestions = SECTOR_SOURCE_SUGGESTIONS[selectedSector] ?? []
+      const plan: SourcePlanEntry[] = suggestions
+        .filter(s => planSelected.has(s.connectorId))
+        .map(s => ({
+          ...s,
+          priority: planPriorities[s.connectorId] ?? s.priority,
+        }))
+      saveSourcePlan(plan)
+    }
     localStorage.setItem('si-onboarding-done', '1')
     onComplete(companyName.trim(), selectedSector!, customEntity.trim())
   }
 
   const ontologyEntities = selectedSector ? SECTORS[selectedSector].ontology.nodes : []
+  const planSuggestions = selectedSector ? (SECTOR_SOURCE_SUGGESTIONS[selectedSector] ?? []) : []
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
@@ -84,7 +126,8 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
 
         {/* Content */}
         <div className="px-6 pb-2" style={{ minHeight: '380px' }}>
-          {/* Step 1 — Welcome + sector */}
+
+          {/* ── Step 1 — Welcome + sector ────────────────────────────────── */}
           {step === 1 && (
             <div className="flex flex-col gap-5">
               <div className="flex flex-col items-center gap-2 pt-2">
@@ -127,8 +170,127 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 2 — Ontology preview + customization */}
-          {step === 2 && selectedSector && (
+          {/* ── Step 2 (live): Source Inventory & Prioritization ─────────── */}
+          {!IS_DEMO_MODE && step === 2 && selectedSector && (
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Database size={18} className="text-teal-600" />
+                  <h2 className="text-xl font-bold text-gray-900">Map your data sources</h2>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  Which systems does <span className="font-medium text-gray-700">{companyName}</span> use?
+                  Mark the ones you have and adjust priority — we'll guide the connection order.
+                </p>
+              </div>
+
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {planSuggestions.map(s => {
+                  const isSelected = planSelected.has(s.connectorId)
+                  const priority = planPriorities[s.connectorId] ?? s.priority
+                  return (
+                    <div
+                      key={s.connectorId}
+                      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all ${
+                        isSelected
+                          ? 'bg-teal-50/60 border-teal-200'
+                          : 'bg-white border-slate-200 opacity-50'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => togglePlanEntry(s.connectorId)}
+                        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                          isSelected ? 'bg-teal-500 border-teal-500' : 'border-gray-300 bg-white'
+                        }`}
+                      >
+                        {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                      </button>
+
+                      {/* Logo initial */}
+                      <span className="flex-shrink-0 w-7 h-7 rounded-lg bg-teal-100 text-teal-700 text-xs font-bold flex items-center justify-center">
+                        {s.name[0]}
+                      </span>
+
+                      {/* Name + use cases */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">{s.name}</span>
+                          <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium">{s.category}</span>
+                        </div>
+                        <div className="flex gap-1 mt-0.5 flex-wrap">
+                          {s.useCases.map(uc => (
+                            <span key={uc} className="text-[9px] text-teal-600 bg-teal-50 border border-teal-100 rounded px-1.5 py-0.5">{uc}</span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Priority selector */}
+                      {isSelected && (
+                        <div className="flex-shrink-0 flex gap-0.5">
+                          {(['high', 'medium', 'low'] as PlanPriority[]).map(p => (
+                            <button
+                              key={p}
+                              onClick={() => setPriority(s.connectorId, p)}
+                              className={`w-6 h-6 rounded text-[10px] font-bold transition-colors ${
+                                priority === p
+                                  ? p === 'high' ? 'bg-red-500 text-white' : p === 'medium' ? 'bg-amber-400 text-white' : 'bg-slate-400 text-white'
+                                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                              }`}
+                            >
+                              {PRIORITY_LABELS[p]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                <span>{planSelected.size} of {planSuggestions.length} sources selected</span>
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />High</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" />Medium</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400" />Low</span>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3 (live): Summary ───────────────────────────────────── */}
+          {!IS_DEMO_MODE && step === 3 && selectedSector && (
+            <div className="flex flex-col items-center gap-5 pt-2">
+              <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center">
+                <Check size={32} className="text-white" strokeWidth={3} />
+              </div>
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900">Ready to connect</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  Workspace configured for <span className="font-semibold text-gray-700">{companyName}</span>
+                </p>
+              </div>
+              <div className="w-full flex flex-col gap-2 bg-gray-50 rounded-xl p-4">
+                {[
+                  { icon: <GitBranch size={15} className="text-teal-600" />, text: `${ontologyEntities.length} entities pre-built for ${SECTOR_NAMES[selectedSector]}` },
+                  { icon: <Database size={15} className="text-teal-600" />, text: `${planSelected.size} data source${planSelected.size !== 1 ? 's' : ''} in your source plan` },
+                  { icon: <Zap size={15} className="text-teal-600" />, text: 'AI will profile data quality and propose your model automatically' },
+                  { icon: <Package size={15} className="text-teal-600" />, text: 'GDPR + EU AI Act compliance already mapped' },
+                ].map(({ icon, text }, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                    {icon}
+                    <span>{text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Demo steps (unchanged) ───────────────────────────────────── */}
+
+          {/* Demo Step 2 — Ontology preview + customization */}
+          {IS_DEMO_MODE && step === 2 && selectedSector && (
             <div className="flex flex-col gap-4">
               <div>
                 <div className="flex items-center gap-2">
@@ -162,8 +324,8 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 3 — Connectors */}
-          {step === 3 && selectedSector && (
+          {/* Demo Step 3 — Connectors */}
+          {IS_DEMO_MODE && step === 3 && selectedSector && (
             <div className="flex flex-col gap-4">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Connect your systems</h2>
@@ -193,8 +355,8 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 4 — Suggested agent */}
-          {step === 4 && selectedSector && (
+          {/* Demo Step 4 — Suggested agent */}
+          {IS_DEMO_MODE && step === 4 && selectedSector && (
             <div className="flex flex-col gap-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Your first suggested agent</h2>
@@ -219,8 +381,8 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             </div>
           )}
 
-          {/* Step 5 — Complete */}
-          {step === 5 && (
+          {/* Demo Step 5 — Complete */}
+          {IS_DEMO_MODE && step === 5 && (
             <div className="flex flex-col items-center gap-5 pt-2">
               <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center">
                 <Check size={32} className="text-white" strokeWidth={3} />
