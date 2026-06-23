@@ -2,7 +2,7 @@ import { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
-  Database, AlertTriangle, Clock, ChevronDown, ChevronRight,
+  Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -19,6 +19,10 @@ import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProf
 import type { TableProfile } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import { loadSourcePlan, PRIORITY_COLORS, type SourcePlanEntry } from '../data/sourcePlan'
+import {
+  loadQualityRules, saveQualityRules, upsertRule, removeRule,
+  getRuleForColumn, effectiveQualityScore, type QualityRule,
+} from '../data/qualityRules'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -359,19 +363,60 @@ function NullBar({ rate }: { rate: number }) {
 }
 
 function ProfilingPanel({
-  tables, tableProfiles, loading, onRefresh,
+  tables, tableProfiles, loading, onRefresh, qualityRules, onUpdateRule, onRemoveRule,
 }: {
   tables: string[]
   tableProfiles: Record<string, TableProfile>
   loading: boolean
   onRefresh: () => void
+  qualityRules: QualityRule[]
+  onUpdateRule: (rule: QualityRule) => void
+  onRemoveRule: (tableKey: string, columnName: string) => void
 }) {
   const [openTable, setOpenTable] = useState<string | null>(null)
+  // editingRule: tracks which column's inline editor is open
+  const [editingRule, setEditingRule] = useState<{ tableKey: string; columnName: string } | null>(null)
+  const [ruleForm, setRuleForm] = useState({ ignore: false, maxNullRate: 30, note: '' })
+
+  function openRuleEditor(tableKey: string, columnName: string) {
+    const existing = getRuleForColumn(qualityRules, tableKey, columnName)
+    setRuleForm({
+      ignore: existing?.ignore ?? false,
+      maxNullRate: existing ? Math.round(existing.maxNullRate * 100) : 30,
+      note: existing?.note ?? '',
+    })
+    setEditingRule({ tableKey, columnName })
+  }
+
+  function saveRule() {
+    if (!editingRule) return
+    onUpdateRule({
+      tableKey: editingRule.tableKey,
+      columnName: editingRule.columnName,
+      ignore: ruleForm.ignore,
+      maxNullRate: ruleForm.maxNullRate / 100,
+      note: ruleForm.note.trim(),
+    })
+    setEditingRule(null)
+  }
+
+  function clearRule() {
+    if (!editingRule) return
+    onRemoveRule(editingRule.tableKey, editingRule.columnName)
+    setEditingRule(null)
+  }
 
   return (
     <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Profiling Report</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Data Quality</span>
+          {qualityRules.filter(r => tables.some(t => r.tableKey === t)).length > 0 && (
+            <span className="text-[9px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 rounded-full px-1.5 py-0.5">
+              {qualityRules.filter(r => tables.some(t => r.tableKey === t)).length} rule{qualityRules.filter(r => tables.some(t => r.tableKey === t)).length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
         <button
           onClick={onRefresh}
           disabled={loading}
@@ -394,8 +439,10 @@ function ProfilingPanel({
             const p = tableProfiles[t]
             if (!p) return null
             const isOpen = openTable === t
-            const qColor = p.quality_score >= 85 ? 'bg-teal-400' : p.quality_score >= 60 ? 'bg-amber-400' : 'bg-red-400'
-            const qText = p.quality_score >= 85 ? 'text-teal-700' : p.quality_score >= 60 ? 'text-amber-700' : 'text-red-700'
+            const effScore = effectiveQualityScore(p, qualityRules, t)
+            const qColor = effScore >= 85 ? 'bg-teal-400' : effScore >= 60 ? 'bg-amber-400' : 'bg-red-400'
+            const qText = effScore >= 85 ? 'text-teal-700' : effScore >= 60 ? 'text-amber-700' : 'text-red-700'
+            const rulesForTable = qualityRules.filter(r => r.tableKey === t)
             return (
               <div key={t} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
                 {/* Table header row */}
@@ -405,13 +452,18 @@ function ProfilingPanel({
                 >
                   <span className="font-mono text-xs text-slate-700 flex-1 truncate">{t}</span>
                   <span className="text-[10px] text-slate-400 flex-shrink-0">{p.row_count.toLocaleString('en-US')} rows · {p.column_count} cols</span>
-                  {/* Quality score */}
+                  {/* Effective quality score */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${qColor}`} style={{ width: `${p.quality_score}%` }} />
+                      <div className={`h-full rounded-full ${qColor}`} style={{ width: `${effScore}%` }} />
                     </div>
-                    <span className={`text-[10px] font-bold ${qText}`}>{p.quality_score}%</span>
+                    <span className={`text-[10px] font-bold ${qText}`}>{effScore}%</span>
                   </div>
+                  {rulesForTable.length > 0 && (
+                    <span className="text-[9px] bg-teal-50 text-teal-700 border border-teal-200 rounded px-1.5 py-0.5 flex-shrink-0 flex items-center gap-0.5">
+                      <ShieldCheck className="w-2.5 h-2.5" />{rulesForTable.length}
+                    </span>
+                  )}
                   {p.high_null_columns.length > 0 && (
                     <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 flex-shrink-0">
                       ⚠ {p.high_null_columns.length} null
@@ -433,34 +485,116 @@ function ProfilingPanel({
                           <th className="text-left px-2 py-1.5 w-28">Null %</th>
                           <th className="text-right px-3 py-1.5">Distinct</th>
                           <th className="text-center px-2 py-1.5">Key?</th>
+                          <th className="text-center px-2 py-1.5">Rule</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {p.columns.map(col => (
-                          <tr key={col.name} className={col.null_rate > 0.3 ? 'bg-red-50/30' : col.null_rate > 0.1 ? 'bg-amber-50/20' : ''}>
-                            <td className="px-3 py-1.5 font-mono text-slate-700 truncate max-w-[140px]" title={col.name}>{col.name}</td>
-                            <td className="px-2 py-1.5">
-                              <span className="bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium">{col.type || '—'}</span>
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <NullBar rate={col.null_rate} />
-                            </td>
-                            <td className="px-3 py-1.5 text-right text-slate-500">{col.distinct_in_sample.toLocaleString('en-US')}</td>
-                            <td className="px-2 py-1.5 text-center">
-                              {col.looks_unique && (
-                                <span title="Likely primary key" className="text-teal-600 font-bold">✦</span>
+                        {p.columns.map(col => {
+                          const rule = getRuleForColumn(qualityRules, t, col.name)
+                          const isEditingThis = editingRule?.tableKey === t && editingRule?.columnName === col.name
+                          const threshold = rule ? rule.maxNullRate : 0.30
+                          const isHighNull = !rule?.ignore && col.null_rate > threshold
+                          return (
+                            <>
+                              <tr key={col.name} className={isHighNull ? (col.null_rate > 0.3 ? 'bg-red-50/30' : 'bg-amber-50/20') : rule?.ignore ? 'bg-slate-50/60' : ''}>
+                                <td className="px-3 py-1.5 font-mono text-slate-700 truncate max-w-[140px]" title={col.name}>
+                                  {col.name}
+                                  {rule?.ignore && <span className="ml-1 text-slate-400 italic">(ignored)</span>}
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <span className="bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium">{col.type || '—'}</span>
+                                </td>
+                                <td className="px-2 py-1.5">
+                                  <NullBar rate={col.null_rate} />
+                                </td>
+                                <td className="px-3 py-1.5 text-right text-slate-500">{col.distinct_in_sample.toLocaleString('en-US')}</td>
+                                <td className="px-2 py-1.5 text-center">
+                                  {col.looks_unique && (
+                                    <span title="Likely primary key" className="text-teal-600 font-bold">✦</span>
+                                  )}
+                                </td>
+                                <td className="px-2 py-1.5 text-center">
+                                  <button
+                                    onClick={() => isEditingThis ? setEditingRule(null) : openRuleEditor(t, col.name)}
+                                    className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-slate-100 transition-colors"
+                                    title={rule ? 'Edit quality rule' : 'Set quality rule'}
+                                  >
+                                    {rule ? (
+                                      <ShieldCheck className={`w-3 h-3 ${rule.ignore ? 'text-slate-400' : 'text-teal-500'}`} />
+                                    ) : (
+                                      <Pencil className="w-2.5 h-2.5 text-slate-300 hover:text-slate-500" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                              {isEditingThis && (
+                                <tr key={`${col.name}-editor`} className="bg-teal-50/40">
+                                  <td colSpan={6} className="px-3 py-2">
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={ruleForm.ignore}
+                                          onChange={e => setRuleForm(f => ({ ...f, ignore: e.target.checked }))}
+                                          className="w-3 h-3 rounded accent-teal-600"
+                                        />
+                                        Ignore nulls (exclude from score)
+                                      </label>
+                                      <label className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                                        <span>Max null</span>
+                                        <input
+                                          type="number"
+                                          min={0} max={100}
+                                          value={ruleForm.maxNullRate}
+                                          disabled={ruleForm.ignore}
+                                          onChange={e => setRuleForm(f => ({ ...f, maxNullRate: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                                          className="w-12 text-[10px] px-1.5 py-0.5 border border-slate-200 rounded text-center disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                        />
+                                        <span>%</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="Note (optional)"
+                                        value={ruleForm.note}
+                                        onChange={e => setRuleForm(f => ({ ...f, note: e.target.value }))}
+                                        className="flex-1 min-w-[100px] text-[10px] px-2 py-0.5 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                      />
+                                      <div className="flex items-center gap-1.5 ml-auto">
+                                        {rule && (
+                                          <button onClick={clearRule}
+                                            className="text-[10px] text-red-500 hover:text-red-700 transition-colors px-1.5 py-0.5">
+                                            Remove
+                                          </button>
+                                        )}
+                                        <button onClick={() => setEditingRule(null)}
+                                          className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-0.5">
+                                          Cancel
+                                        </button>
+                                        <button onClick={saveRule}
+                                          className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700 transition-colors">
+                                          Save
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {ruleForm.note && (
+                                      <p className="mt-1 text-[9px] text-slate-500 italic">{ruleForm.note}</p>
+                                    )}
+                                  </td>
+                                </tr>
                               )}
-                            </td>
-                          </tr>
-                        ))}
+                            </>
+                          )
+                        })}
                       </tbody>
                     </table>
-                    {p.high_null_columns.length > 0 && (
+                    {p.high_null_columns.filter(col => !getRuleForColumn(qualityRules, t, col)?.ignore).length > 0 && (
                       <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 flex items-center gap-2">
                         <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
                         <span className="text-[10px] text-amber-700">
-                          High null rate: <span className="font-mono">{p.high_null_columns.join(', ')}</span>
-                          {' — '}review in Data Quality step
+                          High null rate: <span className="font-mono">
+                            {p.high_null_columns.filter(col => !getRuleForColumn(qualityRules, t, col)?.ignore).join(', ')}
+                          </span>
+                          {' — '}click ✎ to set a rule or ignore
                         </span>
                       </div>
                     )}
@@ -477,6 +611,7 @@ function ProfilingPanel({
 
 function ConnectedSourcesPanel({
   sources, onDisconnect, onSync, tableProfiles, profilingLoading, onRefreshProfiles,
+  qualityRules, onUpdateRule, onRemoveRule,
 }: {
   sources: BackendSource[]
   onDisconnect: (id: string) => void
@@ -484,6 +619,9 @@ function ConnectedSourcesPanel({
   tableProfiles: Record<string, TableProfile>
   profilingLoading: boolean
   onRefreshProfiles: () => void
+  qualityRules: QualityRule[]
+  onUpdateRule: (rule: QualityRule) => void
+  onRemoveRule: (tableKey: string, columnName: string) => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (id: string) => setExpanded(prev => {
@@ -507,9 +645,14 @@ function ConnectedSourcesPanel({
         const tables = s.target_tables ?? []
         const profs = tables.map(t => tableProfiles[t]).filter((p): p is TableProfile => !!p)
         const avgQ = profs.length > 0
-          ? Math.round(profs.reduce((a, p) => a + p.quality_score, 0) / profs.length)
+          ? Math.round(profs.reduce((a, p) => a + effectiveQualityScore(p, qualityRules, tables[profs.indexOf(p)]), 0) / profs.length)
           : undefined
-        const totalHighNull = profs.reduce((a, p) => a + p.high_null_columns.length, 0)
+        const totalHighNull = profs.reduce((a, p, pi) => {
+          return a + p.columns.filter(col => {
+            const rule = getRuleForColumn(qualityRules, tables[pi], col.name)
+            return !rule?.ignore && col.null_rate > (rule ? rule.maxNullRate : 0.30)
+          }).length
+        }, 0)
         const isExpanded = expanded.has(s.id)
 
         return (
@@ -561,13 +704,16 @@ function ConnectedSourcesPanel({
               )}
             </div>
 
-            {/* Profiling report — full column-level detail */}
+            {/* Data Quality — full column-level profiling + rule editing */}
             {isExpanded && (profs.length > 0 || profilingLoading) && (
               <ProfilingPanel
                 tables={tables}
                 tableProfiles={tableProfiles}
                 loading={profilingLoading}
                 onRefresh={onRefreshProfiles}
+                qualityRules={qualityRules}
+                onUpdateRule={onUpdateRule}
+                onRemoveRule={onRemoveRule}
               />
             )}
           </div>
@@ -864,6 +1010,30 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   // ── Quality profiles
   const [tableProfiles, setTableProfiles] = useState<Record<string, TableProfile>>({})
   const [profilingLoading, setProfilingLoading] = useState(false)
+
+  // ── Quality rules (live mode)
+  const [qualityRules, setQualityRules] = useState<QualityRule[]>(() => loadQualityRules())
+  useEffect(() => {
+    const handler = () => setQualityRules(loadQualityRules())
+    window.addEventListener('quality-rules-updated', handler)
+    return () => window.removeEventListener('quality-rules-updated', handler)
+  }, [])
+
+  const handleUpdateRule = useCallback((rule: QualityRule) => {
+    setQualityRules(prev => {
+      const next = upsertRule(prev, rule)
+      saveQualityRules(next)
+      return next
+    })
+  }, [])
+
+  const handleRemoveRule = useCallback((tableKey: string, columnName: string) => {
+    setQualityRules(prev => {
+      const next = removeRule(prev, tableKey, columnName)
+      saveQualityRules(next)
+      return next
+    })
+  }, [])
 
   // ── Source plan (live mode)
   const [plan, setPlan] = useState<SourcePlanEntry[]>(() => loadSourcePlan())
@@ -1168,6 +1338,9 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             tableProfiles={tableProfiles}
             profilingLoading={profilingLoading}
             onRefreshProfiles={refreshProfiles}
+            qualityRules={qualityRules}
+            onUpdateRule={handleUpdateRule}
+            onRemoveRule={handleRemoveRule}
           />
         </section>
 

@@ -10,6 +10,42 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 4: Data Quality & Cleaning)
+
+Implements **Step 4** of the 8-step Customer Experience Process — per-column
+quality rule editing so users can mark nulls as expected and customize
+acceptable thresholds.
+
+### New — `data/qualityRules.ts`
+
+- `QualityRule` type: `{ tableKey, columnName, maxNullRate (0–1), ignore, note }`.
+- `loadQualityRules()` / `saveQualityRules()` — localStorage persistence
+  (`si-quality-rules`), fires `quality-rules-updated` event on write.
+- `upsertRule()` / `removeRule()` / `getRuleForColumn()` — CRUD helpers.
+- `effectiveQualityScore()` — recalculates a table's quality score respecting
+  user rules (ignored columns are excluded from the null penalty).
+
+### Updated — `DataSourcesView.tsx`
+
+- `ProfilingPanel` gains `qualityRules`, `onUpdateRule`, `onRemoveRule` props.
+- Each column row in the column-detail table now has a **Rule** column:
+  - Grey pencil icon → no rule set.
+  - Teal shield icon → active rule (custom threshold or ignored).
+  - Clicking opens an inline editor row with:
+    - "Ignore nulls" checkbox (excludes column from quality score).
+    - "Max null %" number input (custom threshold, default 30%).
+    - Free-text "Note" field.
+    - Save / Remove / Cancel buttons.
+- Table header now shows effective quality score (rules-adjusted) instead
+  of raw score; a teal rule-count badge appears when any rules exist.
+- High-null warning footer filters out ignored columns.
+- `ConnectedSourcesPanel` `avgQ` badge and high-null count now use
+  rules-adjusted values.
+- Main view: `qualityRules` state + `quality-rules-updated` event listener +
+  `handleUpdateRule` / `handleRemoveRule` callbacks.
+
+---
+
 ## 2026-06-23 (Step 3: Source Integration & Profiling)
 
 Implements **Step 3** of the 8-step Customer Experience Process — "Integrazione
