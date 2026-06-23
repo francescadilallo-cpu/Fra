@@ -10,6 +10,36 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 5: AI-Assisted Ontology Generation)
+
+Implements **Step 5** of the 8-step Customer Experience Process — inline AI
+data-model generation inside DataSourcesView for live users.
+
+### Updated — `DataSourcesView.tsx`
+
+- **`ConfidenceBar` component** — compact 40px confidence score bar (teal ≥80%,
+  amber ≥60%, slate <60%).
+- **`OntologyGenerationPanel` component** — 4-state UI (idle → analyzing →
+  review → done/error):
+  - **Idle**: gradient card with "Generate Data Model" CTA and entity count if
+    the user already has an ontology. Shows "Retry" on error.
+  - **Analyzing**: loading skeleton with step-by-step progress dots
+    ("Scanning schemas / Inferring entities / Proposing relations & metrics").
+  - **Review**: three collapsible sections (Entities, Metrics, Relations) with
+    per-item checkboxes and confidence bars. High-confidence items
+    (≥60%) are pre-selected. Apply footer shows selected count.
+  - **Done**: success card with item count and "Open Ontology Builder →" link.
+- Apply flow:
+  - Entities → `saveExtension()` (localStorage + backend sync).
+  - Metrics → `createMetric()` API, mapped from `MetricProposal.formula` to
+    `BackendMetric.expression`.
+  - Relations → `addRelation()` API with `edge_type: 'fk'`.
+  - Fires `ontology-entity-added` event on apply.
+- Panel appears as "Step 5 of 8 — AI Data Model" section in live mode when
+  at least one user source is active.
+
+---
+
 ## 2026-06-23 (Step 4: Data Quality & Cleaning)
 
 Implements **Step 4** of the 8-step Customer Experience Process — per-column

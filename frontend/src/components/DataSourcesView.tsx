@@ -3,6 +3,7 @@ import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
   Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
+  Sparkles, Brain, Link2,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -15,14 +16,15 @@ import {
   type BackendSource, type ParamField,
 } from '../api/sources'
 import { Mail } from 'lucide-react'
-import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles } from '../api/semantic'
-import type { TableProfile } from '../api/semantic'
+import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles, analyzeSources, createMetric, addRelation } from '../api/semantic'
+import type { TableProfile, AnalyzeResult } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import { loadSourcePlan, PRIORITY_COLORS, type SourcePlanEntry } from '../data/sourcePlan'
 import {
   loadQualityRules, saveQualityRules, upsertRule, removeRule,
   getRuleForColumn, effectiveQualityScore, type QualityRule,
 } from '../data/qualityRules'
+import { loadExtension, saveExtension } from '../data/ontologyExtensions'
 import type { NavTab } from '../types'
 import { toast as globalToast } from './Toast'
 
@@ -321,6 +323,318 @@ function ConnectorLogo({ c, size = 'md' }: { c: ConnectorDef; size?: 'sm' | 'md'
   return (
     <div className={`${sizes} ${c.bg} ${c.fg} rounded-lg flex items-center justify-center font-bold flex-shrink-0 ring-1 ring-black/5`}>
       {c.logo}
+    </div>
+  )
+}
+
+// ── Ontology generation panel (Step 5) ───────────────────────────────────────
+
+type OntologyGenState = 'idle' | 'analyzing' | 'review' | 'applying' | 'done' | 'error'
+
+function ConfidenceBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100)
+  const color = pct >= 80 ? 'bg-teal-400' : pct >= 60 ? 'bg-amber-400' : 'bg-slate-300'
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-10 h-1 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[9px] text-slate-400">{pct}%</span>
+    </div>
+  )
+}
+
+function OntologyGenerationPanel({
+  sectorId,
+  onNavigateToOntology,
+}: {
+  sectorId: string
+  onNavigateToOntology: () => void
+}) {
+  const [genState, setGenState] = useState<OntologyGenState>('idle')
+  const [proposal, setProposal] = useState<AnalyzeResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedEntities, setSelectedEntities] = useState<Set<string>>(new Set())
+  const [selectedMetrics, setSelectedMetrics] = useState<Set<string>>(new Set())
+  const [selectedRelations, setSelectedRelations] = useState<Set<string>>(new Set())
+  const [appliedCount, setAppliedCount] = useState(0)
+
+  // Check if ontology already has entities from a previous generation
+  const existingExt = useMemo(() => loadExtension(sectorId), [sectorId, genState])
+  const existingCount = existingExt.nodes.length
+
+  async function runAnalysis() {
+    setGenState('analyzing')
+    setError(null)
+    try {
+      const result = await analyzeSources()
+      setProposal(result)
+      // Pre-select all high-confidence proposals
+      setSelectedEntities(new Set(result.proposal.entities.filter(e => e.confidence >= 0.6).map(e => e.table)))
+      setSelectedMetrics(new Set(result.proposal.metrics.filter(m => m.confidence >= 0.6).map(m => m.name)))
+      setSelectedRelations(new Set(result.proposal.relations.filter(r => r.confidence >= 0.6).map(r => `${r.from_table}__${r.to_table}`)))
+      setGenState('review')
+    } catch (e) {
+      setError(backendErrorMessage(e) || 'Analysis failed — check that sources are connected.')
+      setGenState('error')
+    }
+  }
+
+  async function applyProposals() {
+    if (!proposal) return
+    setGenState('applying')
+    let count = 0
+    try {
+      // Apply selected entities → ontology extension
+      const entitiesToAdd = proposal.proposal.entities.filter(e => selectedEntities.has(e.table))
+      if (entitiesToAdd.length > 0) {
+        const ext = loadExtension(sectorId)
+        const existingIds = new Set(ext.nodes.map(n => n.id))
+        const newNodes = entitiesToAdd
+          .filter(e => !existingIds.has(e.table))
+          .map((e, i) => ({
+            id: e.table,
+            label: e.name,
+            uri: `urn:entity:${e.table}`,
+            properties: [],
+            position: { x: 200 + (i % 3) * 220, y: 100 + Math.floor(i / 3) * 160 },
+            db_table: e.table,
+          }))
+        saveExtension(sectorId, { ...ext, nodes: [...ext.nodes, ...newNodes] })
+        count += newNodes.length
+      }
+
+      // Apply selected metrics
+      const metricsToAdd = proposal.proposal.metrics.filter(m => selectedMetrics.has(m.name))
+      await Promise.allSettled(metricsToAdd.map(m =>
+        createMetric({
+          name: m.name, description: m.description,
+          expression: m.formula, sector_id: sectorId,
+          type: 'derived', entity: '', field: '', numerator: '', denominator: '',
+          filters: [], time_dimension: '', grains: [], format: 'number',
+          status: 'draft', owner: '', tags: [],
+        })
+          .then(() => { count++ })
+          .catch(() => {})
+      ))
+
+      // Apply selected relations
+      const relationsToAdd = proposal.proposal.relations.filter(r => selectedRelations.has(`${r.from_table}__${r.to_table}`))
+      await Promise.allSettled(relationsToAdd.map(r =>
+        addRelation({ from_table: r.from_table, to_table: r.to_table, via_column: r.via_column, edge_type: 'fk' })
+          .then(() => { count++ })
+          .catch(() => {})
+      ))
+
+      setAppliedCount(count)
+      window.dispatchEvent(new CustomEvent('ontology-entity-added'))
+      setGenState('done')
+    } catch (e) {
+      setError(backendErrorMessage(e) || 'Apply failed. Some items may have been saved.')
+      setGenState('error')
+    }
+  }
+
+  const totalSelected = selectedEntities.size + selectedMetrics.size + selectedRelations.size
+
+  if (genState === 'idle' || genState === 'error') {
+    return (
+      <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 bg-violet-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <Brain className="w-4.5 h-4.5 text-violet-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-slate-800">AI-Assisted Data Model</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {existingCount > 0
+                ? `${existingCount} entities already in your data model. Run again to discover new ones.`
+                : 'Let AI analyze your connected sources and propose an initial data model — entities, metrics, and relations.'}
+            </p>
+            {genState === 'error' && error && (
+              <p className="mt-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{error}</p>
+            )}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={runAnalysis}
+                className="flex items-center gap-1.5 text-xs bg-violet-600 text-white px-3 py-1.5 rounded-lg hover:bg-violet-700 transition-colors font-medium"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {genState === 'error' ? 'Retry Analysis' : 'Generate Data Model'}
+              </button>
+              {existingCount > 0 && (
+                <button
+                  onClick={onNavigateToOntology}
+                  className="text-xs text-violet-600 hover:text-violet-800 transition-colors"
+                >
+                  Open Ontology Builder →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (genState === 'analyzing') {
+    return (
+      <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-5">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-4 h-4 text-violet-500 animate-spin flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-slate-700">Analyzing sources…</p>
+            <p className="text-xs text-slate-400 mt-0.5">Profiling tables and generating entity proposals</p>
+          </div>
+        </div>
+        <div className="mt-3 space-y-1.5">
+          {['Scanning table schemas', 'Inferring entity types', 'Proposing relations & metrics'].map((step, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full border-2 border-violet-300 animate-pulse" />
+              <span className="text-[11px] text-slate-500">{step}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (genState === 'done') {
+    return (
+      <div className="bg-teal-50 border border-teal-200 rounded-xl p-5">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-teal-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-teal-800">Data model updated</p>
+            <p className="text-xs text-teal-600 mt-0.5">{appliedCount} item{appliedCount !== 1 ? 's' : ''} added to your semantic layer.</p>
+          </div>
+          <button onClick={onNavigateToOntology}
+            className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+            Open Ontology Builder →
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // review / applying
+  const entities = proposal?.proposal.entities ?? []
+  const metrics = proposal?.proposal.metrics ?? []
+  const relations = proposal?.proposal.relations ?? []
+
+  return (
+    <div className="bg-white border border-violet-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-violet-50 to-indigo-50 border-b border-violet-100">
+        <Sparkles className="w-4 h-4 text-violet-500" />
+        <span className="text-sm font-semibold text-slate-800">AI Proposals</span>
+        <span className="text-[10px] text-slate-500 ml-1">
+          {proposal?.llm_used ? 'generated with LLM' : 'schema-inferred'}
+        </span>
+        <span className="ml-auto text-[10px] text-slate-400">{totalSelected} selected</span>
+      </div>
+
+      {/* Entities */}
+      {entities.length > 0 && (
+        <div className="border-b border-slate-100">
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50">
+            <Database className="w-3 h-3 text-slate-500" />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Entities ({entities.length})</span>
+          </div>
+          {entities.map(e => (
+            <label key={e.table} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-t border-slate-50 first:border-0">
+              <input
+                type="checkbox"
+                checked={selectedEntities.has(e.table)}
+                onChange={ev => setSelectedEntities(prev => { const s = new Set(prev); ev.target.checked ? s.add(e.table) : s.delete(e.table); return s })}
+                className="w-3.5 h-3.5 rounded accent-violet-600"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-800">{e.name}</span>
+                  <span className="font-mono text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{e.table}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5 truncate">{e.description}</p>
+              </div>
+              <ConfidenceBar score={e.confidence} />
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* Metrics */}
+      {metrics.length > 0 && (
+        <div className="border-b border-slate-100">
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50">
+            <Zap className="w-3 h-3 text-slate-500" />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Metrics ({metrics.length})</span>
+          </div>
+          {metrics.map(m => (
+            <label key={m.name} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-t border-slate-50 first:border-0">
+              <input
+                type="checkbox"
+                checked={selectedMetrics.has(m.name)}
+                onChange={ev => setSelectedMetrics(prev => { const s = new Set(prev); ev.target.checked ? s.add(m.name) : s.delete(m.name); return s })}
+                className="w-3.5 h-3.5 rounded accent-violet-600"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-800">{m.name}</span>
+                  {m.unit && <span className="text-[9px] text-slate-400">{m.unit}</span>}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate">{m.formula}</p>
+              </div>
+              <ConfidenceBar score={m.confidence} />
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* Relations */}
+      {relations.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50">
+            <Link2 className="w-3 h-3 text-slate-500" />
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Relations ({relations.length})</span>
+          </div>
+          {relations.map(r => {
+            const key = `${r.from_table}__${r.to_table}`
+            return (
+              <label key={key} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-t border-slate-50 first:border-0">
+                <input
+                  type="checkbox"
+                  checked={selectedRelations.has(key)}
+                  onChange={ev => setSelectedRelations(prev => { const s = new Set(prev); ev.target.checked ? s.add(key) : s.delete(key); return s })}
+                  className="w-3.5 h-3.5 rounded accent-violet-600"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="font-mono text-slate-600">{r.from_table}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="font-mono text-slate-600">{r.to_table}</span>
+                    <span className="text-[9px] text-slate-400 ml-1">via {r.via_column}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5 truncate">{r.description}</p>
+                </div>
+                <ConfidenceBar score={r.confidence} />
+              </label>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Apply footer */}
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-t border-slate-100">
+        <button onClick={() => setGenState('idle')} className="text-xs text-slate-400 hover:text-slate-600">← Back</button>
+        <button
+          onClick={applyProposals}
+          disabled={totalSelected === 0 || genState === 'applying'}
+          className="flex items-center gap-1.5 text-xs bg-violet-600 text-white px-3 py-1.5 rounded-lg hover:bg-violet-700 transition-colors font-medium disabled:opacity-40"
+        >
+          {genState === 'applying' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+          {genState === 'applying' ? 'Applying…' : `Apply ${totalSelected} item${totalSelected !== 1 ? 's' : ''}`}
+        </button>
+      </div>
     </div>
   )
 }
@@ -1343,6 +1657,21 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             onRemoveRule={handleRemoveRule}
           />
         </section>
+
+        {/* Step 5: AI-Assisted Ontology Generation */}
+        {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Brain className="w-4 h-4 text-violet-500" />
+              <h2 className="text-sm font-bold text-slate-800">AI Data Model</h2>
+              <span className="text-[10px] text-slate-400">Step 5 of 8</span>
+            </div>
+            <OntologyGenerationPanel
+              sectorId={sectorId}
+              onNavigateToOntology={() => onNavigate?.('sembuilder')}
+            />
+          </section>
+        )}
 
         {/* Build Semantic Layer CTA */}
         {sources.length > 0 && (
