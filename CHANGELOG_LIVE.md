@@ -10,6 +10,31 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 0: Structural Cleanup)
+
+Bonifica preparatoria al redesign "Data Workbench". Rimuove le tre incoerenze
+strutturali emerse dalla critica UX, senza toccare ancora l'estetica.
+
+### `DataSourcesView.tsx`
+- **Rimosso doppio CTA "Build"**: il vecchio blocco "Ready to build your data
+  model?" non mostra più il trigger in live mode — l'unico punto di build è ora
+  lo Step 7 (`ActivationReadinessPanel`). Il blocco resta solo per: (a) il
+  progress dettagliato durante il build, (b) il trigger in demo mode (dove lo
+  Step 7 non è renderizzato). Condizione: `sources.length > 0 && (building || IS_DEMO_MODE)`.
+- **Rimosso `SourcePlanBanner`** (dead code): dopo la rimozione del wizard in
+  live mode nulla scrive più il source plan, quindi la banner era sempre vuota.
+  Eliminati il componente, lo state `plan`, il listener `source-plan-updated`,
+  `openPlanConnector` e l'import da `sourcePlan`.
+
+### `ProcessView.tsx`
+- **Rimosso `SmartConnectPanel`** dalla pagina Setup: duplicava l'entry-point
+  `analyzeSources()` ora centralizzato nello Step 5 (`OntologyGenerationPanel`)
+  di DataSourcesView. ProcessView/Setup resta focalizzata sul pipeline executor.
+- `SmartConnectPanel.tsx` ora orfano (non più importato, non bundleato) —
+  candidato a cancellazione in una pulizia successiva.
+
+---
+
 ## 2026-06-23 (Step 8: Continuous Evolution)
 
 Implements **Step 8** of the 8-step Customer Experience Process — a feedback

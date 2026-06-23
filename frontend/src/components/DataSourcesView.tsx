@@ -19,7 +19,6 @@ import { Mail } from 'lucide-react'
 import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles, analyzeSources, createMetric, addRelation } from '../api/semantic'
 import type { TableProfile, AnalyzeResult } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
-import { loadSourcePlan, PRIORITY_COLORS, type SourcePlanEntry } from '../data/sourcePlan'
 import {
   loadQualityRules, saveQualityRules, upsertRule, removeRule,
   getRuleForColumn, effectiveQualityScore, type QualityRule,
@@ -1627,107 +1626,6 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
   )
 }
 
-// ── Source Plan Banner ───────────────────────────────────────────────────────
-
-function SourcePlanBanner({
-  plan, connectedTypes, onConnect,
-}: {
-  plan: SourcePlanEntry[]
-  connectedTypes: string[]
-  onConnect: (connectorId: string) => void
-}) {
-  const [collapsed, setCollapsed] = useState(false)
-  const connectedSet = new Set(connectedTypes.map(t => t.toLowerCase()))
-  const pending = plan.filter(e => !connectedSet.has(e.connectorId.toLowerCase()))
-  const done = plan.filter(e => connectedSet.has(e.connectorId.toLowerCase()))
-
-  if (plan.length === 0) return null
-
-  return (
-    <div className="border border-teal-200 rounded-xl overflow-hidden">
-      {/* Header */}
-      <button
-        onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-teal-50/70 hover:bg-teal-50 transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
-          <Star className="w-4 h-4 text-teal-600" />
-          <span className="text-sm font-bold text-slate-800">Source Plan</span>
-          <span className="text-[10px] font-semibold bg-white border border-teal-200 text-teal-700 rounded-full px-2 py-0.5">
-            {done.length}/{plan.length} connected
-          </span>
-          {pending.length > 0 && (
-            <span className="text-[10px] font-semibold bg-amber-50 border border-amber-200 text-amber-700 rounded-full px-2 py-0.5">
-              {pending.length} pending
-            </span>
-          )}
-        </div>
-        {collapsed
-          ? <ChevronRight className="w-4 h-4 text-slate-400" />
-          : <ChevronDown className="w-4 h-4 text-slate-400" />}
-      </button>
-
-      {!collapsed && (
-        <div className="divide-y divide-slate-100">
-          {(['high', 'medium', 'low'] as const).map(priority => {
-            const entries = plan.filter(e => e.priority === priority)
-            if (entries.length === 0) return null
-            const colors = PRIORITY_COLORS[priority]
-            return (
-              <div key={priority} className="px-4 py-3 bg-white">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                    {priority === 'high' ? 'High priority' : priority === 'medium' ? 'Medium priority' : 'Low priority'}
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {entries.map(entry => {
-                    const isConnected = connectedSet.has(entry.connectorId.toLowerCase())
-                    return (
-                      <div key={entry.connectorId} className="flex items-center gap-3">
-                        {/* Status dot */}
-                        <span className={`flex-shrink-0 w-2 h-2 rounded-full ${isConnected ? 'bg-teal-500' : 'bg-slate-300'}`} />
-                        {/* Logo initial */}
-                        <span className="flex-shrink-0 w-6 h-6 rounded bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center">
-                          {entry.name[0]}
-                        </span>
-                        {/* Name + category */}
-                        <div className="flex-1 min-w-0 flex items-center gap-2">
-                          <span className={`text-sm font-medium ${isConnected ? 'text-teal-700' : 'text-slate-700'}`}>{entry.name}</span>
-                          <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">{entry.category}</span>
-                          <div className="flex gap-1 flex-wrap hidden sm:flex">
-                            {entry.useCases.slice(0, 2).map(uc => (
-                              <span key={uc} className="text-[9px] text-teal-600 bg-teal-50 border border-teal-100 rounded px-1.5 py-0.5">{uc}</span>
-                            ))}
-                          </div>
-                        </div>
-                        {/* Action */}
-                        {isConnected ? (
-                          <span className="flex-shrink-0 flex items-center gap-1 text-[11px] font-semibold text-teal-600">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Connected
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => onConnect(entry.connectorId)}
-                            className="flex-shrink-0 text-[11px] font-semibold text-teal-600 hover:text-teal-700 border border-teal-200 hover:border-teal-400 rounded-lg px-2.5 py-1 bg-white hover:bg-teal-50 transition-colors"
-                          >
-                            Connect →
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
@@ -1810,14 +1708,6 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     resolveFeedback(sectorId, id)
     setFeedbackItems(loadFeedback(sectorId))
   }, [sectorId])
-
-  // ── Source plan (live mode)
-  const [plan, setPlan] = useState<SourcePlanEntry[]>(() => loadSourcePlan())
-  useEffect(() => {
-    const handler = () => setPlan(loadSourcePlan())
-    window.addEventListener('source-plan-updated', handler)
-    return () => window.removeEventListener('source-plan-updated', handler)
-  }, [])
 
   // ── UI state
   const [search, setSearch] = useState('')
@@ -2057,11 +1947,6 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     }
   }
 
-  const openPlanConnector = useCallback((connectorId: string) => {
-    const def = CONNECTORS.find(c => c.id === connectorId)
-    if (def && def.status !== 'coming-soon') setCredentialModal(def)
-  }, [])
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -2077,15 +1962,6 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
         {/* AW active sources (manufacturing demo only) */}
         {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWSourcesPanel />}
-
-        {/* Source plan — live users who went through source inventory in onboarding */}
-        {!IS_DEMO_MODE && plan.length > 0 && (
-          <SourcePlanBanner
-            plan={plan}
-            connectedTypes={sources.filter(s => !s.is_default).map(s => s.connector_type)}
-            onConnect={openPlanConnector}
-          />
-        )}
 
         {/* Sources error */}
         {sourcesError && (
@@ -2219,8 +2095,8 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           </section>
         )}
 
-        {/* Build Semantic Layer CTA */}
-        {sources.length > 0 && (
+        {/* Build progress (both modes) + idle trigger (demo only — live uses Step 7 Activation) */}
+        {sources.length > 0 && (building || IS_DEMO_MODE) && (
           <div className="rounded-xl border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-5">
             {building ? (
               <div className="space-y-2">

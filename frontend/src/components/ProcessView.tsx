@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
 import { Play, Square, CheckCircle2, Loader2, Clock, Plug, Download, GitBranch, Sparkles, Database, FileText, Send, CheckCircle, ShoppingCart, Factory, Package, AlertTriangle, Activity, ArrowRight } from 'lucide-react'
-import SmartConnectPanel from './SmartConnectPanel'
 import { useSector } from '../contexts/SectorContext'
 import type { SectorId } from '../data/sectors'
 import { getLiveConfig, semanticSources, semanticStatus, buildSemanticLayer, backendErrorMessage, type LiveConfig, type SemanticStatus } from '../api/semantic'
@@ -575,11 +574,6 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
         <h1 className="text-2xl font-bold text-slate-900">Setup</h1>
         <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
       </div>
-
-      {/* ── Smart Connect — AI data model proposal (live only, when sources exist) */}
-      {!IS_DEMO_MODE && (liveConfig?.connectors?.length ?? 0) > 0 && runState !== 'running' && (
-        <SmartConnectPanel sectorId={sectorId} />
-      )}
 
       {/* ── Pipeline executor ─────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
