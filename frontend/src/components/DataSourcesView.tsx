@@ -2456,26 +2456,41 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                 const hasProfiled = Object.keys(tableProfiles).length > 0
                 const hasEntities = extNodeCount > 0
                 const allCertified = reviewItems.length === 0 || reviewItems.every(i => i.status !== 'pending')
-                const checks: ReadinessCheck[] = [
+                const prereqChecks: ReadinessCheck[] = [
                   { label: 'Data sources connected', done: sources.some(s => !s.is_default && s.status === 'active'), hint: 'Connect at least one data source', actionLabel: 'Connect source', onAction: () => handleStepNavigate(2) },
                   { label: 'Sources profiled & quality reviewed', done: hasProfiled, hint: 'Go to Profiling to run analysis', actionLabel: 'Run profiling', onAction: () => handleStepNavigate(3) },
                   { label: 'AI data model generated', done: hasEntities, hint: 'Generate entities and metrics from your data', actionLabel: 'Generate model', onAction: () => handleStepNavigate(5) },
                   { label: 'Ontology items certified', done: allCertified, hint: 'Certify all proposed items in Human Review', actionLabel: 'Review items', onAction: () => handleStepNavigate(6) },
-                  { label: 'Semantic layer built', done: semBuilt, hint: 'Build the semantic layer to make data queryable' },
                 ]
-                const allReady = checks.every(c => c.done)
-                const missingChecks = checks.filter(c => !c.done)
-                const doneCount = checks.length - missingChecks.length
+                const allPrereqsDone = prereqChecks.every(c => c.done)
+                const missingPrereqs = prereqChecks.filter(c => !c.done)
+                const doneCount = prereqChecks.length - missingPrereqs.length
                 return (
                   <div className="space-y-4">
-                    {allReady ? (
+                    {semBuilt ? (
+                      <div className="rounded-xl border border-teal-300 bg-gradient-to-r from-teal-50 to-emerald-50 overflow-hidden">
+                        <div className="flex items-center gap-4 px-5 py-4">
+                          <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <CheckCircle2 className="w-5 h-5 text-teal-600" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-teal-800">Semantic layer active</p>
+                            <p className="text-xs text-teal-600 mt-0.5">Your data is queryable. Head to the Query tab to start asking questions.</p>
+                          </div>
+                          <button onClick={handleBuildSemanticLayer} disabled={building} className="btn btn-secondary btn-sm flex-shrink-0">
+                            {building ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                            {building ? 'Rebuilding…' : 'Rebuild'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : allPrereqsDone ? (
                       <div className="rounded-xl border border-teal-300 bg-gradient-to-r from-teal-50 to-emerald-50 overflow-hidden">
                         <div className="flex items-center gap-4 px-5 py-4">
                           <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center flex-shrink-0">
                             <Rocket className="w-5 h-5 text-teal-600" />
                           </div>
                           <div className="flex-1">
-                            <p className="text-sm font-bold text-teal-800">All checks passed — ready to activate!</p>
+                            <p className="text-sm font-bold text-teal-800">All prerequisites met — ready to build!</p>
                             <p className="text-xs text-teal-600 mt-0.5">Build the semantic layer and start querying your data.</p>
                           </div>
                           <button onClick={handleBuildSemanticLayer} disabled={building} className="btn btn-primary flex-shrink-0">
@@ -2501,12 +2516,12 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                     ) : (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-slate-700">{missingChecks.length} item{missingChecks.length !== 1 ? 's' : ''} remaining before activation</span>
-                          <span className="text-xs text-slate-400">({doneCount}/{checks.length} complete)</span>
+                          <span className="text-sm font-semibold text-slate-700">{missingPrereqs.length} item{missingPrereqs.length !== 1 ? 's' : ''} remaining before activation</span>
+                          <span className="text-xs text-slate-400">({doneCount}/{prereqChecks.length} complete)</span>
                         </div>
                         <div className="panel overflow-hidden">
                           <div className="divide-y divide-slate-50">
-                            {missingChecks.map(c => (
+                            {missingPrereqs.map(c => (
                               <div key={c.label} className="flex items-center gap-3 px-4 py-3">
                                 <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
                                   <span className="w-2 h-2 rounded-full bg-slate-300" />

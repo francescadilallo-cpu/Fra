@@ -1599,7 +1599,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       {defs.length === 0 && (
         <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
           <p className="text-sm font-semibold">No definitions yet</p>
-          <p className="text-xs mt-1">Run setup to auto-populate definitions from your data, or add them manually below.</p>
+          <p className="text-xs mt-1">Add field definitions manually using the button below, or they will auto-populate once your data model is built.</p>
         </div>
       )}
       <div className="flex items-center justify-between">
@@ -1664,7 +1664,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
   )
 }
 
-function AmbiguityLogPanel({ isDemoWorkspace }: { isDemoWorkspace: boolean }) {
+function AmbiguityLogPanel({ isDemoWorkspace, onNavigate }: { isDemoWorkspace: boolean; onNavigate?: (s: SLSection) => void }) {
   const demoAmbiguities = isDemoWorkspace
     ? DEMO_DISAMBIGUATION_RULES.map(r => ({
         term: r.term,
@@ -1679,7 +1679,11 @@ function AmbiguityLogPanel({ isDemoWorkspace }: { isDemoWorkspace: boolean }) {
       <div className="text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
         <AlertTriangle className="w-6 h-6 mx-auto mb-2 opacity-30" />
         <p className="text-sm font-semibold">No ambiguities logged yet</p>
-        <p className="text-xs mt-1">Add disambiguation rules in the <span className="font-semibold">Rules</span> section to document terms that map to multiple fields.</p>
+        <p className="text-xs mt-1">Add disambiguation rules in the{' '}
+          {onNavigate
+            ? <button onClick={() => onNavigate('rules')} className="font-semibold text-teal-600 hover:underline">Rules</button>
+            : <span className="font-semibold">Rules</span>
+          }{' '}section to document terms that map to multiple fields.</p>
       </div>
     )
   }
@@ -3426,7 +3430,7 @@ export default function SemanticLayerView() {
             {defTab === 'definitions' && <SemanticDefsPanel initialDefs={initialDefs} />}
 
             {/* Ambiguity Log tab */}
-            {defTab === 'ambiguity' && <AmbiguityLogPanel isDemoWorkspace={isDemoWorkspace} />}
+            {defTab === 'ambiguity' && <AmbiguityLogPanel isDemoWorkspace={isDemoWorkspace} onNavigate={setSection} />}
           </div>
         )}
 

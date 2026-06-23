@@ -2244,6 +2244,18 @@ Full systematic sweep of every component and backend endpoint not covered by pri
 
 ---
 
+## 2026-06-23
+
+### Fix end-user flow dead-ends in wizard, semantic layer, and query interface
+- `frontend/src/components/DataSourcesView.tsx`
+  - Step 7 (Activation): fixed dead-end where "Build & Activate" button never appeared when all prerequisites passed but the semantic layer was not yet built. Extracted `prereqChecks` (first 4 checks only); the build panel now appears when `allPrereqsDone && !semBuilt`, and a "Semantic layer active" success card replaces it when `semBuilt`. The missing-items list only shows prerequisite gaps, never the build step itself.
+  - Added a "Rebuild" button on the success card so users can rebuild after adding new sources.
+- `frontend/src/components/SemanticLayerView.tsx`
+  - `SemanticDefsPanel` empty state: removed misleading "Run setup" CTA (no such action exists); updated text to "Add field definitions manually using the button below, or they will auto-populate once your data model is built."
+  - `AmbiguityLogPanel` empty state: "Rules" is now a clickable `onNavigate('rules')` link so users can jump directly to the Rules section instead of hunting for it.
+- `frontend/src/components/QueryInterface.tsx`
+  - Backend offline banner (live mode) now includes a "Retry" button calling `checkBackendOnce`, giving users a direct action instead of a dead-end message.
+
 ## 2026-06-17
 
 ### Data-driven disambiguation card for live ambiguities

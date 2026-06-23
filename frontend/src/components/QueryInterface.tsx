@@ -1117,12 +1117,15 @@ export default function QueryInterface() {
             {backendOnline === false && !isLLMActive && !IS_DEMO_MODE && (
               <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left w-full max-w-lg">
                 <WifiOff className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <p className="text-xs font-semibold text-amber-800">Backend temporarily unavailable</p>
                   <p className="text-xs text-amber-700 mt-0.5">
                     Could not reach the query service. Please try again in a moment.
                   </p>
                 </div>
+                <button onClick={checkBackendOnce} className="text-xs text-amber-700 hover:text-amber-900 font-medium flex-shrink-0 underline underline-offset-2">
+                  Retry
+                </button>
               </div>
             )}
             {backendOnline === false && !isLLMActive && IS_DEMO_MODE && (
