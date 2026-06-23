@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 7: Activation & Onboarding)
+
+Implements **Step 7** of the 8-step Customer Experience Process — an
+activation readiness checklist that verifies all BUILD prerequisites are
+met before the user triggers the semantic layer build.
+
+### Updated — `DataSourcesView.tsx`
+
+- **`ReadinessCheck` interface** — `{ label, done, hint, actionLabel?, onAction? }`.
+- **`ActivationReadinessPanel` component**:
+  - N/N progress counter chip in the header.
+  - Per-check row: teal filled circle (done) or grey hollow dot (pending).
+  - Pending items show a hint and optional action link.
+  - When `allReady`, bottom banner shows "Build & Activate" CTA
+    (calls `handleBuildSemanticLayer`).
+  - Card border and background turn teal when all checks pass.
+- **5 readiness checks** (derived from existing state, no new API calls):
+  1. Data sources connected — `sources.some(s => !s.is_default && s.status === 'active')`
+  2. Sources profiled & quality reviewed — `Object.keys(tableProfiles).length > 0`
+  3. AI data model generated — `loadExtension(sectorId).nodes.length > 0`
+  4. Ontology items certified — `reviewItems.every(i => i.status !== 'pending')`
+  5. Semantic layer built — `journeySteps.find(s.id === 'model')?.done`
+- `useJourneyProgress()` imported to derive `semBuilt` without an extra API call.
+- Section appears as "Activation · Step 7 of 8" in live mode when sources are active.
+
+---
+
 ## 2026-06-23 (Step 6: Human Review & Maintainment)
 
 Implements **Step 6** of the 8-step Customer Experience Process — a persistent

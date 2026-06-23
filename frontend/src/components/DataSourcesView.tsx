@@ -3,7 +3,7 @@ import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
   Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
-  Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare,
+  Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare, Rocket,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -25,6 +25,7 @@ import {
   getRuleForColumn, effectiveQualityScore, type QualityRule,
 } from '../data/qualityRules'
 import { loadExtension, saveExtension } from '../data/ontologyExtensions'
+import { useJourneyProgress } from '../data/journeyProgress'
 import {
   loadReviewQueue, addReviewItems, updateReviewItem, certifyAll, type ReviewItem, type ReviewStatus,
 } from '../data/changeReviewQueue'
@@ -813,6 +814,83 @@ function ReviewPanel({
   )
 }
 
+// ── Activation readiness checklist (Step 7) ──────────────────────────────────
+
+interface ReadinessCheck {
+  label: string
+  done: boolean
+  hint: string
+  actionLabel?: string
+  onAction?: () => void
+}
+
+function ActivationReadinessPanel({
+  checks, allReady, onActivate, activating,
+}: {
+  checks: ReadinessCheck[]
+  allReady: boolean
+  onActivate: () => void
+  activating: boolean
+}) {
+  const doneCount = checks.filter(c => c.done).length
+  return (
+    <div className={`rounded-xl border overflow-hidden ${allReady ? 'border-teal-300 bg-gradient-to-r from-teal-50 to-emerald-50' : 'border-slate-200 bg-white'}`}>
+      {/* Header */}
+      <div className={`flex items-center gap-3 px-4 py-3 ${allReady ? 'bg-teal-50/60' : 'bg-slate-50'} border-b ${allReady ? 'border-teal-200' : 'border-slate-100'}`}>
+        <Rocket className={`w-4 h-4 ${allReady ? 'text-teal-600' : 'text-slate-400'}`} />
+        <span className="text-sm font-semibold text-slate-800">Activation Readiness</span>
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${doneCount === checks.length ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
+          {doneCount}/{checks.length}
+        </span>
+      </div>
+
+      {/* Checklist */}
+      <div className="divide-y divide-slate-50">
+        {checks.map(c => (
+          <div key={c.label} className="flex items-center gap-3 px-4 py-2.5">
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${c.done ? 'bg-teal-100' : 'bg-slate-100'}`}>
+              {c.done
+                ? <Check className="w-3 h-3 text-teal-600" />
+                : <span className="w-2 h-2 rounded-full bg-slate-300" />
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-xs font-medium ${c.done ? 'text-teal-800' : 'text-slate-700'}`}>{c.label}</p>
+              {!c.done && <p className="text-[10px] text-slate-400 mt-0.5">{c.hint}</p>}
+            </div>
+            {!c.done && c.actionLabel && c.onAction && (
+              <button
+                onClick={c.onAction}
+                className="text-[10px] text-teal-600 hover:text-teal-800 font-medium flex-shrink-0 transition-colors"
+              >
+                {c.actionLabel} →
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Activate CTA */}
+      {allReady && (
+        <div className="px-4 py-3 bg-teal-50 border-t border-teal-200 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-teal-800">Ready to activate!</p>
+            <p className="text-[10px] text-teal-600 mt-0.5">Build your semantic layer and start querying your data.</p>
+          </div>
+          <button
+            onClick={onActivate}
+            disabled={activating}
+            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-semibold disabled:opacity-60"
+          >
+            {activating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+            {activating ? 'Building…' : 'Build & Activate'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Connected sources panel ───────────────────────────────────────────────────
 
 function connectorById(id: string): ConnectorDef | undefined {
@@ -1488,6 +1566,8 @@ function SourcePlanBanner({
 
 export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
   const { sectorId, sector } = useSector()
+  const { steps: journeySteps } = useJourneyProgress()
+  const semBuilt = journeySteps.find(s => s.id === 'model')?.done ?? false
   const ontology = useExtendedOntology(sectorId)
 
   // ── Backend sources state
@@ -1883,6 +1963,57 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             />
           </section>
         )}
+
+        {/* Step 7: Activation & Onboarding */}
+        {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (() => {
+          const hasProfiled = Object.keys(tableProfiles).length > 0
+          const hasEntities = loadExtension(sectorId).nodes.length > 0
+          const allCertified = reviewItems.length === 0 || reviewItems.every(i => i.status !== 'pending')
+          const checks: ReadinessCheck[] = [
+            {
+              label: 'Data sources connected',
+              done: true,
+              hint: 'Connect at least one data source',
+              actionLabel: 'Connect source',
+            },
+            {
+              label: 'Sources profiled & quality reviewed',
+              done: hasProfiled,
+              hint: 'Expand a connected source to run profiling',
+            },
+            {
+              label: 'AI data model generated',
+              done: hasEntities,
+              hint: 'Run "Generate Data Model" in the AI Data Model section above',
+            },
+            {
+              label: 'Ontology items certified',
+              done: allCertified,
+              hint: 'Certify all items in the Human Review section above',
+            },
+            {
+              label: 'Semantic layer built',
+              done: semBuilt,
+              hint: 'Build the semantic layer to make data queryable',
+            },
+          ]
+          const allReady = checks.every(c => c.done)
+          return (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Rocket className="w-4 h-4 text-slate-500" />
+                <h2 className="text-sm font-bold text-slate-800">Activation</h2>
+                <span className="text-[10px] text-slate-400">Step 7 of 8</span>
+              </div>
+              <ActivationReadinessPanel
+                checks={checks}
+                allReady={allReady}
+                onActivate={handleBuildSemanticLayer}
+                activating={building}
+              />
+            </section>
+          )
+        })()}
 
         {/* Build Semantic Layer CTA */}
         {sources.length > 0 && (
