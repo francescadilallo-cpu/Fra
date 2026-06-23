@@ -10,6 +10,40 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 8: Continuous Evolution)
+
+Implements **Step 8** of the 8-step Customer Experience Process — a feedback
+loop for ongoing data platform improvement after go-live.
+
+### New — `data/evolutionFeedback.ts`
+
+- `FeedbackItem` type: kind (`data_quality | missing_metric | wrong_result |
+  schema_change | other`), title, notes, submittedAt, status (`open |
+  in_review | resolved`), resolvedAt.
+- `loadFeedback(sectorId)` / `saveFeedback(sectorId, items)` — localStorage
+  keyed by sector (`fra:evolution-feedback:{sectorId}`).
+- `addFeedback()` — creates a new open item and persists it.
+- `resolveFeedback()` — marks an item resolved with timestamp.
+- `KIND_LABELS` — human-readable labels for each feedback kind.
+
+### Updated — `DataSourcesView.tsx`
+
+- **`ContinuousEvolutionPanel` component**:
+  - **Data Freshness row** — pill badges per source showing Fresh / Aging /
+    Stale based on `last_sync_at` (<24h / <72h / ≥72h).
+  - **"Report issue" button** — toggles an inline form with kind selector
+    (dropdown), title (required), notes (optional), Submit / Cancel.
+  - **Feedback list** — shows up to 5 items with status dot (grey=open,
+    amber=in review, teal=resolved), kind label, date, and inline note.
+  - **Resolve button** per open item.
+  - Resolved-count footer bar.
+- Main view: `feedbackItems` state, `evolution-feedback-updated` listener,
+  `handleAddFeedback` + `handleResolveFeedback` callbacks.
+- Step 8 section appears in live mode only after the semantic layer has
+  been built (`semBuilt` from `useJourneyProgress`).
+
+---
+
 ## 2026-06-23 (Step 7: Activation & Onboarding)
 
 Implements **Step 7** of the 8-step Customer Experience Process — an

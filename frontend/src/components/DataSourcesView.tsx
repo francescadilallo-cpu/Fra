@@ -3,7 +3,7 @@ import {
   Plug, Upload, Check, X, FileText, Search, Star,
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
   Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
-  Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare, Rocket,
+  Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare, Rocket, TrendingUp, Plus,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -26,6 +26,10 @@ import {
 } from '../data/qualityRules'
 import { loadExtension, saveExtension } from '../data/ontologyExtensions'
 import { useJourneyProgress } from '../data/journeyProgress'
+import {
+  loadFeedback, addFeedback, resolveFeedback, KIND_LABELS,
+  type FeedbackItem, type FeedbackKind,
+} from '../data/evolutionFeedback'
 import {
   loadReviewQueue, addReviewItems, updateReviewItem, certifyAll, type ReviewItem, type ReviewStatus,
 } from '../data/changeReviewQueue'
@@ -891,6 +895,168 @@ function ActivationReadinessPanel({
   )
 }
 
+// ── Continuous evolution panel (Step 8) ──────────────────────────────────────
+
+function ContinuousEvolutionPanel({
+  sources, feedbackItems, onAddFeedback, onResolve,
+}: {
+  sources: { id: string; label: string; last_sync_at: string | null; status: string }[]
+  feedbackItems: FeedbackItem[]
+  onAddFeedback: (kind: FeedbackKind, title: string, notes: string) => void
+  onResolve: (id: string) => void
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [formKind, setFormKind] = useState<FeedbackKind>('data_quality')
+  const [formTitle, setFormTitle] = useState('')
+  const [formNotes, setFormNotes] = useState('')
+
+  function submitForm() {
+    if (!formTitle.trim()) return
+    onAddFeedback(formKind, formTitle.trim(), formNotes.trim())
+    setFormTitle(''); setFormNotes(''); setShowForm(false)
+  }
+
+  const openItems = feedbackItems.filter(f => f.status === 'open')
+  const resolvedItems = feedbackItems.filter(f => f.status === 'resolved')
+
+  // Freshness info derived from source sync dates
+  const freshnessItems = sources
+    .filter(s => s.last_sync_at)
+    .map(s => {
+      const ageMs = Date.now() - new Date(s.last_sync_at!).getTime()
+      const ageH = ageMs / 3_600_000
+      const status = ageH < 24 ? 'fresh' : ageH < 72 ? 'warning' : 'stale'
+      return { ...s, ageH, status }
+    })
+
+  const statusColor = (s: string) =>
+    s === 'fresh' ? 'text-teal-600 bg-teal-50 border-teal-200'
+    : s === 'warning' ? 'text-amber-600 bg-amber-50 border-amber-200'
+    : 'text-red-600 bg-red-50 border-red-200'
+
+  const statusLabel = (s: string) =>
+    s === 'fresh' ? 'Fresh' : s === 'warning' ? 'Aging' : 'Stale'
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+        <TrendingUp className="w-4 h-4 text-slate-500" />
+        <span className="text-sm font-semibold text-slate-800">Continuous Evolution</span>
+        {openItems.length > 0 && (
+          <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-1.5 py-0.5 font-medium">
+            {openItems.length} open
+          </span>
+        )}
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="ml-auto flex items-center gap-1 text-[10px] text-teal-600 hover:text-teal-800 font-medium transition-colors"
+        >
+          <Plus className="w-3 h-3" />Report issue
+        </button>
+      </div>
+
+      {/* Data freshness */}
+      {freshnessItems.length > 0 && (
+        <div className="px-4 py-3 border-b border-slate-50">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Data Freshness</p>
+          <div className="flex flex-wrap gap-2">
+            {freshnessItems.map(s => (
+              <div key={s.id} className={`flex items-center gap-1.5 text-[10px] border rounded-full px-2 py-0.5 ${statusColor(s.status)}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                <span className="font-medium truncate max-w-[120px]">{s.label}</span>
+                <span className="opacity-70">{statusLabel(s.status)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback form */}
+      {showForm && (
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">New Report</p>
+          <div className="space-y-2">
+            <select
+              value={formKind}
+              onChange={e => setFormKind(e.target.value as FeedbackKind)}
+              className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-400 bg-white"
+            >
+              {(Object.entries(KIND_LABELS) as [FeedbackKind, string][]).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="Brief title *"
+              value={formTitle}
+              onChange={e => setFormTitle(e.target.value)}
+              className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-400"
+            />
+            <textarea
+              placeholder="Details (optional)"
+              value={formNotes}
+              onChange={e => setFormNotes(e.target.value)}
+              rows={2}
+              className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-teal-400 resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={submitForm}
+                disabled={!formTitle.trim()}
+                className="text-xs bg-teal-600 text-white px-3 py-1 rounded hover:bg-teal-700 transition-colors disabled:opacity-40 font-medium"
+              >Submit</button>
+              <button onClick={() => setShowForm(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback items */}
+      {feedbackItems.length > 0 ? (
+        <div className="divide-y divide-slate-50">
+          {feedbackItems.slice(0, 5).map(item => (
+            <div key={item.id} className={`flex items-start gap-3 px-4 py-2.5 ${item.status === 'resolved' ? 'opacity-50' : ''}`}>
+              <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${item.status === 'resolved' ? 'bg-teal-400' : item.status === 'in_review' ? 'bg-amber-400' : 'bg-slate-300'}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-slate-700">{item.title}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {KIND_LABELS[item.kind]} · {new Date(item.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                  {item.status === 'resolved' && item.resolvedAt && ` · Resolved ${new Date(item.resolvedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}
+                </p>
+                {item.notes && <p className="text-[10px] text-slate-400 italic mt-0.5 truncate">"{item.notes}"</p>}
+              </div>
+              {item.status === 'open' && (
+                <button
+                  onClick={() => onResolve(item.id)}
+                  className="text-[9px] text-teal-600 hover:text-teal-800 font-medium flex-shrink-0 transition-colors"
+                >
+                  Resolve
+                </button>
+              )}
+            </div>
+          ))}
+          {feedbackItems.length > 5 && (
+            <div className="px-4 py-2 text-center">
+              <span className="text-[10px] text-slate-400">{feedbackItems.length - 5} more items</span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="px-4 py-4 text-center">
+          <p className="text-xs text-slate-400">No reports yet. Use "Report issue" to flag data quality problems, missing metrics, or schema changes.</p>
+        </div>
+      )}
+
+      {resolvedItems.length > 0 && (
+        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+          <span className="text-[10px] text-slate-400">{resolvedItems.length} resolved item{resolvedItems.length !== 1 ? 's' : ''}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Connected sources panel ───────────────────────────────────────────────────
 
 function connectorById(id: string): ConnectorDef | undefined {
@@ -1624,6 +1790,27 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     setReviewItems(loadReviewQueue(sectorId))
   }, [sectorId])
 
+  // ── Evolution feedback (Step 8, live mode)
+  const [feedbackItems, setFeedbackItems] = useState<FeedbackItem[]>(() =>
+    IS_DEMO_MODE ? [] : loadFeedback(sectorId)
+  )
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const handler = () => setFeedbackItems(loadFeedback(sectorId))
+    window.addEventListener('evolution-feedback-updated', handler)
+    return () => window.removeEventListener('evolution-feedback-updated', handler)
+  }, [sectorId])
+
+  const handleAddFeedback = useCallback((kind: FeedbackKind, title: string, notes: string) => {
+    addFeedback(sectorId, kind, title, notes)
+    setFeedbackItems(loadFeedback(sectorId))
+  }, [sectorId])
+
+  const handleResolveFeedback = useCallback((id: string) => {
+    resolveFeedback(sectorId, id)
+    setFeedbackItems(loadFeedback(sectorId))
+  }, [sectorId])
+
   // ── Source plan (live mode)
   const [plan, setPlan] = useState<SourcePlanEntry[]>(() => loadSourcePlan())
   useEffect(() => {
@@ -2014,6 +2201,23 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             </section>
           )
         })()}
+
+        {/* Step 8: Continuous Evolution */}
+        {!IS_DEMO_MODE && semBuilt && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp className="w-4 h-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-800">Continuous Evolution</h2>
+              <span className="text-[10px] text-slate-400">Step 8 of 8</span>
+            </div>
+            <ContinuousEvolutionPanel
+              sources={sources.filter(s => !s.is_default)}
+              feedbackItems={feedbackItems}
+              onAddFeedback={handleAddFeedback}
+              onResolve={handleResolveFeedback}
+            />
+          </section>
+        )}
 
         {/* Build Semantic Layer CTA */}
         {sources.length > 0 && (
