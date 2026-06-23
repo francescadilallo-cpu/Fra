@@ -10,6 +10,32 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 2a: Workbench Pipeline Rail)
+
+Il cuore del redesign: DataSourcesView smette di essere uno scroll di pannelli
+impilati e diventa un **Data Workbench** orchestrato da una pipeline visiva.
+
+### `DataSourcesView.tsx`
+- **`WorkbenchRail`** — stepper orizzontale degli 8 step raggruppati nelle 3 fasi
+  (Setup → Build → Operate), stile pipeline Foundry:
+  - Nodi connessi da una linea che si "riempie" di teal fino al fronte raggiunto.
+  - Stato per nodo: `done` (cerchio teal + check), `current` (ring teal pulsante),
+    `upcoming` (numero grigio).
+  - Etichette di fase pesate 2/4/2 allineate sui rispettivi gruppi.
+  - Header con eyebrow "Data Pipeline", hint "next: <step>" e chip "N/8 complete".
+  - Ogni nodo è cliccabile → scroll-to della sezione ancorata.
+- **Derivazione stato live** (`workbenchSteps` useMemo): high-water-mark sui
+  segnali reali (sorgenti attive, profili, regole qualità, entità ontologia,
+  review certificate, semantic layer). Gli step opzionali si auto-completano
+  quando superi il fronte — niente blocchi su passi saltabili.
+- **Segnale reattivo `extNodeCount`** per le entità utente dell'ontologia
+  (ascolta `ontology-entity-added` / `ontology-builder-changed`).
+- **Ancore di sezione** (`wb-connect/-sources/-step5/-step6/-step7/-step8`) +
+  `scroll-mt-4` per la navigazione del rail.
+- Header di sezione 5-8 migrati a `.eyebrow` con label fase ("Step 5 · Build").
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 1: Design System Foundation)
 
 Sistematizza il design (tema light raffinato) per portarlo da "hand-crafted" a

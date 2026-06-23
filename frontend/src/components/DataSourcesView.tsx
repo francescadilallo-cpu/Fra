@@ -1626,6 +1626,108 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
   )
 }
 
+// ── Workbench pipeline rail (Step 1–8 orchestration) ────────────────────────
+
+type StepStatus = 'done' | 'current' | 'upcoming'
+type WorkbenchPhase = 'SETUP' | 'BUILD' | 'OPERATE'
+
+interface WorkbenchStep {
+  n: number
+  phase: WorkbenchPhase
+  label: string
+  anchor: string
+  status: StepStatus
+}
+
+const PHASE_META: { id: WorkbenchPhase; label: string; span: number }[] = [
+  { id: 'SETUP', label: 'Setup', span: 2 },
+  { id: 'BUILD', label: 'Build', span: 4 },
+  { id: 'OPERATE', label: 'Operate', span: 2 },
+]
+
+function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anchor: string) => void }) {
+  const doneCount = steps.filter(s => s.status === 'done').length
+  const current = steps.find(s => s.status === 'current')
+
+  return (
+    <div className="panel">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="eyebrow">Data Pipeline</span>
+          {current && (
+            <span className="t-mini text-slate-400">· next: {current.label}</span>
+          )}
+        </div>
+        <span className={`chip ${doneCount === steps.length ? 'chip-teal' : 'chip-slate'}`}>
+          {doneCount}/{steps.length} complete
+        </span>
+      </div>
+
+      {/* Phase labels (weighted to match step counts 2/4/2) */}
+      <div className="flex px-5">
+        {PHASE_META.map((p, i) => (
+          <div
+            key={p.id}
+            style={{ flexGrow: p.span }}
+            className={`flex justify-center ${i > 0 ? 'border-l border-slate-100' : ''}`}
+          >
+            <span className="eyebrow text-slate-400">{p.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Nodes */}
+      <div className="flex px-5 pt-2 pb-5">
+        {steps.map((s, i) => {
+          const isLast = i === steps.length - 1
+          const segDone = s.status === 'done'
+          return (
+            <div key={s.n} className="flex-1 flex flex-col items-center relative min-w-0">
+              {/* connector to next node */}
+              {!isLast && (
+                <div
+                  className={`absolute top-3 left-1/2 w-full h-0.5 ${segDone ? 'bg-teal-400' : 'bg-slate-200'}`}
+                />
+              )}
+              <button
+                onClick={() => onJump(s.anchor)}
+                title={`${s.n}. ${s.label}`}
+                className="relative z-10 group flex flex-col items-center gap-1.5 min-w-0 w-full"
+              >
+                <span
+                  className={`flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 transition-colors ${
+                    s.status === 'done'
+                      ? 'bg-teal-600 text-white'
+                      : s.status === 'current'
+                      ? 'bg-white ring-2 ring-teal-500 text-teal-600'
+                      : 'bg-white ring-1 ring-slate-200 text-slate-300'
+                  }`}
+                >
+                  {s.status === 'done'
+                    ? <Check className="w-3.5 h-3.5" />
+                    : s.status === 'current'
+                    ? <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                    : <span className="t-micro font-bold">{s.n}</span>}
+                </span>
+                <span
+                  className={`t-micro text-center leading-tight px-0.5 truncate max-w-full ${
+                    s.status === 'done' ? 'text-teal-700 font-medium'
+                    : s.status === 'current' ? 'text-slate-800 font-semibold'
+                    : 'text-slate-400'
+                  } group-hover:text-teal-600`}
+                >
+                  {s.label}
+                </span>
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: NavTab) => void } = {}) {
@@ -1707,6 +1809,22 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   const handleResolveFeedback = useCallback((id: string) => {
     resolveFeedback(sectorId, id)
     setFeedbackItems(loadFeedback(sectorId))
+  }, [sectorId])
+
+  // ── User-added ontology entity count (reactive signal for the workbench rail)
+  const [extNodeCount, setExtNodeCount] = useState(() =>
+    IS_DEMO_MODE ? 0 : loadExtension(sectorId).nodes.length
+  )
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const refresh = () => setExtNodeCount(loadExtension(sectorId).nodes.length)
+    refresh()
+    window.addEventListener('ontology-entity-added', refresh)
+    window.addEventListener('ontology-builder-changed', refresh)
+    return () => {
+      window.removeEventListener('ontology-entity-added', refresh)
+      window.removeEventListener('ontology-builder-changed', refresh)
+    }
   }, [sectorId])
 
   // ── UI state
@@ -1947,6 +2065,43 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     }
   }
 
+  // ── Workbench rail: derive the 8-step pipeline status from live signals.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const jumpTo = useCallback((anchor: string) => {
+    scrollRef.current?.querySelector(`#${anchor}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const workbenchSteps = useMemo<WorkbenchStep[]>(() => {
+    const hasActiveSources = sources.some(s => !s.is_default && s.status === 'active')
+    const hasProfiled = Object.keys(tableProfiles).length > 0
+    const hasQualityRules = qualityRules.length > 0
+    const hasEntities = extNodeCount > 0
+    const reviewEngaged = reviewItems.length > 0 && reviewItems.every(i => i.status !== 'pending')
+
+    const defs: Omit<WorkbenchStep, 'status'>[] = [
+      { n: 1, phase: 'SETUP',   label: 'Discovery',  anchor: 'wb-connect' },
+      { n: 2, phase: 'SETUP',   label: 'Sources',    anchor: 'wb-sources' },
+      { n: 3, phase: 'BUILD',   label: 'Profiling',  anchor: 'wb-sources' },
+      { n: 4, phase: 'BUILD',   label: 'Quality',    anchor: 'wb-sources' },
+      { n: 5, phase: 'BUILD',   label: 'Data Model', anchor: 'wb-step5' },
+      { n: 6, phase: 'BUILD',   label: 'Review',     anchor: 'wb-step6' },
+      { n: 7, phase: 'OPERATE', label: 'Activation', anchor: 'wb-step7' },
+      { n: 8, phase: 'OPERATE', label: 'Evolution',  anchor: 'wb-step8' },
+    ]
+    const doneRaw = [
+      true, hasActiveSources, hasProfiled, hasQualityRules,
+      hasEntities, reviewEngaged, semBuilt, semBuilt,
+    ]
+    // High-water mark: the frontier is the first not-done step after the last
+    // done one. Optional steps (e.g. quality) auto-complete once you move past.
+    let lastDone = -1
+    doneRaw.forEach((d, i) => { if (d) lastDone = i })
+    return defs.map((d, i) => ({
+      ...d,
+      status: (i <= lastDone ? 'done' : i === lastDone + 1 ? 'current' : 'upcoming') as StepStatus,
+    }))
+  }, [sources, tableProfiles, qualityRules, extNodeCount, reviewItems, semBuilt])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -1958,7 +2113,12 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-8 py-6 space-y-6">
+
+        {/* Workbench pipeline rail (live mode — orchestrates the 8-step flow) */}
+        {!IS_DEMO_MODE && (
+          <WorkbenchRail steps={workbenchSteps} onJump={jumpTo} />
+        )}
 
         {/* AW active sources (manufacturing demo only) */}
         {IS_DEMO_MODE && sectorId === 'manufacturing' && <AWSourcesPanel />}
@@ -1972,7 +2132,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         )}
 
         {/* Connected sources from backend */}
-        <section>
+        <section id="wb-sources" className="scroll-mt-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-slate-500" />
@@ -1998,11 +2158,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
         {/* Step 5: AI-Assisted Ontology Generation */}
         {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
-          <section>
+          <section id="wb-step5" className="scroll-mt-4">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="w-4 h-4 text-violet-500" />
               <h2 className="text-sm font-bold text-slate-800">AI Data Model</h2>
-              <span className="text-[10px] text-slate-400">Step 5 of 8</span>
+              <span className="eyebrow text-slate-400">Step 5 · Build</span>
             </div>
             <OntologyGenerationPanel
               sectorId={sectorId}
@@ -2013,11 +2173,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
         {/* Step 6: Human Review & Maintainment */}
         {!IS_DEMO_MODE && reviewItems.length > 0 && (
-          <section>
+          <section id="wb-step6" className="scroll-mt-4">
             <div className="flex items-center gap-2 mb-3">
               <ClipboardCheck className="w-4 h-4 text-slate-500" />
               <h2 className="text-sm font-bold text-slate-800">Human Review</h2>
-              <span className="text-[10px] text-slate-400">Step 6 of 8</span>
+              <span className="eyebrow text-slate-400">Step 6 · Build</span>
             </div>
             <ReviewPanel
               items={reviewItems}
@@ -2030,7 +2190,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Step 7: Activation & Onboarding */}
         {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (() => {
           const hasProfiled = Object.keys(tableProfiles).length > 0
-          const hasEntities = loadExtension(sectorId).nodes.length > 0
+          const hasEntities = extNodeCount > 0
           const allCertified = reviewItems.length === 0 || reviewItems.every(i => i.status !== 'pending')
           const checks: ReadinessCheck[] = [
             {
@@ -2062,11 +2222,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           ]
           const allReady = checks.every(c => c.done)
           return (
-            <section>
+            <section id="wb-step7" className="scroll-mt-4">
               <div className="flex items-center gap-2 mb-3">
                 <Rocket className="w-4 h-4 text-slate-500" />
                 <h2 className="text-sm font-bold text-slate-800">Activation</h2>
-                <span className="text-[10px] text-slate-400">Step 7 of 8</span>
+                <span className="eyebrow text-slate-400">Step 7 · Operate</span>
               </div>
               <ActivationReadinessPanel
                 checks={checks}
@@ -2080,11 +2240,11 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
         {/* Step 8: Continuous Evolution */}
         {!IS_DEMO_MODE && semBuilt && (
-          <section>
+          <section id="wb-step8" className="scroll-mt-4">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-slate-500" />
               <h2 className="text-sm font-bold text-slate-800">Continuous Evolution</h2>
-              <span className="text-[10px] text-slate-400">Step 8 of 8</span>
+              <span className="eyebrow text-slate-400">Step 8 · Operate</span>
             </div>
             <ContinuousEvolutionPanel
               sources={sources.filter(s => !s.is_default)}
@@ -2138,7 +2298,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         )}
 
         {/* Connector hub */}
-        <section>
+        <section id="wb-connect" className="scroll-mt-4">
           <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <Plug className="w-4 h-4 text-slate-500" />
