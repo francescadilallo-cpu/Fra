@@ -119,7 +119,14 @@ export default function App() {
   }, [granted])
 
   useEffect(() => {
-    if (granted && !localStorage.getItem(ONBOARDING_KEY)) {
+    if (!granted) return
+    // In live mode the wizard is no longer needed: company/sector come from
+    // account registration, and source planning is handled inside DataSourcesView.
+    if (!IS_DEMO_MODE) {
+      localStorage.setItem(ONBOARDING_KEY, '1')
+      return
+    }
+    if (!localStorage.getItem(ONBOARDING_KEY)) {
       setShowOnboarding(true)
     }
   }, [granted])
