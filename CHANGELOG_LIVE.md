@@ -10,6 +10,31 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (Step 3: Source Integration & Profiling)
+
+Implements **Step 3** of the 8-step Customer Experience Process — "Integrazione
+sorgenti + profiling automatico delle tabelle".
+
+### Updated — `DataSourcesView.tsx`
+
+- **`NullBar` component** — compact inline bar (48px wide) with teal/amber/red
+  color coding (0% / <10% / ≥10%) and a percentage label.
+- **`ProfilingPanel` component** — replaces the old single-metric quality bar
+  with a full per-table/per-column breakdown:
+  - Collapsible table cards showing row count, column count, and quality score.
+  - Column grid: name, inferred type chip, null-rate `NullBar`, distinct-value
+    count, key indicator (✦ for primary/foreign keys).
+  - High-null warning row at the bottom of each table card.
+  - Loading skeleton state (spinner + "Analyzing data structure…").
+  - "Refresh" button triggers a fresh `getSourceProfiles()` call.
+- **`profilingLoading` state** — boolean controlling skeleton vs. live data.
+- **`refreshProfiles` callback** — sets loading, fetches `getSourceProfiles()`,
+  clears loading. Replaces the inline fetch in the auto-profile `useEffect`.
+- ConnectedSourcesPanel receives `profilingLoading` + `onRefreshProfiles` props;
+  the Refresh button in `ProfilingPanel` is wired back to the parent handler.
+
+---
+
 ## 2026-06-23 (Step 2: Source Inventory & Prioritization)
 
 Implements **Step 2** of the 8-step Customer Experience Process — "Mappa delle

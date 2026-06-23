@@ -343,13 +343,147 @@ function relativeTime(iso: string | null): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+// ── Profiling report panel ────────────────────────────────────────────────────
+
+function NullBar({ rate }: { rate: number }) {
+  const pct = Math.round(rate * 100)
+  const color = pct === 0 ? 'bg-teal-400' : pct < 10 ? 'bg-amber-400' : 'bg-red-400'
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <div className="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden flex-shrink-0">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(pct, pct > 0 ? 4 : 0)}%` }} />
+      </div>
+      <span className={`text-[10px] font-medium flex-shrink-0 ${pct > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{pct}%</span>
+    </div>
+  )
+}
+
+function ProfilingPanel({
+  tables, tableProfiles, loading, onRefresh,
+}: {
+  tables: string[]
+  tableProfiles: Record<string, TableProfile>
+  loading: boolean
+  onRefresh: () => void
+}) {
+  const [openTable, setOpenTable] = useState<string | null>(null)
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Profiling Report</span>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-teal-600 transition-colors disabled:opacity-40"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Profiling…' : 'Refresh'}
+        </button>
+      </div>
+
+      {loading && tables.every(t => !tableProfiles[t]) ? (
+        <div className="space-y-2">
+          {tables.slice(0, 3).map(t => (
+            <div key={t} className="h-8 bg-slate-100 rounded animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tables.map(t => {
+            const p = tableProfiles[t]
+            if (!p) return null
+            const isOpen = openTable === t
+            const qColor = p.quality_score >= 85 ? 'bg-teal-400' : p.quality_score >= 60 ? 'bg-amber-400' : 'bg-red-400'
+            const qText = p.quality_score >= 85 ? 'text-teal-700' : p.quality_score >= 60 ? 'text-amber-700' : 'text-red-700'
+            return (
+              <div key={t} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                {/* Table header row */}
+                <button
+                  onClick={() => setOpenTable(isOpen ? null : t)}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <span className="font-mono text-xs text-slate-700 flex-1 truncate">{t}</span>
+                  <span className="text-[10px] text-slate-400 flex-shrink-0">{p.row_count.toLocaleString('en-US')} rows · {p.column_count} cols</span>
+                  {/* Quality score */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${qColor}`} style={{ width: `${p.quality_score}%` }} />
+                    </div>
+                    <span className={`text-[10px] font-bold ${qText}`}>{p.quality_score}%</span>
+                  </div>
+                  {p.high_null_columns.length > 0 && (
+                    <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5 flex-shrink-0">
+                      ⚠ {p.high_null_columns.length} null
+                    </span>
+                  )}
+                  {isOpen
+                    ? <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                    : <ChevronRight className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+                </button>
+
+                {/* Column-level detail */}
+                {isOpen && p.columns.length > 0 && (
+                  <div className="border-t border-slate-100">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-400 font-semibold uppercase tracking-wide">
+                          <th className="text-left px-3 py-1.5">Column</th>
+                          <th className="text-left px-2 py-1.5">Type</th>
+                          <th className="text-left px-2 py-1.5 w-28">Null %</th>
+                          <th className="text-right px-3 py-1.5">Distinct</th>
+                          <th className="text-center px-2 py-1.5">Key?</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {p.columns.map(col => (
+                          <tr key={col.name} className={col.null_rate > 0.3 ? 'bg-red-50/30' : col.null_rate > 0.1 ? 'bg-amber-50/20' : ''}>
+                            <td className="px-3 py-1.5 font-mono text-slate-700 truncate max-w-[140px]" title={col.name}>{col.name}</td>
+                            <td className="px-2 py-1.5">
+                              <span className="bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium">{col.type || '—'}</span>
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <NullBar rate={col.null_rate} />
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-slate-500">{col.distinct_in_sample.toLocaleString('en-US')}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              {col.looks_unique && (
+                                <span title="Likely primary key" className="text-teal-600 font-bold">✦</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {p.high_null_columns.length > 0 && (
+                      <div className="px-3 py-2 bg-amber-50 border-t border-amber-100 flex items-center gap-2">
+                        <AlertTriangle className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                        <span className="text-[10px] text-amber-700">
+                          High null rate: <span className="font-mono">{p.high_null_columns.join(', ')}</span>
+                          {' — '}review in Data Quality step
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ConnectedSourcesPanel({
-  sources, onDisconnect, onSync, tableProfiles,
+  sources, onDisconnect, onSync, tableProfiles, profilingLoading, onRefreshProfiles,
 }: {
   sources: BackendSource[]
   onDisconnect: (id: string) => void
   onSync: (id: string) => void
   tableProfiles: Record<string, TableProfile>
+  profilingLoading: boolean
+  onRefreshProfiles: () => void
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (id: string) => setExpanded(prev => {
@@ -427,37 +561,14 @@ function ConnectedSourcesPanel({
               )}
             </div>
 
-            {/* Expandable quality detail */}
-            {isExpanded && profs.length > 0 && (
-              <div className="px-4 pb-3 border-t border-slate-50 bg-slate-50/50">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide pt-2.5 mb-2">Data Quality</p>
-                <div className="space-y-2">
-                  {tables.map(t => {
-                    const p = tableProfiles[t]
-                    if (!p) return null
-                    return (
-                      <div key={t} className="flex items-center gap-2.5 text-[11px]">
-                        <span className="font-mono text-slate-500 w-36 truncate flex-shrink-0">{t}</span>
-                        <div className="w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden flex-shrink-0">
-                          <div
-                            className={`h-full rounded-full ${p.quality_score >= 85 ? 'bg-teal-400' : p.quality_score >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                            style={{ width: `${p.quality_score}%` }}
-                          />
-                        </div>
-                        <span className="text-slate-500 font-medium w-8 flex-shrink-0">{p.quality_score}%</span>
-                        <span className="text-slate-300">·</span>
-                        <span className="text-slate-400">{p.row_count.toLocaleString('en-US')} rows</span>
-                        {p.high_null_columns.length > 0 && (
-                          <span className="text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[180px]"
-                            title={p.high_null_columns.join(', ')}>
-                            ⚠ {p.high_null_columns.slice(0, 2).join(', ')}{p.high_null_columns.length > 2 ? ` +${p.high_null_columns.length - 2}` : ''}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+            {/* Profiling report — full column-level detail */}
+            {isExpanded && (profs.length > 0 || profilingLoading) && (
+              <ProfilingPanel
+                tables={tables}
+                tableProfiles={tableProfiles}
+                loading={profilingLoading}
+                onRefresh={onRefreshProfiles}
+              />
             )}
           </div>
         )
@@ -752,6 +863,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
 
   // ── Quality profiles
   const [tableProfiles, setTableProfiles] = useState<Record<string, TableProfile>>({})
+  const [profilingLoading, setProfilingLoading] = useState(false)
 
   // ── Source plan (live mode)
   const [plan, setPlan] = useState<SourcePlanEntry[]>(() => loadSourcePlan())
@@ -778,13 +890,22 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     globalToast(msg, type === 'error' ? 'error' : 'success')
   }, [])
 
+  const refreshProfiles = useCallback(() => {
+    if (IS_DEMO_MODE) return
+    setProfilingLoading(true)
+    getSourceProfiles()
+      .then(setTableProfiles)
+      .catch(() => {})
+      .finally(() => setProfilingLoading(false))
+  }, [])
+
   // ── Auto-profile when user sources become active
   useEffect(() => {
     if (IS_DEMO_MODE) return
     const hasActive = sources.some(s => !s.is_default && s.status === 'active')
     if (!hasActive) return
-    getSourceProfiles().then(setTableProfiles).catch(() => {})
-  }, [sources])
+    refreshProfiles()
+  }, [sources, refreshProfiles])
 
   // ── Load sources from backend on mount
   useEffect(() => {
@@ -1045,6 +1166,8 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             onDisconnect={disconnectSource}
             onSync={syncById}
             tableProfiles={tableProfiles}
+            profilingLoading={profilingLoading}
+            onRefreshProfiles={refreshProfiles}
           />
         </section>
 
