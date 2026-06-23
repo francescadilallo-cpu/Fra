@@ -2244,6 +2244,14 @@ Full systematic sweep of every component and backend endpoint not covered by pri
 
 ---
 
+## 2026-06-23 (2)
+
+### Fix "New relation" button always hidden when draft entities are not yet loaded
+- `frontend/src/components/SemanticLayerView.tsx`
+  - `RelationsSection`: removed `entityTables.length > 0` gate — "+ New relation" button is now always visible.
+  - Table selects fall back to free-text inputs when `entityTables` is empty (before AI model is generated).
+  - `entityTables` prop merges draft entity table names with raw `backendSources` tables (deduped) — dropdowns populate as soon as sources are connected.
+
 ## 2026-06-23
 
 ### Fix end-user flow dead-ends in wizard, semantic layer, and query interface

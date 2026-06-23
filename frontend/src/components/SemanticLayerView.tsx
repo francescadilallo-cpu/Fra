@@ -1797,14 +1797,12 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
       <div className="flex items-start justify-between gap-4">
         <SectionHeader icon={ArrowRight} title="Intra-source Relations"
           desc="Foreign-key relationships within each data source" />
-        {entityTables.length > 0 && (
-          <button
-            onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium flex-shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New relation'}
-          </button>
-        )}
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium flex-shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New relation'}
+        </button>
       </div>
 
       {/* Inline add form */}
@@ -1814,19 +1812,29 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[11px] text-slate-500 mb-0.5 block">From table *</label>
-              <select value={form.from_table} onChange={ev => setForm(f => ({ ...f, from_table: ev.target.value }))} required
-                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
-                <option value="">Select table…</option>
-                {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              {entityTables.length > 0 ? (
+                <select value={form.from_table} onChange={ev => setForm(f => ({ ...f, from_table: ev.target.value }))} required
+                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+                  <option value="">Select table…</option>
+                  {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={form.from_table} onChange={ev => setForm(f => ({ ...f, from_table: ev.target.value }))} required
+                  placeholder="e.g. sales_order" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
+              )}
             </div>
             <div>
               <label className="text-[11px] text-slate-500 mb-0.5 block">To table *</label>
-              <select value={form.to_table} onChange={ev => setForm(f => ({ ...f, to_table: ev.target.value }))} required
-                className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
-                <option value="">Select table…</option>
-                {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              {entityTables.length > 0 ? (
+                <select value={form.to_table} onChange={ev => setForm(f => ({ ...f, to_table: ev.target.value }))} required
+                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400">
+                  <option value="">Select table…</option>
+                  {entityTables.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={form.to_table} onChange={ev => setForm(f => ({ ...f, to_table: ev.target.value }))} required
+                  placeholder="e.g. customer" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-400 font-mono placeholder:font-sans" />
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -3126,7 +3134,10 @@ export default function SemanticLayerView() {
           <RelationsSection
             relationsData={relationsData}
             onNavigate={setSection}
-            entityTables={draft?.entities.map(e => e.table) ?? []}
+            entityTables={[...new Set([
+              ...(draft?.entities.map(e => e.table) ?? []),
+              ...backendSources.flatMap(s => s.tables),
+            ])]}
             onRelationAdded={loadFromBackend}
           />
         )}
