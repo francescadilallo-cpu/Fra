@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Design tokens (light theme). Semantic names so component classes and future
+   theming reference intent, not raw palette values.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --surface:          theme('colors.white');
+  --surface-muted:    theme('colors.slate.50');
+  --surface-sunken:   theme('colors.slate.100');
+  --border:           theme('colors.slate.200');
+  --border-subtle:    theme('colors.slate.100');
+  --text:             theme('colors.slate.900');
+  --text-secondary:   theme('colors.slate.600');
+  --text-muted:       theme('colors.slate.400');
+  --accent:           theme('colors.teal.600');
+  --accent-hover:     theme('colors.teal.700');
+  --accent-soft:      theme('colors.teal.50');
+}
+
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
@@ -13,21 +31,75 @@
 }
 
 @layer components {
+  /* ── Surfaces & panels ──────────────────────────────────────────────── */
   .card {
     @apply bg-white border border-slate-200 rounded-xl shadow-sm p-5;
   }
 
+  /* A panel is a bordered surface that hosts a header + body (children manage
+     their own padding). The workbench is built from these. */
+  .panel {
+    @apply bg-white border border-slate-200 rounded-xl overflow-hidden;
+  }
+  .panel-accent {
+    @apply border-teal-200;
+  }
+  .panel-header {
+    @apply flex items-center gap-2.5 px-4 py-3 bg-slate-50 border-b border-slate-100;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 text-sm font-semibold
+           px-4 py-2 rounded-lg transition-colors disabled:opacity-50
+           disabled:cursor-not-allowed;
+  }
+  .btn-sm { @apply text-xs px-2.5 py-1.5 gap-1; }
   .btn-primary {
-    @apply bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2 rounded-lg transition-colors;
+    @apply bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2
+           rounded-lg transition-colors;
   }
-
+  .btn-secondary {
+    @apply bg-white border border-slate-200 text-slate-700 hover:border-slate-300
+           hover:bg-slate-50;
+  }
   .btn-ghost {
-    @apply text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-3 py-2 rounded-lg transition-colors;
+    @apply text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-3 py-2
+           rounded-lg transition-colors;
+  }
+  .btn-danger {
+    @apply bg-red-600 hover:bg-red-700 text-white;
   }
 
+  /* ── Form controls ──────────────────────────────────────────────────── */
+  .input, .select, .textarea {
+    @apply w-full text-sm px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg
+           text-slate-800 placeholder:text-slate-400 outline-none transition-colors
+           focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30;
+  }
+  .textarea { @apply resize-none; }
+
+  /* ── Badges & chips ─────────────────────────────────────────────────── */
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
   }
+  .chip {
+    @apply inline-flex items-center gap-1 text-[11px] font-semibold rounded-full
+           px-1.5 py-0.5 border;
+  }
+  .chip-teal   { @apply bg-teal-50   text-teal-700   border-teal-200; }
+  .chip-amber  { @apply bg-amber-50  text-amber-700  border-amber-200; }
+  .chip-red    { @apply bg-red-50    text-red-600    border-red-200; }
+  .chip-slate  { @apply bg-slate-100 text-slate-500  border-slate-200; }
+  .chip-violet { @apply bg-violet-50 text-violet-700 border-violet-200; }
+
+  /* ── Typography helpers (replaces repeated one-off micro sizes) ─────── */
+  /* Eyebrow: the uppercase tracked section label used across the app. */
+  .eyebrow {
+    @apply text-[10px] font-bold text-slate-500 uppercase tracking-wide;
+  }
+  .t-micro { @apply text-[10px] leading-tight; }
+  .t-mini  { @apply text-[11px] leading-tight; }
 }
 
 /* Dark sidebar scrollbar */

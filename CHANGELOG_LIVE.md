@@ -10,6 +10,29 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 1: Design System Foundation)
+
+Sistematizza il design (tema light raffinato) per portarlo da "hand-crafted" a
+vocabolario riutilizzabile — prerequisito per il Data Workbench.
+
+### `index.css`
+- **Design token semantici** (`:root` CSS custom properties): `--surface`,
+  `--surface-muted/-sunken`, `--border`, `--text/-secondary/-muted`,
+  `--accent/-hover/-soft`. Riferiscono intento, non valori palette grezzi.
+- **Superfici/pannelli**: `.panel`, `.panel-accent`, `.panel-header` — i mattoni
+  del workbench.
+- **Sistema bottoni completo**: `.btn` + `.btn-sm`, `.btn-primary`,
+  `.btn-secondary`, `.btn-ghost`, `.btn-danger` (prima erano inline e divergenti).
+- **Form control**: `.input`, `.select`, `.textarea` con focus-ring teal coerente.
+- **Chips**: `.chip` + varianti `chip-teal/amber/red/slate/violet`.
+- **Helper tipografici**: `.eyebrow` (sostituisce il ripetuto
+  `text-[10px] font-bold uppercase tracking-wide`), `.t-micro`, `.t-mini`.
+
+Le classi sono additive: il codice esistente non cambia, il nuovo Workbench le
+consuma da subito per garantire coerenza.
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 0: Structural Cleanup)
 
 Bonifica preparatoria al redesign "Data Workbench". Rimuove le tre incoerenze
