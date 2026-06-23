@@ -10,6 +10,35 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Wizard a step singolo)
+
+Riscrittura strutturale del workbench live: da 3 rappresentazioni sovrapposte
+della pipeline a un wizard pulito dove **si vede un solo step alla volta**.
+
+### `DataSourcesView.tsx`
+- **WorkbenchRail → navigazione**: cliccare un nodo imposta `activeStep`, non
+  scorre ad un'ancora. Nodo attivo evidenziato con dot teal sotto il label.
+- **`activeStep` state**: sincronizzato automaticamente allo step corrente della
+  pipeline, poi libero dopo la prima navigazione manuale dell'utente.
+- **Step 1 — Discovery**: card di conferma workspace con panoramica delle 3 fasi.
+- **Step 2 — Sources**: connector hub + upload **spostati qui** (non più in fondo
+  alla pagina), più ConnectedSourcesPanel se ci sono sorgenti.
+- **Step 3 — Profiling**: ConnectedSourcesPanel con focus sul profilo tabelle.
+- **Step 4 — Quality**: `ProfilingPanel` standalone su tutte le tabelle attive
+  (non più annidato dentro le source card).
+- **Step 5–6**: OntologyGenerationPanel e ReviewPanel invariati.
+- **Step 7 — Activation**: mostra **solo i check mancanti** (non la checklist
+  completa), con link diretto allo step pertinente. CTA "Build & Activate" quando
+  tutti i check sono ok.
+- **Step 8 — Evolution**: ContinuousEvolutionPanel; gating se non ancora live.
+- **Bottoni Back / Next** con contatore "Step X of 8".
+- Ogni step ha uno stato vuoto contestuale con shortcut "← Go to step X".
+- Demo mode: layout piatto invariato (nessun wizard in demo).
+- Rimossi: `CollapsibleStage`, `GuidedEmptyState`, `ActivationReadinessPanel`,
+  `StatusToken`, `statusByN` (sostituiti dalla struttura wizard).
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 2e: Collapsible Stages + Celebrations)
 
 Il salto spaziale finale: il workbench resta focalizzato sullo step corrente
