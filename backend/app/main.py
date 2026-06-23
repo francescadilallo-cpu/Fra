@@ -35,9 +35,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator, model_validator
-import jwt as _pyjwt
-from jwt.exceptions import ExpiredSignatureError as _JWTExpiredSignatureError
-from jwt.exceptions import InvalidTokenError as _JWTInvalidTokenError
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -331,6 +328,17 @@ def _bump_semantic_cache_namespace() -> None:
         _in_process_cache.clear()
 
 
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(s: str) -> bytes:
+    pad = 4 - len(s) % 4
+    if pad != 4:
+        s += "=" * pad
+    return base64.urlsafe_b64decode(s)
+
+
 def _get_jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET_KEY", "")
     if not secret:
@@ -342,22 +350,48 @@ def _get_jwt_secret() -> str:
 
 
 def _jwt_encode(payload: dict[str, Any], secret: str) -> str:
-    return _pyjwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
+    hdr = _b64url_encode(b'{"alg":"HS256","typ":"JWT"}')
+    body = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
+    signing_input = f"{hdr}.{body}"
+    sig = _b64url_encode(
+        hmac.new(
+            secret.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256
+        ).digest()
+    )
+    return f"{signing_input}.{sig}"
 
 
 def _jwt_decode(token: str, secret: str) -> dict[str, Any]:
     try:
-        return _pyjwt.decode(
-            token,
-            secret,
-            algorithms=[JWT_ALGORITHM],
-            issuer=JWT_ISSUER,
-            audience=JWT_AUDIENCE,
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("malformed token")
+        hdr_b64, payload_b64, sig_b64 = parts
+        signing_input = f"{hdr_b64}.{payload_b64}"
+        expected_sig = _b64url_encode(
+            hmac.new(
+                secret.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256
+            ).digest()
         )
-    except _JWTExpiredSignatureError as exc:
-        raise ValueError("Token expired") from exc
-    except _JWTInvalidTokenError as exc:
-        raise ValueError("Invalid token") from exc
+        if not hmac.compare_digest(sig_b64, expected_sig):
+            raise ValueError("signature mismatch")
+        payload: dict[str, Any] = json.loads(_b64url_decode(payload_b64))
+        now = int(datetime.now(timezone.utc).timestamp())
+        if "exp" in payload and payload["exp"] < now:
+            raise ValueError("Token expired")
+        if payload.get("iss") != JWT_ISSUER:
+            raise ValueError("invalid issuer")
+        aud = payload.get("aud")
+        if isinstance(aud, list):
+            if JWT_AUDIENCE not in aud:
+                raise ValueError("invalid audience")
+        elif aud != JWT_AUDIENCE:
+            raise ValueError("invalid audience")
+        return payload
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("invalid token") from exc
 
 
 _MAX_PASSWORD_BYTES = 4096  # fast-reject oversized inputs before PBKDF2

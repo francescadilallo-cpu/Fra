@@ -10,6 +10,31 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (fix: replace PyJWT with pure-Python HS256 — restore test suite green)
+
+### Root cause
+
+`PyJWT 2.13.0` imports from `cryptography` at module level even for HS256-only
+usage. The `cryptography` Rust extension (`_cffi_backend`) was broken in the
+deployment environment, causing an `AssertionError` during app import — making
+all 16 golden-question tests error before running.
+
+### Fix (`backend/app/main.py`)
+
+- Removed `import jwt as _pyjwt` and its two exception imports
+  (`ExpiredSignatureError`, `InvalidTokenError`).
+- Added `_b64url_encode` / `_b64url_decode` helpers (standard-library only).
+- Replaced `_jwt_encode` with a minimal HS256 JWT encoder using
+  `hmac.new(..., hashlib.sha256).digest()` — identical wire format to PyJWT.
+- Replaced `_jwt_decode` with a verifier that checks signature, `exp`, `iss`,
+  and `aud` and raises `ValueError` on any failure (same contract as before).
+
+No behaviour change for valid tokens; zero new external dependencies.
+
+**Test result after fix:** 1136 passed, 0 failures.
+
+---
+
 ## 2026-06-23 (UX rebuild — Phases 2–4: Smart Setup, smart empty states, adaptive home)
 
 ### Phase 2 — Unified Smart Setup flow (`components/GuidedSetup.tsx`)
