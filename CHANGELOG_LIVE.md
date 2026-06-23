@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 2c: Rail Hero + Workbench Header)
+
+Rende il redesign nettamente più visibile (il rail precedente era troppo timido).
+
+### `DataSourcesView.tsx`
+- **`WorkbenchRail` → hero**:
+  - Header band scuro (slate-900→800) con icona, titolo "Data Pipeline", stato
+    ("Up next · …" / "Fully operational") e progress bar teal + contatore N/8.
+  - Nodi più grandi (32px) con **icona per step** (Sparkles/Plug/Database/
+    ShieldCheck/Brain/ClipboardCheck/Rocket/TrendingUp); il nodo corrente è
+    scalato e con ombra.
+  - **Spotlight dello step corrente**: striscia con icona, "You're here · Step N",
+    descrizione contestuale e bottone azione inline (es. "Generate model →").
+  - Stato finale "Your data model is live and queryable" quando tutto è done.
+- **Header pagina workbench** (live mode): titolo "Data Workbench" + sottotitolo
+  sul pipeline + badge stato a destra ("Operational" / "Setup in progress").
+  Demo mode resta "Data Sources" invariato.
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 2b: Guided Empty State)
 
 ### `DataSourcesView.tsx`

@@ -1645,27 +1645,49 @@ const PHASE_META: { id: WorkbenchPhase; label: string; span: number }[] = [
   { id: 'OPERATE', label: 'Operate', span: 2 },
 ]
 
+// Per-step detail used by the rail spotlight + node icons.
+const STEP_DETAIL: Record<number, { icon: typeof Database; desc: string; cta: string }> = {
+  1: { icon: Sparkles,       desc: 'Your sector and context are set — the model is tuned to your domain.', cta: 'Review setup' },
+  2: { icon: Plug,           desc: 'Connect your ERP, CRM, files and databases. Data loads automatically.', cta: 'Connect a source' },
+  3: { icon: Database,       desc: 'Every table is profiled: row counts, types, null rates and key detection.', cta: 'View profiling' },
+  4: { icon: ShieldCheck,    desc: 'Tune quality rules — mark expected nulls, set thresholds, certify columns.', cta: 'Set quality rules' },
+  5: { icon: Brain,          desc: 'AI proposes entities, metrics and relations from your data. You approve.', cta: 'Generate model' },
+  6: { icon: ClipboardCheck, desc: 'Review and certify every AI-generated item before it goes live.', cta: 'Review items' },
+  7: { icon: Rocket,         desc: 'All checks green? Build the semantic layer and activate your workspace.', cta: 'Activate' },
+  8: { icon: TrendingUp,     desc: 'Monitor freshness and report issues — the model keeps improving.', cta: 'Open monitoring' },
+}
+
 function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anchor: string) => void }) {
   const doneCount = steps.filter(s => s.status === 'done').length
   const current = steps.find(s => s.status === 'current')
+  const allDone = doneCount === steps.length
+  const pct = Math.round((doneCount / steps.length) * 100)
 
   return (
     <div className="panel">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="eyebrow">Data Pipeline</span>
-          {current && (
-            <span className="t-mini text-slate-400">· next: {current.label}</span>
-          )}
+      {/* Header band */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-teal-500/15 ring-1 ring-teal-400/30">
+            <Database className="w-4 h-4 text-teal-300" />
+          </span>
+          <div>
+            <p className="text-sm font-bold text-white leading-none">Data Pipeline</p>
+            <p className="t-mini text-slate-400 mt-1">
+              {allDone ? 'Fully operational' : current ? `Up next · ${current.label}` : 'Getting started'}
+            </p>
+          </div>
         </div>
-        <span className={`chip ${doneCount === steps.length ? 'chip-teal' : 'chip-slate'}`}>
-          {doneCount}/{steps.length} complete
-        </span>
+        <div className="flex items-center gap-2.5">
+          <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-teal-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="t-mini font-semibold text-teal-300 tabular-nums">{doneCount}/{steps.length}</span>
+        </div>
       </div>
 
       {/* Phase labels (weighted to match step counts 2/4/2) */}
-      <div className="flex px-5">
+      <div className="flex px-5 pt-4">
         {PHASE_META.map((p, i) => (
           <div
             key={p.id}
@@ -1678,16 +1700,17 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
       </div>
 
       {/* Nodes */}
-      <div className="flex px-5 pt-2 pb-5">
+      <div className="flex px-5 pt-2 pb-4">
         {steps.map((s, i) => {
           const isLast = i === steps.length - 1
           const segDone = s.status === 'done'
+          const Icon = STEP_DETAIL[s.n].icon
           return (
             <div key={s.n} className="flex-1 flex flex-col items-center relative min-w-0">
               {/* connector to next node */}
               {!isLast && (
                 <div
-                  className={`absolute top-3 left-1/2 w-full h-0.5 ${segDone ? 'bg-teal-400' : 'bg-slate-200'}`}
+                  className={`absolute top-4 left-1/2 w-full h-0.5 ${segDone ? 'bg-teal-400' : 'bg-slate-200'}`}
                 />
               )}
               <button
@@ -1696,19 +1719,17 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
                 className="relative z-10 group flex flex-col items-center gap-1.5 min-w-0 w-full"
               >
                 <span
-                  className={`flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 transition-colors ${
+                  className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 transition-all ${
                     s.status === 'done'
-                      ? 'bg-teal-600 text-white'
+                      ? 'bg-teal-600 text-white shadow-sm'
                       : s.status === 'current'
-                      ? 'bg-white ring-2 ring-teal-500 text-teal-600'
+                      ? 'bg-white ring-2 ring-teal-500 text-teal-600 shadow-sm scale-110'
                       : 'bg-white ring-1 ring-slate-200 text-slate-300'
                   }`}
                 >
                   {s.status === 'done'
-                    ? <Check className="w-3.5 h-3.5" />
-                    : s.status === 'current'
-                    ? <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                    : <span className="t-micro font-bold">{s.n}</span>}
+                    ? <Check className="w-4 h-4" />
+                    : <Icon className="w-4 h-4" />}
                 </span>
                 <span
                   className={`t-micro text-center leading-tight px-0.5 truncate max-w-full ${
@@ -1724,6 +1745,27 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
           )
         })}
       </div>
+
+      {/* Spotlight — current step detail + inline action */}
+      {allDone ? (
+        <div className="border-t border-slate-100 bg-teal-50/60 px-5 py-3 flex items-center gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+          <p className="text-sm text-teal-800 font-medium">Your data model is live and queryable.</p>
+        </div>
+      ) : current ? (
+        <div className="border-t border-slate-100 bg-gradient-to-r from-teal-50/70 to-transparent px-5 py-3 flex items-center gap-3">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-white ring-1 ring-teal-200 flex-shrink-0">
+            {(() => { const I = STEP_DETAIL[current.n].icon; return <I className="w-4 h-4 text-teal-600" /> })()}
+          </span>
+          <div className="flex-1 min-w-0">
+            <span className="eyebrow text-teal-600">You're here · Step {current.n}</span>
+            <p className="t-mini text-slate-600 mt-0.5 leading-snug">{STEP_DETAIL[current.n].desc}</p>
+          </div>
+          <button onClick={() => onJump(current.anchor)} className="btn btn-primary btn-sm flex-shrink-0">
+            {STEP_DETAIL[current.n].cta} →
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2146,11 +2188,27 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
-        <h1 className="text-2xl font-bold text-slate-900">Data Sources</h1>
-        <p className="text-slate-500 mt-1 text-sm">
-          {workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly
-        </p>
+      <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{IS_DEMO_MODE ? 'Data Sources' : 'Data Workbench'}</h1>
+          <p className="text-slate-500 mt-1 text-sm">
+            {IS_DEMO_MODE
+              ? `${workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly`
+              : `${workspaceLabel(sector.name)} · From raw sources to a governed, queryable data model — one guided pipeline`}
+          </p>
+        </div>
+        {!IS_DEMO_MODE && (
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+            <span className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${
+              semBuilt
+                ? 'bg-teal-50 text-teal-700 border-teal-200'
+                : 'bg-slate-50 text-slate-500 border-slate-200'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${semBuilt ? 'bg-teal-500' : 'bg-slate-300'}`} />
+              {semBuilt ? 'Operational' : 'Setup in progress'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Body */}
