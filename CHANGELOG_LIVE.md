@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-23 (UX Redesign — Phase 2e: Collapsible Stages + Celebrations)
+
+Il salto spaziale finale: il workbench resta focalizzato sullo step corrente
+invece di essere un lungo scroll di pannelli sempre aperti.
+
+### `DataSourcesView.tsx`
+- **`StatusToken`** estratto come primitivo riutilizzabile (token numerato di
+  stato), usato da CollapsibleStage e dal connector hub (DRY).
+- **`CollapsibleStage`** — sostituisce `StageHeader`: gli step `done` partono
+  **collassati** mostrando solo una summary di una riga; gli step `current`/
+  `upcoming` partono espansi. Header cliccabile con chevron.
+  - Summary per sezione: Sources `"N sources · M tables profiled"`,
+    Data Model `"N entities in model"`, Review `"X/Y certified"`,
+    Activation `"Semantic layer built"` / `"N/5 checks ready"`,
+    Evolution `"N open · monitoring active"`.
+- **Celebrazioni inline**: toast quando uno step si completa
+  (`"✓ <step> complete · N/8 done"`), con messaggio speciale al completamento
+  totale (`"🎉 Your data model is live"`). Salta il mount iniziale.
+
+---
+
 ## 2026-06-23 (UX Redesign — Phase 2d: Unified Stage Headers)
 
 ### `DataSourcesView.tsx`

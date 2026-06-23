@@ -1770,36 +1770,66 @@ function WorkbenchRail({ steps, onJump }: { steps: WorkbenchStep[]; onJump: (anc
   )
 }
 
-// ── Stage header (unified section header tied to the rail) ──────────────────
+// ── Stage primitives (section headers tied to the rail) ─────────────────────
 
-function StageHeader({
-  token, phase, title, status, trailing,
+function StatusToken({ token, status }: { token: string; status?: StepStatus }) {
+  return (
+    <span
+      className={`flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full t-micro font-bold flex-shrink-0 ${
+        status === 'done'
+          ? 'bg-teal-600 text-white'
+          : status === 'current'
+          ? 'bg-white ring-2 ring-teal-500 text-teal-600'
+          : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
+      }`}
+    >
+      {status === 'done' ? <Check className="w-3.5 h-3.5" /> : token}
+    </span>
+  )
+}
+
+/**
+ * A collapsible stage: completed (`done`) steps start collapsed showing only a
+ * one-line summary, keeping the workbench focused on the current step. Current
+ * and upcoming steps start expanded.
+ */
+function CollapsibleStage({
+  token, phase, title, status, summary, trailing, children,
 }: {
   token: string
   phase: string
   title: string
   status?: StepStatus
+  summary?: React.ReactNode
   trailing?: React.ReactNode
+  children: React.ReactNode
 }) {
+  const [open, setOpen] = useState(status !== 'done')
   return (
-    <div className="flex items-center gap-2.5 mb-3">
-      <span
-        className={`flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded-full t-micro font-bold flex-shrink-0 ${
-          status === 'done'
-            ? 'bg-teal-600 text-white'
-            : status === 'current'
-            ? 'bg-white ring-2 ring-teal-500 text-teal-600'
-            : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
-        }`}
-      >
-        {status === 'done' ? <Check className="w-3.5 h-3.5" /> : token}
-      </span>
-      <div className="flex-1 min-w-0">
-        <span className="eyebrow text-slate-400">{phase}</span>
-        <h2 className="text-sm font-bold text-slate-800 leading-tight">{title}</h2>
+    <>
+      <div className="flex items-center gap-2.5 mb-3">
+        <StatusToken token={token} status={status} />
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex-1 flex items-center gap-2 text-left min-w-0 group"
+        >
+          <div className="flex-shrink-0">
+            <span className="eyebrow text-slate-400">{phase}</span>
+            <h2 className="text-sm font-bold text-slate-800 leading-tight group-hover:text-teal-700 transition-colors">{title}</h2>
+          </div>
+          {!open && summary && (
+            <span className="flex-1 t-mini text-slate-500 truncate min-w-0">{summary}</span>
+          )}
+          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+            {trailing}
+            {open
+              ? <ChevronDown className="w-4 h-4 text-slate-400" />
+              : <ChevronRight className="w-4 h-4 text-slate-400" />}
+          </div>
+        </button>
       </div>
-      {trailing}
-    </div>
+      {open && children}
+    </>
   )
 }
 
@@ -2224,6 +2254,26 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     return m
   }, [workbenchSteps])
 
+  // ── Celebrate when a pipeline step completes (skips the initial mount count).
+  const prevDoneRef = useRef<number>(-1)
+  useEffect(() => {
+    if (IS_DEMO_MODE) return
+    const done = workbenchSteps.filter(s => s.status === 'done').length
+    if (prevDoneRef.current === -1) { prevDoneRef.current = done; return }
+    if (done > prevDoneRef.current) {
+      const justCompleted = workbenchSteps[done - 1]
+      if (justCompleted) {
+        globalToast(
+          done === workbenchSteps.length
+            ? '🎉 Your data model is live — every step complete!'
+            : `✓ ${justCompleted.label} complete · ${done}/${workbenchSteps.length} done`,
+          'success',
+        )
+      }
+    }
+    prevDoneRef.current = done
+  }, [workbenchSteps])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
@@ -2278,49 +2328,65 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             (the GuidedEmptyState above covers that case) */}
         {(IS_DEMO_MODE || sources.filter(s => !s.is_default).length > 0) && (
           <section id="wb-sources" className="scroll-mt-4">
-            <StageHeader
+            <CollapsibleStage
               token="2–4"
               phase="Setup → Build"
               title="Sources, Profiling & Quality"
               status={statusByN[3]}
+              summary={`${sources.filter(s => !s.is_default).length} sources · ${Object.keys(tableProfiles).length} tables profiled`}
               trailing={sourcesLoading
                 ? <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin" />
                 : <span className="t-mini text-slate-400">{sources.filter(s => !s.is_default).length} active</span>}
-            />
-            <ConnectedSourcesPanel
-              sources={sources}
-              onDisconnect={disconnectSource}
-              onSync={syncById}
-              tableProfiles={tableProfiles}
-              profilingLoading={profilingLoading}
-              onRefreshProfiles={refreshProfiles}
-              qualityRules={qualityRules}
-              onUpdateRule={handleUpdateRule}
-              onRemoveRule={handleRemoveRule}
-            />
+            >
+              <ConnectedSourcesPanel
+                sources={sources}
+                onDisconnect={disconnectSource}
+                onSync={syncById}
+                tableProfiles={tableProfiles}
+                profilingLoading={profilingLoading}
+                onRefreshProfiles={refreshProfiles}
+                qualityRules={qualityRules}
+                onUpdateRule={handleUpdateRule}
+                onRemoveRule={handleRemoveRule}
+              />
+            </CollapsibleStage>
           </section>
         )}
 
         {/* Step 5: AI-Assisted Ontology Generation */}
         {!IS_DEMO_MODE && sources.some(s => !s.is_default && s.status === 'active') && (
           <section id="wb-step5" className="scroll-mt-4">
-            <StageHeader token="5" phase="Build" title="AI Data Model" status={statusByN[5]} />
-            <OntologyGenerationPanel
-              sectorId={sectorId}
-              onNavigateToOntology={() => onNavigate?.('sembuilder')}
-            />
+            <CollapsibleStage
+              token="5"
+              phase="Build"
+              title="AI Data Model"
+              status={statusByN[5]}
+              summary={`${extNodeCount} ${extNodeCount === 1 ? 'entity' : 'entities'} in model`}
+            >
+              <OntologyGenerationPanel
+                sectorId={sectorId}
+                onNavigateToOntology={() => onNavigate?.('sembuilder')}
+              />
+            </CollapsibleStage>
           </section>
         )}
 
         {/* Step 6: Human Review & Maintainment */}
         {!IS_DEMO_MODE && reviewItems.length > 0 && (
           <section id="wb-step6" className="scroll-mt-4">
-            <StageHeader token="6" phase="Build" title="Human Review" status={statusByN[6]} />
-            <ReviewPanel
-              items={reviewItems}
-              onUpdate={handleUpdateReview}
-              onCertifyAll={handleCertifyAll}
-            />
+            <CollapsibleStage
+              token="6"
+              phase="Build"
+              title="Human Review"
+              status={statusByN[6]}
+              summary={`${reviewItems.filter(i => i.status === 'certified').length}/${reviewItems.length} certified`}
+            >
+              <ReviewPanel
+                items={reviewItems}
+                onUpdate={handleUpdateReview}
+                onCertifyAll={handleCertifyAll}
+              />
+            </CollapsibleStage>
           </section>
         )}
 
@@ -2358,15 +2424,23 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
             },
           ]
           const allReady = checks.every(c => c.done)
+          const doneChecks = checks.filter(c => c.done).length
           return (
             <section id="wb-step7" className="scroll-mt-4">
-              <StageHeader token="7" phase="Operate" title="Activation" status={statusByN[7]} />
-              <ActivationReadinessPanel
-                checks={checks}
-                allReady={allReady}
-                onActivate={handleBuildSemanticLayer}
-                activating={building}
-              />
+              <CollapsibleStage
+                token="7"
+                phase="Operate"
+                title="Activation"
+                status={statusByN[7]}
+                summary={semBuilt ? 'Semantic layer built' : `${doneChecks}/${checks.length} checks ready`}
+              >
+                <ActivationReadinessPanel
+                  checks={checks}
+                  allReady={allReady}
+                  onActivate={handleBuildSemanticLayer}
+                  activating={building}
+                />
+              </CollapsibleStage>
             </section>
           )
         })()}
@@ -2374,13 +2448,20 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
         {/* Step 8: Continuous Evolution */}
         {!IS_DEMO_MODE && semBuilt && (
           <section id="wb-step8" className="scroll-mt-4">
-            <StageHeader token="8" phase="Operate" title="Continuous Evolution" status={statusByN[8]} />
-            <ContinuousEvolutionPanel
-              sources={sources.filter(s => !s.is_default)}
-              feedbackItems={feedbackItems}
-              onAddFeedback={handleAddFeedback}
-              onResolve={handleResolveFeedback}
-            />
+            <CollapsibleStage
+              token="8"
+              phase="Operate"
+              title="Continuous Evolution"
+              status={statusByN[8]}
+              summary={`${feedbackItems.filter(f => f.status === 'open').length} open · monitoring active`}
+            >
+              <ContinuousEvolutionPanel
+                sources={sources.filter(s => !s.is_default)}
+                feedbackItems={feedbackItems}
+                onAddFeedback={handleAddFeedback}
+                onResolve={handleResolveFeedback}
+              />
+            </CollapsibleStage>
           </section>
         )}
 
@@ -2437,17 +2518,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
               </div>
             ) : (
               <div className="flex items-center gap-2.5">
-                <span
-                  className={`flex items-center justify-center w-6 h-6 rounded-full t-micro font-bold flex-shrink-0 ${
-                    statusByN[2] === 'done'
-                      ? 'bg-teal-600 text-white'
-                      : statusByN[2] === 'current'
-                      ? 'bg-white ring-2 ring-teal-500 text-teal-600'
-                      : 'bg-slate-100 text-slate-400 ring-1 ring-slate-200'
-                  }`}
-                >
-                  {statusByN[2] === 'done' ? <Check className="w-3.5 h-3.5" /> : '2'}
-                </span>
+                <StatusToken token="2" status={statusByN[2]} />
                 <div>
                   <span className="eyebrow text-slate-400">Setup</span>
                   <h2 className="text-sm font-bold text-slate-800 leading-tight">
