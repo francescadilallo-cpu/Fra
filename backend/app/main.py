@@ -736,12 +736,34 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
             # MultiDiGraph, whose add_edge() always appends a parallel edge —
             # looping the loaders in place would silently double (then
             # triple, ...) every edge on each successive sync.
+            #
+            # Wrap the manager so that sf_* schema-catalog tables (created by
+            # the Salesforce connector to hold object/field metadata) are
+            # invisible to the KG builder — they are not business entities
+            # and would inflate the graph with thousands of spurious nodes.
+            class _FilteredMgr:
+                """Thin proxy that hides sf_*_objects / sf_*_fields tables."""
+
+                def __init__(self, inner):
+                    self._inner = inner
+
+                def get_schema_info(self):
+                    return {
+                        k: v
+                        for k, v in self._inner.get_schema_info().items()
+                        if not re.match(r"sf_[a-z0-9_]+_(objects|fields)$", k)
+                    }
+
+                def __getattr__(self, name):
+                    return getattr(self._inner, name)
+
             new_kg = KnowledgeGraph()
             ontology = _semantic_state.get("ontology")
+            filtered_mgr = _FilteredMgr(mgr)
             if ontology is not None:
-                new_kg.build_from_ontology(mgr, ontology)
+                new_kg.build_from_ontology(filtered_mgr, ontology)
             else:
-                new_kg.build_from_schema(mgr)
+                new_kg.build_from_schema(filtered_mgr)
             _semantic_state["kg"] = new_kg
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)

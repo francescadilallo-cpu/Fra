@@ -1452,7 +1452,9 @@ class DuckDBSourceManager:
                 client_id=stored.get("client_id"),
                 client_secret=stored.get("client_secret"),
             ) as sf:
-                schema = sf.get_schema(max_objects=150)
+                # Limit to priority objects only on free-tier deployments to
+                # avoid OOM on 512 MB instances during KG rebuild.
+                schema = sf.get_schema(max_objects=25)
         except (SalesforceAuthError, SalesforceAPIError) as exc:
             raise ValueError(str(exc)) from exc
 
