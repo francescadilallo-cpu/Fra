@@ -134,7 +134,56 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   stripe:             { connector_type: 'stripe',             params_schema: [], waitlist_only: true },
   satispay:           { connector_type: 'satispay',           params_schema: [], waitlist_only: true },
   nexi:               { connector_type: 'nexi',               params_schema: [], waitlist_only: true },
-  salesforce:         { connector_type: 'salesforce',         params_schema: [], waitlist_only: true },
+  salesforce: {
+    connector_type: 'salesforce',
+    params_schema: [
+      {
+        key: 'instance_url',
+        label: 'Instance URL',
+        type: 'url',
+        placeholder: 'https://mycompany.my.salesforce.com',
+        required: true,
+        hint: 'Your Salesforce org URL — no trailing slash',
+      },
+      {
+        key: 'client_id',
+        label: 'Consumer Key (Client ID)',
+        type: 'text',
+        placeholder: 'Paste your Connected App Consumer Key',
+        required: true,
+        hint: 'Found in Setup → Apps → App Manager → your Connected App',
+      },
+      {
+        key: 'client_secret',
+        label: 'Consumer Secret (Client Secret)',
+        type: 'password',
+        placeholder: 'Paste your Connected App Consumer Secret',
+        required: true,
+      },
+      {
+        key: 'username',
+        label: 'Username',
+        type: 'text',
+        placeholder: 'you@yourcompany.com',
+        required: true,
+      },
+      {
+        key: 'password',
+        label: 'Password',
+        type: 'password',
+        placeholder: 'Your Salesforce password',
+        required: true,
+      },
+      {
+        key: 'security_token',
+        label: 'Security Token',
+        type: 'password',
+        placeholder: 'Paste your security token',
+        required: true,
+        hint: 'Reset at: Settings → Personal → Reset My Security Token',
+      },
+    ],
+  },
   hubspot:            { connector_type: 'hubspot',            params_schema: [], waitlist_only: true },
   teamsystem:         { connector_type: 'teamsystem',         params_schema: [], waitlist_only: true },
   zucchetti:          { connector_type: 'zucchetti',          params_schema: [], waitlist_only: true },
@@ -145,6 +194,45 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   'danea-easyfatt':   { connector_type: 'danea_easyfatt',    params_schema: [], waitlist_only: true },
   sdi:                { connector_type: 'sdi',                params_schema: [], waitlist_only: true },
   'agenzia-entrate':  { connector_type: 'agenzia_entrate',   params_schema: [], waitlist_only: true },
+}
+
+// ── Salesforce schema API ─────────────────────────────────────────────────────
+
+export interface SalesforceField {
+  name: string
+  label: string
+  type: string
+  is_required: boolean
+  is_relation: boolean
+  relation_to: string | null
+}
+
+export interface SalesforceObject {
+  name: string
+  label: string
+  field_count: number
+  is_custom: boolean
+  key_prefix: string | null
+  fields: SalesforceField[]
+}
+
+export interface SalesforceSchema {
+  instance_url: string
+  org_id: string
+  api_version: string
+  object_count: number
+  objects: SalesforceObject[]
+  fetched_at: string
+}
+
+export async function getSalesforceSchema(sourceId: string): Promise<SalesforceSchema> {
+  const res = await api.get<SalesforceSchema>(`/api/salesforce/schema/${encodeURIComponent(sourceId)}`)
+  return res.data
+}
+
+export async function refreshSalesforceSchema(sourceId: string): Promise<SalesforceSchema> {
+  const res = await api.post<SalesforceSchema>(`/api/salesforce/schema/${encodeURIComponent(sourceId)}/refresh`)
+  return res.data
 }
 
 export function getConnectorBackendDef(connectorId: string): ConnectorBackendDef {

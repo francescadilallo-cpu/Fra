@@ -1,0 +1,454 @@
+"""Salesforce connector — OAuth2 username-password flow + Metadata API schema retrieval.
+
+Authentication flow:
+  POST {instance_url}/services/oauth2/token (grant_type=password)
+  → access_token used for all subsequent REST API calls
+
+Schema retrieval:
+  GET /services/data/v59.0/sobjects/            → list of all SObjects
+  GET /services/data/v59.0/sobjects/{obj}/describe/ → full field metadata
+
+Ingestion into DuckDB:
+  Creates two tables per source:
+    sf_{source_id}_objects  — one row per SObject
+    sf_{source_id}_fields   — one row per field across all objects
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+_SF_API_VERSION = "v59.0"
+_DATA_DIR = Path(__file__).parent.parent.parent / "data"
+
+# Standard SObjects most relevant for business analysis (prioritised in schema fetch)
+_PRIORITY_OBJECTS = {
+    "Account",
+    "Contact",
+    "Lead",
+    "Opportunity",
+    "OpportunityLineItem",
+    "Product2",
+    "Pricebook2",
+    "PricebookEntry",
+    "Case",
+    "CaseComment",
+    "Task",
+    "Event",
+    "Activity",
+    "Campaign",
+    "CampaignMember",
+    "Quote",
+    "QuoteLineItem",
+    "Order",
+    "OrderItem",
+    "Contract",
+    "Asset",
+    "User",
+    "UserRole",
+}
+
+
+# ── Dataclasses ───────────────────────────────────────────────────────────────
+
+
+@dataclass
+class SalesforceField:
+    name: str
+    label: str
+    type: str
+    is_required: bool
+    is_relation: bool
+    relation_to: str | None
+
+
+@dataclass
+class SalesforceObject:
+    name: str
+    label: str
+    field_count: int
+    is_custom: bool
+    key_prefix: str | None
+    fields: list[SalesforceField] = field(default_factory=list)
+
+
+@dataclass
+class SalesforceSchema:
+    instance_url: str
+    org_id: str
+    api_version: str
+    object_count: int
+    objects: list[SalesforceObject]
+    fetched_at: str
+
+
+# ── Errors ────────────────────────────────────────────────────────────────────
+
+
+class SalesforceAuthError(ValueError):
+    """Raised when Salesforce OAuth2 authentication fails."""
+
+
+class SalesforceAPIError(RuntimeError):
+    """Raised when a Salesforce REST API call fails."""
+
+
+# ── Connector class ───────────────────────────────────────────────────────────
+
+
+class SalesforceConnector:
+    """Authenticated Salesforce REST API client."""
+
+    def __init__(
+        self,
+        instance_url: str,
+        client_id: str,
+        client_secret: str,
+        username: str,
+        password: str,
+        security_token: str,
+    ) -> None:
+        self.instance_url = instance_url.rstrip("/")
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._username = username
+        self._password = password
+        self._security_token = security_token
+        self._access_token: str | None = None
+        # httpx client is reused across requests within the same connector instance
+        self._http = httpx.Client(timeout=60)
+
+    def authenticate(self) -> str:
+        """Perform OAuth2 username-password flow and return the access token."""
+        try:
+            resp = self._http.post(
+                f"{self.instance_url}/services/oauth2/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                    "username": self._username,
+                    "password": self._password + self._security_token,
+                },
+            )
+        except httpx.RequestError as exc:
+            raise SalesforceAuthError(
+                f"Could not reach Salesforce at {self.instance_url} — check the Instance URL and network access: {exc}"
+            ) from exc
+
+        if resp.status_code != 200:
+            try:
+                detail = resp.json()
+                msg = (
+                    detail.get("error_description") or detail.get("error") or resp.text
+                )
+            except Exception:
+                msg = resp.text
+            raise SalesforceAuthError(
+                f"Salesforce authentication failed ({resp.status_code}): {msg}"
+            )
+
+        result = resp.json()
+        if "access_token" not in result:
+            raise SalesforceAuthError(
+                f"Salesforce response missing access_token: {result}"
+            )
+
+        self._access_token = result["access_token"]
+        if "instance_url" in result:
+            self.instance_url = result["instance_url"].rstrip("/")
+
+        logger.info("Salesforce authenticated for %s", self._username)
+        return self._access_token
+
+    def _get(self, path: str) -> Any:
+        """Authenticated GET to Salesforce REST API."""
+        if not self._access_token:
+            self.authenticate()
+
+        url = f"{self.instance_url}/services/data/{_SF_API_VERSION}{path}"
+        resp = self._http.get(
+            url,
+            headers={"Authorization": f"Bearer {self._access_token}"},
+        )
+        if resp.status_code == 401:
+            # Token expired — re-authenticate once and retry
+            self.authenticate()
+            resp = self._http.get(
+                url,
+                headers={"Authorization": f"Bearer {self._access_token}"},
+            )
+
+        if resp.status_code != 200:
+            raise SalesforceAPIError(
+                f"Salesforce API {path} returned {resp.status_code}: {resp.text[:400]}"
+            )
+        return resp.json()
+
+    def get_org_id(self) -> str:
+        """Return the Organisation ID via a lightweight SOQL query."""
+        try:
+            result = self._get("/query?q=SELECT+Id+FROM+Organization+LIMIT+1")
+            records = result.get("records", [])
+            return records[0]["Id"] if records else "unknown"
+        except Exception:
+            return "unknown"
+
+    def list_sobjects(self) -> list[dict]:
+        """Return the raw list of all SObjects from /sobjects/."""
+        result = self._get("/sobjects/")
+        return result.get("sobjects", [])
+
+    def describe_object(self, obj_name: str) -> dict:
+        """Return the full describe result for one SObject."""
+        return self._get(f"/sobjects/{obj_name}/describe/")
+
+    def get_schema(self, max_objects: int = 150) -> SalesforceSchema:
+        """
+        Retrieve schema for up to *max_objects* SObjects.
+
+        Priority order:
+          1. Standard priority objects (Account, Contact, Opportunity, …)
+          2. Other standard objects
+          3. Custom objects (__c suffix)
+        """
+        if not self._access_token:
+            self.authenticate()
+
+        raw_objects = self.list_sobjects()
+
+        # Filter to queryable, non-deprecated objects
+        queryable = [
+            o
+            for o in raw_objects
+            if o.get("queryable") and not o.get("deprecatedAndHidden")
+        ]
+
+        priority = [o for o in queryable if o["name"] in _PRIORITY_OBJECTS]
+        standard = [
+            o
+            for o in queryable
+            if not o.get("custom") and o["name"] not in _PRIORITY_OBJECTS
+        ]
+        custom = [o for o in queryable if o.get("custom")]
+
+        remaining = max_objects - len(priority)
+        selected = priority + standard[: remaining // 2] + custom[: remaining // 2]
+        selected = selected[:max_objects]
+
+        objects: list[SalesforceObject] = []
+        for obj_meta in selected:
+            obj_name = obj_meta["name"]
+            try:
+                desc = self.describe_object(obj_name)
+            except SalesforceAPIError as exc:
+                logger.warning("Skipping %s: %s", obj_name, exc)
+                continue
+
+            raw_fields = desc.get("fields", [])
+            sf_fields = []
+            for f in raw_fields:
+                refs = f.get("referenceTo") or []
+                sf_fields.append(
+                    SalesforceField(
+                        name=f["name"],
+                        label=f.get("label", f["name"]),
+                        type=f["type"],
+                        is_required=not f.get("nillable", True)
+                        and not f.get("defaultedOnCreate", False),
+                        is_relation=f["type"] in ("reference",),
+                        relation_to=", ".join(refs) if refs else None,
+                    )
+                )
+
+            objects.append(
+                SalesforceObject(
+                    name=obj_name,
+                    label=obj_meta.get("label", obj_name),
+                    field_count=len(sf_fields),
+                    is_custom=bool(obj_meta.get("custom")),
+                    key_prefix=obj_meta.get("keyPrefix"),
+                    fields=sf_fields,
+                )
+            )
+
+        org_id = self.get_org_id()
+
+        return SalesforceSchema(
+            instance_url=self.instance_url,
+            org_id=org_id,
+            api_version=_SF_API_VERSION,
+            object_count=len(objects),
+            objects=objects,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def close(self) -> None:
+        self._http.close()
+
+    def __enter__(self) -> "SalesforceConnector":
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+
+# ── Config + schema persistence ───────────────────────────────────────────────
+
+
+def save_salesforce_config(source_id: str, params: dict) -> None:
+    """Persist Salesforce credentials for *source_id* to backend/data/salesforce_config.json."""
+    config_path = _DATA_DIR / "salesforce_config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict = {}
+    if config_path.exists():
+        try:
+            existing = json.loads(config_path.read_text())
+        except Exception:
+            pass
+
+    existing[source_id] = {
+        "instance_url": params.get("instance_url", ""),
+        "client_id": params.get("client_id", ""),
+        "client_secret": params.get("client_secret", ""),
+        "username": params.get("username", ""),
+        "password": params.get("password", ""),
+        "security_token": params.get("security_token", ""),
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    config_path.write_text(json.dumps(existing, indent=2))
+    logger.info("Salesforce config saved for source '%s'", source_id)
+
+
+def load_salesforce_config(source_id: str) -> dict | None:
+    """Return the persisted credentials for *source_id*, or None."""
+    config_path = _DATA_DIR / "salesforce_config.json"
+    if not config_path.exists():
+        return None
+    try:
+        data = json.loads(config_path.read_text())
+        return data.get(source_id)
+    except Exception:
+        return None
+
+
+def save_salesforce_schema(source_id: str, schema: SalesforceSchema) -> None:
+    """Cache the retrieved schema to backend/data/salesforce_schema_{source_id}.json."""
+    schema_path = _DATA_DIR / f"salesforce_schema_{source_id}.json"
+    schema_path.parent.mkdir(parents=True, exist_ok=True)
+    schema_path.write_text(json.dumps(asdict(schema), indent=2))
+    logger.info(
+        "Salesforce schema cached for '%s': %d objects", source_id, schema.object_count
+    )
+
+
+def load_salesforce_schema(source_id: str) -> dict | None:
+    """Return the cached schema dict for *source_id*, or None."""
+    schema_path = _DATA_DIR / f"salesforce_schema_{source_id}.json"
+    if not schema_path.exists():
+        return None
+    try:
+        return json.loads(schema_path.read_text())
+    except Exception:
+        return None
+
+
+def delete_salesforce_config(source_id: str) -> None:
+    """Remove credentials and cached schema for *source_id* on source deletion."""
+    config_path = _DATA_DIR / "salesforce_config.json"
+    if config_path.exists():
+        try:
+            data = json.loads(config_path.read_text())
+            if source_id in data:
+                del data[source_id]
+                config_path.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass
+
+    schema_path = _DATA_DIR / f"salesforce_schema_{source_id}.json"
+    if schema_path.exists():
+        try:
+            schema_path.unlink()
+        except Exception:
+            pass
+
+
+# ── DuckDB ingest helpers ─────────────────────────────────────────────────────
+
+
+def build_salesforce_dataframes(
+    schema: SalesforceSchema,
+) -> tuple["Any", "Any"]:  # (pd.DataFrame, pd.DataFrame)
+    """
+    Convert a SalesforceSchema into two pandas DataFrames suitable for DuckDB:
+      objects_df  — one row per SObject
+      fields_df   — one row per field
+    """
+    import pandas as pd
+
+    objects_rows = []
+    fields_rows = []
+
+    for obj in schema.objects:
+        objects_rows.append(
+            {
+                "object_name": obj.name,
+                "object_label": obj.label,
+                "is_custom": obj.is_custom,
+                "field_count": obj.field_count,
+                "key_prefix": obj.key_prefix,
+            }
+        )
+        for fld in obj.fields:
+            fields_rows.append(
+                {
+                    "object_name": obj.name,
+                    "field_name": fld.name,
+                    "field_label": fld.label,
+                    "field_type": fld.type,
+                    "is_required": fld.is_required,
+                    "is_relation": fld.is_relation,
+                    "relation_to": fld.relation_to,
+                }
+            )
+
+    objects_df = (
+        pd.DataFrame(objects_rows)
+        if objects_rows
+        else pd.DataFrame(
+            columns=[
+                "object_name",
+                "object_label",
+                "is_custom",
+                "field_count",
+                "key_prefix",
+            ]
+        )
+    )
+    fields_df = (
+        pd.DataFrame(fields_rows)
+        if fields_rows
+        else pd.DataFrame(
+            columns=[
+                "object_name",
+                "field_name",
+                "field_label",
+                "field_type",
+                "is_required",
+                "is_relation",
+                "relation_to",
+            ]
+        )
+    )
+
+    return objects_df, fields_df

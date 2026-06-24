@@ -67,6 +67,7 @@ IMPLEMENTED_CONNECTOR_TYPES = {
     "mysql",
     "parquet",
     "context_doc",
+    "salesforce",
 }
 
 # SaaS connectors: registered in registry but ingestion not yet implemented
@@ -78,7 +79,6 @@ SAAS_CONNECTOR_TYPES = {
     "stripe",
     "satispay",
     "nexi",
-    "salesforce",
     "hubspot",
     "teamsystem",
     "zucchetti",

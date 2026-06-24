@@ -768,6 +768,8 @@ class DuckDBSourceManager:
             self._ingest_parquet(conn, cfg)
         elif ctype == "context_doc":
             self._ingest_context_doc(conn, cfg)
+        elif ctype == "salesforce":
+            self._ingest_salesforce(conn, cfg)
         elif ctype not in IMPLEMENTED_CONNECTOR_TYPES:
             logger.info(
                 "Source '%s' connector_type='%s' not yet implemented — skipping",
@@ -1412,6 +1414,79 @@ class DuckDBSourceManager:
     ) -> None:
         """Context documents are metadata-only — no DuckDB table is created."""
         logger.info("CTX  %-25s (context document, no DuckDB table)", cfg.label)
+
+    def _ingest_salesforce(
+        self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
+    ) -> None:
+        """Authenticate to Salesforce, retrieve full schema, and store as DuckDB tables.
+
+        Creates two tables per source:
+          sf_{id}_objects  — one row per SObject (name, label, is_custom, field_count)
+          sf_{id}_fields   — one row per field (object_name, field_name, type, ...)
+        """
+        from .salesforce_connector import (
+            SalesforceConnector,
+            SalesforceAuthError,
+            save_salesforce_config,
+            save_salesforce_schema,
+            build_salesforce_dataframes,
+        )
+
+        params = cfg.params
+        required = (
+            "instance_url",
+            "client_id",
+            "client_secret",
+            "username",
+            "password",
+            "security_token",
+        )
+        missing = [k for k in required if not params.get(k)]
+        if missing:
+            raise ValueError(
+                f"Salesforce source '{cfg.id}' is missing required credentials: {', '.join(missing)}"
+            )
+
+        try:
+            with SalesforceConnector(
+                instance_url=params["instance_url"],
+                client_id=params["client_id"],
+                client_secret=params["client_secret"],
+                username=params["username"],
+                password=params["password"],
+                security_token=params["security_token"],
+            ) as sf:
+                sf.authenticate()
+                schema = sf.get_schema(max_objects=150)
+        except SalesforceAuthError as exc:
+            raise ValueError(str(exc)) from exc
+
+        # Persist credentials + schema to disk
+        save_salesforce_config(cfg.id, params)
+        save_salesforce_schema(cfg.id, schema)
+
+        # Build DataFrames and load into DuckDB
+        objects_df, fields_df = build_salesforce_dataframes(schema)
+
+        safe_id = cfg.id.replace("-", "_")
+        objects_table = f"sf_{safe_id}_objects"
+        fields_table = f"sf_{safe_id}_fields"
+
+        conn.execute(
+            f'CREATE TABLE IF NOT EXISTS "{objects_table}" AS SELECT * FROM objects_df'
+        )
+        conn.execute(
+            f'CREATE TABLE IF NOT EXISTS "{fields_table}" AS SELECT * FROM fields_df'
+        )
+
+        n_objects = len(objects_df)
+        n_fields = len(fields_df)
+        self._row_counts[f"{cfg.id}.{objects_table}"] = n_objects
+        self._row_counts[f"{cfg.id}.{fields_table}"] = n_fields
+
+        logger.info(
+            "SF   %-25s %3d objects  %5d fields", cfg.label, n_objects, n_fields
+        )
 
     # ── Auto-discovery ─────────────────────────────────────────────────────────
 

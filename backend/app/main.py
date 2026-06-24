@@ -2924,12 +2924,25 @@ def remove_source(
     from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
 
     mgr = get_source_manager(_SCENARIO_PATH)
+
+    # Check connector type before removal so we can clean up Salesforce config
+    existing_cfg = mgr.registry.get(source_id)
+    is_salesforce = (
+        existing_cfg is not None and existing_cfg.connector_type == "salesforce"
+    )
+
     try:
         mgr.registry.remove(source_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    if is_salesforce:
+        from .connectors.salesforce_connector import delete_salesforce_config
+
+        delete_salesforce_config(source_id)
+
     _audit(request, current_user, "Removed data source", source_id, category="config")
     try:
         mgr.rebuild()
@@ -3066,6 +3079,98 @@ def semantic_sources(
                 {"id": key, "name": key, "error": "Unable to load source metadata"}
             )
     return sources
+
+
+# ── Salesforce schema endpoint ────────────────────────────────────────────────
+
+
+@app.get("/api/salesforce/schema/{source_id}")
+def get_salesforce_schema(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Return the cached Salesforce schema for *source_id*.
+
+    The schema is fetched from Salesforce and cached to disk the first time a
+    Salesforce source is registered via POST /api/sources. Subsequent calls
+    return the cached version instantly without hitting Salesforce.
+
+    Use POST /api/sources/{source_id}/sync to force a refresh.
+    """
+    from .connectors.salesforce_connector import load_salesforce_schema
+
+    schema = load_salesforce_schema(source_id)
+    if schema is None:
+        # Source may exist in registry but schema hasn't been fetched yet
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No Salesforce schema found for source '{source_id}'. "
+                "Connect the source via the Data Sources wizard to fetch it."
+            ),
+        )
+    return schema
+
+
+@app.post("/api/salesforce/schema/{source_id}/refresh")
+def refresh_salesforce_schema(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Re-authenticate to Salesforce and refresh the cached schema for *source_id*.
+
+    Loads credentials from the persisted config file, not the request body,
+    so credentials are never re-transmitted after the initial connect.
+    """
+    from .connectors.salesforce_connector import (
+        SalesforceConnector,
+        SalesforceAuthError,
+        load_salesforce_config,
+        save_salesforce_schema,
+    )
+
+    cfg = load_salesforce_config(source_id)
+    if cfg is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No Salesforce credentials found for source '{source_id}'. "
+                "Reconnect the source to store credentials."
+            ),
+        )
+
+    try:
+        with SalesforceConnector(
+            instance_url=cfg["instance_url"],
+            client_id=cfg["client_id"],
+            client_secret=cfg["client_secret"],
+            username=cfg["username"],
+            password=cfg["password"],
+            security_token=cfg["security_token"],
+        ) as sf:
+            sf.authenticate()
+            schema = sf.get_schema(max_objects=150)
+    except SalesforceAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Salesforce schema refresh failed: {exc}",
+        )
+
+    save_salesforce_schema(source_id, schema)
+    _audit(
+        request,
+        current_user,
+        "Refreshed Salesforce schema",
+        source_id,
+        category="config",
+    )
+
+    from dataclasses import asdict
+
+    return asdict(schema)
 
 
 # ── Semantic definitions CRUD ─────────────────────────────────────────────────
