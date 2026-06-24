@@ -181,6 +181,39 @@ class SalesforceSchema:
     fetched_at: str
 
 
+@dataclass
+class SchemaGraphNode:
+    name: str
+    label: str
+    is_custom: bool
+    is_queryable: bool
+    key_prefix: str | None
+    field_count: int
+
+
+@dataclass
+class SchemaGraphEdge:
+    from_object: str
+    to_object: str
+    field_name: str
+    field_label: str
+    relationship_name: str | None
+    is_required: bool
+
+
+@dataclass
+class SalesforceSchemaGraph:
+    source_id: str
+    instance_url: str
+    org_id: str
+    api_version: str
+    total_objects: int
+    described_objects: int
+    nodes: list[SchemaGraphNode]
+    edges: list[SchemaGraphEdge]
+    built_at: str
+
+
 # ── Errors ────────────────────────────────────────────────────────────────────
 
 
@@ -371,6 +404,120 @@ class SalesforceConnector:
             fetched_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def _post_composite_batch(self, paths: list[str]) -> list[dict]:
+        """POST to /composite/batch with up to 25 sub-GET requests."""
+        url = f"{self.instance_url}/services/data/{_SF_API_VERSION}/composite/batch"
+        payload = {
+            "batchRequests": [
+                {"method": "GET", "url": f"/services/data/{_SF_API_VERSION}{p}"}
+                for p in paths
+            ]
+        }
+        headers = {
+            "Authorization": f"Bearer {self._access_token}",
+            "Content-Type": "application/json",
+        }
+        resp = self._http.post(url, json=payload, headers=headers, timeout=120)
+        if resp.status_code == 401:
+            self._refresh_access_token()
+            headers["Authorization"] = f"Bearer {self._access_token}"
+            resp = self._http.post(url, json=payload, headers=headers, timeout=120)
+        if resp.status_code != 200:
+            raise SalesforceAPIError(
+                f"Composite batch failed {resp.status_code}: {resp.text[:400]}"
+            )
+        return resp.json().get("results", [])
+
+    def get_schema_graph(self, max_objects: int = 0) -> "SalesforceSchemaGraph":
+        """Discover all objects, fields, and relationships via Composite batch API.
+
+        Phase 1: Global Describe → full list of queryable SObjects (no per-object calls).
+        Phase 2: Composite batch describe, 25 objects per HTTP request.
+
+        Returns a SalesforceSchemaGraph with nodes (objects) and edges (relationships).
+        When max_objects=0 (default) all queryable objects are described.
+        """
+        raw = self.list_sobjects()
+        queryable = [
+            o
+            for o in raw
+            if o.get("queryable") and not o.get("deprecatedAndHidden")
+        ]
+        if max_objects > 0:
+            queryable = queryable[:max_objects]
+
+        node_names: set[str] = {o["name"] for o in queryable}
+        name_to_node: dict[str, SchemaGraphNode] = {}
+        for o in queryable:
+            name_to_node[o["name"]] = SchemaGraphNode(
+                name=o["name"],
+                label=o.get("label", o["name"]),
+                is_custom=bool(o.get("custom")),
+                is_queryable=True,
+                key_prefix=o.get("keyPrefix"),
+                field_count=0,
+            )
+
+        edges: list[SchemaGraphEdge] = []
+        paths = [f"/sobjects/{o['name']}/describe/" for o in queryable]
+        _BATCH = 25
+
+        for i in range(0, len(paths), _BATCH):
+            chunk_paths = paths[i : i + _BATCH]
+            chunk_objects = queryable[i : i + _BATCH]
+            try:
+                results = self._post_composite_batch(chunk_paths)
+            except SalesforceAPIError as exc:
+                logger.warning("Composite batch %d–%d failed: %s", i, i + _BATCH, exc)
+                continue
+
+            for obj_meta, result in zip(chunk_objects, results):
+                if result.get("statusCode") != 200:
+                    logger.debug(
+                        "Describe skipped for %s: status %s",
+                        obj_meta["name"],
+                        result.get("statusCode"),
+                    )
+                    continue
+                desc = result.get("result", {})
+                obj_name = obj_meta["name"]
+                fields = desc.get("fields", [])
+
+                if obj_name in name_to_node:
+                    name_to_node[obj_name].field_count = len(fields)
+
+                for f in fields:
+                    if f.get("type") != "reference":
+                        continue
+                    refs = f.get("referenceTo") or []
+                    for ref in refs:
+                        if ref not in node_names:
+                            continue
+                        edges.append(
+                            SchemaGraphEdge(
+                                from_object=obj_name,
+                                to_object=ref,
+                                field_name=f["name"],
+                                field_label=f.get("label", f["name"]),
+                                relationship_name=f.get("relationshipName"),
+                                is_required=not f.get("nillable", True),
+                            )
+                        )
+
+        org_id = self.get_org_id()
+        nodes = list(name_to_node.values())
+        return SalesforceSchemaGraph(
+            source_id="",
+            instance_url=self.instance_url,
+            org_id=org_id,
+            api_version=_SF_API_VERSION,
+            total_objects=len(queryable),
+            described_objects=sum(1 for n in nodes if n.field_count > 0),
+            nodes=nodes,
+            edges=edges,
+            built_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     def close(self) -> None:
         self._http.close()
 
@@ -470,6 +617,39 @@ def delete_salesforce_config(source_id: str) -> None:
             pass
 
     _delete_salesforce_profile(source_id)
+
+    graph_path = _DATA_DIR / f"salesforce_schema_graph_{source_id}.json"
+    if graph_path.exists():
+        try:
+            graph_path.unlink()
+        except Exception:
+            pass
+
+
+def save_salesforce_schema_graph(source_id: str, graph: "SalesforceSchemaGraph") -> None:
+    """Persist the schema graph to disk for *source_id*."""
+    path = _DATA_DIR / f"salesforce_schema_graph_{source_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = asdict(graph)
+    data["source_id"] = source_id
+    path.write_text(json.dumps(data, indent=2))
+    logger.info(
+        "Schema graph saved for '%s': %d nodes, %d edges",
+        source_id,
+        len(graph.nodes),
+        len(graph.edges),
+    )
+
+
+def load_salesforce_schema_graph(source_id: str) -> dict | None:
+    """Return the cached schema graph dict for *source_id*, or None."""
+    path = _DATA_DIR / f"salesforce_schema_graph_{source_id}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return None
 
 
 # ── Field-level profiling ─────────────────────────────────────────────────────

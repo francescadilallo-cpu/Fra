@@ -3183,6 +3183,95 @@ def refresh_salesforce_schema(
     return asdict(schema)
 
 
+# ── Salesforce schema graph ───────────────────────────────────────────────────
+
+
+@app.get("/api/salesforce/schema-graph/{source_id}")
+def get_salesforce_schema_graph(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Return the cached schema graph for *source_id*.
+
+    The graph contains:
+      - nodes: all queryable SObjects (name, label, is_custom, field_count, …)
+      - edges: all reference-type fields across all objects (Lookup / Master-Detail)
+
+    Build or refresh with POST /api/salesforce/schema-graph/{source_id}/build.
+    """
+    from .connectors.salesforce_connector import load_salesforce_schema_graph
+
+    graph = load_salesforce_schema_graph(source_id)
+    if graph is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No schema graph found for source '{source_id}'. "
+                "Run POST /api/salesforce/schema-graph/{source_id}/build first."
+            ),
+        )
+    return graph
+
+
+@app.post("/api/salesforce/schema-graph/{source_id}/build")
+def build_salesforce_schema_graph(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    request: Request,
+    max_objects: int = 0,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Discover and cache the full schema graph for *source_id*.
+
+    Uses the Salesforce Composite batch API to describe all objects in batches
+    of 25, extracting nodes (SObjects) and edges (reference-type relationships).
+
+    Query param:
+      max_objects — cap the number of objects described (0 = unlimited, default).
+
+    Returns the full graph immediately; also persists it to disk for future
+    GET /api/salesforce/schema-graph/{source_id} calls.
+    """
+    from .connectors.salesforce_connector import (
+        SalesforceConnector,
+        SalesforceAuthError,
+        load_salesforce_config,
+        save_salesforce_schema_graph,
+    )
+    from dataclasses import asdict
+
+    cfg = load_salesforce_config(source_id)
+    if cfg is None or not cfg.get("access_token"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Salesforce token found for '{source_id}'. Re-authorise first.",
+        )
+
+    try:
+        with SalesforceConnector(
+            instance_url=cfg["instance_url"],
+            access_token=cfg["access_token"],
+            refresh_token=cfg.get("refresh_token"),
+            client_id=cfg.get("client_id"),
+            client_secret=cfg.get("client_secret"),
+        ) as sf:
+            graph = sf.get_schema_graph(max_objects=max_objects)
+    except SalesforceAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Schema graph build failed: {exc}")
+
+    graph.source_id = source_id
+    save_salesforce_schema_graph(source_id, graph)
+    _audit(
+        request,
+        current_user,
+        "Built Salesforce schema graph",
+        source_id,
+        category="config",
+    )
+    return asdict(graph)
+
+
 # ── Salesforce OAuth2 PKCE flow ───────────────────────────────────────────────
 
 # In-memory PKCE session store: state → {verifier, instance_url, client_id,
