@@ -180,7 +180,7 @@ function CredentialModal({
   connector: ConnectorDef
   onSubmit: (params: Record<string, string>) => void
   onCancel: () => void
-  onOAuthSuccess?: () => void
+  onOAuthSuccess?: (sourceId: string) => void
   loading: boolean
 }) {
   const def = getConnectorBackendDef(connector.id)
@@ -224,14 +224,14 @@ function CredentialModal({
       popup.location.href = auth_url
 
       let settled = false
-      const settle = (success: boolean, error?: string) => {
+      const settle = (success: boolean, resolvedId?: string, error?: string) => {
         if (settled) return
         settled = true
         clearInterval(closedCheck)
         window.removeEventListener('message', msgHandler)
         setOauthLoading(false)
         if (success) {
-          onOAuthSuccess?.()
+          onOAuthSuccess?.(resolvedId ?? source_id)
         } else {
           setOauthError(error ?? 'Authorization failed. Please check your credentials and try again.')
         }
@@ -241,8 +241,8 @@ function CredentialModal({
       const msgHandler = (event: MessageEvent) => {
         if (event.data?.type !== 'salesforce-oauth-callback') return
         try { popup.close() } catch { /* ignore */ }
-        if (event.data.success) settle(true)
-        else settle(false, event.data.error)
+        if (event.data.success) settle(true, event.data.source_id as string | undefined)
+        else settle(false, undefined, event.data.error)
       }
       window.addEventListener('message', msgHandler)
 
@@ -255,10 +255,10 @@ function CredentialModal({
         listSources()
           .then(sources => {
             const found = sources.find(s => s.id === source_id)
-            if (found) settle(true)
-            else settle(false, 'Authorization was cancelled or did not complete.')
+            if (found) settle(true, found.id)
+            else settle(false, undefined, 'Authorization was cancelled or did not complete.')
           })
-          .catch(() => settle(false, 'Authorization was cancelled.'))
+          .catch(() => settle(false, undefined, 'Authorization was cancelled.'))
       }, 600)
 
     } catch (err: unknown) {
@@ -2872,15 +2872,20 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           connector={credentialModal}
           onSubmit={submitCredentials}
           onCancel={() => { setCredentialModal(null); setConnectingId(null) }}
-          onOAuthSuccess={() => {
+          onOAuthSuccess={(sourceId) => {
             const connId = credentialModal?.id
             setCredentialModal(null)
-            if (connId) setConnectingId(connId)   // spinner on card while sources refresh
+            if (connId) setConnectingId(connId)
+            showToast('Salesforce connected — loading schema…', 'ok')
             listSources()
-              .then(setSources)
+              .then(sources => {
+                setSources(sources)
+                // Auto-sync: pull schema immediately after auth
+                const sf = sources.find(s => s.id === sourceId)
+                if (sf) syncById(sf.id)
+              })
               .catch(() => {})
               .finally(() => setConnectingId(null))
-            showToast('Salesforce connected — source registered', 'ok')
           }}
           loading={credentialLoading}
         />
