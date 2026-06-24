@@ -204,6 +204,16 @@ function CredentialModal({
   const handleSalesforceAuth = async () => {
     setOauthLoading(true)
     setOauthError(null)
+
+    // Open popup SYNCHRONOUSLY before any await — browsers block popups opened
+    // after an async gap because they no longer consider it a direct user gesture.
+    const popup = window.open('about:blank', 'sf-oauth', 'width=620,height=720,scrollbars=yes,resizable=yes')
+    if (!popup) {
+      setOauthLoading(false)
+      setOauthError('Popup blocked — please allow popups for this site and try again.')
+      return
+    }
+
     try {
       const { auth_url } = await startSalesforceAuth({
         instance_url: values['instance_url'] ?? '',
@@ -211,7 +221,9 @@ function CredentialModal({
         client_secret: values['client_secret'] ?? '',
         label: connector.name,
       })
-      const popup = window.open(auth_url, 'sf-oauth', 'width=620,height=720,scrollbars=yes,resizable=yes')
+
+      // Navigate the already-open popup to the Salesforce auth URL
+      popup.location.href = auth_url
 
       const msgHandler = (event: MessageEvent) => {
         if (event.data?.type !== 'salesforce-oauth-callback') return
@@ -228,13 +240,14 @@ function CredentialModal({
 
       // Detect popup closed without completing
       const closedCheck = setInterval(() => {
-        if (popup?.closed) {
+        if (popup.closed) {
           clearInterval(closedCheck)
           window.removeEventListener('message', msgHandler)
           setOauthLoading(false)
         }
       }, 600)
     } catch (err: unknown) {
+      popup.close()
       setOauthLoading(false)
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setOauthError(detail ?? 'Failed to start authorization — check your Instance URL and Client ID.')
