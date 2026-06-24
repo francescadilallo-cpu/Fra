@@ -32,6 +32,8 @@ frontend/dist/
 
 # Env
 .env
+backend/.env
+frontend/.env.local
 
 # OS
 .DS_Store
