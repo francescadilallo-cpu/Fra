@@ -41,6 +41,8 @@ Endpoint principali:
 - POST /api/sources/{id}/sync
 - GET /api/salesforce/schema/{source_id} — schema Salesforce cached (objects + fields)
 - POST /api/salesforce/schema/{source_id}/refresh — ri-autentica e aggiorna lo schema senza re-inserire credenziali
+- GET /api/salesforce/schema-graph/{source_id} — grafo completo nodes+edges cachato su disco
+- POST /api/salesforce/schema-graph/{source_id}/build?max_objects=N — discovery full-org via Composite batch API (25 describe per request); salva salesforce_schema_graph_{id}.json
 - GET /api/semantic/sources — sorgenti caricate nel semantic stack
 - GET /api/semantic/metrics, POST /api/semantic/metrics, DELETE /api/semantic/metrics/{id}
 - GET /api/semantic/hierarchies, POST, DELETE
@@ -116,7 +118,8 @@ Ruoli:
 - PostgresConnector: carica dump SQL ERP in SQLite in-memory (demo legacy)
 - SQLiteConnector: accesso a clienthub.db CRM (demo legacy)
 - FileConnector: carica HR CSV e PIM JSON; normalizza date; query via DuckDB in-memory
-- **SalesforceConnector**: OAuth2 username-password flow; recupera schema SObject completo (fino a 150 oggetti) via Metadata REST API v59.0; crea tabelle DuckDB sf_{id}_objects e sf_{id}_fields; persiste credentials in backend/data/salesforce_config.json e schema in salesforce_schema_{id}.json
+- **SalesforceConnector**: OAuth2 PKCE flow; recupera schema SObject (fino a 25 oggetti prioritari) via Metadata REST API v59.0; crea tabelle DuckDB sf_{id}_objects e sf_{id}_fields; persiste credentials in backend/data/salesforce_config.json e schema in salesforce_schema_{id}.json
+- **SalesforceConnector.get_schema_graph()**: discovery completa senza max cap — Phase 1 lista tutti gli SObject queryable via Global Describe; Phase 2 describe in batch da 25 via POST /composite/batch; estrae nodi (SObjects) e archi (campi reference); salva in salesforce_schema_graph_{id}.json. Dataclasses: SchemaGraphNode, SchemaGraphEdge, SalesforceSchemaGraph.
 
 
 ### 3.4 Knowledge Graph

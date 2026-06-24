@@ -308,6 +308,37 @@ Azioni consigliate:
 2. esporre data fetch (fetched_at) nell'UI per evidenziare schema obsoleto
 
 
+### L5 - Schema graph build è sincrono e bloccante
+
+Stato: APERTO
+
+Evidenza:
+
+- POST /api/salesforce/schema-graph/{id}/build chiama get_schema_graph() in-thread; per org con 800+ oggetti (~32 batch da 25) può impiegare 60-120s bloccando il worker FastAPI
+- Nessun progress feedback al client durante il build
+
+Azioni consigliate:
+
+1. Spostare il build in un BackgroundTask FastAPI e ritornare subito un job_id
+2. Aggiungere GET /api/salesforce/schema-graph/{id}/build/status per polling
+3. In alternativa, accettare max_objects=50 come default temporaneo finché non è asincrono
+
+### L6 - Entity delete in Data Model non ha conferma utente
+
+Stato: APERTO
+
+Evidenza:
+
+- EntityCard.onDelete chiama removeNode() direttamente senza dialog di conferma
+- OntologyBuilder.deleteEntity ha showConfirm(); SemanticLayerView no
+- Un click accidentale sul cestino elimina l'entità senza possibilità di undo (localStorage)
+
+Azioni consigliate:
+
+1. Aggiungere showConfirm() prima di removeNode() in SemanticLayerView
+2. Oppure aggiungere undo temporaneo (es. toast con "Annulla" per 5s)
+
+
 ### L1 - Codice morto o ridondante
 
 Stato: APERTO

@@ -981,6 +981,25 @@ All other remaining "semantic"/"ontology"/"Knowledge Graph"/"pipeline" occurrenc
 
 ---
 
+## 2026-06-25
+
+### Salesforce: schema graph discovery via Composite batch API
+- `backend/app/connectors/salesforce_connector.py`
+  - Nuovi dataclass `SchemaGraphNode`, `SchemaGraphEdge`, `SalesforceSchemaGraph`.
+  - `SalesforceConnector.get_schema_graph()`: Phase 1 lista tutti gli SObject queryable (Global Describe); Phase 2 describe in batch da 25 via POST `/composite/batch`. Archi estratti dai campi `type=reference`.
+  - Nuovi helper `save/load_salesforce_schema_graph()`; `delete_salesforce_config()` ora pulisce anche il file graph.
+- `backend/app/main.py`
+  - `GET /api/salesforce/schema-graph/{source_id}` — restituisce grafo cachato.
+  - `POST /api/salesforce/schema-graph/{source_id}/build?max_objects=N` — build sincrono, salva su disco.
+
+### Data Model: delete per entità e relazioni manuali
+- `frontend/src/components/SemanticLayerView.tsx`
+  - `EntityCard`: icona `Trash2` in live mode; chiama `removeNode()` + dispatch `ontology-builder-changed`.
+  - `RelationsSection`: `handleDeleteRelation()` chiama `removeRelation()` API; cestino visibile solo su relazioni manuali (`is_manual=true`); spinner durante la chiamata.
+  - `buildRelationGroups`: preserva `id` e `is_manual` dal `DraftRelation` per abilitare il delete.
+
+---
+
 ## 2026-06-20 (session cont. 3)
 
 ### Polish: final jargon pass — live-user strings across 8 files
