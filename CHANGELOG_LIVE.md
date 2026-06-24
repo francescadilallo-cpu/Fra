@@ -10,6 +10,44 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-24 (Salesforce connector — OAuth2 + schema retrieval)
+
+Sostituito il pannello "coming soon" di Salesforce con un connettore OAuth2 funzionante.
+
+### `frontend/src/api/sources.ts`
+- Entry Salesforce in `CONNECTOR_BACKEND_MAP` aggiornata: 6 campi reali (Instance URL, Consumer Key, Consumer Secret, Username, Password, Security Token)
+- Rimosso `waitlist_only: true` — il form credenziali ora è visibile agli utenti live
+- Aggiunti tipi TypeScript `SalesforceSchema`, `SalesforceObject`, `SalesforceField`
+- Aggiunti helper `getSalesforceSchema(sourceId)` e `refreshSalesforceSchema(sourceId)`
+
+### `backend/app/connectors/salesforce_connector.py` (nuovo)
+- `SalesforceConnector` — OAuth2 username-password flow via httpx; autentica verso `{instance_url}/services/oauth2/token`
+- `get_schema(max_objects=150)` — recupera lista SObjects + describe per ogni oggetto (campi, tipi, relazioni); prioritizza Account, Contact, Opportunity e altri oggetti core
+- `save/load_salesforce_config()` — persiste credenziali in `backend/data/salesforce_config.json`
+- `save/load_salesforce_schema()` — cache schema su `backend/data/salesforce_schema_{id}.json`
+- `delete_salesforce_config()` — pulizia al remove sorgente
+- `build_salesforce_dataframes()` — converte SalesforceSchema in due pandas DataFrame per DuckDB
+
+### `backend/app/connectors/source_registry.py`
+- `IMPLEMENTED_CONNECTOR_TYPES`: aggiunto `"salesforce"`
+- `SAAS_CONNECTOR_TYPES`: rimosso `"salesforce"` (non più stub)
+
+### `backend/app/connectors/duckdb_source_manager.py`
+- Aggiunto branch `salesforce` in `_ingest_source()`
+- `_ingest_salesforce()`: autentica, recupera schema, crea DuckDB tables `sf_{id}_objects` e `sf_{id}_fields`
+
+### `backend/app/main.py`
+- `DELETE /api/sources/{id}`: aggiunta pulizia `salesforce_config.json` e cache schema se connector_type=salesforce
+- `GET /api/salesforce/schema/{source_id}`: ritorna schema cached (senza riaprire connessione SF)
+- `POST /api/salesforce/schema/{source_id}/refresh`: ri-autentica con credenziali memorizzate e aggiorna cache
+
+**Note operative:**
+- La prima connessione può richiedere 30–90 secondi (150 describe calls REST alle API Salesforce)
+- Credenziali stored in `backend/data/salesforce_config.json` (plaintext — non committare, mantenere su persistent disk)
+- Schema refresh disponibile tramite endpoint dedicato — non richiede re-inserimento credenziali
+
+---
+
 ## 2026-06-23 (UX Redesign — Wizard a step singolo)
 
 Riscrittura strutturale del workbench live: da 3 rappresentazioni sovrapposte

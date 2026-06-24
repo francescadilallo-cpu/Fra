@@ -272,6 +272,42 @@ Azioni residue:
 
 ## BASSO
 
+### L3 - Salesforce credentials stored plaintext (noto, atteso)
+
+Stato: APERTO (noto, accettato per ora)
+
+Evidenza:
+
+- backend/data/salesforce_config.json contiene password e security_token in chiaro
+- il file risiede su Render persistent disk; non è in git (gitignored per policy)
+
+Impatto:
+
+- accesso al filesystem del container espone le credenziali in chiaro
+- non critico su Render free tier (container isolato, singolo tenant)
+
+Azioni consigliate:
+
+1. cifrare i campi sensibili con Fernet (cryptography) usando FRA_SECRET_KEY come chiave
+2. o delegare la gestione credenziali a un vault (es. Render Secret Files, Doppler)
+3. aggiungere backend/data/salesforce_config.json al .gitignore se non già presente
+
+
+### L4 - Salesforce schema non aggiornato automaticamente
+
+Stato: APERTO
+
+Evidenza:
+
+- salesforce_schema_{id}.json viene scritto al primo connect e aggiornato solo via POST /api/salesforce/schema/{id}/refresh esplicito
+- lo schema Salesforce dell'org può cambiare (nuovi oggetti custom, nuovi campi)
+
+Azioni consigliate:
+
+1. aggiungere un cron job (o trigger su /api/sources/{id}/sync) che ri-fetcha lo schema ogni N giorni
+2. esporre data fetch (fetched_at) nell'UI per evidenziare schema obsoleto
+
+
 ### L1 - Codice morto o ridondante
 
 Stato: APERTO

@@ -37,7 +37,10 @@ Endpoint principali:
 - POST /api/semantic/ask — query NL, rate limit 5/min, cache Redis opzionale
 - POST /api/ask — alias legacy compatibile verso /api/semantic/ask
 - GET /api/sources, POST /api/sources — gestione sorgenti dati live
-- DELETE /api/sources/{id}, POST /api/sources/{id}/sync
+- DELETE /api/sources/{id} — rimuove sorgente; pulisce anche salesforce_config.json se connector_type=salesforce
+- POST /api/sources/{id}/sync
+- GET /api/salesforce/schema/{source_id} — schema Salesforce cached (objects + fields)
+- POST /api/salesforce/schema/{source_id}/refresh — ri-autentica e aggiorna lo schema senza re-inserire credenziali
 - GET /api/semantic/sources — sorgenti caricate nel semantic stack
 - GET /api/semantic/metrics, POST /api/semantic/metrics, DELETE /api/semantic/metrics/{id}
 - GET /api/semantic/hierarchies, POST, DELETE
@@ -99,6 +102,7 @@ File:
 - backend/app/connectors/sqlite_connector.py
 - backend/app/connectors/file_connector.py
 - backend/app/connectors/source_registry.py
+- backend/app/connectors/salesforce_connector.py  ← nuovo
 
 Ruoli:
 
@@ -107,10 +111,12 @@ Ruoli:
   - `FRA_STORAGE_MODE=nostore`: runtime in-memory, nessuna persistenza locale
   - ERPDuckDBAdapter, CRMDuckDBAdapter, HRPIMDuckDBAdapter condividono lo stesso file snapshot
   - source_registry.py: persistenza SQLite delle sorgenti utente live
+  - IMPLEMENTED_CONNECTOR_TYPES include ora: erp_sqldump, crm_sqlite, hr_csv, pim_json, csv, json, excel, sqlite, postgresql, mysql, parquet, context_doc, **salesforce**
 - BaseConnector: contratto comune (load_entity, describe, execute_query)
 - PostgresConnector: carica dump SQL ERP in SQLite in-memory (demo legacy)
 - SQLiteConnector: accesso a clienthub.db CRM (demo legacy)
 - FileConnector: carica HR CSV e PIM JSON; normalizza date; query via DuckDB in-memory
+- **SalesforceConnector**: OAuth2 username-password flow; recupera schema SObject completo (fino a 150 oggetti) via Metadata REST API v59.0; crea tabelle DuckDB sf_{id}_objects e sf_{id}_fields; persiste credentials in backend/data/salesforce_config.json e schema in salesforce_schema_{id}.json
 
 
 ### 3.4 Knowledge Graph
@@ -345,7 +351,8 @@ File principali:
 
 - **frontend/src/api/semantic.ts** — tutte le chiamate /api/semantic/*, /api/ask, /api/sources; tipi SemanticDraft, BackendSource, BackendMetric, DraftEntity, DraftRelation
 - frontend/src/api/client.ts — Axios instance + JWT interceptor + helper login/logout; token in localStorage
-- frontend/src/api/sources.ts, agents.ts, queries.ts, workspace.ts, users.ts, tokens.ts — client per domini specifici
+- **frontend/src/api/sources.ts** — CONNECTOR_BACKEND_MAP con credential schema per tutti i connettori; Salesforce ha 6 campi OAuth2 (instance_url, client_id, client_secret, username, password, security_token); tipi SalesforceSchema/SalesforceObject/SalesforceField; getSalesforceSchema() e refreshSalesforceSchema()
+- frontend/src/api/agents.ts, queries.ts, workspace.ts, users.ts, tokens.ts — client per domini specifici
 
 Pattern condiviso:
 - token JWT letto da localStorage, iniettato in Authorization header via interceptor
