@@ -205,8 +205,7 @@ function CredentialModal({
     setOauthLoading(true)
     setOauthError(null)
 
-    // Open popup SYNCHRONOUSLY before any await — browsers block popups opened
-    // after an async gap because they no longer consider it a direct user gesture.
+    // Open popup SYNCHRONOUSLY — browsers block window.open() after an async gap.
     const popup = window.open('about:blank', 'sf-oauth', 'width=620,height=720,scrollbars=yes,resizable=yes')
     if (!popup) {
       setOauthLoading(false)
@@ -215,37 +214,53 @@ function CredentialModal({
     }
 
     try {
-      const { auth_url } = await startSalesforceAuth({
+      const { auth_url, source_id } = await startSalesforceAuth({
         instance_url: values['instance_url'] ?? '',
         client_id: values['client_id'] ?? '',
         client_secret: values['client_secret'] ?? '',
         label: connector.name,
       })
 
-      // Navigate the already-open popup to the Salesforce auth URL
       popup.location.href = auth_url
 
-      const msgHandler = (event: MessageEvent) => {
-        if (event.data?.type !== 'salesforce-oauth-callback') return
-        window.removeEventListener('message', msgHandler)
+      let settled = false
+      const settle = (success: boolean, error?: string) => {
+        if (settled) return
+        settled = true
         clearInterval(closedCheck)
+        window.removeEventListener('message', msgHandler)
         setOauthLoading(false)
-        if (event.data.success) {
+        if (success) {
           onOAuthSuccess?.()
         } else {
-          setOauthError(event.data.error ?? 'Authorization failed. Please check your credentials and try again.')
+          setOauthError(error ?? 'Authorization failed. Please check your credentials and try again.')
         }
+      }
+
+      // Fast path: postMessage from the callback HTML page
+      const msgHandler = (event: MessageEvent) => {
+        if (event.data?.type !== 'salesforce-oauth-callback') return
+        try { popup.close() } catch { /* ignore */ }
+        if (event.data.success) settle(true)
+        else settle(false, event.data.error)
       }
       window.addEventListener('message', msgHandler)
 
-      // Detect popup closed without completing
+      // Fallback: when popup closes, ask the backend if the source was registered.
+      // This handles cases where window.opener is nullified by cross-origin redirects.
       const closedCheck = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(closedCheck)
-          window.removeEventListener('message', msgHandler)
-          setOauthLoading(false)
-        }
+        if (!popup.closed) return
+        clearInterval(closedCheck)
+        if (settled) return
+        listSources()
+          .then(sources => {
+            const found = sources.find(s => s.id === source_id)
+            if (found) settle(true)
+            else settle(false, 'Authorization was cancelled or did not complete.')
+          })
+          .catch(() => settle(false, 'Authorization was cancelled.'))
       }, 600)
+
     } catch (err: unknown) {
       popup.close()
       setOauthLoading(false)
