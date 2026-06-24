@@ -208,7 +208,7 @@ function CredentialModal({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-900">{connector.name}</p>
             <p className="text-[11px] text-slate-500">
-              {def.waitlist_only ? 'Native connector coming soon' : 'Configure connection'}
+              {def.waitlist_only ? 'Native connector coming soon' : IS_DEMO_MODE ? 'Live workspace only' : 'Configure connection'}
             </p>
           </div>
           <button onClick={onCancel} aria-label="Close" className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100">
@@ -240,8 +240,18 @@ function CredentialModal({
               </button>
             )}
           </div>
+        ) : IS_DEMO_MODE ? (
+          /* Demo mode — SaaS connectors with real credential forms are live-only */
+          <div className="px-5 py-6">
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-center space-y-2">
+              <p className="text-sm font-semibold text-slate-700">Available in live workspaces</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Connect your real {connector.name} account once you activate a live workspace with your own data.
+              </p>
+            </div>
+          </div>
         ) : (
-          /* Normal credential form */
+          /* Normal credential form — live mode only */
           <div className="px-5 py-4 space-y-3.5">
             {def.params_schema.map((field: ParamField, idx: number) => (
               <div key={field.key}>
@@ -269,9 +279,9 @@ function CredentialModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3.5 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
           <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-            {def.waitlist_only ? 'Close' : 'Cancel'}
+            {def.waitlist_only || IS_DEMO_MODE ? 'Close' : 'Cancel'}
           </button>
-          {!def.waitlist_only && (
+          {!def.waitlist_only && !IS_DEMO_MODE && (
             <button
               onClick={() => onSubmit(values)}
               disabled={!valid || loading}
@@ -1523,8 +1533,8 @@ function ConnectedSourcesPanel({
               />
             )}
 
-            {/* Salesforce field-quality profile */}
-            {s.connector_type === 'salesforce' && s.status === 'active' && (
+            {/* Salesforce field-quality profile — live mode only */}
+            {!IS_DEMO_MODE && s.connector_type === 'salesforce' && s.status === 'active' && (
               <SalesforceProfilePanel sourceId={s.id} />
             )}
           </div>
