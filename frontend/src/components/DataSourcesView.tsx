@@ -328,8 +328,12 @@ function CredentialModal({
               </div>
             ))}
             {oauthError && (
-              <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2.5 text-xs text-red-700">
-                {oauthError}
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 flex-1">{oauthError}</p>
+                <button onClick={() => setOauthError(null)} className="text-red-400 hover:text-red-600 flex-shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             )}
             <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-[10px] text-blue-700 leading-relaxed">
@@ -2854,10 +2858,14 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           onSubmit={submitCredentials}
           onCancel={() => { setCredentialModal(null); setConnectingId(null) }}
           onOAuthSuccess={() => {
+            const connId = credentialModal?.id
             setCredentialModal(null)
-            setConnectingId(null)
-            listSources().then(setSources).catch(() => {})
-            showToast('Salesforce authorized — source registered', 'ok')
+            if (connId) setConnectingId(connId)   // spinner on card while sources refresh
+            listSources()
+              .then(setSources)
+              .catch(() => {})
+              .finally(() => setConnectingId(null))
+            showToast('Salesforce connected — source registered', 'ok')
           }}
           loading={credentialLoading}
         />
