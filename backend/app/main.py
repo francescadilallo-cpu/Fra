@@ -3975,6 +3975,28 @@ def patch_draft_entity(
     return {"ok": True}
 
 
+@app.delete(
+    "/api/semantic/draft/entities/{name}",
+    tags=["semantic"],
+    summary="Remove an entity from the catalog",
+)
+def delete_draft_entity(
+    name: Annotated[str, _ApiPath(max_length=128)],
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Data model not ready — connect a data source and run setup first",
+        )
+    ok = catalog.delete_entity_meta(name)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+    return {"ok": True}
+
+
 @app.patch(
     "/api/semantic/draft/metrics/{name}",
     tags=["semantic"],

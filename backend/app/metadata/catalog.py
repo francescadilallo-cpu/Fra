@@ -685,6 +685,19 @@ class MetadataCatalog:
             session.commit()
         return True
 
+    def delete_entity_meta(self, name: str) -> bool:
+        """Remove an entity and its attributes from the catalog. Returns False if not found."""
+        with self._Session() as session:
+            row = session.get(EntityMetaRow, name)
+            if row is None:
+                return False
+            session.execute(
+                delete(AttributeMetaRow).where(AttributeMetaRow.entity == name)
+            )
+            session.delete(row)
+            session.commit()
+        return True
+
     def save_metric_draft(
         self,
         name: str,

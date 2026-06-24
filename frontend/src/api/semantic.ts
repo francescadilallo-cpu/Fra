@@ -462,6 +462,9 @@ export const patchDraftEntity = (
     .patch(`/api/semantic/draft/entities/${encodeURIComponent(name)}`, updates)
     .then(() => undefined)
 
+export const deleteDraftEntity = (name: string): Promise<void> =>
+  http.delete(`/api/semantic/draft/entities/${encodeURIComponent(name)}`).then(() => undefined)
+
 export const patchDraftMetric = (
   name: string,
   updates: { description?: string; formula?: string; label?: string },

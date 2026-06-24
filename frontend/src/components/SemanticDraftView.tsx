@@ -4,7 +4,7 @@ import {
   Edit2, Check, X, Plus, Trash2, Loader2, RefreshCw, Download, ArrowRight,
 } from 'lucide-react'
 import {
-  getDraft, patchDraftEntity, patchDraftMetric,
+  getDraft, patchDraftEntity, deleteDraftEntity, patchDraftMetric,
   addContextDoc, deleteContextDoc,
   addRelation, removeRelation,
   createQueryTemplate, updateQueryTemplate, deleteQueryTemplate,
@@ -245,17 +245,31 @@ function EntitiesTab({ entities, onUpdate }: { entities: DraftEntity[]; onUpdate
   )
   return (
     <div className="space-y-2">
-      {entities.map(e => <EntityCard key={e.name} entity={e} onSaved={onUpdate} />)}
+      {entities.map(e => <EntityCard key={e.name} entity={e} onSaved={onUpdate} onDeleted={onUpdate} />)}
     </div>
   )
 }
 
-function EntityCard({ entity, onSaved }: { entity: DraftEntity; onSaved: () => void }) {
+function EntityCard({ entity, onSaved, onDeleted }: { entity: DraftEntity; onSaved: () => void; onDeleted: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [userDesc, setUserDesc] = useState(entity.user_description)
   const [ctxNotes, setCtxNotes] = useState(entity.context_notes)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    setDeleting(true)
+    try {
+      await deleteDraftEntity(entity.name)
+      onDeleted()
+      toast(`${entity.name} removed`, 'success')
+    } catch (err) {
+      toast(backendErrorMessage(err) || `Could not remove ${entity.name}`, 'error')
+      setDeleting(false)
+    }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -288,6 +302,14 @@ function EntityCard({ entity, onSaved }: { entity: DraftEntity; onSaved: () => v
           )}
         </div>
         <span className="text-slate-400 text-xs flex-shrink-0">{expanded ? '▲' : '▼'}</span>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label="Delete entity"
+          className="text-slate-300 hover:text-red-400 transition-colors disabled:opacity-40 p-0.5 flex-shrink-0"
+        >
+          {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+        </button>
       </button>
 
       {expanded && (
