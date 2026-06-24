@@ -10,6 +10,37 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-24 (Salesforce — OAuth 2.0 Authorization Code + PKCE, MFA-compatible)
+
+Sostituito il flusso username-password (deprecato da Salesforce, incompatibile con MFA) con Authorization Code + PKCE. Nessuna password viene più memorizzata.
+
+### `backend/app/connectors/salesforce_connector.py`
+- Aggiunte helper PKCE: `generate_pkce_pair()`, `build_authorization_url()`, `exchange_code_for_token()`
+- `SalesforceConnector` ora accetta `access_token` direttamente (non più username/password)
+- Refresh trasparente: su 401 chiama `grant_type=refresh_token` con client_id/client_secret
+- `save_salesforce_config()` persiste solo access_token + refresh_token, niente password
+
+### `backend/app/main.py`
+- `GET /api/salesforce/auth/start`: genera PKCE pair + state, restituisce auth_url a cui punta il popup
+- `GET /api/salesforce/auth/callback`: valida state, scambia code+verifier per token, registra source, risponde con HTML che chiama `window.opener.postMessage(...)`
+- `_SF_PKCE_SESSIONS`: dizionario in-memory TTL 10 min per le sessioni PKCE
+- Import `time`/`secrets` spostati in testa al file (E402 fix)
+
+### `backend/app/connectors/duckdb_source_manager.py`
+- `_ingest_salesforce()` carica access_token da `salesforce_config.json` (scritto al callback), non più da `cfg.params`
+
+### `frontend/src/api/sources.ts`
+- `ConnectorBackendDef` con flag `oauth_pkce?: boolean`
+- Entry Salesforce: 3 campi (Instance URL, Consumer Key/Client ID, Consumer Secret), `oauth_pkce: true`
+- Nuova funzione `startSalesforceAuth()` che chiama `GET /api/salesforce/auth/start`
+
+### `frontend/src/components/DataSourcesView.tsx`
+- `CredentialModal` con nuovo ramo `oauth_pkce`: mostra i 3 campi Connected App + info panel MFA-safe
+- Bottone "Authorize with Salesforce" apre popup; listener `message` chiude modal e aggiorna lista sources on success
+- Prop `onOAuthSuccess` nel parent: chiama `listSources()` e mostra toast di conferma
+
+---
+
 ## 2026-06-24 (Salesforce connector — OAuth2 + schema retrieval)
 
 Sostituito il pannello "coming soon" di Salesforce con un connettore OAuth2 funzionante.
