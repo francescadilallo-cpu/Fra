@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ReactFlow, Background, Controls, MiniMap, Handle, Position, type NodeProps, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Search, Download, Copy, Check, Table2, ArrowRight } from 'lucide-react'
+import { Database, X, GitBranch, Code2, Layers, Server, FileCode, Sparkles, Search, Download, Copy, Check, Table2, ArrowRight, Trash2 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
-import { useExtendedOntology } from '../data/ontologyExtensions'
+import { useExtendedOntology, removeNode } from '../data/ontologyExtensions'
 import { getLiveConfig, type LiveConfig } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import type { OntologyNodeData, OntologyNode, OntologyEdge, PropertyType, NavTab } from '../types'
@@ -198,10 +198,16 @@ function LegendPanel() {
 
 // ── Entities tabular view ────────────────────────────────────────────────────
 function EntitiesView() {
-  const { sectorId } = useSector()
+  const { sector, sectorId } = useSector()
   const extendedOntology = useExtendedOntology(sectorId)
   const [search, setSearch] = useState('')
   const [expandedNode, setExpandedNode] = useState<string | null>(null)
+  const baseNodeIds = new Set(sector.ontology.nodes.map((n: { id: string }) => n.id))
+
+  function handleDeleteNode(nodeId: string) {
+    removeNode(sectorId, nodeId, baseNodeIds.has(nodeId))
+    window.dispatchEvent(new CustomEvent('ontology-builder-changed'))
+  }
 
   const filtered = extendedOntology.nodes.filter(n =>
     !search || n.data.label.toLowerCase().includes(search.toLowerCase()) ||
@@ -271,6 +277,13 @@ function EntitiesView() {
                   <span className="text-xs text-teal-600 font-medium">{node.data.row_count.toLocaleString()} rows</span>
                 )}
                 <span className={`text-slate-400 text-lg leading-none transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteNode(node.id) }}
+                  aria-label="Delete entity"
+                  className="text-slate-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </button>
 
               {isOpen && (

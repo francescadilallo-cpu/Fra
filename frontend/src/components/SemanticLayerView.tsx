@@ -3137,10 +3137,10 @@ export default function SemanticLayerView() {
                     sectorId={sectorId}
                     isBase={baseNodeIds.has(node.id)}
                     entityOptions={entityOptions}
-                    onDelete={!IS_DEMO_MODE ? () => {
+                    onDelete={() => {
                       removeNode(sectorId, node.id, baseNodeIds.has(node.id))
                       window.dispatchEvent(new CustomEvent('ontology-builder-changed'))
-                    } : undefined}
+                    }}
                   />
                 ))}
               </div>

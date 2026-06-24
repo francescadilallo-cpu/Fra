@@ -830,6 +830,8 @@ function buildAddClassWithLinkIntent(
 // Build initial canvas state by merging sector ontology + saved extensions
 function buildInitialState(sector: { ontology: { nodes: { id: string; type: string; position: { x: number; y: number }; data: OntologyNodeData }[]; edges: { id: string; source: string; target: string; label: string; type: string; animated: boolean; style: Record<string, string | number>; labelStyle: Record<string, string | number> }[] } }, sectorId: string, liveConfig?: LiveConfig | null): { nodes: Node[]; edges: Edge[] } {
   const ext = loadExtension(sectorId)
+  const removedBaseNodes = new Set(ext.removedBaseNodes ?? [])
+  const removedBaseEdges = new Set(ext.removedBaseEdges ?? [])
 
   // Live workspaces start from scratch: only the backend-derived ontology
   // (already mode-filtered) or user extensions — never the demo sector schema.
@@ -846,7 +848,8 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
     : (IS_DEMO_MODE ? (sector.ontology.edges ?? []) : [])
 
   // Base nodes (possibly with extra properties added via builder)
-  const baseNodes: Node[] = sourceNodes.map((n) => {
+  // Filter out nodes the user has explicitly deleted via removeNode()
+  const baseNodes: Node[] = sourceNodes.filter(n => !removedBaseNodes.has(n.id)).map((n) => {
     const extraProps: OntologyProperty[] = ext.addedProperties
       .filter((p) => p.nodeId === n.id)
       .map((p) => typeof p.property === 'string' ? { name: p.property, type: 'string' as PropertyType } : p.property)
@@ -877,7 +880,7 @@ function buildInitialState(sector: { ontology: { nodes: { id: string; type: stri
     },
   }))
 
-  const baseEdges: Edge[] = sourceEdges.map((e) => ({
+  const baseEdges: Edge[] = sourceEdges.filter(e => !removedBaseEdges.has(e.id)).map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
