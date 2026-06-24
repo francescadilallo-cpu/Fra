@@ -4,6 +4,7 @@ import {
   Zap, AlertCircle, CheckCircle2, Loader2, Download, Trash2, RefreshCw,
   Database, AlertTriangle, Clock, ChevronDown, ChevronRight, ShieldCheck, Pencil,
   Sparkles, Brain, Link2, ClipboardCheck, Flag, MessageSquare, Rocket, TrendingUp, Plus,
+  ExternalLink,
 } from 'lucide-react'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -13,7 +14,7 @@ import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import {
   listSources, addSource, removeSource, syncSource,
   getConnectorBackendDef, CONNECTOR_BACKEND_MAP,
-  getSalesforceProfile, runSalesforceProfile,
+  getSalesforceProfile, runSalesforceProfile, startSalesforceAuth,
   type BackendSource, type ParamField,
   type SalesforceSchemaProfile, type SalesforceObjectProfile,
 } from '../api/sources'
@@ -174,16 +175,19 @@ function AWSourcesPanel() {
 // ── Credential modal ──────────────────────────────────────────────────────────
 
 function CredentialModal({
-  connector, onSubmit, onCancel, loading,
+  connector, onSubmit, onCancel, onOAuthSuccess, loading,
 }: {
   connector: ConnectorDef
   onSubmit: (params: Record<string, string>) => void
   onCancel: () => void
+  onOAuthSuccess?: () => void
   loading: boolean
 }) {
   const def = getConnectorBackendDef(connector.id)
   const [values, setValues] = useState<Record<string, string>>({})
   const [notified, setNotified] = useState(false)
+  const [oauthLoading, setOauthLoading] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
 
   const set = (key: string, val: string) => setValues(prev => ({ ...prev, [key]: val }))
 
@@ -197,6 +201,46 @@ function CredentialModal({
     .filter(f => f.required)
     .every(f => (values[f.key] ?? '').trim() !== '')
 
+  const handleSalesforceAuth = async () => {
+    setOauthLoading(true)
+    setOauthError(null)
+    try {
+      const { auth_url } = await startSalesforceAuth({
+        instance_url: values['instance_url'] ?? '',
+        client_id: values['client_id'] ?? '',
+        client_secret: values['client_secret'] ?? '',
+        label: connector.name,
+      })
+      const popup = window.open(auth_url, 'sf-oauth', 'width=620,height=720,scrollbars=yes,resizable=yes')
+
+      const msgHandler = (event: MessageEvent) => {
+        if (event.data?.type !== 'salesforce-oauth-callback') return
+        window.removeEventListener('message', msgHandler)
+        clearInterval(closedCheck)
+        setOauthLoading(false)
+        if (event.data.success) {
+          onOAuthSuccess?.()
+        } else {
+          setOauthError(event.data.error ?? 'Authorization failed. Please check your credentials and try again.')
+        }
+      }
+      window.addEventListener('message', msgHandler)
+
+      // Detect popup closed without completing
+      const closedCheck = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(closedCheck)
+          window.removeEventListener('message', msgHandler)
+          setOauthLoading(false)
+        }
+      }, 600)
+    } catch (err: unknown) {
+      setOauthLoading(false)
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setOauthError(detail ?? 'Failed to start authorization — check your Instance URL and Client ID.')
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -208,7 +252,7 @@ function CredentialModal({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-900">{connector.name}</p>
             <p className="text-[11px] text-slate-500">
-              {def.waitlist_only ? 'Native connector coming soon' : IS_DEMO_MODE ? 'Live workspace only' : 'Configure connection'}
+              {def.waitlist_only ? 'Native connector coming soon' : IS_DEMO_MODE ? 'Live workspace only' : def.oauth_pkce ? 'Authorize via OAuth 2.0 + PKCE' : 'Configure connection'}
             </p>
           </div>
           <button onClick={onCancel} aria-label="Close" className="text-slate-400 hover:text-slate-600 p-1.5 rounded hover:bg-slate-100">
@@ -250,6 +294,35 @@ function CredentialModal({
               </p>
             </div>
           </div>
+        ) : def.oauth_pkce ? (
+          /* OAuth 2.0 Authorization Code + PKCE — enter Connected App credentials, then open popup */
+          <div className="px-5 py-4 space-y-3.5">
+            {def.params_schema.map((field: ParamField, idx: number) => (
+              <div key={field.key}>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  {field.label}
+                  {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                </label>
+                <input
+                  autoFocus={idx === 0}
+                  type={field.type === 'password' ? 'password' : 'text'}
+                  value={values[field.key] ?? ''}
+                  onChange={e => set(field.key, e.target.value)}
+                  placeholder={field.placeholder}
+                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-100 font-mono placeholder:font-sans placeholder:text-slate-400"
+                />
+                {field.hint && <p className="text-[10px] text-slate-400 mt-1">{field.hint}</p>}
+              </div>
+            ))}
+            {oauthError && (
+              <div className="rounded-lg bg-red-50 border border-red-100 px-3 py-2.5 text-xs text-red-700">
+                {oauthError}
+              </div>
+            )}
+            <div className="rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 text-[10px] text-blue-700 leading-relaxed">
+              A secure browser popup will open so you can log in to Salesforce directly — including MFA. No passwords are stored.
+            </div>
+          </div>
         ) : (
           /* Normal credential form — live mode only */
           <div className="px-5 py-4 space-y-3.5">
@@ -282,14 +355,25 @@ function CredentialModal({
             {def.waitlist_only || IS_DEMO_MODE ? 'Close' : 'Cancel'}
           </button>
           {!def.waitlist_only && !IS_DEMO_MODE && (
-            <button
-              onClick={() => onSubmit(values)}
-              disabled={!valid || loading}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${valid && !loading ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
-            >
-              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
-              {loading ? 'Connecting…' : 'Connect & Ingest'}
-            </button>
+            def.oauth_pkce ? (
+              <button
+                onClick={handleSalesforceAuth}
+                disabled={!valid || oauthLoading}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${valid && !oauthLoading ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+              >
+                {oauthLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                {oauthLoading ? 'Authorizing…' : 'Authorize with Salesforce'}
+              </button>
+            ) : (
+              <button
+                onClick={() => onSubmit(values)}
+                disabled={!valid || loading}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${valid && !loading ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+              >
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />}
+                {loading ? 'Connecting…' : 'Connect & Ingest'}
+              </button>
+            )
           )}
         </div>
       </div>
@@ -2756,6 +2840,12 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
           connector={credentialModal}
           onSubmit={submitCredentials}
           onCancel={() => { setCredentialModal(null); setConnectingId(null) }}
+          onOAuthSuccess={() => {
+            setCredentialModal(null)
+            setConnectingId(null)
+            listSources().then(setSources).catch(() => {})
+            showToast('Salesforce authorized — source registered', 'ok')
+          }}
           loading={credentialLoading}
         />
       )}

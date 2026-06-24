@@ -66,6 +66,9 @@ export interface ConnectorBackendDef {
   /** True when backend ingestion is not yet implemented for this connector type.
    *  The credential modal will show a "register interest" panel instead of the form. */
   waitlist_only?: boolean
+  /** True for connectors that use OAuth2 Authorization Code + PKCE (e.g. Salesforce).
+   *  The credential modal shows a popup-based auth flow instead of a credential form. */
+  oauth_pkce?: boolean
 }
 
 export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
@@ -136,6 +139,7 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
   nexi:               { connector_type: 'nexi',               params_schema: [], waitlist_only: true },
   salesforce: {
     connector_type: 'salesforce',
+    oauth_pkce: true,
     params_schema: [
       {
         key: 'instance_url',
@@ -159,28 +163,7 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
         type: 'password',
         placeholder: 'Paste your Connected App Consumer Secret',
         required: true,
-      },
-      {
-        key: 'username',
-        label: 'Username',
-        type: 'text',
-        placeholder: 'you@yourcompany.com',
-        required: true,
-      },
-      {
-        key: 'password',
-        label: 'Password',
-        type: 'password',
-        placeholder: 'Your Salesforce password',
-        required: true,
-      },
-      {
-        key: 'security_token',
-        label: 'Security Token',
-        type: 'password',
-        placeholder: 'Paste your security token',
-        required: true,
-        hint: 'Reset at: Settings → Personal → Reset My Security Token',
+        hint: 'Set Callback URL in Connected App to the backend /api/salesforce/auth/callback URL',
       },
     ],
   },
@@ -223,6 +206,19 @@ export interface SalesforceSchema {
   object_count: number
   objects: SalesforceObject[]
   fetched_at: string
+}
+
+export async function startSalesforceAuth(params: {
+  instance_url: string
+  client_id: string
+  client_secret: string
+  label?: string
+}): Promise<{ auth_url: string; state: string; source_id: string }> {
+  const res = await api.get<{ auth_url: string; state: string; source_id: string }>(
+    '/api/salesforce/auth/start',
+    { params },
+  )
+  return res.data
 }
 
 export async function getSalesforceSchema(sourceId: string): Promise<SalesforceSchema> {

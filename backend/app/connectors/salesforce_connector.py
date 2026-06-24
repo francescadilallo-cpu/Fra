@@ -1,8 +1,14 @@
-"""Salesforce connector — OAuth2 username-password flow + Metadata API schema retrieval.
+"""Salesforce connector — OAuth 2.0 Authorization Code + PKCE flow.
 
-Authentication flow:
-  POST {instance_url}/services/oauth2/token (grant_type=password)
-  → access_token used for all subsequent REST API calls
+Authentication flow (Web Server / Authorization Code + PKCE):
+  1. GET  /api/salesforce/auth/start   → generate state + PKCE pair, return SF auth URL
+  2. User logs in at Salesforce (popup)
+  3. SF redirects → GET /api/salesforce/auth/callback?code=...&state=...
+  4. Backend exchanges code+verifier for access_token + refresh_token
+  5. Tokens stored in backend/data/salesforce_config.json
+
+Token refresh (transparent):
+  POST {instance_url}/services/oauth2/token  grant_type=refresh_token
 
 Schema retrieval:
   GET /services/data/v59.0/sobjects/            → list of all SObjects
@@ -16,12 +22,16 @@ Ingestion into DuckDB:
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
+import secrets
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -56,6 +66,86 @@ _PRIORITY_OBJECTS = {
     "User",
     "UserRole",
 }
+
+
+# ── PKCE helpers ──────────────────────────────────────────────────────────────
+
+
+def generate_pkce_pair() -> tuple[str, str]:
+    """Return (code_verifier, code_challenge) for PKCE S256."""
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+    digest = hashlib.sha256(verifier.encode()).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def build_authorization_url(
+    instance_url: str,
+    client_id: str,
+    redirect_uri: str,
+    code_challenge: str,
+    state: str,
+) -> str:
+    """Build the Salesforce OAuth2 authorization URL."""
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "state": state,
+        "prompt": "login",  # always show login page, respects MFA
+    }
+    return f"{instance_url.rstrip('/')}/services/oauth2/authorize?{urlencode(params)}"
+
+
+def exchange_code_for_token(
+    instance_url: str,
+    client_id: str,
+    client_secret: str,
+    code: str,
+    code_verifier: str,
+    redirect_uri: str,
+) -> dict:
+    """Exchange an authorization code for access_token + refresh_token.
+
+    Returns the full token response dict from Salesforce.
+    Raises SalesforceAuthError on failure.
+    """
+    try:
+        resp = httpx.post(
+            f"{instance_url.rstrip('/')}/services/oauth2/token",
+            data={
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "code_verifier": code_verifier,
+                "redirect_uri": redirect_uri,
+            },
+            timeout=30,
+        )
+    except httpx.RequestError as exc:
+        raise SalesforceAuthError(
+            f"Could not reach Salesforce at {instance_url}: {exc}"
+        ) from exc
+
+    if resp.status_code != 200:
+        try:
+            detail = resp.json()
+            msg = detail.get("error_description") or detail.get("error") or resp.text
+        except Exception:
+            msg = resp.text
+        raise SalesforceAuthError(
+            f"Salesforce token exchange failed ({resp.status_code}): {msg}"
+        )
+
+    result = resp.json()
+    if "access_token" not in result:
+        raise SalesforceAuthError(
+            f"Salesforce token response missing access_token: {result}"
+        )
+    return result
 
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────
@@ -106,83 +196,75 @@ class SalesforceAPIError(RuntimeError):
 
 
 class SalesforceConnector:
-    """Authenticated Salesforce REST API client."""
+    """Authenticated Salesforce REST API client (Authorization Code + PKCE).
+
+    Instantiate with an access_token obtained via the PKCE flow. Provide
+    refresh_token + client_id + client_secret to enable transparent refresh
+    when the access_token expires (Salesforce tokens expire after ~2h).
+    """
 
     def __init__(
         self,
         instance_url: str,
-        client_id: str,
-        client_secret: str,
-        username: str,
-        password: str,
-        security_token: str,
+        access_token: str,
+        *,
+        refresh_token: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
     ) -> None:
         self.instance_url = instance_url.rstrip("/")
+        self._access_token = access_token
+        self._refresh_token = refresh_token
         self._client_id = client_id
         self._client_secret = client_secret
-        self._username = username
-        self._password = password
-        self._security_token = security_token
-        self._access_token: str | None = None
-        # httpx client is reused across requests within the same connector instance
         self._http = httpx.Client(timeout=60)
 
-    def authenticate(self) -> str:
-        """Perform OAuth2 username-password flow and return the access token."""
+    def _refresh_access_token(self) -> None:
+        """Use the refresh_token to obtain a new access_token in-place."""
+        if not (self._refresh_token and self._client_id and self._client_secret):
+            raise SalesforceAuthError(
+                "Access token expired and no refresh_token/credentials available to renew it. "
+                "Reconnect the Salesforce source."
+            )
         try:
             resp = self._http.post(
                 f"{self.instance_url}/services/oauth2/token",
                 data={
-                    "grant_type": "password",
+                    "grant_type": "refresh_token",
                     "client_id": self._client_id,
                     "client_secret": self._client_secret,
-                    "username": self._username,
-                    "password": self._password + self._security_token,
+                    "refresh_token": self._refresh_token,
                 },
             )
         except httpx.RequestError as exc:
             raise SalesforceAuthError(
-                f"Could not reach Salesforce at {self.instance_url} — check the Instance URL and network access: {exc}"
+                f"Could not reach Salesforce to refresh token: {exc}"
             ) from exc
 
         if resp.status_code != 200:
             try:
-                detail = resp.json()
-                msg = (
-                    detail.get("error_description") or detail.get("error") or resp.text
-                )
+                msg = resp.json().get("error_description") or resp.text
             except Exception:
                 msg = resp.text
             raise SalesforceAuthError(
-                f"Salesforce authentication failed ({resp.status_code}): {msg}"
+                f"Token refresh failed ({resp.status_code}): {msg}"
             )
 
         result = resp.json()
-        if "access_token" not in result:
-            raise SalesforceAuthError(
-                f"Salesforce response missing access_token: {result}"
-            )
-
         self._access_token = result["access_token"]
         if "instance_url" in result:
             self.instance_url = result["instance_url"].rstrip("/")
-
-        logger.info("Salesforce authenticated for %s", self._username)
-        return self._access_token
+        logger.info("Salesforce access token refreshed")
 
     def _get(self, path: str) -> Any:
-        """Authenticated GET to Salesforce REST API."""
-        if not self._access_token:
-            self.authenticate()
-
+        """Authenticated GET to Salesforce REST API. Refreshes token on 401."""
         url = f"{self.instance_url}/services/data/{_SF_API_VERSION}{path}"
         resp = self._http.get(
             url,
             headers={"Authorization": f"Bearer {self._access_token}"},
         )
         if resp.status_code == 401:
-            # Token expired — re-authenticate once and retry
-            self.authenticate()
+            self._refresh_access_token()
             resp = self._http.get(
                 url,
                 headers={"Authorization": f"Bearer {self._access_token}"},
@@ -221,9 +303,6 @@ class SalesforceConnector:
           2. Other standard objects
           3. Custom objects (__c suffix)
         """
-        if not self._access_token:
-            self.authenticate()
-
         raw_objects = self.list_sobjects()
 
         # Filter to queryable, non-deprecated objects
@@ -305,8 +384,17 @@ class SalesforceConnector:
 # ── Config + schema persistence ───────────────────────────────────────────────
 
 
-def save_salesforce_config(source_id: str, params: dict) -> None:
-    """Persist Salesforce credentials for *source_id* to backend/data/salesforce_config.json."""
+def save_salesforce_config(
+    source_id: str,
+    token_response: dict,
+    client_id: str,
+    client_secret: str,
+) -> None:
+    """Persist PKCE token response for *source_id* to backend/data/salesforce_config.json.
+
+    *token_response* is the dict returned by exchange_code_for_token().
+    Stores access_token, refresh_token, instance_url — no passwords.
+    """
     config_path = _DATA_DIR / "salesforce_config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -318,16 +406,15 @@ def save_salesforce_config(source_id: str, params: dict) -> None:
             pass
 
     existing[source_id] = {
-        "instance_url": params.get("instance_url", ""),
-        "client_id": params.get("client_id", ""),
-        "client_secret": params.get("client_secret", ""),
-        "username": params.get("username", ""),
-        "password": params.get("password", ""),
-        "security_token": params.get("security_token", ""),
+        "instance_url": token_response.get("instance_url", ""),
+        "access_token": token_response.get("access_token", ""),
+        "refresh_token": token_response.get("refresh_token", ""),
+        "client_id": client_id,
+        "client_secret": client_secret,
         "saved_at": datetime.now(timezone.utc).isoformat(),
     }
     config_path.write_text(json.dumps(existing, indent=2))
-    logger.info("Salesforce config saved for source '%s'", source_id)
+    logger.info("Salesforce PKCE config saved for source '%s'", source_id)
 
 
 def load_salesforce_config(source_id: str) -> dict | None:

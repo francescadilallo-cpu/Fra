@@ -7,11 +7,13 @@ import hashlib
 import hmac
 import json
 import math as _math
+import secrets as _secrets
 import sqlite3 as _sqlite3
 import logging
 import os
 import re
 import threading
+import time as _time
 import uuid
 from collections import OrderedDict, deque as _deque
 from contextlib import asynccontextmanager
@@ -32,7 +34,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, field_validator, model_validator
 from slowapi import Limiter
@@ -3118,46 +3120,35 @@ def refresh_salesforce_schema(
     request: Request,
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict:
-    """Re-authenticate to Salesforce and refresh the cached schema for *source_id*.
-
-    Loads credentials from the persisted config file, not the request body,
-    so credentials are never re-transmitted after the initial connect.
-    """
+    """Re-fetch the Salesforce schema using the stored PKCE tokens."""
     from .connectors.salesforce_connector import (
         SalesforceConnector,
         SalesforceAuthError,
         load_salesforce_config,
         save_salesforce_schema,
     )
+    from dataclasses import asdict
 
     cfg = load_salesforce_config(source_id)
-    if cfg is None:
+    if cfg is None or not cfg.get("access_token"):
         raise HTTPException(
             status_code=404,
-            detail=(
-                f"No Salesforce credentials found for source '{source_id}'. "
-                "Reconnect the source to store credentials."
-            ),
+            detail=f"No Salesforce token found for '{source_id}'. Re-authorise first.",
         )
 
     try:
         with SalesforceConnector(
             instance_url=cfg["instance_url"],
-            client_id=cfg["client_id"],
-            client_secret=cfg["client_secret"],
-            username=cfg["username"],
-            password=cfg["password"],
-            security_token=cfg["security_token"],
+            access_token=cfg["access_token"],
+            refresh_token=cfg.get("refresh_token"),
+            client_id=cfg.get("client_id"),
+            client_secret=cfg.get("client_secret"),
         ) as sf:
-            sf.authenticate()
             schema = sf.get_schema(max_objects=150)
     except SalesforceAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Salesforce schema refresh failed: {exc}",
-        )
+        raise HTTPException(status_code=502, detail=f"Schema refresh failed: {exc}")
 
     save_salesforce_schema(source_id, schema)
     _audit(
@@ -3167,10 +3158,185 @@ def refresh_salesforce_schema(
         source_id,
         category="config",
     )
-
-    from dataclasses import asdict
-
     return asdict(schema)
+
+
+# ── Salesforce OAuth2 PKCE flow ───────────────────────────────────────────────
+
+# In-memory PKCE session store: state → {verifier, instance_url, client_id,
+# client_secret, source_id, expires_at}.  State expires in 10 minutes.
+_SF_PKCE_SESSIONS: dict[str, dict] = {}
+_SF_PKCE_TTL = 600
+
+
+def _sf_callback_url(req: Request) -> str:
+    """Return the Salesforce redirect URI, preferring the FRA_SALESFORCE_CALLBACK_URL env var."""
+    import os as _os
+
+    override = _os.getenv("FRA_SALESFORCE_CALLBACK_URL", "").strip()
+    if override:
+        return override
+    base = str(req.base_url).rstrip("/")
+    return f"{base}/api/salesforce/auth/callback"
+
+
+def _sf_prune_sessions() -> None:
+    """Remove expired PKCE sessions."""
+    now = _time.time()
+    expired = [k for k, v in _SF_PKCE_SESSIONS.items() if v["expires_at"] < now]
+    for k in expired:
+        del _SF_PKCE_SESSIONS[k]
+
+
+@app.get("/api/salesforce/auth/start")
+def salesforce_auth_start(
+    request: Request,
+    instance_url: str = Query(..., max_length=256),
+    client_id: str = Query(..., max_length=512),
+    client_secret: str = Query(..., max_length=512),
+    label: str = Query(default="Salesforce", max_length=128),
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Generate a PKCE state + return the Salesforce authorization URL.
+
+    The frontend opens this URL in a popup.  After the user authenticates,
+    Salesforce redirects to /api/salesforce/auth/callback which exchanges
+    the code for tokens and registers the source.
+    """
+    from .connectors.salesforce_connector import (
+        generate_pkce_pair,
+        build_authorization_url,
+    )
+
+    _sf_prune_sessions()
+
+    verifier, challenge = generate_pkce_pair()
+    state = _secrets.token_urlsafe(32)
+    source_id = f"salesforce-{_secrets.token_hex(4)}"
+    redirect_uri = _sf_callback_url(request)
+
+    _SF_PKCE_SESSIONS[state] = {
+        "verifier": verifier,
+        "instance_url": instance_url.rstrip("/"),
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "source_id": source_id,
+        "label": label,
+        "redirect_uri": redirect_uri,
+        "expires_at": _time.time() + _SF_PKCE_TTL,
+    }
+
+    auth_url = build_authorization_url(
+        instance_url=instance_url,
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        code_challenge=challenge,
+        state=state,
+    )
+    return {"auth_url": auth_url, "state": state, "source_id": source_id}
+
+
+@app.get("/api/salesforce/auth/callback", response_class=HTMLResponse)
+def salesforce_auth_callback(
+    request: Request,
+    code: str = Query(...),
+    state: str = Query(...),
+    error: str | None = Query(default=None),
+    error_description: str | None = Query(default=None),
+) -> HTMLResponse:
+    """Receive the authorization code from Salesforce, exchange for tokens,
+    register the source, and return an HTML page that posts a message back
+    to the opener window and closes itself.
+    """
+    from .connectors.salesforce_connector import (
+        exchange_code_for_token,
+        save_salesforce_config,
+        SalesforceAuthError,
+    )
+    from .connectors.source_registry import SourceConfig
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    def _error_page(msg: str) -> HTMLResponse:
+        html = f"""<!DOCTYPE html><html><head><title>Salesforce Auth Error</title></head>
+<body>
+<script>
+try {{
+  window.opener.postMessage({{type:'salesforce-oauth-callback',success:false,error:{json.dumps(msg)}}}, '*');
+}} catch(e) {{}}
+window.close();
+</script>
+<p style="font-family:sans-serif;color:#b91c1c">Authentication failed: {msg}</p>
+<p><a href="javascript:window.close()">Close this window</a></p>
+</body></html>"""
+        return HTMLResponse(content=html, status_code=200)
+
+    # Salesforce-side errors (user denied access, etc.)
+    if error:
+        return _error_page(error_description or error)
+
+    # Validate state
+    _sf_prune_sessions()
+    session = _SF_PKCE_SESSIONS.pop(state, None)
+    if session is None:
+        return _error_page(
+            "OAuth state mismatch or session expired — please try again."
+        )
+
+    # Exchange code for tokens
+    try:
+        token_resp = exchange_code_for_token(
+            instance_url=session["instance_url"],
+            client_id=session["client_id"],
+            client_secret=session["client_secret"],
+            code=code,
+            code_verifier=session["verifier"],
+            redirect_uri=session["redirect_uri"],
+        )
+    except SalesforceAuthError as exc:
+        return _error_page(str(exc))
+
+    source_id = session["source_id"]
+    instance_url = token_resp.get("instance_url", session["instance_url"])
+
+    # Persist tokens
+    save_salesforce_config(
+        source_id=source_id,
+        token_response=token_resp,
+        client_id=session["client_id"],
+        client_secret=session["client_secret"],
+    )
+
+    # Register source in registry as 'pending' (schema fetch happens on first sync)
+    try:
+        mgr = get_source_manager(_SCENARIO_PATH)
+        cfg = SourceConfig(
+            id=source_id,
+            connector_type="salesforce",
+            label=session.get("label", "Salesforce"),
+            params={"instance_url": instance_url, "client_id": session["client_id"]},
+            status="pending",
+        )
+        if mgr.registry.get(source_id) is None:
+            mgr.registry.upsert(cfg)
+    except Exception as exc:
+        logger.warning("Could not register Salesforce source after OAuth: %s", exc)
+
+    success_html = f"""<!DOCTYPE html><html><head><title>Salesforce Connected</title></head>
+<body>
+<script>
+try {{
+  window.opener.postMessage({{
+    type: 'salesforce-oauth-callback',
+    success: true,
+    source_id: {json.dumps(source_id)},
+    instance_url: {json.dumps(instance_url)}
+  }}, '*');
+}} catch(e) {{}}
+window.close();
+</script>
+<p style="font-family:sans-serif;color:#065f46">&#10003; Salesforce connected. You can close this window.</p>
+</body></html>"""
+    return HTMLResponse(content=success_html, status_code=200)
 
 
 @app.get("/api/salesforce/profile/{source_id}")

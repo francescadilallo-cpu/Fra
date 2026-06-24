@@ -1418,7 +1418,11 @@ class DuckDBSourceManager:
     def _ingest_salesforce(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        """Authenticate to Salesforce, retrieve full schema, and store as DuckDB tables.
+        """Retrieve Salesforce schema using stored PKCE tokens and load into DuckDB.
+
+        Credentials are loaded from salesforce_config.json (written at OAuth callback
+        time), not from cfg.params. cfg.params only carries non-sensitive metadata
+        (instance_url, client_id) stored at registration time.
 
         Creates two tables per source:
           sf_{id}_objects  — one row per SObject (name, label, is_custom, field_count)
@@ -1427,42 +1431,31 @@ class DuckDBSourceManager:
         from .salesforce_connector import (
             SalesforceConnector,
             SalesforceAuthError,
-            save_salesforce_config,
+            SalesforceAPIError,
+            load_salesforce_config,
             save_salesforce_schema,
             build_salesforce_dataframes,
         )
 
-        params = cfg.params
-        required = (
-            "instance_url",
-            "client_id",
-            "client_secret",
-            "username",
-            "password",
-            "security_token",
-        )
-        missing = [k for k in required if not params.get(k)]
-        if missing:
+        stored = load_salesforce_config(cfg.id)
+        if not stored or not stored.get("access_token"):
             raise ValueError(
-                f"Salesforce source '{cfg.id}' is missing required credentials: {', '.join(missing)}"
+                f"Salesforce source '{cfg.id}' has no stored access token. "
+                "Re-authorise via the Data Sources connector panel."
             )
 
         try:
             with SalesforceConnector(
-                instance_url=params["instance_url"],
-                client_id=params["client_id"],
-                client_secret=params["client_secret"],
-                username=params["username"],
-                password=params["password"],
-                security_token=params["security_token"],
+                instance_url=stored["instance_url"],
+                access_token=stored["access_token"],
+                refresh_token=stored.get("refresh_token"),
+                client_id=stored.get("client_id"),
+                client_secret=stored.get("client_secret"),
             ) as sf:
-                sf.authenticate()
                 schema = sf.get_schema(max_objects=150)
-        except SalesforceAuthError as exc:
+        except (SalesforceAuthError, SalesforceAPIError) as exc:
             raise ValueError(str(exc)) from exc
 
-        # Persist credentials + schema to disk
-        save_salesforce_config(cfg.id, params)
         save_salesforce_schema(cfg.id, schema)
 
         # Build DataFrames and load into DuckDB
