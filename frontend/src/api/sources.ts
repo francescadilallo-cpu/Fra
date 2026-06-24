@@ -147,7 +147,7 @@ export const CONNECTOR_BACKEND_MAP: Record<string, ConnectorBackendDef> = {
         type: 'url',
         placeholder: 'https://mycompany.my.salesforce.com',
         required: true,
-        hint: 'Your Salesforce org URL — no trailing slash',
+        hint: 'Your Salesforce org URL — with or without https://',
       },
       {
         key: 'client_id',

@@ -3210,6 +3210,11 @@ def salesforce_auth_start(
 
     _sf_prune_sessions()
 
+    # Normalise: add https:// if caller omitted the scheme
+    if instance_url and not instance_url.startswith(("http://", "https://")):
+        instance_url = f"https://{instance_url}"
+    instance_url = instance_url.rstrip("/")
+
     verifier, challenge = generate_pkce_pair()
     state = _secrets.token_urlsafe(32)
     source_id = f"salesforce-{_secrets.token_hex(4)}"
@@ -3217,7 +3222,7 @@ def salesforce_auth_start(
 
     _SF_PKCE_SESSIONS[state] = {
         "verifier": verifier,
-        "instance_url": instance_url.rstrip("/"),
+        "instance_url": instance_url,
         "client_id": client_id,
         "client_secret": client_secret,
         "source_id": source_id,
