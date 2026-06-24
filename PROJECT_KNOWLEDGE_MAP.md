@@ -20,53 +20,43 @@ Flusso logico principale:
 - Knowledge graph: backend/app/kg/graph.py
 - Metadata catalog: backend/app/metadata/catalog.py
 - Frontend app shell: frontend/src/App.tsx
+- Frontend API client (semantic): frontend/src/api/semantic.ts
 
 
-File: backend/app/main.py
+File: backend/app/main.py (~5000 righe — leggere per sezioni, non dall'inizio)
 
 Endpoint principali:
 
-- GET /api/health
-  - stato servizio
-- GET /api/dashboard
-  - KPI sintetici (customers/products/quotes/orders, conversion rate, ordini recenti)
-- GET /api/ontology/graph
-  - grafo ontologico legacy/manufacturing
-- GET /api/ontology/mappings
-  - mapping tabella/campo -> ontologia
-- PUT /api/ontology/mappings
-  - update mapping specifico
-- GET /api/data/{table}
-  - paginazione dati su tabelle whitelisted
-  - endpoint protetto: richiede autenticazione RBAC (user/admin)
-- GET /api/semantic/status
-  - stato semantic stack (loaded, entities, KG stats, metadata stats)
-  - endpoint protetto: richiede autenticazione RBAC (user/admin)
-- POST /api/semantic/ask
-  - endpoint unico di interrogazione NL verso semantic layer neuro-simbolico
-  - protetto con autenticazione esplicita via Depends(get_current_user)
-  - payload normalizzato: question oppure query (alias), session_id, context
-  - rate limiting slowapi: massimo 5 richieste/minuto per utente/IP (429 su superamento)
-  - cache risposta opzionale su Redis con chiave deterministica question+context (`SEMANTIC_REDIS_URL`)
-  - TTL cache configurabile via `SEMANTIC_REDIS_TTL_SECONDS` (default 120)
-  - invalidazione cache a namespace bump su `PUT /api/ontology/mappings` e `POST /api/kg/build`
-- POST /api/ontology/validate
-  - validazione admin-only della configurazione ontologica (YAML)
-  - hard-fail 422 su incoerenze strutturali (`ONTOLOGY_VALIDATION_ERROR`)
-- POST /api/ask
-  - alias legacy compatibile, instradato internamente allo stesso path sicuro di `/api/semantic/ask`
-- POST /api/auth/token e POST /api/auth/login
-  - endpoint autenticazione OAuth2 password flow
-  - rate limiting slowapi: massimo 5 tentativi/minuto per IP (anti brute force)
-- POST /api/agent/execute
-  - ingresso command NL esecutivo (write-back) con validazione semantica
-  - protetto admin (Depends(require_roles("admin")))
-  - output sempre in stato PENDING_HUMAN_APPROVAL se validato
-- POST /api/agent/approve/{action_id}
-  - endpoint manager per approvazione/rifiuto azione pending
-  - su approve esegue write-back sicuro verso connettori/DB
-- GET /api/agent/audit
-  - audit trail semantico delle fasi PROPOSED/VALIDATED/QUEUED/APPROVED/REJECTED/EXECUTED/FAILED
+- GET /api/health — stato servizio
+- GET /api/dashboard — KPI sintetici
+- POST /api/auth/token, POST /api/auth/login — OAuth2 password flow, rate limit 5/min per IP
+- GET /api/semantic/status — stato semantic stack (entities, KG nodes/edges, metadata)
+- GET /api/semantic/live-config — configurazione workspace live (entità, metriche, connettori)
+- GET /api/semantic/draft — draft completo (entities, relations, metrics, context_docs)
+- POST /api/semantic/build — costruisce semantic layer; chiama _refresh_catalog_and_kg_after_rebuild()
+- POST /api/semantic/ask — query NL, rate limit 5/min, cache Redis opzionale
+- POST /api/ask — alias legacy compatibile verso /api/semantic/ask
+- GET /api/sources, POST /api/sources — gestione sorgenti dati live
+- DELETE /api/sources/{id}, POST /api/sources/{id}/sync
+- GET /api/semantic/sources — sorgenti caricate nel semantic stack
+- GET /api/semantic/metrics, POST /api/semantic/metrics, DELETE /api/semantic/metrics/{id}
+- GET /api/semantic/hierarchies, POST, DELETE
+- GET /api/semantic/segments, POST, DELETE
+- GET /api/semantic/draft/relations, POST /api/semantic/draft/relations, DELETE /{id}
+- PATCH /api/semantic/draft/entities/{name} — aggiorna descrizione/note entità
+- GET /api/semantic/templates, POST, PATCH, DELETE — query template gestiti da MetadataCatalog
+- GET /api/semantic/example-questions — domande esempio per il query interface
+- GET /api/semantic/coverage — copertura ontologica
+- GET /api/semantic/mapping-defs — definizioni di campo per il frontend
+- POST /api/ontology/validate — admin-only, hard-fail 422 su YAML incoerente
+- GET /api/ontology/graph, GET /api/ontology/mappings, PUT /api/ontology/mappings
+- GET /api/data/{table} — paginazione dati, RBAC user/admin
+- GET /api/data/store/status, POST /api/data/store/rebuild
+- POST /api/agent/execute — HITL write-back, admin-only, PENDING_HUMAN_APPROVAL
+- POST /api/agent/approve/{action_id}, GET /api/agent/audit
+- GET /api/agents/custom, POST, PUT, DELETE — agenti custom live
+- GET /api/queries/saved, POST, DELETE — query salvate
+- GET /api/ontology/extension, PUT /api/ontology/extension — bridge cross-source (localStorage sync)
 
 
 ### 3.2 Semantic Layer (core ragionamento)
@@ -104,26 +94,23 @@ Intent supportati (macro categorie):
 File:
 
 - backend/app/connectors/base.py
+- backend/app/connectors/duckdb_source_manager.py  ← primario
 - backend/app/connectors/postgres_connector.py
 - backend/app/connectors/sqlite_connector.py
 - backend/app/connectors/file_connector.py
+- backend/app/connectors/source_registry.py
 
 Ruoli:
 
+- DuckDBSourceManager (registry-driven) — connettore primario in produzione:
+  - `FRA_STORAGE_MODE=snapshot` (default Render): usa fra_unified.duckdb committato
+  - `FRA_STORAGE_MODE=nostore`: runtime in-memory, nessuna persistenza locale
+  - ERPDuckDBAdapter, CRMDuckDBAdapter, HRPIMDuckDBAdapter condividono lo stesso file snapshot
+  - source_registry.py: persistenza SQLite delle sorgenti utente live
 - BaseConnector: contratto comune (load_entity, describe, execute_query)
-- PostgresConnector:
-  - carica dump SQL ERP in SQLite in-memory
-  - espone query SQL su tabelle ERP
-- SQLiteConnector:
-  - accesso a clienthub.db CRM
-- FileConnector:
-  - carica HR CSV e PIM JSON
-  - normalizza date (IT DD/MM/YYYY -> ISO, US MM/DD/YYYY -> ISO)
-  - espone query SQL via DuckDB su dataframe in-memory
-- DuckDBSourceManager (registry-driven):
-  - `FRA_STORAGE_MODE=nostore` (default): nessuna persistenza datalake locale, runtime in-memory
-  - `FRA_STORAGE_MODE=snapshot`: snapshot DuckDB persistente opzionale
-  - supporta view legacy compatibili `dipendenti_hr` e `product_catalog_pim`
+- PostgresConnector: carica dump SQL ERP in SQLite in-memory (demo legacy)
+- SQLiteConnector: accesso a clienthub.db CRM (demo legacy)
+- FileConnector: carica HR CSV e PIM JSON; normalizza date; query via DuckDB in-memory
 
 
 ### 3.4 Knowledge Graph
@@ -336,49 +323,34 @@ Gestione sessione/tenant:
 
 Cartella: frontend/src/components
 
-- AccessGate.tsx: login UI con autenticazione backend (OAuth2 password flow su /api/auth/token)
-- Dashboard.tsx: KPI e sintesi operativa
-- OntologyGraph.tsx: visualizzazione grafo ontologico
-- OntologyBuilder.tsx: builder ontologia
-- QueryInterface.tsx: interfaccia query utente
-- MappingView.tsx: gestione mapping
-- DataExplorer.tsx: esplorazione tabellare
-- DataSourcesView.tsx: sorgenti e stato
-- AgentsView.tsx / AgentBuilder.tsx / AgentWorkflows.tsx: sezione agenti
-- ProcessView.tsx: orchestrazione/flussi
-- ComplianceView.tsx: compliance controls
-- ConfigurationView.tsx: configurazioni
-- UseCasesView.tsx: use case per dominio
-- OnboardingWizard.tsx: setup iniziale
-- CommandPalette.tsx: navigazione rapida comandi
-- AdminSections.tsx: sezioni admin (gestione utenti, token API generati runtime, audit e notifiche)
-- SemanticLayerView.tsx: vista operativa semantic layer
+- AccessGate.tsx: login UI (OAuth2 verso /api/auth/token)
+- Dashboard.tsx: KPI live (real data da /api/data/store/status, /api/semantic/draft)
+- DataSourcesView.tsx: **wizard 8 step in live mode** (Discovery→Sources→Profiling→Quality→AI Model→Human Review→Activation→Evolution); flat layout in demo mode
+- SemanticLayerView.tsx: navigazione a sezioni via `setSection(SLSection)` — overview/sources/entities/bridges/relations/rules/metrics/hierarchies/segments/definitions/playground
+- SemanticDraftView.tsx: revisione entità/metriche del draft semantico
+- OntologyGraph.tsx: grafo visuale ReactFlow entità e relazioni
+- OntologyBuilder.tsx: chatbot AI per costruire il data model
+- QueryInterface.tsx: NL query, demo engine locale o backend /api/ask
+- AgentsView.tsx / AgentBuilder.tsx / AgentWorkflows.tsx: agenti custom live e workflow
+- ProcessView.tsx: pipeline setup (extract→enrich→index) con stati live
+- ComplianceView.tsx: GDPR data map + EU AI Act risk register
+- ConfigurationView.tsx / AdminSections.tsx: utenti, token API, notifiche, audit log
+- UseCasesView.tsx: esempi per settore
+- CommandPalette.tsx: navigazione rapida (⌘K)
 
 
 ### 4.3 API client frontend
 
-File: frontend/src/api/client.ts
+File principali:
 
-Funzioni principali:
+- **frontend/src/api/semantic.ts** — tutte le chiamate /api/semantic/*, /api/ask, /api/sources; tipi SemanticDraft, BackendSource, BackendMetric, DraftEntity, DraftRelation
+- frontend/src/api/client.ts — Axios instance + JWT interceptor + helper login/logout; token in localStorage
+- frontend/src/api/sources.ts, agents.ts, queries.ts, workspace.ts, users.ts, tokens.ts — client per domini specifici
 
-- checkHealth
-- login
-- fetchDashboard
-- fetchOntologyGraph
-- fetchMappings
-- updateMapping
-- runQuery
-- fetchTableData
-
-Comportamento auth client:
-
-- token JWT letto dinamicamente da localStorage
-- header Authorization: Bearer <token> aggiunto automaticamente via Axios interceptor
-- cleanup token su risposta 401 e su logout applicativo
-
-Feature toggle:
-
-- VITE_USE_MOCK=true abilita dati mock
+Pattern condiviso:
+- token JWT letto da localStorage, iniettato in Authorization header via interceptor
+- handle401() dedup guard condiviso tra tutti gli Axios instance
+- backendErrorMessage(err) estrae err.response.data.detail per toast errori
 
 
 ### 4.4 Moduli dati e stato locale
@@ -387,10 +359,13 @@ Cartella: frontend/src/data
 
 Elementi chiave:
 
-- companies.ts: gestione company locale e switch
-- agentStore.ts: stato e findings agenti
-- queryEngine.ts: parser/query simulation lato frontend su ontologia mock
-- connectors.ts, sectors.ts, reportGenerator.ts, complianceData.ts, ecc.
+- queryEngine.ts: parser NL lato frontend (demo) + tipi EngineResult condivisi con semantic.ts
+- ontologyExtensions.ts: bridge cross-source in localStorage (SavedExtension con fromField/toField); storage key mode-scoped
+- sectors.ts, connectors.ts, agentStore.ts, reportGenerator.ts, complianceData.ts
+
+Regola storage split:
+- Bridges (cross-source) → localStorage via ontologyExtensions.ts
+- Relations, Metrics, Hierarchies, Segments → API backend (MetadataCatalog SQLite)
 
 
 ## 5) Flussi operativi principali
@@ -435,30 +410,45 @@ File principali:
 
 Note operative:
 
-- backend esposto su 8000
-- frontend Nginx su 5173 (container -> port 80)
-- variabile ANTHROPIC_API_KEY necessaria per ontology intent mapping neuro-simbolico
-- slowapi configurato in backend/app/main.py con handler custom HTTP 429
+- backend esposto su 8000; frontend Vite dev su 5173
+- ANTHROPIC_API_KEY (o GROQ_API_KEY) per intent mapping LLM; degradazione graceful senza chiave
+- slowapi: rate limit 5/min su /api/semantic/ask e /api/auth/*; handler custom HTTP 429
+
+Render free tier (512MB RAM) — ENV vars in backend/Dockerfile:
+
+| Var | Valore | Effetto |
+|---|---|---|
+| FRA_STORAGE_MODE | snapshot | Usa fra_unified.duckdb committato (~780KB) |
+| FRA_KG_NODE_LIMIT | 5000 | KG capped ~15MB (default 200k = ~400MB) |
+| FRA_KG_EDGE_LIMIT | 5000 | Edge store capped |
+| FRA_SKIP_WARMUP | true | KG built lazy su prima query, non al boot |
+| JWT_ACCESS_TOKEN_EXPIRE_MINUTES | 10080 | 7 giorni sessione |
+
+Aumentare FRA_KG_NODE/EDGE_LIMIT a 0 (illimitato) su piani con ≥2GB RAM.
 
 
 ## 7) Indice rapido di navigazione codice
 
+- Guida operativa Claude Code: CLAUDE.md
 - API e bootstrap backend: backend/app/main.py
 - Semantic orchestration: backend/app/semantic/layer.py
-- Connettore ERP dump: backend/app/connectors/postgres_connector.py
-- Connettore CRM: backend/app/connectors/sqlite_connector.py
-- Connettore file HR/PIM: backend/app/connectors/file_connector.py
+- DuckDB source manager: backend/app/connectors/duckdb_source_manager.py
 - KG builder: backend/app/kg/graph.py
 - Metadata engine: backend/app/metadata/catalog.py
 - Ontology business: backend/app/ontology/ontology.py
 - Context session store: backend/app/context/manager.py
 - CLI: backend/app/cli.py
-- Test integrativi: backend/tests/test_golden_questions.py
+- Test integrativi: backend/tests/test_api_integration.py
+- Test KG: backend/tests/test_kg_graph.py
 - Test agentic endpoints: backend/tests/test_agentic_endpoints.py
 - Frontend shell: frontend/src/App.tsx
 - Frontend layout/navigation: frontend/src/components/Layout.tsx
-- Frontend API adapter: frontend/src/api/client.ts
-- Recap evoluzione lavori: RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md
+- Frontend API client (semantic): frontend/src/api/semantic.ts
+- Demo/live switch: frontend/src/lib/demoMode.ts
+- Bridge storage cross-source: frontend/src/data/ontologyExtensions.ts
+- Data workbench wizard (live): frontend/src/components/DataSourcesView.tsx
+- Semantic layer sections: frontend/src/components/SemanticLayerView.tsx
+- Changelog modifiche live: CHANGELOG_LIVE.md
 
 
 ## 8) Gap documentali residui

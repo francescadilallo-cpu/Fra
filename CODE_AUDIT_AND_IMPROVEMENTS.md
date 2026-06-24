@@ -252,22 +252,22 @@ Azioni:
 
 ### M6 - Implementazione JWT custom (manutenzione e hardening)
 
-Stato: NUOVO
+Stato: PARZIALE
 
-Evidenza:
+Evidenza aggiornata:
 
-- in backend/app/main.py e presente implementazione manuale encode/decode JWT con HMAC
+- migrate da python-jose a PyJWT (commit 216f46c) e poi da PyJWT a implementazione pure-Python HS256 (commit bab390c) per risolvere binding cryptography rotto su Render
+- implementazione custom HMAC presente in backend/app/main.py
 
-Impatto:
+Impatto residuo:
 
-- maggiore rischio manutentivo rispetto a librerie mature
-- necessita test security regressivi specifici
+- implementazione non standard, maggiore rischio manutentivo
+- serve test negativi su token malformati/claims invalidi
 
-Azioni:
+Azioni residue:
 
-1. valutare migrazione a libreria consolidata (es. PyJWT o python-jose)
-2. aggiungere test negativi su token malformati/claims invalidi
-3. mantenere policy chiara di issuer/audience/exp/nbf
+1. aggiungere test negativi JWT (token malformato, exp scaduto, firma errata)
+2. mantenere policy chiara issuer/audience/exp/nbf nei commenti
 
 
 ## BASSO

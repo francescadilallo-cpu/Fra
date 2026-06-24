@@ -1,6 +1,6 @@
 # Orientamento al progetto — Fra / DataIntelligence
 
-> Documento di riferimento rapido. Aggiornato al 2026-06-21.
+> Documento di riferimento rapido. Aggiornato al 2026-06-24.
 
 ---
 
@@ -62,7 +62,8 @@ Il valore è determinato dal **JWT** dell'utente: se il token contiene `mode: "l
 | Settori | Switcha tra Manufacturing / Retail / Healthcare / Finance | Sempre "manufacturing" come default (non rilevante) |
 | Agenti precostituiti | Sì (Sales Performance, CRM Dedup, ecc.) | No — il cliente crea i suoi |
 | Audit log | Voci demo hardcoded | Voci reali dal backend (`_audit()`) |
-| Query engine | Risposte precalcolate per AdventureWorks | Chiama il backend `/query` reale |
+| Query engine | Risposte precalcolate per AdventureWorks | Chiama `/api/ask` → `/api/semantic/ask` backend |
+| DataSourcesView | Layout flat con tutte le sezioni | Wizard 8 step (Discovery→Activation→Evolution) |
 
 **Regola d'oro nel codice:** tutto ciò che è dietro `IS_DEMO_MODE ? ... : ...` mostra contenuto diverso. Il codice live non deve mai "vedere" termini AdventureWorks, settori demo, o termini tecnici come "semantic layer" / "ontology".
 
@@ -175,34 +176,12 @@ Quando un cliente live usa l'app, costruisce progressivamente:
 
 ---
 
-## 8. Cosa è stato fatto in questa sessione
+## 8. Evoluzioni recenti (storico sintetico)
 
-**Obiettivo:** eliminare tutto il gergo tecnico dai percorsi visibili agli utenti live, sostituendo con linguaggio semplice.
-
-**Terminologia rimpiazzata:**
-
-| Prima | Dopo |
-|---|---|
-| semantic layer | data model |
-| ontology | entity graph / data model |
-| pipeline | setup |
-| Knowledge Graph | data model / graph |
-| "Run Semantic Pipeline" | "Run Setup" |
-| "Process" (heading) | "Setup" |
-| "Semantic Definitions" (tab) | "Field Definitions" |
-| "Rebuilt knowledge graph" (audit) | "Rebuilt data model" |
-| `sector.name` ("Manufacturing") | `workspaceLabel()` (nome azienda) |
-
-**File toccati:**
-- `backend/app/main.py` — audit log
-- `CommandPalette.tsx` — etichette comandi
-- `MappingView.tsx` — tab label
-- `ProcessView.tsx` — heading + empty state
-- `AdminSections.tsx` — descrizione notifiche
-- `Layout.tsx` — `document.title`
-- `OntologyBuilder.tsx` — header + confirm dialog
-- `OntologyGraph.tsx` — Code view descriptions
-- `SemanticLayerView.tsx` — YAML export key
+- **De-jargonizzazione live mode** (giugno 2026): rimosso gergo tecnico ("semantic layer", "ontology", "pipeline") da tutti i percorsi visibili a utenti live; sostituiti con "data model", "entity graph", "setup"
+- **Wizard 8 step DataSourcesView** (giugno 2026): in live mode, DataSourcesView è un wizard a step singolo con Rail di navigazione; demo mode usa il layout flat invariato
+- **SemanticLayerView sezioni** (giugno 2026): navigazione a sezioni via `setSection(SLSection)` — bridges con fromField/toField, relations con "+ New" sempre visibile, form con fallback free-text
+- **Memory fix Render** (giugno 2026): FRA_KG_NODE_LIMIT=5000, FRA_KG_EDGE_LIMIT=5000, FRA_SKIP_WARMUP=true nel Dockerfile per evitare OOM su free tier 512MB
 
 ---
 
@@ -231,8 +210,11 @@ Il frontend gira su `http://localhost:5173`, il backend su `http://localhost:800
 
 | File | Contenuto |
 |---|---|
+| `CLAUDE.md` | **Guida operativa per Claude Code** — comandi, architettura, regole |
 | `CHANGELOG_LIVE.md` | Log cronologico di ogni modifica live |
 | `PROJECT_KNOWLEDGE_MAP.md` | Mappa completa del codice |
+| `ORIENTAMENTO.md` | Questo file — overview rapido del prodotto |
+| `AGENTS.md` | Obblighi di manutenzione doc post-modifica |
+| `CODE_AUDIT_AND_IMPROVEMENTS.md` | Security findings e technical debt |
 | `DISCOVERY.md` | Note di discovery iniziale |
 | `RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md` | Recap storico funzionalità |
-| `AGENTS.md` | Istruzioni per agenti AI che lavorano sul repo |
