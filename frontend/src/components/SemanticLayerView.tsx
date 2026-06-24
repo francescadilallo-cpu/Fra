@@ -12,7 +12,7 @@ import {
   getHierarchies, createHierarchy, deleteHierarchy as apiDeleteHierarchy,
   getSegments, createSegment, deleteSegment as apiDeleteSegment,
   ask as backendAsk, adaptAskResult,
-  getDraft, listQueryTemplates, addRelation, backendErrorMessage,
+  getDraft, listQueryTemplates, addRelation, removeRelation, backendErrorMessage,
   type BackendMetric, type BackendHierarchy, type BackendSegment, type BackendSource,
   type SemanticStatus, type SemanticDraft, type QueryTemplate, type DraftEntity, type DraftRelation,
 } from '../api/semantic'
@@ -25,7 +25,7 @@ import {
   type DemoSource, type DemoBridge, type DemoDisambiguationRule, type DemoQueryExample,
 } from '../data/demoSemanticLayer'
 import { SemanticDraftView } from './SemanticDraftView'
-import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange } from '../data/ontologyExtensions'
+import { useExtendedOntology, loadExtension, saveExtension, applyNodeChange, removeNode } from '../data/ontologyExtensions'
 import { SECTORS } from '../data/sectors'
 import type { OntologyProperty, PropertyType, OntologyNode } from '../types'
 
@@ -336,12 +336,13 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
 
 // ── EntityCard ─────────────────────────────────────────────────────────────────
 
-function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions }: {
+function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions, onDelete }: {
   nodeId: string
   ontologyNode: { label: string; uri: string; db_table: string | null; row_count: number; properties: OntologyProperty[] }
   sectorId: string
   isBase: boolean
   entityOptions: string[]
+  onDelete?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -380,6 +381,15 @@ function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions }: {
             <Edit3 className="w-3 h-3" />
             {editing ? 'Done' : 'Edit'}
           </button>
+          {onDelete && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              aria-label="Delete entity"
+              className="text-slate-300 hover:text-red-400 transition-colors p-1"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </button>
 
@@ -552,7 +562,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 const AW_RELATIONS: {
   source: string; sourceKey: string
   colorBorder: string; colorBg: string; colorText: string; colorDot: string; icon: string
-  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean }[]
+  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean; id?: number; is_manual?: boolean }[]
 }[] = []
 
 // Color palette for dynamically derived relation groups
@@ -589,6 +599,8 @@ function buildRelationGroups(
       fromRows: fromEntity?.record_count ?? 0,
       toRows:   toEntity?.record_count   ?? 0,
       note: rel.edge_type ?? '',
+      id: rel.id,
+      is_manual: rel.is_manual,
     })
   }
   return Array.from(groups.values())
@@ -1740,11 +1752,12 @@ const SECTION_NAV: { id: SLSection; label: string; Icon: React.ComponentType<{ c
 
 // ── Relations Section ─────────────────────────────────────────────────────────
 
-function RelationsSection({ relationsData, onNavigate, entityTables, onRelationAdded }: {
+function RelationsSection({ relationsData, onNavigate, entityTables, onRelationAdded, onRelationDeleted }: {
   relationsData: typeof AW_RELATIONS
   onNavigate: (s: SLSection) => void
   entityTables: string[]
   onRelationAdded: () => void
+  onRelationDeleted: () => void
 }) {
   const [filterSource, setFilterSource] = useState<string>('all')
   const [filterCard, setFilterCard] = useState<string>('all')
@@ -1752,6 +1765,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [form, setForm] = useState({ from_table: '', to_table: '', via_column: '', edge_type: 'FK' })
 
   const totalRelations = relationsData.reduce((a, g) => a + g.relations.length, 0)
@@ -1789,6 +1803,19 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
       toast(backendErrorMessage(err) || 'Failed to add relation', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDeleteRelation(id: number) {
+    setDeletingId(id)
+    try {
+      await removeRelation(id)
+      onRelationDeleted()
+      toast('Relation removed', 'success')
+    } catch (err) {
+      toast(backendErrorMessage(err) || 'Failed to remove relation', 'error')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -1958,6 +1985,18 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
                           {/* Top row: entity → entity + badges */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.from}</span>
+                            {r.is_manual && r.id != null && (
+                              <button
+                                onClick={() => handleDeleteRelation(r.id!)}
+                                disabled={deletingId === r.id}
+                                aria-label="Delete relation"
+                                className="ml-auto text-slate-300 hover:text-red-400 transition-colors disabled:opacity-40"
+                              >
+                                {deletingId === r.id
+                                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  : <Trash2 className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
                               {r.cardinality === '1:N' ? (
                                 <>
@@ -3098,6 +3137,10 @@ export default function SemanticLayerView() {
                     sectorId={sectorId}
                     isBase={baseNodeIds.has(node.id)}
                     entityOptions={entityOptions}
+                    onDelete={!IS_DEMO_MODE ? () => {
+                      removeNode(sectorId, node.id, baseNodeIds.has(node.id))
+                      window.dispatchEvent(new CustomEvent('ontology-builder-changed'))
+                    } : undefined}
                   />
                 ))}
               </div>
@@ -3139,6 +3182,7 @@ export default function SemanticLayerView() {
               ...backendSources.flatMap(s => s.tables),
             ])]}
             onRelationAdded={loadFromBackend}
+            onRelationDeleted={loadFromBackend}
           />
         )}
 
