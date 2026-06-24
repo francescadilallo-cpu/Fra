@@ -382,6 +382,248 @@ def delete_salesforce_config(source_id: str) -> None:
         except Exception:
             pass
 
+    _delete_salesforce_profile(source_id)
+
+
+# ── Field-level profiling ─────────────────────────────────────────────────────
+
+# Field types that are worth fetching sample values for (exclude binary/blob)
+_PROFILABLE_TYPES = {
+    "string",
+    "picklist",
+    "multipicklist",
+    "boolean",
+    "int",
+    "double",
+    "currency",
+    "percent",
+    "date",
+    "datetime",
+    "email",
+    "phone",
+    "url",
+    "id",
+    "reference",
+    "textarea",
+    "combobox",
+}
+
+# Max distinct values kept in the profile per field
+_MAX_TOP_VALUES = 10
+
+
+@dataclass
+class SalesforceFieldProfile:
+    field_name: str
+    field_label: str
+    field_type: str
+    is_relation: bool
+    populated_count: int  # rows where field is not null/empty
+    total_count: int  # total rows sampled
+    null_rate: float  # 0.0–1.0
+    distinct_count: int
+    top_values: list[str]  # up to _MAX_TOP_VALUES most frequent non-null values
+
+
+@dataclass
+class SalesforceObjectProfile:
+    object_name: str
+    object_label: str
+    sample_size: int  # actual rows fetched (≤ requested)
+    fields_profiled: int
+    field_profiles: list[SalesforceFieldProfile]
+    profiled_at: str
+
+
+@dataclass
+class SalesforceSchemaProfile:
+    source_id: str
+    sample_size_requested: int
+    objects_profiled: int
+    object_profiles: list[SalesforceObjectProfile]
+    profiled_at: str
+
+
+class SalesforceProfiler:
+    """Samples real rows from Salesforce and computes field quality statistics.
+
+    Raw rows are never persisted — only aggregate statistics (null rate,
+    distinct count, top values) are stored in the profile JSON.
+    """
+
+    # SOQL fields that always exist and are safe to skip in profiling
+    _SYSTEM_FIELDS = {
+        "Id",
+        "IsDeleted",
+        "SystemModstamp",
+        "LastModifiedById",
+        "CreatedById",
+        "LastModifiedDate",
+        "CreatedDate",
+    }
+
+    def __init__(self, connector: SalesforceConnector) -> None:
+        self._sf = connector
+
+    def _build_soql(self, obj_name: str, fields: list[str], limit: int) -> str:
+        # SOQL field list must not exceed ~200 fields due to URL length limits.
+        # Pick the first 150 profilable fields to stay safe.
+        safe_fields = fields[:150]
+        field_list = ", ".join(safe_fields)
+        return f"SELECT {field_list} FROM {obj_name} LIMIT {limit}"
+
+    def profile_sobject(
+        self,
+        obj_name: str,
+        obj_label: str,
+        schema_fields: list[SalesforceField],
+        sample_size: int = 500,
+    ) -> SalesforceObjectProfile | None:
+        """Fetch up to *sample_size* rows and compute per-field statistics.
+
+        Returns None if the object is not queryable or SOQL fails.
+        """
+        # Pick profilable fields (skip system fields and binary types)
+        profile_fields = [
+            f
+            for f in schema_fields
+            if f.type in _PROFILABLE_TYPES and f.name not in self._SYSTEM_FIELDS
+        ]
+        if not profile_fields:
+            return None
+
+        field_names = [f.name for f in profile_fields]
+
+        try:
+            soql = self._build_soql(obj_name, field_names, sample_size)
+            encoded = soql.replace(" ", "+").replace(",", "%2C")
+            raw = self._sf._get(f"/query?q={encoded}")
+            records: list[dict] = raw.get("records", [])
+        except Exception as exc:
+            logger.warning("Profile query failed for %s: %s", obj_name, exc)
+            return None
+
+        total = len(records)
+        if total == 0:
+            return None
+
+        field_profiles: list[SalesforceFieldProfile] = []
+        for fld in profile_fields:
+            values = [r.get(fld.name) for r in records]
+            non_null = [
+                v
+                for v in values
+                if v is not None and v != "" and v is not False or v is False
+            ]
+            # Recalculate: non-null means the field has a real value
+            non_null = [v for v in values if v is not None and str(v).strip() != ""]
+            populated = len(non_null)
+            null_rate = round(1.0 - populated / total, 4) if total > 0 else 1.0
+
+            # Distinct count and top values (string-coerced)
+            str_vals = [str(v) for v in non_null]
+            from collections import Counter
+
+            counter = Counter(str_vals)
+            distinct = len(counter)
+            top_values = [v for v, _ in counter.most_common(_MAX_TOP_VALUES)]
+
+            field_profiles.append(
+                SalesforceFieldProfile(
+                    field_name=fld.name,
+                    field_label=fld.label,
+                    field_type=fld.type,
+                    is_relation=fld.is_relation,
+                    populated_count=populated,
+                    total_count=total,
+                    null_rate=null_rate,
+                    distinct_count=distinct,
+                    top_values=top_values,
+                )
+            )
+
+        return SalesforceObjectProfile(
+            object_name=obj_name,
+            object_label=obj_label,
+            sample_size=total,
+            fields_profiled=len(field_profiles),
+            field_profiles=field_profiles,
+            profiled_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def profile_schema(
+        self,
+        schema: "SalesforceSchema",
+        sample_size: int = 500,
+        objects_to_profile: set[str] | None = None,
+    ) -> SalesforceSchemaProfile:
+        """Profile all objects in *schema* (or the given subset).
+
+        Defaults to _PRIORITY_OBJECTS if *objects_to_profile* is None.
+        """
+        if objects_to_profile is None:
+            objects_to_profile = _PRIORITY_OBJECTS
+
+        target_objects = [
+            obj for obj in schema.objects if obj.name in objects_to_profile
+        ]
+        if not target_objects:
+            # Fall back to the first 20 objects if none of the priority ones are present
+            target_objects = schema.objects[:20]
+
+        profiles: list[SalesforceObjectProfile] = []
+        for obj in target_objects:
+            logger.info("Profiling %s (sample=%d)…", obj.name, sample_size)
+            prof = self.profile_sobject(
+                obj_name=obj.name,
+                obj_label=obj.label,
+                schema_fields=obj.fields,
+                sample_size=sample_size,
+            )
+            if prof is not None:
+                profiles.append(prof)
+
+        return SalesforceSchemaProfile(
+            source_id="",  # caller sets this
+            sample_size_requested=sample_size,
+            objects_profiled=len(profiles),
+            object_profiles=profiles,
+            profiled_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+def save_salesforce_profile(source_id: str, profile: SalesforceSchemaProfile) -> None:
+    """Persist aggregated field profiles to backend/data/salesforce_profile_{source_id}.json."""
+    profile.source_id = source_id
+    profile_path = _DATA_DIR / f"salesforce_profile_{source_id}.json"
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text(json.dumps(asdict(profile), indent=2))
+    logger.info(
+        "Salesforce profile saved for '%s': %d objects profiled",
+        source_id,
+        profile.objects_profiled,
+    )
+
+
+def load_salesforce_profile(source_id: str) -> dict | None:
+    """Return the cached profile dict for *source_id*, or None."""
+    profile_path = _DATA_DIR / f"salesforce_profile_{source_id}.json"
+    if not profile_path.exists():
+        return None
+    try:
+        return json.loads(profile_path.read_text())
+    except Exception:
+        return None
+
+
+def _delete_salesforce_profile(source_id: str) -> None:
+    profile_path = _DATA_DIR / f"salesforce_profile_{source_id}.json"
+    if profile_path.exists():
+        try:
+            profile_path.unlink()
+        except Exception:
+            pass
+
 
 # ── DuckDB ingest helpers ─────────────────────────────────────────────────────
 

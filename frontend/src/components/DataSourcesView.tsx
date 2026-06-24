@@ -13,7 +13,9 @@ import { AW_SAMPLE_DATA, type AWEntityName } from '../data/awSampleData'
 import {
   listSources, addSource, removeSource, syncSource,
   getConnectorBackendDef, CONNECTOR_BACKEND_MAP,
+  getSalesforceProfile, runSalesforceProfile,
   type BackendSource, type ParamField,
+  type SalesforceSchemaProfile, type SalesforceObjectProfile,
 } from '../api/sources'
 import { Mail } from 'lucide-react'
 import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles, analyzeSources, createMetric, addRelation } from '../api/semantic'
@@ -1273,6 +1275,146 @@ function ProfilingPanel({
   )
 }
 
+// ── Salesforce profile panel ──────────────────────────────────────────────────
+
+function NullRateBar({ rate }: { rate: number }) {
+  const pct = Math.round(rate * 100)
+  const cls = pct > 60 ? 'bg-red-400' : pct > 30 ? 'bg-amber-400' : 'bg-teal-400'
+  return (
+    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+        <div className={`h-full rounded-full ${cls}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`text-[10px] font-medium tabular-nums w-7 text-right ${pct > 60 ? 'text-red-600' : pct > 30 ? 'text-amber-600' : 'text-slate-500'}`}>
+        {pct}%
+      </span>
+    </div>
+  )
+}
+
+function SalesforceObjectProfileCard({ obj }: { obj: SalesforceObjectProfile }) {
+  const [open, setOpen] = useState(false)
+  const fields = obj.field_profiles
+  const highNull = fields.filter(f => f.null_rate > 0.6).length
+  const medNull = fields.filter(f => f.null_rate > 0.3 && f.null_rate <= 0.6).length
+  const populated = fields.filter(f => f.null_rate <= 0.3).length
+
+  return (
+    <div className="border border-slate-100 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-slate-800">{obj.object_label}</span>
+            <span className="text-[10px] text-slate-400 font-mono">{obj.object_name}</span>
+            <span className="text-[10px] text-slate-400">· {obj.sample_size} rows sampled</span>
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            {populated > 0 && <span className="text-[10px] bg-teal-50 text-teal-700 border border-teal-100 px-1.5 py-0.5 rounded">{populated} populated</span>}
+            {medNull > 0 && <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded">{medNull} sparse</span>}
+            {highNull > 0 && <span className="text-[10px] bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded">{highNull} mostly empty</span>}
+          </div>
+        </div>
+        {open ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+      </button>
+
+      {open && (
+        <div className="divide-y divide-slate-50">
+          <div className="grid grid-cols-[1fr_80px_1fr_60px] gap-2 px-3 py-1.5 bg-white">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Field</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Type</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Null rate</span>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Distinct</span>
+          </div>
+          {fields.map(f => (
+            <div key={f.field_name} className="grid grid-cols-[1fr_80px_1fr_60px] gap-2 items-center px-3 py-1.5 bg-white hover:bg-slate-50/50">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-slate-700 truncate">{f.field_label}</p>
+                <p className="text-[9px] text-slate-400 font-mono truncate">{f.field_name}</p>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono truncate">{f.field_type}</span>
+              <NullRateBar rate={f.null_rate} />
+              <span className="text-[10px] text-slate-500 tabular-nums text-right">{f.distinct_count}</span>
+            </div>
+          ))}
+          {fields.length === 0 && (
+            <p className="text-xs text-slate-400 text-center py-3">No profilable fields found</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SalesforceProfilePanel({ sourceId }: { sourceId: string }) {
+  const [profile, setProfile] = useState<SalesforceSchemaProfile | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [checked, setChecked] = useState(false)
+
+  useEffect(() => {
+    getSalesforceProfile(sourceId).then(setProfile).catch(() => {}).finally(() => setChecked(true))
+  }, [sourceId])
+
+  const handleRun = async () => {
+    setLoading(true)
+    try {
+      const p = await runSalesforceProfile(sourceId, 500)
+      setProfile(p)
+    } catch {
+      // error shown by toast in parent
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!checked) return null
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3 space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700">Field Quality Profile</p>
+        <button
+          onClick={handleRun}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 hover:text-teal-700 border border-slate-200 hover:border-teal-300 bg-white hover:bg-teal-50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          {loading ? 'Profiling…' : profile ? 'Re-run (500 rows)' : 'Run profile (500 rows)'}
+        </button>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-500" />
+          Sampling 500 rows per object — this may take a minute…
+        </div>
+      )}
+
+      {!loading && !profile && (
+        <p className="text-xs text-slate-400 py-1">
+          No profile yet. Run the profiler to see field null rates, distinct counts, and sample values.
+        </p>
+      )}
+
+      {!loading && profile && (
+        <>
+          <p className="text-[11px] text-slate-400">
+            {profile.objects_profiled} objects · {profile.sample_size_requested} rows/object ·{' '}
+            profiled {new Date(profile.profiled_at).toLocaleDateString('en-US', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </p>
+          <div className="space-y-1.5">
+            {profile.object_profiles.map(obj => (
+              <SalesforceObjectProfileCard key={obj.object_name} obj={obj} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function ConnectedSourcesPanel({
   sources, onDisconnect, onSync, tableProfiles, profilingLoading, onRefreshProfiles,
   qualityRules, onUpdateRule, onRemoveRule,
@@ -1379,6 +1521,11 @@ function ConnectedSourcesPanel({
                 onUpdateRule={onUpdateRule}
                 onRemoveRule={onRemoveRule}
               />
+            )}
+
+            {/* Salesforce field-quality profile */}
+            {s.connector_type === 'salesforce' && s.status === 'active' && (
+              <SalesforceProfilePanel sourceId={s.id} />
             )}
           </div>
         )

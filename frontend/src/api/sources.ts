@@ -235,6 +235,49 @@ export async function refreshSalesforceSchema(sourceId: string): Promise<Salesfo
   return res.data
 }
 
+// ── Salesforce profile API ────────────────────────────────────────────────────
+
+export interface SalesforceFieldProfile {
+  field_name: string
+  field_label: string
+  field_type: string
+  is_relation: boolean
+  populated_count: number
+  total_count: number
+  null_rate: number        // 0.0–1.0
+  distinct_count: number
+  top_values: string[]
+}
+
+export interface SalesforceObjectProfile {
+  object_name: string
+  object_label: string
+  sample_size: number
+  fields_profiled: number
+  field_profiles: SalesforceFieldProfile[]
+  profiled_at: string
+}
+
+export interface SalesforceSchemaProfile {
+  source_id: string
+  sample_size_requested: number
+  objects_profiled: number
+  object_profiles: SalesforceObjectProfile[]
+  profiled_at: string
+}
+
+export async function getSalesforceProfile(sourceId: string): Promise<SalesforceSchemaProfile> {
+  const res = await api.get<SalesforceSchemaProfile>(`/api/salesforce/profile/${encodeURIComponent(sourceId)}`)
+  return res.data
+}
+
+export async function runSalesforceProfile(sourceId: string, sampleSize = 500): Promise<SalesforceSchemaProfile> {
+  const res = await api.post<SalesforceSchemaProfile>(
+    `/api/salesforce/profile/${encodeURIComponent(sourceId)}?sample_size=${sampleSize}`,
+  )
+  return res.data
+}
+
 export function getConnectorBackendDef(connectorId: string): ConnectorBackendDef {
   return CONNECTOR_BACKEND_MAP[connectorId] ?? {
     connector_type: connectorId.replace(/-/g, '_'),

@@ -3173,6 +3173,140 @@ def refresh_salesforce_schema(
     return asdict(schema)
 
 
+@app.get("/api/salesforce/profile/{source_id}")
+def get_salesforce_profile(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Return cached field-quality profiles for a Salesforce source.
+
+    Returns 404 if the profile hasn't been generated yet.
+    Call POST /api/salesforce/profile/{source_id} to generate it.
+    """
+    from .connectors.salesforce_connector import load_salesforce_profile
+
+    profile = load_salesforce_profile(source_id)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No profile found for source '{source_id}'. "
+                "Run POST /api/salesforce/profile/{source_id} to generate it."
+            ),
+        )
+    return profile
+
+
+@app.post("/api/salesforce/profile/{source_id}")
+def run_salesforce_profile(
+    source_id: Annotated[str, _ApiPath(max_length=128)],
+    request: Request,
+    sample_size: int = Query(default=500, ge=50, le=2000),
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Sample real Salesforce data and compute field-quality statistics.
+
+    Fetches up to *sample_size* rows per object (default 500) for the
+    priority SObjects (Account, Contact, Opportunity, …). Raw rows are
+    discarded immediately; only aggregate statistics are persisted:
+      - null_rate      — fraction of rows where the field is empty
+      - distinct_count — number of unique values in the sample
+      - top_values     — up to 10 most frequent non-null values
+
+    No PII is stored. The profile is saved to
+    backend/data/salesforce_profile_{source_id}.json and returned.
+    """
+    from .connectors.salesforce_connector import (
+        SalesforceConnector,
+        SalesforceAuthError,
+        SalesforceProfiler,
+        load_salesforce_config,
+        load_salesforce_schema,
+        save_salesforce_profile,
+    )
+    from dataclasses import asdict as _asdict
+
+    cfg = load_salesforce_config(source_id)
+    if cfg is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No credentials found for source '{source_id}'. Reconnect first.",
+        )
+
+    schema_dict = load_salesforce_schema(source_id)
+    if schema_dict is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No schema found for source '{source_id}'. Connect first to fetch schema.",
+        )
+
+    # Reconstruct schema dataclass from cached JSON
+    from .connectors.salesforce_connector import (
+        SalesforceSchema,
+        SalesforceObject,
+        SalesforceField,
+    )
+
+    schema = SalesforceSchema(
+        instance_url=schema_dict["instance_url"],
+        org_id=schema_dict["org_id"],
+        api_version=schema_dict["api_version"],
+        object_count=schema_dict["object_count"],
+        fetched_at=schema_dict["fetched_at"],
+        objects=[
+            SalesforceObject(
+                name=o["name"],
+                label=o["label"],
+                field_count=o["field_count"],
+                is_custom=o["is_custom"],
+                key_prefix=o["key_prefix"],
+                fields=[
+                    SalesforceField(
+                        name=f["name"],
+                        label=f["label"],
+                        type=f["type"],
+                        is_required=f["is_required"],
+                        is_relation=f["is_relation"],
+                        relation_to=f["relation_to"],
+                    )
+                    for f in o["fields"]
+                ],
+            )
+            for o in schema_dict["objects"]
+        ],
+    )
+
+    try:
+        with SalesforceConnector(
+            instance_url=cfg["instance_url"],
+            client_id=cfg["client_id"],
+            client_secret=cfg["client_secret"],
+            username=cfg["username"],
+            password=cfg["password"],
+            security_token=cfg["security_token"],
+        ) as sf:
+            sf.authenticate()
+            profiler = SalesforceProfiler(sf)
+            profile = profiler.profile_schema(schema, sample_size=sample_size)
+    except SalesforceAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Salesforce profiling failed: {exc}",
+        )
+
+    save_salesforce_profile(source_id, profile)
+    _audit(
+        request,
+        current_user,
+        "Ran Salesforce field profile",
+        f"{source_id} (sample={sample_size})",
+        category="config",
+    )
+    return _asdict(profile)
+
+
 # ── Semantic definitions CRUD ─────────────────────────────────────────────────
 
 
