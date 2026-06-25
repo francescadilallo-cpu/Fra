@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (GraphRAG — fallback fuzzy nel linking, zero dipendenze)
+
+Via di mezzo per il recall del table-linking senza appesantire Render: il match della domanda ai nodi del KG ora ha un **fallback fuzzy** (stdlib `difflib`, nessuna dipendenza/memoria) oltre a esatto + singolare/plurale + sinonimi. Cattura refusi/varianti (es. "custmers"→`customers`) senza falsi positivi (cutoff 0.86, solo per token altrimenti non matchati).
+
+### `backend/app/semantic/graph_rag.py`
+- `_FUZZY_CUTOFF=0.86` + `difflib.get_close_matches` come fallback nel linking.
+
+### Test
+- `test_graph_rag`: fuzzy match su refuso; nessun over-match su parola estranea. Suite completa **1203 passed**.
+
+Nota: per terminologie *molto* diverse dai nomi tecnici resta il canale vettoriale (rinviato; valutarlo se il recall su dati reali non basta).
+
+---
+
 ## 2026-06-25 (Schema prompt — selezione tabelle guidata dal GraphRAG)
 
 Risolto il limite strutturale del cap fisso: con più fonti fuse il totale tabelle supera qualsiasi N, e includere "le prime N" lasciava fuori dal prompt la tabella che serve. Ora lo schema del prompt LLM-SQL è **scoped alla domanda**.

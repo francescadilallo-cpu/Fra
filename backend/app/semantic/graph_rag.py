@@ -12,12 +12,17 @@ nothing matches, so callers can append it unconditionally.
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any
 
 _MIN_TOKEN = 3
 _MAX_NODES = 8
 _MAX_EDGES_PER_NODE = 6
+# Conservative similarity for the fuzzy fallback (catches typos/morphological
+# variants like "custmers"→"customers" without false positives). Stdlib only —
+# no embeddings/dependencies, so it stays light on memory-bounded deployments.
+_FUZZY_CUTOFF = 0.86
 
 # Small stopword set (EN + a few IT) so generic words don't match node labels.
 _STOPWORDS = {
@@ -167,8 +172,18 @@ def build_graph_context(
     for label, node_id in label_to_node.items():
         if " " in label and label in q_lower:
             _add(node_id)
+    # Exact (with singular/plural) match, then a conservative fuzzy fallback for
+    # tokens that didn't match — catches typos / morphological variants.
+    label_keys = list(label_to_node.keys())
     for tok in tokens:
-        _add(_match(tok))
+        nid = _match(tok)
+        if nid is None:
+            close = difflib.get_close_matches(
+                tok, label_keys, n=1, cutoff=_FUZZY_CUTOFF
+            )
+            if close:
+                nid = label_to_node.get(close[0])
+        _add(nid)
 
     # Drop hidden-table nodes; cap.
     visible = [

@@ -82,3 +82,15 @@ class TestBuildGraphContext:
         kg = _sample_kg()
         gr = build_graph_context(kg, "unrelated weather forecast")
         assert gr["tables"] == []
+
+    def test_fuzzy_matches_typo(self):
+        kg = _sample_kg()
+        # "custmers" (typo) should still link to the customers table.
+        gr = build_graph_context(kg, "show custmers")
+        assert "customers" in set(gr["tables"])
+
+    def test_fuzzy_does_not_overmatch(self):
+        kg = _sample_kg()
+        # A clearly unrelated word must not fuzzy-link to any node.
+        gr = build_graph_context(kg, "weather")
+        assert gr["nodes"] == [] and gr["tables"] == []
