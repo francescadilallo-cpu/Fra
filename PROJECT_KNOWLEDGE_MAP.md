@@ -226,6 +226,24 @@ Nota compatibilita HTTP:
 - endpoint /api/agent/execute usa HTTP 422 con costante aggiornata `HTTP_422_UNPROCESSABLE_CONTENT` per compatibilita con stack FastAPI/Starlette recenti
 
 
+### 3.8-ter Auto-build pipeline (Contesto → Fonti → KG/Semantic Layer)
+
+File:
+
+- backend/app/pipeline/runs.py — `PipelineRun`/`StageStatus` + `PipelineRunStore` (in-process, thread-safe)
+- backend/app/pipeline/orchestrator.py — `run_build_pipeline()` orchestra i 5 stadi
+- backend/app/context/doc_analyzer.py — `analyze_documents()` estrae priors dai documenti
+- backend/app/semantic/apply.py — `apply_proposal()` persiste la proposta nel modello durevole
+- backend/app/agentic/verifier.py — `verify_model()` stub controlli consistenza
+
+Responsabilita:
+
+- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione (stub), (5) verifica agenti (stub)
+- colma il gap proposta→apply: `/api/semantic/analyze` proponeva soltanto; ora la pipeline scrive relazioni/metriche/descrizioni nel modello e ricostruisce KG+SL
+- multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
+- endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`
+- frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio
+
 ### 3.9 Query engine legacy LLM-to-SQL
 
 Stato:

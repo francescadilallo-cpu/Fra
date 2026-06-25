@@ -454,6 +454,33 @@ export const buildSemanticLayer = (signal?: AbortSignal, force = false): Promise
 export const getDraft = (): Promise<SemanticDraft> =>
   http.get<SemanticDraft>('/api/semantic/draft').then(r => r.data)
 
+// ── Auto-build pipeline (Context → Sources → KG/Semantic Layer) ───────────────
+
+export type PipelineStageState = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+
+export interface PipelineStage {
+  name: string
+  state: PipelineStageState
+  detail: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface PipelineRun {
+  id: string | null
+  stages: PipelineStage[]
+  started_at?: string
+  finished_at?: string | null
+  ok: boolean
+  running: boolean
+}
+
+export const runPipeline = (signal?: AbortSignal): Promise<PipelineRun> =>
+  http.post<PipelineRun>('/api/pipeline/run', undefined, { signal }).then(r => r.data)
+
+export const getPipelineStatus = (): Promise<PipelineRun> =>
+  http.get<PipelineRun>('/api/pipeline/status').then(r => r.data)
+
 export const patchDraftEntity = (
   name: string,
   updates: { user_description?: string; context_notes?: string },

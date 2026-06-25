@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Auto-build pipeline — Contesto → Fonti → KG/Semantic Layer)
+
+Scheletro della pipeline che costruisce automaticamente Knowledge Graph + Semantic Layer a partire da **documenti di contesto + fonti dati**. Orchestrazione server-side a 5 stadi con stato per-stadio; stadi 1–3 funzionanti (auto-applicati), 4–5 stub. Colmato il gap chiave: la proposta dell'LLM (`/api/semantic/analyze`) ora viene davvero **applicata** al modello, non più solo mostrata.
+
+### Nuovi moduli backend
+- `backend/app/pipeline/runs.py` — `StageStatus` / `PipelineRun` + `PipelineRunStore` (in-process, thread-safe).
+- `backend/app/pipeline/orchestrator.py` — `run_build_pipeline()`: contesto → fonti → analyze(priors) → apply → `reload_semantic()` → template; stadi 4–5 stub; degrade graceful per stadio.
+- `backend/app/context/doc_analyzer.py` — `analyze_documents()`: estrae glossario/entità/metriche/dominio dai documenti caricati, li persiste nel context store e li restituisce come *priors*. Degrada senza LLM.
+- `backend/app/semantic/apply.py` — `apply_proposal()`: persiste relazioni (`add_manual_relation`), metriche (`sl_metrics`) e descrizioni entità (`save_entity_draft`). Idempotente, filtro per confidence.
+- `backend/app/agentic/verifier.py` — `verify_model()`: stub controlli consistenza (relazioni verso tabelle inesistenti, entità senza colonne).
+
+### `backend/app/semantic/analyzer.py`
+- `analyze()` accetta `priors` opzionali; nuovo `_priors_block()` inietta il vocabolario di business nel prompt.
+
+### `backend/app/main.py`
+- `POST /api/pipeline/run` (auto-applica, executor, 409 se già in corso) e `GET /api/pipeline/status`.
+
+### Frontend
+- `frontend/src/api/semantic.ts` — `runPipeline()` / `getPipelineStatus()` + tipi `PipelineRun`/`PipelineStage`.
+- `frontend/src/components/PipelineView.tsx` — vista "Auto-Build" con avanzamento per-stadio (polling) + link alla preview del modello. Wording neutro (no jargon) per utenti live.
+- `Layout.tsx` / `App.tsx` / `types/index.ts` — nuovo tab `pipeline` ("Auto-Build") nel gruppo Model.
+
+### Test
+- `backend/tests/test_pipeline.py` — 17 test: state machine, apply (relazioni/entità, idempotenza, confidence), doc analyzer graceful, priors block, verifier.
+
+---
+
 ## 2026-06-24 (Salesforce — OAuth 2.0 Authorization Code + PKCE, MFA-compatible)
 
 Sostituito il flusso username-password (deprecato da Salesforce, incompatibile con MFA) con Authorization Code + PKCE. Nessuna password viene più memorizzata.

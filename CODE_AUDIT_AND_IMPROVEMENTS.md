@@ -587,3 +587,18 @@ Impatto:
 - creato file di recap evolutivo richiesto: `RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md`
 - include funzionalita introdotte, hardening, agentic layer, coverage test e stato operativo corrente
 
+
+## 12) Auto-build pipeline (2026-06-25) — stato e follow-up
+
+Introdotto lo scheletro della pipeline auto-build (`backend/app/pipeline/`, `context/doc_analyzer.py`, `semantic/apply.py`, `agentic/verifier.py`). Stadi 1–3 funzionanti e auto-applicati, 4–5 stub.
+
+Miglioramento risolto:
+- la proposta Smart-Connect ora viene **applicata** (relazioni/metriche/descrizioni) e non più solo mostrata: `/api/semantic/analyze` produceva una proposta mai scritta nel KG/SL.
+
+Follow-up noti (debito intenzionale dello scheletro):
+- stadio 4 (integrazione conversazionale/manuale): solo hook, marcato `skipped`.
+- stadio 5 (`verify_model`): solo controlli deterministici minimi; manca il giro agentico reale (critica LLM, replay golden questions, faithfulness).
+- due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
+- `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).
+- match proposta→entità per descrizione fatto via `table`: verificare allineamento nomi su build multi-fonte.
+

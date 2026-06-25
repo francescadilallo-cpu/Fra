@@ -43,6 +43,7 @@ const NAV_STAGES: NavStage[] = [
     id: 'model',
     label: 'Model',
     items: [
+      { id: 'pipeline',   label: 'Auto-Build',   icon: Sparkles },
       { id: 'ontology',   label: 'Entity Graph', icon: GitBranch },
       { id: 'builder',    label: 'Builder AI',   icon: Wand2 },
       { id: 'sembuilder', label: 'Data Model',   icon: Network },

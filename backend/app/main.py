@@ -3835,6 +3835,60 @@ async def build_semantic_layer(
     return _get_semantic_draft(_hidden_demo_tables(current_user))
 
 
+# ── Auto-build pipeline endpoints (Context → Sources → KG/Semantic Layer) ─────
+
+
+@app.post(
+    "/api/pipeline/run",
+    tags=["pipeline"],
+    summary="Run the auto-build pipeline: documents + sources → KG + Semantic Layer",
+)
+async def run_pipeline_endpoint(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Orchestrate the 5-stage auto-build flow and return the completed run.
+
+    Stages 1–3 (context → sources → build) run and AUTO-APPLY the inferred model
+    to the live KG + Semantic Layer; stages 4–5 are stubs for now. Runs in a
+    worker thread so the event loop stays responsive (like build_semantic_layer).
+    """
+    import asyncio
+
+    from .pipeline.orchestrator import run_build_pipeline
+    from .pipeline.runs import default_run_store
+
+    if default_run_store.is_running():
+        raise HTTPException(
+            status_code=409, detail="A pipeline run is already in progress"
+        )
+
+    hidden = _hidden_demo_tables(current_user)
+    loop = asyncio.get_event_loop()
+    run = await loop.run_in_executor(
+        None,
+        lambda: run_build_pipeline(
+            mode=current_user.mode, hidden=hidden, store=default_run_store
+        ),
+    )
+    return run.to_dict()
+
+
+@app.get(
+    "/api/pipeline/status",
+    tags=["pipeline"],
+    summary="Status of the current/most-recent auto-build pipeline run",
+)
+def pipeline_status_endpoint(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    from .pipeline.runs import default_run_store
+
+    run = default_run_store.current_or_last()
+    if run is None:
+        return {"id": None, "stages": [], "running": False, "ok": False}
+    return run.to_dict()
+
+
 @app.get(
     "/api/semantic/draft",
     tags=["semantic"],
