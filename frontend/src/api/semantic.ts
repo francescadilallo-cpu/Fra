@@ -466,6 +466,24 @@ export interface PipelineStage {
   finished_at: string | null
 }
 
+export interface VerificationWarning {
+  type: string
+  severity: 'high' | 'medium' | 'low' | 'info'
+  detail: string
+}
+
+export interface VerificationReport {
+  ok: boolean
+  warnings: VerificationWarning[]
+  advisory: VerificationWarning[]
+  summary: Record<string, number>
+}
+
+export interface PipelineReport {
+  applied?: { relations: number; entities: number; metrics: number }
+  verification?: VerificationReport
+}
+
 export interface PipelineRun {
   id: string | null
   stages: PipelineStage[]
@@ -473,6 +491,7 @@ export interface PipelineRun {
   finished_at?: string | null
   ok: boolean
   running: boolean
+  report?: PipelineReport
 }
 
 export const runPipeline = (signal?: AbortSignal): Promise<PipelineRun> =>
@@ -480,6 +499,17 @@ export const runPipeline = (signal?: AbortSignal): Promise<PipelineRun> =>
 
 export const getPipelineStatus = (): Promise<PipelineRun> =>
   http.get<PipelineRun>('/api/pipeline/status').then(r => r.data)
+
+export interface IntegrateResult {
+  ops: Array<Record<string, unknown>>
+  applied: string[]
+  counts: { relations: number; entities: number; metrics: number }
+  llm_used: boolean
+  draft: SemanticDraft
+}
+
+export const integrateModel = (instruction: string): Promise<IntegrateResult> =>
+  http.post<IntegrateResult>('/api/semantic/integrate', { instruction }).then(r => r.data)
 
 export const patchDraftEntity = (
   name: string,

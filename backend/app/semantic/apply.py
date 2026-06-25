@@ -87,58 +87,106 @@ def _apply_entity_descriptions(proposal: dict, catalog: Any) -> int:
     return applied
 
 
-def _apply_metrics(proposal: dict, sector_id: str) -> int:
-    """Insert proposed metrics into the sector-scoped ``sl_metrics`` store."""
+def insert_sl_metric(
+    name: str,
+    formula: str,
+    description: str = "",
+    unit: str = "",
+    sector_id: str = "manufacturing",
+) -> bool:
+    """Insert one metric into the sector-scoped ``sl_metrics`` store.
+
+    Idempotent on (sector_id, name): returns False if name/formula are empty or
+    the metric already exists. Shared by the build stage and conversational
+    integration so both write metrics the same way.
+    """
+    name = (name or "").strip()
+    formula = (formula or "").strip()
+    if not name or not formula:
+        return False
     from ..database import get_connection
 
     conn = get_connection()
     try:
-        existing = {
-            row[0].lower()
-            for row in conn.execute(
-                "SELECT name FROM sl_metrics WHERE sector_id=?", (sector_id,)
-            ).fetchall()
-        }
-        applied = 0
-        for m in proposal.get("metrics", []) or []:
-            if float(m.get("confidence", 0)) < _MIN_CONFIDENCE:
-                continue
-            name = (m.get("name") or "").strip()
-            formula = (m.get("formula") or "").strip()
-            if not name or not formula or name.lower() in existing:
-                continue
-            conn.execute(
-                """INSERT INTO sl_metrics
-                   (id, sector_id, name, description, type, entity, field, numerator,
-                    denominator, expression, filters_json, time_dimension, grains_json,
-                    format, status, owner, tags_json, is_builtin)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)""",
-                (
-                    f"m-{uuid.uuid4().hex[:12]}",
-                    sector_id,
-                    name,
-                    (m.get("description") or "").strip(),
-                    "derived",
-                    "",
-                    "",
-                    "",
-                    "",
-                    formula,
-                    json.dumps([]),
-                    "",
-                    json.dumps(["month", "quarter", "year"]),
-                    "currency" if (m.get("unit") or "").strip() else "number",
-                    "draft",
-                    "auto",
-                    json.dumps(["auto"]),
-                ),
-            )
-            existing.add(name.lower())
-            applied += 1
+        exists = conn.execute(
+            "SELECT 1 FROM sl_metrics WHERE sector_id=? AND lower(name)=lower(?)",
+            (sector_id, name),
+        ).fetchone()
+        if exists:
+            return False
+        conn.execute(
+            """INSERT INTO sl_metrics
+               (id, sector_id, name, description, type, entity, field, numerator,
+                denominator, expression, filters_json, time_dimension, grains_json,
+                format, status, owner, tags_json, is_builtin)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)""",
+            (
+                f"m-{uuid.uuid4().hex[:12]}",
+                sector_id,
+                name,
+                (description or "").strip(),
+                "derived",
+                "",
+                "",
+                "",
+                "",
+                formula,
+                json.dumps([]),
+                "",
+                json.dumps(["month", "quarter", "year"]),
+                "currency" if (unit or "").strip() else "number",
+                "draft",
+                "auto",
+                json.dumps(["auto"]),
+            ),
+        )
         conn.commit()
-        return applied
+        return True
     finally:
         conn.close()
+
+
+def _apply_metrics(proposal: dict, sector_id: str) -> int:
+    """Insert proposed metrics into the sector-scoped ``sl_metrics`` store."""
+    applied = 0
+    for m in proposal.get("metrics", []) or []:
+        if float(m.get("confidence", 0)) < _MIN_CONFIDENCE:
+            continue
+        if insert_sl_metric(
+            m.get("name", ""),
+            m.get("formula", ""),
+            m.get("description", ""),
+            m.get("unit", ""),
+            sector_id,
+        ):
+            applied += 1
+    return applied
+
+
+def merge_proposal_metrics_into_draft(
+    draft_metrics: list[dict], extra_metrics: list[dict]
+) -> list[dict]:
+    """Merge extra metrics (proposal/conversational) into draft metrics by name.
+
+    Lets template generation cover freshly-added metrics that live in
+    ``sl_metrics`` rather than the catalog's draft-metric store.
+    """
+    seen = {(m.get("name") or "").lower() for m in draft_metrics}
+    merged = list(draft_metrics)
+    for m in extra_metrics or []:
+        name = (m.get("name") or "").strip()
+        if name and name.lower() not in seen:
+            merged.append(
+                {
+                    "name": name,
+                    "label": name,
+                    "description": m.get("description", ""),
+                    "formula": m.get("formula", ""),
+                    "unit": m.get("unit", ""),
+                }
+            )
+            seen.add(name.lower())
+    return merged
 
 
 def apply_proposal(

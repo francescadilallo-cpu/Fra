@@ -21,6 +21,7 @@ from app.context.store import ContextStore
 from app.pipeline.runs import STAGE_SEQUENCE, PipelineRun, PipelineRunStore
 from app.semantic.analyzer import _priors_block
 from app.semantic.apply import _apply_entity_descriptions, _apply_relations
+from app.semantic.integrate import _sanitize_ops, apply_ops, interpret_instruction
 
 
 # ── PipelineRun state machine ─────────────────────────────────────────────────
@@ -235,3 +236,109 @@ class TestVerifier:
         }
         report = verify_model(draft)
         assert report["ok"] is True
+
+
+# ── verification (schema-aware deep checks) ───────────────────────────────────
+
+
+class TestVerifierDeep:
+    schema = {
+        "orders": {"columns": [{"name": "id"}, {"name": "total"}, {"name": "cust_id"}]},
+        "customers": {"columns": [{"name": "id"}, {"name": "name"}]},
+    }
+
+    def test_metric_unknown_reference(self):
+        draft = {
+            "entities": [{"name": "Order", "table": "orders", "columns": ["id"]}],
+            "metrics": [{"name": "Rev", "formula": "SUM(orders.ghost)"}],
+            "relations": [],
+        }
+        report = verify_model(draft, schema_info=self.schema)
+        assert any(w["type"] == "metric_unknown_reference" for w in report["warnings"])
+
+    def test_relation_unknown_column(self):
+        draft = {
+            "entities": [
+                {"name": "Order", "table": "orders", "columns": ["id"]},
+                {"name": "Customer", "table": "customers", "columns": ["id"]},
+            ],
+            "metrics": [],
+            "relations": [
+                {"from_table": "orders", "to_table": "customers", "via_column": "nope"}
+            ],
+        }
+        report = verify_model(draft, schema_info=self.schema)
+        assert any(w["type"] == "relation_unknown_column" for w in report["warnings"])
+
+    def test_duplicate_entity_table(self):
+        draft = {
+            "entities": [
+                {"name": "Order", "table": "orders", "columns": ["id"]},
+                {"name": "Sale", "table": "orders", "columns": ["id"]},
+            ],
+            "metrics": [],
+            "relations": [],
+        }
+        report = verify_model(draft)
+        assert any(w["type"] == "duplicate_entity_table" for w in report["warnings"])
+
+
+# ── conversational integration (interpret + apply ops) ────────────────────────
+
+
+class TestIntegrate:
+    def test_sanitize_filters_invalid(self):
+        raw = {
+            "ops": [
+                {"op": "delete_everything"},  # not allowed
+                {
+                    "op": "add_relation",
+                    "from_table": "orders",
+                    "to_table": "orders",
+                },  # self-loop
+                {
+                    "op": "add_relation",
+                    "from_table": "orders",
+                    "to_table": "customers",
+                    "via_column": "cust_id",
+                },
+                {"op": "add_metric", "name": "Rev"},  # missing formula
+                {"op": "add_metric", "name": "Rev", "formula": "SUM(orders.total)"},
+            ]
+        }
+        ops = _sanitize_ops(raw, {"orders", "customers"}, {"Order", "Customer"})
+        kinds = [o["op"] for o in ops]
+        assert kinds == ["add_relation", "add_metric"]
+
+    def test_sanitize_rejects_unknown_tables(self):
+        raw = {"ops": [{"op": "add_relation", "from_table": "a", "to_table": "b"}]}
+        assert _sanitize_ops(raw, {"orders"}, set()) == []
+
+    def test_interpret_no_llm(self):
+        # No LLM provider configured in test env → graceful empty ops.
+        out = interpret_instruction("link orders to customers", {"entities": []})
+        assert out["ops"] == [] and out["llm_used"] is False
+
+    def test_apply_ops_relation_and_description(self):
+        cat = FakeCatalog(
+            entities=[
+                {"name": "Customer", "table": "customers", "user_description": ""}
+            ]
+        )
+        ops = [
+            {
+                "op": "add_relation",
+                "from_table": "orders",
+                "to_table": "customers",
+                "via_column": "cust_id",
+            },
+            {
+                "op": "set_entity_description",
+                "entity": "customers",
+                "description": "Buyers",
+            },
+        ]
+        result = apply_ops(ops, catalog=cat, sector_id="manufacturing")
+        assert result["counts"]["relations"] == 1
+        assert result["counts"]["entities"] == 1
+        assert cat.descriptions["Customer"] == "Buyers"

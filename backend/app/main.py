@@ -3889,6 +3889,69 @@ def pipeline_status_endpoint(
     return run.to_dict()
 
 
+class IntegrateRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=2000)
+
+
+@app.post(
+    "/api/semantic/integrate",
+    tags=["pipeline"],
+    summary="Refine the data model from a plain-language instruction (stage 4)",
+)
+def integrate_model(
+    body: IntegrateRequest,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Conversational integration: interpret an NL instruction into additive
+    model edits (relations, entity descriptions, metrics), apply them, refresh
+    templates, and return what changed plus the updated draft."""
+    from .semantic.integrate import apply_ops, interpret_instruction
+
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Data model not ready — connect a data source and run setup first",
+        )
+
+    hidden = _hidden_demo_tables(current_user)
+    draft = _get_semantic_draft(hidden)
+    interpreted = interpret_instruction(body.instruction, draft)
+    ops = interpreted["ops"]
+    result = apply_ops(ops, catalog=catalog, sector_id="manufacturing")
+
+    # Refresh query templates so freshly-added metrics become answerable.
+    if result["added_metrics"]:
+        from .semantic.apply import merge_proposal_metrics_into_draft
+
+        layer = _semantic_state.get("layer")
+        fresh = _get_semantic_draft(hidden)
+        augmented = dict(fresh)
+        augmented["metrics"] = merge_proposal_metrics_into_draft(
+            fresh.get("metrics", []), result["added_metrics"]
+        )
+        auto_tpls = generate_templates_from_draft(augmented)
+        catalog.upsert_auto_templates(auto_tpls)
+        if layer is not None:
+            layer.set_templates(catalog.list_templates())
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
+
+    return {
+        "ops": ops,
+        "applied": result["applied"],
+        "counts": result["counts"],
+        "llm_used": interpreted["llm_used"],
+        "draft": _get_semantic_draft(hidden),
+    }
+
+
 @app.get(
     "/api/semantic/draft",
     tags=["semantic"],

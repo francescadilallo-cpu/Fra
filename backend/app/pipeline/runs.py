@@ -63,6 +63,8 @@ class PipelineRun:
     started_at: str = field(default_factory=_utcnow)
     finished_at: str | None = None
     ok: bool = False
+    # Verification report (stage 5) and applied-counts summary (stage 3).
+    report: dict[str, Any] = field(default_factory=dict)
     # monotonic timestamp for eviction; not serialised
     _touched: float = field(default_factory=time.monotonic, repr=False)
 
@@ -116,6 +118,7 @@ class PipelineRun:
             "finished_at": self.finished_at,
             "ok": self.ok,
             "running": self.running,
+            "report": self.report,
         }
 
 

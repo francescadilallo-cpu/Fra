@@ -595,9 +595,13 @@ Introdotto lo scheletro della pipeline auto-build (`backend/app/pipeline/`, `con
 Miglioramento risolto:
 - la proposta Smart-Connect ora viene **applicata** (relazioni/metriche/descrizioni) e non più solo mostrata: `/api/semantic/analyze` produceva una proposta mai scritta nel KG/SL.
 
-Follow-up noti (debito intenzionale dello scheletro):
-- stadio 4 (integrazione conversazionale/manuale): solo hook, marcato `skipped`.
-- stadio 5 (`verify_model`): solo controlli deterministici minimi; manca il giro agentico reale (critica LLM, replay golden questions, faithfulness).
+Aggiornamento 2026-06-25 (stadi 4–5 completati):
+- stadio 4: integrazione conversazionale reale (`semantic/integrate.py` + `POST /api/semantic/integrate`), ops additive sanificate.
+- stadio 5: `verify_model()` con controlli reali schema-aware + critica LLM opzionale; report in `PipelineRun.report`.
+
+Follow-up residui:
+- verifica: manca ancora replay golden questions + faithfulness scoring (TODO esplicito nel modulo).
+- integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
 - due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
 - `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).
 - match proposta→entità per descrizione fatto via `table`: verificare allineamento nomi su build multi-fonte.

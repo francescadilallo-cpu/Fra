@@ -10,6 +10,32 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Pipeline — stadio 4 integrazione conversazionale + stadio 5 verifica)
+
+Completati i due stadi prima stub. La pipeline ora copre l'intero flusso a 5 stadi.
+
+### Stadio 4 — integrazione conversazionale (`backend/app/semantic/integrate.py`)
+- `interpret_instruction()` traduce un'istruzione in linguaggio naturale in operazioni *additive* (add_relation / set_entity_description / add_metric), sanificate contro tabelle/entità reali; degrada senza LLM.
+- `apply_ops()` applica le operazioni riusando gli store durevoli (`add_manual_relation`, `save_entity_draft`, `insert_sl_metric`).
+- `POST /api/semantic/integrate`: interpreta → applica → rigenera i template → ritorna le modifiche + draft aggiornato.
+
+### Stadio 5 — verifica affidabilità/consistenza (`backend/app/agentic/verifier.py`)
+- `verify_model()` ora fa controlli reali schema-aware: relazioni verso tabelle/colonne inesistenti, metriche con riferimenti `table.column` inesistenti, entità duplicate/senza colonne, metriche senza formula. Severità high/medium/low.
+- Critica LLM opzionale (advisory), graceful senza provider.
+- L'orchestratore esegue la verifica (stadio 5) e incorpora il report in `PipelineRun.report`; stadio 4 marcato come abilitato.
+
+### `backend/app/semantic/apply.py`
+- Estratti helper condivisi `insert_sl_metric()` e `merge_proposal_metrics_into_draft()` (riusati da build + integrazione).
+
+### Frontend
+- `api/semantic.ts`: `integrateModel()` + tipi `VerificationReport`/`PipelineReport`; `PipelineRun.report`.
+- `PipelineView.tsx`: pannello report di verifica (warning + advisory) e box "Refine by instruction".
+
+### Test
+- `backend/tests/test_pipeline.py`: +7 test (verifica schema-aware, sanitize/apply ops). Totale 24; suite completa 1160 passed.
+
+---
+
 ## 2026-06-25 (Auto-build pipeline — Contesto → Fonti → KG/Semantic Layer)
 
 Scheletro della pipeline che costruisce automaticamente Knowledge Graph + Semantic Layer a partire da **documenti di contesto + fonti dati**. Orchestrazione server-side a 5 stadi con stato per-stadio; stadi 1–3 funzionanti (auto-applicati), 4–5 stub. Colmato il gap chiave: la proposta dell'LLM (`/api/semantic/analyze`) ora viene davvero **applicata** al modello, non più solo mostrata.

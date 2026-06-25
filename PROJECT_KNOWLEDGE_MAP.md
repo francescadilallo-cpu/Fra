@@ -233,16 +233,17 @@ File:
 - backend/app/pipeline/runs.py — `PipelineRun`/`StageStatus` + `PipelineRunStore` (in-process, thread-safe)
 - backend/app/pipeline/orchestrator.py — `run_build_pipeline()` orchestra i 5 stadi
 - backend/app/context/doc_analyzer.py — `analyze_documents()` estrae priors dai documenti
-- backend/app/semantic/apply.py — `apply_proposal()` persiste la proposta nel modello durevole
-- backend/app/agentic/verifier.py — `verify_model()` stub controlli consistenza
+- backend/app/semantic/apply.py — `apply_proposal()` persiste la proposta; helper condivisi `insert_sl_metric()`/`merge_proposal_metrics_into_draft()`
+- backend/app/semantic/integrate.py — stadio 4: `interpret_instruction()`/`apply_ops()` (integrazione conversazionale, ops additive)
+- backend/app/agentic/verifier.py — stadio 5: `verify_model()` controlli reali schema-aware + critica LLM opzionale
 
 Responsabilita:
 
-- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione (stub), (5) verifica agenti (stub)
+- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione conversazionale/manuale, (5) verifica consistenza (report in `PipelineRun.report`)
 - colma il gap proposta→apply: `/api/semantic/analyze` proponeva soltanto; ora la pipeline scrive relazioni/metriche/descrizioni nel modello e ricostruisce KG+SL
 - multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
-- endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`
-- frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio
+- endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)
+- frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio, report di verifica e box "Refine by instruction"
 
 ### 3.9 Query engine legacy LLM-to-SQL
 

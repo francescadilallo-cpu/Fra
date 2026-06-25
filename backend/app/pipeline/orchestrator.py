@@ -103,7 +103,10 @@ def run_build_pipeline(
     else:
         try:
             from ..semantic.analyzer import analyze  # noqa: PLC0415
-            from ..semantic.apply import apply_proposal  # noqa: PLC0415
+            from ..semantic.apply import (  # noqa: PLC0415
+                apply_proposal,
+                merge_proposal_metrics_into_draft,
+            )
             from ..semantic.template_generator import (  # noqa: PLC0415
                 generate_templates_from_draft,
             )
@@ -126,13 +129,14 @@ def run_build_pipeline(
             n_tpl = 0
             if catalog is not None and layer is not None:
                 augmented = dict(draft)
-                augmented["metrics"] = _merge_metrics(
+                augmented["metrics"] = merge_proposal_metrics_into_draft(
                     draft.get("metrics", []), proposal.get("metrics", [])
                 )
                 auto_tpls = generate_templates_from_draft(augmented)
                 n_tpl = catalog.upsert_auto_templates(auto_tpls)
                 layer.set_templates(catalog.list_templates())
 
+            run.report["applied"] = applied
             run.finish(
                 STAGE_BUILD,
                 f"applied {applied['relations']} relations, "
@@ -143,25 +147,30 @@ def run_build_pipeline(
             logger.error("pipeline build stage failed: %s", exc, exc_info=True)
             run.fail(STAGE_BUILD, str(exc))
 
-    # ── Stage 4: integration (STUB) ──────────────────────────────────────────
-    run.skip(
+    # ── Stage 4: integration ─────────────────────────────────────────────────
+    # Integration is interactive (manual editor + conversational endpoint), so
+    # the batch run just confirms it's enabled rather than performing edits.
+    run.finish(
         STAGE_INTEGRATION,
-        "Manual/conversational integration not yet automated — edit in the UI.",
+        "Model open for refinement — edit it directly or use 'Refine by instruction'.",
     )
 
-    # ── Stage 5: verification (STUB) ─────────────────────────────────────────
+    # ── Stage 5: verification ────────────────────────────────────────────────
     run.start(STAGE_VERIFICATION)
     try:
         from ..agentic.verifier import verify_model  # noqa: PLC0415
 
         if not draft:
             draft = _get_semantic_draft(hidden)
-        report = verify_model(draft)
-        run.skip(
-            STAGE_VERIFICATION,
-            f"{report['summary']['warnings']} warnings (stub checks). "
-            "Full agentic verification pending.",
+        report = verify_model(draft, schema_info=schema_info or None, use_llm=True)
+        run.report["verification"] = report
+        summary = report["summary"]
+        detail = (
+            f"{summary['warnings']} warnings "
+            f"({summary['blocking']} blocking), {summary['advisory']} advisory notes"
         )
+        # Blocking issues are surfaced in the report but don't hard-fail the run.
+        run.finish(STAGE_VERIFICATION, detail)
     except Exception as exc:  # noqa: BLE001
         logger.warning("pipeline verification stage failed: %s", exc, exc_info=True)
         run.fail(STAGE_VERIFICATION, str(exc))
@@ -169,25 +178,3 @@ def run_build_pipeline(
     run.complete()
     store.set_current(run)
     return run
-
-
-def _merge_metrics(
-    draft_metrics: list[dict], proposal_metrics: list[dict]
-) -> list[dict]:
-    """Merge proposal metrics into draft metrics (dedupe by name) so template
-    generation covers the freshly-proposed metrics too."""
-    by_name = {m.get("name", "").lower(): m for m in draft_metrics}
-    merged = list(draft_metrics)
-    for m in proposal_metrics or []:
-        name = (m.get("name") or "").strip()
-        if name and name.lower() not in by_name:
-            merged.append(
-                {
-                    "name": name,
-                    "label": name,
-                    "description": m.get("description", ""),
-                    "formula": m.get("formula", ""),
-                    "unit": m.get("unit", ""),
-                }
-            )
-    return merged
