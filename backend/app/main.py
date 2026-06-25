@@ -10,6 +10,7 @@ import math as _math
 import secrets as _secrets
 import sqlite3 as _sqlite3
 import logging
+import logging.handlers
 import os
 import re
 import threading
@@ -70,6 +71,53 @@ from .workspace.router import router as workspace_router
 from .context.store import default_store as _context_store
 
 load_dotenv()
+
+
+def _configure_logging() -> None:
+    """Set up console + rotating-file logging for the Fra backend.
+
+    Environment variables:
+      LOG_LEVEL   — Python level name (DEBUG/INFO/WARNING/ERROR). Default: INFO.
+      LOG_DIR     — Directory for log files. Default: backend/logs/ next to this file.
+      LOG_TO_FILE — Set to 'false' to disable file logging (console only). Default: true.
+    """
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # Console handler — always on
+    if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+               for h in root.handlers):
+        console = logging.StreamHandler()
+        console.setFormatter(fmt)
+        root.addHandler(console)
+
+    # Rotating file handler
+    if os.getenv("LOG_TO_FILE", "true").lower() not in ("0", "false", "no"):
+        log_dir = Path(os.getenv("LOG_DIR", Path(__file__).parent.parent / "logs"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "fra.log",
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(fmt)
+        root.addHandler(file_handler)
+
+    # Quiet noisy third-party loggers
+    for noisy in ("httpx", "httpcore", "uvicorn.access", "multipart"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+_configure_logging()
 logger = logging.getLogger(__name__)
 
 

@@ -35,5 +35,8 @@ frontend/dist/
 backend/.env
 frontend/.env.local
 
+# Logs
+backend/logs/
+
 # OS
 .DS_Store
