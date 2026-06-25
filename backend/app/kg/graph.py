@@ -487,6 +487,54 @@ class KnowledgeGraph:
             self._g.number_of_edges(),
         )
 
+    def _table_node(self, table: str) -> str:
+        """Return a table-level node id for *table*, creating a minimal schema
+        node if none exists. Reuses the ``{table}:__schema__`` node from
+        build_from_schema when present so manual edges attach to the same node."""
+        schema_id = f"{table}:__schema__"
+        if schema_id not in self._g:
+            self._add_node(
+                schema_id,
+                entity_type=table,
+                canonical_id="__schema__",
+                data={"table": table, "columns": [], "row_count": 0},
+                provenance=[
+                    {"source": "manual_relation", "original_id": table, "table": table}
+                ],
+            )
+        return schema_id
+
+    def ingest_manual_relations(self, relations: list[dict]) -> int:
+        """Add user-defined / auto-applied relations as graph edges.
+
+        Relations created by the auto-build proposal or by conversational
+        integration live in the MetadataCatalog; ingesting them here makes the
+        Knowledge Graph reflect the integrated, context-informed model rather
+        than only FK-inferred structure. Edges are tagged ``manual=True``.
+        Returns the number of edges added.
+        """
+        if not relations:
+            return 0
+        added = 0
+        seen: set[tuple[str, str, str]] = set()
+        for rel in relations:
+            ft = str(rel.get("from_table", "")).strip()
+            tt = str(rel.get("to_table", "")).strip()
+            edge_type = str(rel.get("edge_type") or "FK").strip() or "FK"
+            if not ft or not tt or ft == tt:
+                continue
+            src = self._table_node(ft)
+            dst = self._table_node(tt)
+            key = (src, dst, edge_type)
+            if key in seen:
+                continue
+            seen.add(key)
+            self._add_edge(src, dst, edge_type, manual=True)
+            added += 1
+        if added:
+            logger.info("KG ingested %d manual relation(s)", added)
+        return added
+
     @property
     def node_count(self) -> int:
         return self._g.number_of_nodes()

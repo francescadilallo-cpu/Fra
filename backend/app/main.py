@@ -646,6 +646,13 @@ def _ensure_semantic_loaded() -> None:
         except Exception as _prune_exc:
             logger.warning("catalog prune skipped: %s", _prune_exc)
 
+        # Fold user-defined / auto-applied relations into the KG so the graph
+        # reflects the integrated model, not just FK-inferred structure.
+        try:
+            kg.ingest_manual_relations(catalog.list_manual_relations())
+        except Exception as _rel_exc:
+            logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
             Path(__file__).parent.parent.parent / "test_scenario" / "semantic_docs"
@@ -764,6 +771,12 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
                 new_kg.build_from_ontology(filtered_mgr, ontology)
             else:
                 new_kg.build_from_schema(filtered_mgr)
+            # Re-fold manual/applied relations into the freshly rebuilt KG.
+            if catalog is not None:
+                try:
+                    new_kg.ingest_manual_relations(catalog.list_manual_relations())
+                except Exception as _rel_exc:
+                    logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
             _semantic_state["kg"] = new_kg
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)
@@ -972,7 +985,7 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
                         if edge_type.startswith("FK_")
                         else "",
                         "edge_type": edge_type,
-                        "is_manual": False,
+                        "is_manual": bool(data.get("manual", False)),
                     }
                 )
     if catalog:

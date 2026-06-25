@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Pipeline — anello Contesto → Knowledge Graph)
+
+Le relazioni *applicate* (proposta auto-build + integrazione conversazionale) ora diventano **archi reali del Knowledge Graph**, non solo voci del catalog. Così il grafo riflette il modello integrato e informato dal contesto, non solo la struttura FK inferita.
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_manual_relations(relations)`: crea/riusa i nodi tabella (`{table}:__schema__`) e aggiunge gli archi taggati `manual=True`; dedup intra-chiamata; ripristinata anche la property `edge_count`.
+
+### `backend/app/main.py`
+- `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`: dopo la build del KG, ingeriscono `catalog.list_manual_relations()` nel grafo.
+- `_get_semantic_draft()`: le relazioni KG con attributo `manual` vengono marcate `is_manual=true` (no doppioni col merge del catalog).
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGManualRelations`). Suite completa 1167 passed. Smoke end-to-end: relazione manuale → arco KG `manual=True` → draft `is_manual`.
+
+---
+
 ## 2026-06-25 (Pipeline — stadio 5: faithfulness scoring sulle risposte)
 
 Completato il "giro di agenti per affidabilità" dello stadio 5 con il **faithfulness scoring**: l'orchestratore campiona alcune domande derivate dai template generati, le fa girare via `layer.ask()` e misura quante risposte sono *grounded* (hanno SQL / sorgenti toccate). Sotto la soglia 0.6 emette il warning `low_faithfulness`. Punteggio esposto nel report e nel pannello di verifica.

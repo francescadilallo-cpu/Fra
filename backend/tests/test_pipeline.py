@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.agentic.verifier import verify_model
 from app.context.doc_analyzer import analyze_documents
 from app.context.store import ContextStore
+from app.kg.graph import KnowledgeGraph
 from app.pipeline.runs import STAGE_SEQUENCE, PipelineRun, PipelineRunStore
 from app.semantic.analyzer import _priors_block
 from app.semantic.apply import _apply_entity_descriptions, _apply_relations
@@ -323,6 +324,60 @@ class TestVerifierDeep:
         )
         assert report["summary"]["faithfulness_score"] == 1.0
         assert not any(w["type"] == "low_faithfulness" for w in report["warnings"])
+
+
+# ── KG ingestion of applied/manual relations (context → KG) ───────────────────
+
+
+class TestKGManualRelations:
+    def test_creates_nodes_and_tagged_edge(self):
+        kg = KnowledgeGraph()
+        added = kg.ingest_manual_relations(
+            [
+                {
+                    "from_table": "orders",
+                    "to_table": "customers",
+                    "via_column": "customer_id",
+                    "edge_type": "FK_customer_id",
+                }
+            ]
+        )
+        assert added == 1
+        assert kg.node_count == 2
+        edges = list(kg.iter_edges())
+        assert any(
+            s.split(":")[0] == "orders"
+            and d.split(":")[0] == "customers"
+            and data.get("manual") is True
+            for s, d, data in edges
+        )
+
+    def test_dedups_within_call(self):
+        kg = KnowledgeGraph()
+        rels = [{"from_table": "a", "to_table": "b", "edge_type": "FK"}] * 2
+        assert kg.ingest_manual_relations(rels) == 1
+
+    def test_skips_self_loops_and_empty(self):
+        kg = KnowledgeGraph()
+        added = kg.ingest_manual_relations(
+            [
+                {"from_table": "a", "to_table": "a"},
+                {"from_table": "", "to_table": "b"},
+            ]
+        )
+        assert added == 0
+
+    def test_reuses_table_node(self):
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "orders", "to_table": "customers", "edge_type": "FK"}]
+        )
+        n0 = kg.node_count
+        # 'orders' node already exists → only 'products' is added.
+        kg.ingest_manual_relations(
+            [{"from_table": "orders", "to_table": "products", "edge_type": "FK"}]
+        )
+        assert kg.node_count == n0 + 1
 
 
 # ── conversational integration (interpret + apply ops) ────────────────────────

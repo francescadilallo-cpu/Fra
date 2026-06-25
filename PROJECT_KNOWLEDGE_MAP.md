@@ -241,6 +241,7 @@ Responsabilita:
 
 - 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione conversazionale/manuale, (5) verifica = consistenza schema + replay query (`query_runner`) + faithfulness risposte (`answer_runner`), report in `PipelineRun.report`
 - colma il gap proposta→apply: `/api/semantic/analyze` proponeva soltanto; ora la pipeline scrive relazioni/metriche/descrizioni nel modello e ricostruisce KG+SL
+- le relazioni applicate (proposta + integrazione conversazionale) sono ingerite nel KG come archi `manual=True` (`KnowledgeGraph.ingest_manual_relations`, chiamato in `_ensure_semantic_loaded`/`_refresh_catalog_and_kg_after_rebuild`): il grafo riflette il modello informato dal contesto, non solo gli FK inferiti
 - multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
 - endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)
 - frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio, report di verifica e box "Refine by instruction"
