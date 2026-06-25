@@ -309,6 +309,98 @@ class SalesforceConnector:
             )
         return resp.json()
 
+    def get_schema_bulk(self, max_objects: int = 0) -> "SalesforceSchema":
+        """Describe all queryable SObjects via Composite batch API.
+
+        Identical result to get_schema() but uses 25-at-a-time batch requests
+        instead of one HTTP call per object.  For a typical org with ~900
+        SObjects this is ~36 calls rather than ~900.
+
+        Priority order: _PRIORITY_OBJECTS first, then other standard, then custom.
+        max_objects=0 (default) means no limit — all queryable objects.
+        """
+        raw_objects = self.list_sobjects()
+        queryable = [
+            o
+            for o in raw_objects
+            if o.get("queryable") and not o.get("deprecatedAndHidden")
+        ]
+
+        priority = [o for o in queryable if o["name"] in _PRIORITY_OBJECTS]
+        standard = [
+            o
+            for o in queryable
+            if not o.get("custom") and o["name"] not in _PRIORITY_OBJECTS
+        ]
+        custom = [o for o in queryable if o.get("custom")]
+        ordered = priority + standard + custom
+
+        if max_objects > 0:
+            ordered = ordered[:max_objects]
+
+        paths = [f"/sobjects/{o['name']}/describe/" for o in ordered]
+        _BATCH = 25
+        objects: list[SalesforceObject] = []
+
+        for i in range(0, len(paths), _BATCH):
+            chunk_paths = paths[i : i + _BATCH]
+            chunk_objects = ordered[i : i + _BATCH]
+            try:
+                results = self._post_composite_batch(chunk_paths)
+            except SalesforceAPIError as exc:
+                logger.warning(
+                    "Composite batch %d–%d failed: %s", i, i + _BATCH, exc
+                )
+                continue
+
+            for obj_meta, result in zip(chunk_objects, results):
+                if result.get("statusCode") != 200:
+                    logger.debug(
+                        "Describe skipped for %s: status %s",
+                        obj_meta["name"],
+                        result.get("statusCode"),
+                    )
+                    continue
+                desc = result.get("result", {})
+                obj_name = obj_meta["name"]
+                raw_fields = desc.get("fields", [])
+
+                sf_fields: list[SalesforceField] = []
+                for f in raw_fields:
+                    refs = f.get("referenceTo") or []
+                    sf_fields.append(
+                        SalesforceField(
+                            name=f["name"],
+                            label=f.get("label", f["name"]),
+                            type=f["type"],
+                            is_required=not f.get("nillable", True)
+                            and not f.get("defaultedOnCreate", False),
+                            is_relation=f["type"] == "reference",
+                            relation_to=", ".join(refs) if refs else None,
+                        )
+                    )
+
+                objects.append(
+                    SalesforceObject(
+                        name=obj_name,
+                        label=obj_meta.get("label", obj_name),
+                        field_count=len(sf_fields),
+                        is_custom=bool(obj_meta.get("custom")),
+                        key_prefix=obj_meta.get("keyPrefix"),
+                        fields=sf_fields,
+                    )
+                )
+
+        org_id = self.get_org_id()
+        return SalesforceSchema(
+            instance_url=self.instance_url,
+            org_id=org_id,
+            api_version=_SF_API_VERSION,
+            object_count=len(objects),
+            objects=objects,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+        )
+
     def query_records(self, soql: str) -> list[dict]:
         """Execute a SOQL query and return all records (auto-paginates)."""
         from urllib.parse import quote as _quote
