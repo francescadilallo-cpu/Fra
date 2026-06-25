@@ -10,6 +10,24 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (fix: Salesforce entities missing in Entity Graph after sync)
+
+**Root cause:** Race condition in the background sync task. `ingest_one()` sets
+`status="active"` internally, which the frontend's poll loop detects and immediately
+fires `pipeline-run-updated`. At that exact moment `reload_semantic()` had already
+reset `_semantic_state["loaded"] = False`, so `getLiveConfig()` hit the early-return
+path and returned 0 nodes — wiping the Entity Graph.
+
+**Fix:** In `_run_sync()` (`main.py`), re-patch `status="syncing"` right after
+`ingest_one()` returns, then only set `status="active"` after `reload_semantic()` (or
+`_refresh_catalog_and_kg_after_rebuild`) completes. The frontend keeps polling
+during the semantic rebuild and receives the full 2392-node response only once the
+stack is fully ready.
+
+**Files:** `backend/app/main.py`
+
+---
+
 ## 2026-06-25 (Salesforce — real data ingestion via SOQL)
 
 After OAuth sync, the backend now queries actual records for priority Salesforce

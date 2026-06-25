@@ -3203,15 +3203,22 @@ def sync_source(
     def _run_sync() -> None:
         try:
             mgr.ingest_one(source_id)
+            # ingest_one() sets status="active" internally, which the frontend
+            # polls for and immediately fires pipeline-run-updated. But at that
+            # point reload_semantic() hasn't run yet (it resets loaded=False),
+            # causing getLiveConfig() to return empty nodes. Re-set to "syncing"
+            # so the frontend keeps polling until the semantic layer is fully
+            # rebuilt and we explicitly mark "active" below.
+            mgr.registry.patch(source_id, status="syncing")
             # Full semantic reload so the KG is rebuilt from the updated DuckDB
             # snapshot (new tables are discovered via build_from_schema).
-            # A partial catalog-only refresh is not enough when the ontology YAML
-            # is present: build_from_ontology() would not see new tables, leaving
-            # Entity Graph and Data Model empty after a Salesforce sync.
             if _semantic_state.get("loaded"):
                 reload_semantic()
             else:
                 _refresh_catalog_and_kg_after_rebuild(mgr)
+            # Semantic state is now fully rebuilt — mark active so frontend fires
+            # pipeline-run-updated and refreshes the Entity Graph with real data.
+            mgr.registry.patch(source_id, status="active", error_msg=None)
             logger.info("Sync complete for source %s", source_id)
         except Exception as exc:
             safe_msg = _safe_ingest_error(exc)
