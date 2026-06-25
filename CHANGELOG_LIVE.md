@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Consolidamento — test end-to-end della pipeline auto-build)
+
+Aggiunto il regression guard mancante per il flusso principale: un test d'integrazione **multi-fonte** che esegue davvero tutti i 5 stadi dell'orchestratore su dati reali e verifica il modello unificato. Finora c'erano solo unit test dei pezzi + smoke manuali.
+
+### `backend/tests/test_pipeline_e2e.py` (nuovo)
+- Seed di 2 fonti CSV con data model diversi (`customers` + `orders` legati da `customer_id`) in uno snapshot DuckDB reale, cablate come manager/registry di processo; poi `run_build_pipeline` end-to-end.
+- Asserzioni: stadi context(skip)/sources/build/integration/verification, `run.ok`; entità di entrambe le fonti; **relazione cross-source** inferita (`orders→customers`) nel KG/draft; nodi `Concept`/`Metric` dal contesto nel grafo; report di verifica presente.
+- Caso degradato (nessuna fonte): build saltato, run comunque ok. Nessun LLM richiesto (deterministico) → guard stabile.
+- Suite completa: **1192 passed**.
+
+---
+
 ## 2026-06-25 (MCP — il Semantic Layer esposto agli agenti AI)
 
 Nuovo **server MCP** (Model Context Protocol) che espone il modello unificato del cliente ad agenti esterni (Claude, ecc.) via un endpoint JSON-RPC 2.0: `POST /api/mcp`. Read-only, JWT-autenticato, confine demo/live rispettato; ispirato a GraphDB 11 di Graphwise ("il grafo come cervello degli agenti"). Nessuna nuova dipendenza (subset MCP implementato a mano).
