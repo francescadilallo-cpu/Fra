@@ -179,7 +179,7 @@ export default function PipelineView({ onNavigate }: Props) {
     try {
       const res = await integrateModel(text)
       if (res.applied.length === 0) {
-        toast(res.llm_used ? 'No changes matched your instruction' : 'AI not available — try the editor', 'info')
+        toast(res.notes || 'No changes matched your instruction', 'info')
       } else {
         toast(`Applied: ${res.applied.join(', ')}`, 'success')
         setInstruction('')

@@ -506,6 +506,7 @@ export interface IntegrateResult {
   applied: string[]
   counts: { relations: number; entities: number; metrics: number }
   llm_used: boolean
+  notes?: string
   draft: SemanticDraft
 }
 

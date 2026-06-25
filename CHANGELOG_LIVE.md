@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Hardening — integrazione conversazionale robusta)
+
+`POST /api/semantic/integrate` (stage 4) reso resiliente e più chiaro.
+
+### `backend/app/main.py`
+- apply ops + rigenerazione template ora in try/except → errore DB/transitorio restituisce un **503 pulito** invece di un 500 con internals.
+- nuovo campo `notes` nella risposta: spiega quando l'AI non è disponibile (no LLM) o quando nessuna modifica è applicabile.
+
+### Frontend
+- `IntegrateResult.notes` + `PipelineView` usa il `notes` del server per il toast (motivo chiaro all'utente, unica fonte di verità).
+
+### Test
+- `backend/tests/test_integrate_endpoint.py` (+3): auth richiesta, degrade pulito senza LLM (no crash + notes), istruzione vuota → 422. Suite completa **1196 passed**.
+
+---
+
 ## 2026-06-25 (Hardening — run pipeline concorrenti & stuck-state)
 
 Indurito il path live della pipeline contro i casi limite di concorrenza.

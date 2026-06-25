@@ -3990,22 +3990,29 @@ def integrate_model(
     draft = _get_semantic_draft(hidden)
     interpreted = interpret_instruction(body.instruction, draft)
     ops = interpreted["ops"]
-    result = apply_ops(ops, catalog=catalog, sector_id="manufacturing")
+    try:
+        result = apply_ops(ops, catalog=catalog, sector_id="manufacturing")
 
-    # Refresh query templates so freshly-added metrics become answerable.
-    if result["added_metrics"]:
-        from .semantic.apply import merge_proposal_metrics_into_draft
+        # Refresh query templates so freshly-added metrics become answerable.
+        if result["added_metrics"]:
+            from .semantic.apply import merge_proposal_metrics_into_draft
 
-        layer = _semantic_state.get("layer")
-        fresh = _get_semantic_draft(hidden)
-        augmented = dict(fresh)
-        augmented["metrics"] = merge_proposal_metrics_into_draft(
-            fresh.get("metrics", []), result["added_metrics"]
-        )
-        auto_tpls = generate_templates_from_draft(augmented)
-        catalog.upsert_auto_templates(auto_tpls)
-        if layer is not None:
-            layer.set_templates(catalog.list_templates())
+            layer = _semantic_state.get("layer")
+            fresh = _get_semantic_draft(hidden)
+            augmented = dict(fresh)
+            augmented["metrics"] = merge_proposal_metrics_into_draft(
+                fresh.get("metrics", []), result["added_metrics"]
+            )
+            auto_tpls = generate_templates_from_draft(augmented)
+            catalog.upsert_auto_templates(auto_tpls)
+            if layer is not None:
+                layer.set_templates(catalog.list_templates())
+    except Exception as exc:
+        logger.error("integrate apply failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not apply the change — please retry in a moment.",
+        ) from exc
     _bump_semantic_cache_namespace()
     layer = _semantic_state.get("layer")
     if layer is not None:
@@ -4014,11 +4021,19 @@ def integrate_model(
         except Exception:
             pass
 
+    if not interpreted["llm_used"]:
+        notes = "AI interpretation unavailable — no LLM configured."
+    elif not result["applied"]:
+        notes = "No applicable changes were found for that instruction."
+    else:
+        notes = ""
+
     return {
         "ops": ops,
         "applied": result["applied"],
         "counts": result["counts"],
         "llm_used": interpreted["llm_used"],
+        "notes": notes,
         "draft": _get_semantic_draft(hidden),
     }
 
