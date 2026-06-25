@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 
@@ -32,6 +33,22 @@ from sqlalchemy.pool import StaticPool
 logger = logging.getLogger(__name__)
 
 NULL_RATE_WARN_THRESHOLD = 0.10  # warn if >10 % nulls
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive int env override, falling back to *default*."""
+    try:
+        val = int(os.getenv(name, str(default)).strip())
+        return val if val > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+# How much of the schema goes into the LLM SQL-generation prompt. Generous
+# defaults (a real CRM/ERP has dozens of objects) but bounded so a huge schema
+# can't blow up the prompt; both are env-tunable per deployment.
+SCHEMA_MAX_TABLES = _env_int("FRA_SCHEMA_MAX_TABLES", 100)
+SCHEMA_MAX_COLS = _env_int("FRA_SCHEMA_MAX_COLS", 40)
 
 
 # ── SQLAlchemy models ─────────────────────────────────────────────────────────
@@ -456,9 +473,9 @@ class MetadataCatalog:
 
     def get_schema_context(
         self,
-        max_tables: int = 30,
+        max_tables: int = SCHEMA_MAX_TABLES,
         exclude_tables: frozenset[str] = frozenset(),
-        max_cols: int = 40,
+        max_cols: int = SCHEMA_MAX_COLS,
     ) -> str:
         """Return a compact LLM-ready description of all catalogued tables.
 

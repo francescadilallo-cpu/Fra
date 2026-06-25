@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Schema prompt — più tabelle + tunable via env)
+
+Il cap di 30 tabelle nel prompt LLM-SQL era troppo basso per CRM/ERP reali (Salesforce ha decine di oggetti): le tabelle oltre la 30ª restavano fuori dal prompt e l'LLM non poteva interrogarle.
+
+### `backend/app/metadata/catalog.py`
+- default `max_tables` alzato **30 → 100**; sia tabelle che colonne ora **configurabili via env**: `FRA_SCHEMA_MAX_TABLES` (default 100) e `FRA_SCHEMA_MAX_COLS` (default 40). Il cap colonne tiene comunque limitata la dimensione del prompt.
+- Suite completa **1197 passed**.
+
+Nota: con schemi enormi (>100 oggetti) la selezione delle tabelle nel prompt resta da rendere guidata dal GraphRAG (follow-up).
+
+---
+
 ## 2026-06-25 (Performance — cap colonne nel prompt schema LLM)
 
 Bound deterministico sulla dimensione del prompt di generazione SQL, per fonti larghe (es. oggetti Salesforce con centinaia di campi).
