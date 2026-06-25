@@ -10,6 +10,31 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Hardening Fase 3 FK + glossario deterministico)
+
+Giro di review-for-improvement sui tre stadi appena rilasciati. Due fonti di
+**falsi positivi** chiuse, zero dipendenze nuove:
+
+- **FK value-overlap anti-falsi-positivi** (`kg/graph.py:_value_overlap_fk`):
+  - *Guardia ambiguità*: una FK reale punta a **una** tabella. Se i valori
+    campionati di una colonna combaciano con le PK di **più** tabelle, sono un
+    dominio generico condiviso (1,2,3…) e non una FK → si scarta invece di
+    indovinare un arco sbagliato (prima vinceva il primo match).
+  - *Guardia bassa cardinalità*: colonne con meno di `_FK_MIN_DISTINCT=4` valori
+    distinti (codici tipo `status_id`/`priority_id`) sono troppo poco selettive
+    per fidarsi dell'overlap → saltate.
+- **Glossario deterministico** (`ingest_glossary_aliases`): la scansione dei
+  label ora è ordinata (più lunghi/specifici prima, poi alfabetico) invece di
+  iterare un `set` → alias stabili tra run e match più specifico in caso di
+  definizione che cita più label.
+
+### Test
+- `test_pipeline` TestValueOverlapFK: +`test_low_cardinality_skipped`,
+  +`test_ambiguous_overlap_skipped`; fixture aggiornate a cardinalità realistica.
+  Suite completa **1213 passed, 6 skipped**.
+
+---
+
 ## 2026-06-25 (Stadi 1-3 — alias glossario, FK più forte, proposta più ricca)
 
 Tre migliorie ai primi stadi (tutte KG-only, bounded, zero dipendenze):

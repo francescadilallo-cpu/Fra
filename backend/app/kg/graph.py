@@ -65,6 +65,7 @@ def _node_limit() -> int:
 _FK_VALUE_SAMPLE = 50  # distinct values sampled per column
 _FK_VALUE_OVERLAP = 0.5  # min share of FK values found in a PK column
 _FK_MAX_PROBES = 200  # cap on candidate columns sampled (whole build)
+_FK_MIN_DISTINCT = 4  # min distinct FK values before overlap is trustworthy
 
 _SENTINEL = object()
 
@@ -559,9 +560,12 @@ class KnowledgeGraph:
                     return
                 fk_vals = _sample(table, name)
                 probes += 1
-                if not fk_vals:
+                # Too few distinct values to tell a real FK from a generic
+                # small-domain code (status_id, priority_id…) that trivially
+                # overlaps unrelated primary keys.
+                if len(fk_vals) < _FK_MIN_DISTINCT:
                     continue
-                target = None
+                targets: list[str] = []
                 for other, _oinfo in schema.items():
                     if other == table:
                         continue
@@ -571,13 +575,16 @@ class KnowledgeGraph:
                             continue
                         inter = len(fk_vals & pk_vals)
                         if inter and inter / len(fk_vals) >= _FK_VALUE_OVERLAP:
-                            target = other
-                            break
-                    if target:
-                        break
-                if target:
-                    self._add_edge(from_node, f"{target}:__schema__", f"FK_{name}")
-                    logger.debug("value-overlap FK: %s.%s → %s", table, name, target)
+                            targets.append(other)
+                            break  # this table matched; move to the next table
+                # Link only on an unambiguous single match. Overlap with several
+                # tables means the values are a shared generic domain (1,2,3…),
+                # not a foreign key — skip rather than guess a wrong edge.
+                if len(targets) == 1:
+                    self._add_edge(from_node, f"{targets[0]}:__schema__", f"FK_{name}")
+                    logger.debug(
+                        "value-overlap FK: %s.%s → %s", table, name, targets[0]
+                    )
 
     def _table_node(self, table: str) -> str:
         """Return a table-level node id for *table*, creating a minimal schema
@@ -823,6 +830,10 @@ class KnowledgeGraph:
             return 0
         index = self._type_level_label_index()
         label_set = set(index.keys())
+        # Deterministic, specificity-first scan order: longer labels first so a
+        # term whose definition cites both "annual revenue" and "revenue" aliases
+        # the more specific node; ties broken alphabetically for stable results.
+        ordered_labels = sorted(label_set, key=lambda s: (-len(s), s))
         aliases: dict[str, list[str]] = {}
         for g in glossary:
             term = str(g.get("term", "")).strip()
@@ -835,7 +846,7 @@ class KnowledgeGraph:
                 continue
             def_words = set(re.findall(r"[a-z0-9_]+", definition))
             matched: str | None = None
-            for lbl in label_set:
+            for lbl in ordered_labels:
                 hit = (
                     (lbl in def_words or lbl.rstrip("s") in def_words)
                     if " " not in lbl

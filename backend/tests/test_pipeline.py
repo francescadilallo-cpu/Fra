@@ -592,7 +592,10 @@ class TestValueOverlapFK:
     }
 
     def test_detects_cross_name_fk(self):
-        data = {("orders", "account_id"): {1, 2}, ("customers", "id"): {1, 2, 3}}
+        data = {
+            ("orders", "account_id"): {1, 2, 3, 4, 5},
+            ("customers", "id"): {1, 2, 3, 4, 5, 6},
+        }
         kg = KnowledgeGraph()
         kg.build_from_schema(_FakeMgr(self.schema, data))
         edges = {
@@ -602,9 +605,40 @@ class TestValueOverlapFK:
         assert ("orders", "customers", "FK_account_id") in edges
 
     def test_no_overlap_no_edge(self):
-        data = {("orders", "account_id"): {97, 98}, ("customers", "id"): {1, 2, 3}}
+        data = {
+            ("orders", "account_id"): {91, 92, 93, 94, 95},
+            ("customers", "id"): {1, 2, 3, 4, 5, 6},
+        }
         kg = KnowledgeGraph()
         kg.build_from_schema(_FakeMgr(self.schema, data))
+        assert not any(
+            dd.get("type") == "FK_account_id" for _s, _d, dd in kg.iter_edges()
+        )
+
+    def test_low_cardinality_skipped(self):
+        # Only 2 distinct values: a generic small-domain code, not a FK.
+        data = {("orders", "account_id"): {1, 2}, ("customers", "id"): {1, 2, 3, 4}}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_FakeMgr(self.schema, data))
+        assert not any(
+            dd.get("type") == "FK_account_id" for _s, _d, dd in kg.iter_edges()
+        )
+
+    def test_ambiguous_overlap_skipped(self):
+        # account_id values fully overlap TWO tables' PKs → generic shared
+        # domain, not a real FK; no edge should be created to either.
+        schema = {
+            "orders": {"columns": [{"name": "account_id", "type": "int"}]},
+            "customers": {"columns": [{"name": "id", "type": "int"}]},
+            "regions": {"columns": [{"name": "id", "type": "int"}]},
+        }
+        data = {
+            ("orders", "account_id"): {1, 2, 3, 4, 5},
+            ("customers", "id"): {1, 2, 3, 4, 5, 6},
+            ("regions", "id"): {1, 2, 3, 4, 5, 7},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_FakeMgr(schema, data))
         assert not any(
             dd.get("type") == "FK_account_id" for _s, _d, dd in kg.iter_edges()
         )

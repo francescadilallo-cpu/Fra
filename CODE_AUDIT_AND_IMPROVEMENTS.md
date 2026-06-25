@@ -637,9 +637,13 @@ Aggiornamento (migliorie stadi 1-3):
 - FK value-overlap in `build_from_schema` (nomi diversi + cross-source), bounded e gated da `FRA_KG_FK_VALUE_SCAN`.
 - proposta `analyze` con synonyms; metriche con colonne inesistenti scartate in apply.
 
+Aggiornamento (hardening Fase 3 FK + glossario deterministico):
+- value-overlap FK ora resiste agli **id generici condivisi**: si crea l'arco solo su match **univoco** (overlap con più tabelle → dominio condiviso, si scarta) e solo se la colonna ha ≥`_FK_MIN_DISTINCT=4` valori distinti (codici a bassa cardinalità saltati).
+- `ingest_glossary_aliases` deterministico (scansione label ordinata per lunghezza/alfabetico) → alias stabili tra run e match più specifico.
+
 Follow-up residui:
 - recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.
-- value-overlap FK: euristica a campione (possibili falsi positivi su id generici condivisi) — valutare soglia/whitelist su dati reali.
+- value-overlap FK: i due guard (univocità + cardinalità minima) riducono i falsi positivi; resta da validare le soglie su dati reali (es. FK legittime a bassa cardinalità su dataset piccoli verrebbero saltate — accettabile perché la Fase 2 per nome le copre).
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
 - GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
