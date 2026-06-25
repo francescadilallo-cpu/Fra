@@ -253,6 +253,13 @@ export default function PipelineView({ onNavigate }: Props) {
                   <AlertTriangle className="h-5 w-5 text-amber-500" />
                 )}
                 <span className="font-medium text-gray-900">Verification</span>
+                {typeof verification.summary?.faithfulness_score === 'number' && (
+                  <span className="ml-auto text-xs text-gray-500">
+                    Faithfulness {Math.round((verification.summary.faithfulness_score as number) * 100)}%
+                    {' · '}
+                    {verification.summary.templates_tested ?? 0} queries replayed
+                  </span>
+                )}
               </div>
               {issues.length === 0 ? (
                 <p className="text-sm text-gray-500">No consistency issues found.</p>

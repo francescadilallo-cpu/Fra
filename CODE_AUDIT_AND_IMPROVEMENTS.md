@@ -602,8 +602,12 @@ Aggiornamento 2026-06-25 (stadi 4–5 completati):
 Aggiornamento (stadio 5 — replay query):
 - aggiunto query smoke test: i template generati vengono rieseguiti read-only sul dato (`query_runner`); i fallimenti diventano warning `template_query_failed`.
 
+Aggiornamento (stadio 5 — faithfulness):
+- aggiunto faithfulness scoring: campiona domande dai template, le fa girare via `layer.ask()` e misura il grounded ratio; sotto soglia → warning `low_faithfulness`.
+
 Follow-up residui:
-- verifica: manca ancora faithfulness scoring sulle risposte NL (TODO esplicito nel modulo); il replay copre ora l'eseguibilità delle query.
+- stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
+- **unificazione dei due store metriche** (`sl_metrics` vs draft metrics del catalog): debito tecnico, NON parte dei 5 step del piano; da affrontare in un giro dedicato con analisi d'impatto (tocca molti endpoint).
 - integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
 - due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
 - `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).

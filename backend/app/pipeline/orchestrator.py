@@ -167,11 +167,28 @@ def run_build_pipeline(
         query_runner = None
         if mgr is not None and live_tables:
             query_runner = lambda sql: mgr.execute(sql, limit=1)  # noqa: E731
+
+        # Faithfulness sampling: ask a few model-derived questions and check the
+        # answers are grounded in data (have SQL / touched sources).
+        layer = _semantic_state.get("layer")
+        questions = _sample_questions(draft)
+        answer_runner = None
+        if layer is not None and questions:
+
+            def answer_runner(q: str) -> dict:
+                r = layer.ask(q, hidden_tables=hidden)
+                return {
+                    "sql_used": r.sql_used,
+                    "sources_touched": r.sources_touched,
+                }
+
         report = verify_model(
             draft,
             schema_info=schema_info or None,
             use_llm=True,
             query_runner=query_runner,
+            answer_runner=answer_runner,
+            questions=questions,
         )
         run.report["verification"] = report
         summary = report["summary"]
@@ -188,3 +205,19 @@ def run_build_pipeline(
     run.complete()
     store.set_current(run)
     return run
+
+
+def _sample_questions(draft: dict, limit: int = 5) -> list[str]:
+    """Derive a few representative questions from the generated templates — the
+    natural-language phrases the model claims it can answer."""
+    questions: list[str] = []
+    seen: set[str] = set()
+    for t in draft.get("templates", []) or []:
+        kw = t.get("keywords") or []
+        q = (kw[0] if kw else (t.get("name") or "")).strip()
+        if q and q.lower() not in seen:
+            seen.add(q.lower())
+            questions.append(q)
+        if len(questions) >= limit:
+            break
+    return questions

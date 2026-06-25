@@ -30,6 +30,11 @@ _BLOCKING = {"high", "medium"}
 # Cap how many templates we actually replay, to keep the pass fast.
 _MAX_TEMPLATES_TO_REPLAY = 25
 
+# Faithfulness sampling: how many NL answers to score, and the minimum share
+# that must be grounded in data (have SQL / touched sources) before we warn.
+_MAX_FAITHFULNESS_QUESTIONS = 5
+_MIN_GROUNDED_RATIO = 0.6
+
 
 def _columns_by_table(schema_info: dict[str, dict] | None) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
@@ -152,6 +157,52 @@ def _check_templates(
     return warnings, tested
 
 
+def _check_faithfulness(
+    questions: list[str], answer_runner: Callable[[str], dict]
+) -> tuple[list[dict], float | None, int]:
+    """Sample NL answers and score how many are *grounded* in data.
+
+    An answer is grounded when it carries SQL or touched at least one source —
+    i.e. it was computed from the data rather than free-form generated. Returns
+    (warnings, grounded_ratio, sampled). A low ratio is the faithfulness finding.
+    """
+    sampled = 0
+    grounded = 0
+    seen: set[str] = set()
+    for q in questions:
+        q = (q or "").strip()
+        if not q or q.lower() in seen:
+            continue
+        seen.add(q.lower())
+        if sampled >= _MAX_FAITHFULNESS_QUESTIONS:
+            break
+        try:
+            res = answer_runner(q) or {}
+        except Exception:  # noqa: BLE001 — a failed answer just isn't grounded
+            sampled += 1
+            continue
+        sampled += 1
+        if res.get("sql_used") or (res.get("sources_touched") or []):
+            grounded += 1
+
+    if sampled == 0:
+        return [], None, 0
+    score = round(grounded / sampled, 2)
+    warnings: list[dict] = []
+    if score < _MIN_GROUNDED_RATIO:
+        warnings.append(
+            {
+                "type": "low_faithfulness",
+                "severity": "medium",
+                "detail": (
+                    f"Only {grounded}/{sampled} sampled answers were grounded in "
+                    f"data (faithfulness {score}). Answers may not be backed by the model."
+                ),
+            }
+        )
+    return warnings, score, sampled
+
+
 def _llm_critique(draft: dict) -> list[dict]:
     """Optional advisory critique from the LLM. Empty list if unavailable."""
     try:
@@ -194,6 +245,8 @@ def verify_model(
     schema_info: dict[str, dict] | None = None,
     use_llm: bool = False,
     query_runner: Callable[[str], Any] | None = None,
+    answer_runner: Callable[[str], dict] | None = None,
+    questions: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run consistency checks over a semantic draft.
 
@@ -201,7 +254,8 @@ def verify_model(
     any high/medium-severity warning is present. *schema_info* (table → columns)
     enables the deeper column-level checks; *use_llm* adds advisory notes;
     *query_runner* (a read-only SQL executor) enables replaying the generated
-    query templates against the data.
+    query templates; *answer_runner* + *questions* enable faithfulness scoring
+    of sampled NL answers.
     """
     entities = draft.get("entities", []) or []
     metrics = draft.get("metrics", []) or []
@@ -221,6 +275,14 @@ def verify_model(
         tpl_warnings, templates_tested = _check_templates(templates, query_runner)
         warnings += tpl_warnings
 
+    faithfulness: float | None = None
+    faithfulness_sampled = 0
+    if answer_runner is not None and questions:
+        f_warnings, faithfulness, faithfulness_sampled = _check_faithfulness(
+            questions, answer_runner
+        )
+        warnings += f_warnings
+
     advisory = _llm_critique(draft) if use_llm else []
 
     checks = [
@@ -231,7 +293,7 @@ def verify_model(
         "entity_no_columns",
         "duplicate_entity_table",
         "template_query_failed",
-        # TODO: faithfulness scoring on NL answers
+        "low_faithfulness",
     ]
 
     blocking = [w for w in warnings if w.get("severity") in _BLOCKING]
@@ -245,6 +307,8 @@ def verify_model(
             "metrics": len(metrics),
             "relations": len(relations),
             "templates_tested": templates_tested,
+            "faithfulness_score": faithfulness,
+            "faithfulness_sampled": faithfulness_sampled,
             "warnings": len(warnings),
             "blocking": len(blocking),
             "advisory": len(advisory),

@@ -239,7 +239,7 @@ File:
 
 Responsabilita:
 
-- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione conversazionale/manuale, (5) verifica consistenza (report in `PipelineRun.report`)
+- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione conversazionale/manuale, (5) verifica = consistenza schema + replay query (`query_runner`) + faithfulness risposte (`answer_runner`), report in `PipelineRun.report`
 - colma il gap proposta→apply: `/api/semantic/analyze` proponeva soltanto; ora la pipeline scrive relazioni/metriche/descrizioni nel modello e ricostruisce KG+SL
 - multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
 - endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)

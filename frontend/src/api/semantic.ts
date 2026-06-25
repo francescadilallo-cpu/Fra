@@ -476,7 +476,7 @@ export interface VerificationReport {
   ok: boolean
   warnings: VerificationWarning[]
   advisory: VerificationWarning[]
-  summary: Record<string, number>
+  summary: Record<string, number | null>
 }
 
 export interface PipelineReport {

@@ -302,6 +302,28 @@ class TestVerifierDeep:
         failed = [w for w in report["warnings"] if w["type"] == "template_query_failed"]
         assert len(failed) == 1 and "bad" in failed[0]["detail"]
 
+    def test_faithfulness_low_score_warns(self):
+        draft = {"entities": [], "metrics": [], "relations": []}
+        answers = {"q1": {"sql_used": "SELECT 1"}, "q2": {}, "q3": {}}
+        report = verify_model(
+            draft,
+            answer_runner=lambda q: answers.get(q, {}),
+            questions=["q1", "q2", "q3"],
+        )
+        assert report["summary"]["faithfulness_sampled"] == 3
+        assert report["summary"]["faithfulness_score"] == round(1 / 3, 2)
+        assert any(w["type"] == "low_faithfulness" for w in report["warnings"])
+
+    def test_faithfulness_grounded_ok(self):
+        answers = {"q1": {"sql_used": "SELECT 1"}, "q2": {"sources_touched": ["t"]}}
+        report = verify_model(
+            {"entities": [], "metrics": [], "relations": []},
+            answer_runner=lambda q: answers.get(q, {}),
+            questions=["q1", "q2"],
+        )
+        assert report["summary"]["faithfulness_score"] == 1.0
+        assert not any(w["type"] == "low_faithfulness" for w in report["warnings"])
+
 
 # ── conversational integration (interpret + apply ops) ────────────────────────
 

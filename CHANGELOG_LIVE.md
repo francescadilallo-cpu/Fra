@@ -10,6 +10,24 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Pipeline — stadio 5: faithfulness scoring sulle risposte)
+
+Completato il "giro di agenti per affidabilità" dello stadio 5 con il **faithfulness scoring**: l'orchestratore campiona alcune domande derivate dai template generati, le fa girare via `layer.ask()` e misura quante risposte sono *grounded* (hanno SQL / sorgenti toccate). Sotto la soglia 0.6 emette il warning `low_faithfulness`. Punteggio esposto nel report e nel pannello di verifica.
+
+### `backend/app/agentic/verifier.py`
+- `verify_model()` accetta `answer_runner` + `questions`; nuovo `_check_faithfulness()`; `faithfulness_score`/`faithfulness_sampled` nel summary.
+
+### `backend/app/pipeline/orchestrator.py`
+- `_sample_questions()` deriva domande dai template; passa un `answer_runner` basato su `layer.ask()` alla verifica.
+
+### Frontend
+- `PipelineView.tsx`: riga "Faithfulness X% · N queries replayed" nel pannello di verifica.
+
+### Test
+- `test_pipeline.py`: +2 (faithfulness basso → warning; grounded → ok). Totale 27; suite completa 1163 passed.
+
+---
+
 ## 2026-06-25 (Pipeline — stadio 5: replay query sul dato mappato)
 
 Rafforzata la verifica (stadio 5) con un *query smoke test* read-only: l'orchestratore riesegue i template di query generati contro il dato reale (`mgr.execute`, token `{year}`/`{limit}` sostituiti, `LIMIT 1`) e segnala come warning `template_query_failed` quelli che non girano — verifica concreta che il modello mappato produce query eseguibili.
