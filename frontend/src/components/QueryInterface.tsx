@@ -639,6 +639,16 @@ function SqlBlock({ sql }: { sql: string }) {
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
 
+// Backend `notes` codes that mean "this answer is a capability/degradation
+// message, not real data" — surfaced with an info notice in live mode.
+const DEGRADED_NOTES = new Set<string>([
+  'unknown_intent_no_llm',
+  'no_manager',
+  'llm_sql_generation_failed',
+  'llm_sql_no_query',
+  'llm_sql_exec_error',
+])
+
 function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavorite }: {
   message: Message
   onFollowUp?: (q: string) => void
@@ -735,6 +745,20 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
             </div>
           )}
         </div>
+
+        {/* Degraded-answer notice: the answer is a capability message, not data
+            (e.g. AI querying not available, generation failed). Flag it so it
+            doesn't look like a real result. */}
+        {!IS_DEMO_MODE && r.notes && DEGRADED_NOTES.has(r.notes) && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>
+              {r.notes === 'unknown_intent_no_llm'
+                ? 'AI querying is not available in this workspace — try a suggested question or a metric you have defined.'
+                : 'The query service had trouble answering this — try rephrasing, or retry in a moment.'}
+            </span>
+          </div>
+        )}
 
         {/* Summary — only rendered when non-empty */}
         {r.summary && (

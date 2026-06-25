@@ -10,6 +10,16 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (UX — risposte "degradate" del path ask riconoscibili)
+
+Il path `ask` aveva già buona gestione errori (CTA inline per 409→Data Sources, 503/404→Setup, hint 422, niente retry sui prerequisiti). Mancava un caso: quando l'AI non è disponibile il backend risponde **200** con un testo esplicativo che però appariva come una risposta dati normale.
+
+### Frontend
+- `EngineResult.notes` + `adaptAskResult` lo propaga.
+- `QueryInterface`: per i `notes` "degradati" (`unknown_intent_no_llm`, `no_manager`, `llm_sql_*`) mostra un avviso ambra ("AI querying non disponibile / problema temporaneo") sopra la risposta, solo in live. Così non sembra un risultato reale.
+
+---
+
 ## 2026-06-25 (Bug-hunt — faithfulness falso-positivo senza LLM)
 
 Bug trovato in review: nello stadio 5 la **faithfulness** e la critica LLM giravano anche senza provider LLM configurato. Senza LLM, `layer.ask()` ritorna messaggi "no LLM" → tutte le risposte campionate risultavano non-grounded → **warning `low_faithfulness` falso-positivo a ogni build**, più ~5 chiamate `ask` inutili.
