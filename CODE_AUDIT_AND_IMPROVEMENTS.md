@@ -621,7 +621,16 @@ Aggiornamento (idee Graphwise completate):
 - citazioni di provenienza in UI: fatte (`GraphCitations` consuma `provenance.graph_context`).
 - server MCP: fatto (`mcp_server.py`, `POST /api/mcp`, read-only, JWT).
 
+Hardening del flusso principale (2026-06-25):
+- run pipeline concorrenti: prenotazione atomica (`begin_run`) + no stuck-state.
+- `/api/semantic/integrate`: apply protetto + `notes` esplicito.
+- bug-fix: faithfulness/critica LLM gated su provider (no warning falso-positivo senza LLM).
+- UX path `ask`: risposte degradate (no-LLM/fail) segnalate, non scambiate per dati.
+- performance: cap colonne (`max_cols=40`) nel prompt schema; `max_tables=30` già presente.
+- test e2e multi-fonte della pipeline come regression guard.
+
 Follow-up residui:
+- performance da validare su dati Salesforce reali: con >30 oggetti alcune tabelle restano fuori dal prompt schema (cap) — valutare selezione guidata dal GraphRAG; costo verifica con LLM (~5 ask) tunable.
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
 - GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.

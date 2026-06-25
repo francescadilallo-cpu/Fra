@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Performance — cap colonne nel prompt schema LLM)
+
+Bound deterministico sulla dimensione del prompt di generazione SQL, per fonti larghe (es. oggetti Salesforce con centinaia di campi).
+
+### `backend/app/metadata/catalog.py`
+- `get_schema_context(..., max_cols=40)`: le colonne elencate per tabella sono cappate a 40 con suffisso `… (+N more columns)`. Prima erano illimitate → una tabella molto larga poteva far esplodere prompt/costo/latenza (e rischio token-limit). `max_tables` era già a 30. Cache key aggiornata a `(max_tables, exclude_tables, max_cols)`.
+
+### Test
+- `test_metadata_catalog.py`: `test_columns_capped_per_table` + cache key aggiornata. Suite completa **1197 passed**.
+
+Nota: lo stadio 5 con LLM fa ~5 `ask` + 1 critica per build (già azzerato senza LLM); resta un costo accettabile della verifica, tunable via `_MAX_FAITHFULNESS_QUESTIONS`.
+
+---
+
 ## 2026-06-25 (UX — risposte "degradate" del path ask riconoscibili)
 
 Il path `ask` aveva già buona gestione errori (CTA inline per 409→Data Sources, 503/404→Setup, hint 422, niente retry sui prerequisiti). Mancava un caso: quando l'AI non è disponibile il backend risponde **200** con un testo esplicativo che però appariva come una risposta dati normale.

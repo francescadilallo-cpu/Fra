@@ -472,10 +472,39 @@ class TestSchemaContextCache:
         b = cat.get_schema_context(max_tables=10)
         # Different max_tables → independent cache entries (keyed together
         # with the exclude_tables frozenset).
-        assert (5, frozenset()) in cat._schema_ctx_cache
-        assert (10, frozenset()) in cat._schema_ctx_cache
-        assert a is cat._schema_ctx_cache[(5, frozenset())]
-        assert b is cat._schema_ctx_cache[(10, frozenset())]
+        assert (5, frozenset(), 40) in cat._schema_ctx_cache
+        assert (10, frozenset(), 40) in cat._schema_ctx_cache
+        assert a is cat._schema_ctx_cache[(5, frozenset(), 40)]
+        assert b is cat._schema_ctx_cache[(10, frozenset(), 40)]
+
+    def test_columns_capped_per_table(self, cat):
+        with cat._Session() as s:
+            cat._upsert_entity(
+                s,
+                name="Wide",
+                description="",
+                primary_key="id",
+                sources=[{"source": "duckdb_unified", "table": "wide"}],
+                record_count=1,
+                freshness="",
+                quality_flags={},
+                kg_node_count=0,
+            )
+            for i in range(60):
+                cat._upsert_attribute(
+                    s,
+                    entity="Wide",
+                    attribute=f"c{i}",
+                    data_type="varchar",
+                    nullability_rate=0.0,
+                    business_definition="",
+                    source_path="",
+                    sample_values=[],
+                    lineage_edges=[],
+                )
+            s.commit()
+        ctx = cat.get_schema_context(max_cols=40)
+        assert "(+20 more columns)" in ctx
 
     def test_exclude_tables_removes_table_from_context(self, cat):
         _seed_entity(cat, "Orders", "orders")
