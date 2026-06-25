@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,9 @@ _REF_RE = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b")
 
 # Severity that makes the report not-ok.
 _BLOCKING = {"high", "medium"}
+
+# Cap how many templates we actually replay, to keep the pass fast.
+_MAX_TEMPLATES_TO_REPLAY = 25
 
 
 def _columns_by_table(schema_info: dict[str, dict] | None) -> dict[str, set[str]]:
@@ -118,6 +121,37 @@ def _check_entities(entities: list[dict]) -> list[dict]:
     return warnings
 
 
+def _fill_tokens(sql: str) -> str:
+    """Substitute the supported template tokens with safe default values,
+    matching SemanticLayer._execute_template_query ({year}→2024, {limit}→10)."""
+    return sql.replace("{year}", "2024").replace("{limit}", "10")
+
+
+def _check_templates(
+    templates: list[dict], query_runner: Callable[[str], Any]
+) -> tuple[list[dict], int]:
+    """Replay generated query templates against the data — a 'does it actually
+    run?' reliability check on the mapped model. Returns (warnings, tested)."""
+    warnings: list[dict] = []
+    tested = 0
+    for t in templates[:_MAX_TEMPLATES_TO_REPLAY]:
+        sql = (t.get("sql_query") or "").strip()
+        if not sql:
+            continue
+        tested += 1
+        try:
+            query_runner(_fill_tokens(sql))
+        except Exception as exc:  # noqa: BLE001 — a failing query is the finding
+            warnings.append(
+                {
+                    "type": "template_query_failed",
+                    "severity": "medium",
+                    "detail": f"Query '{t.get('name', '?')}' failed to run: {str(exc)[:160]}",
+                }
+            )
+    return warnings, tested
+
+
 def _llm_critique(draft: dict) -> list[dict]:
     """Optional advisory critique from the LLM. Empty list if unavailable."""
     try:
@@ -159,16 +193,20 @@ def verify_model(
     draft: dict[str, Any],
     schema_info: dict[str, dict] | None = None,
     use_llm: bool = False,
+    query_runner: Callable[[str], Any] | None = None,
 ) -> dict[str, Any]:
     """Run consistency checks over a semantic draft.
 
     Returns ``{ok, checks, warnings, advisory, summary}``. ``ok`` is False when
     any high/medium-severity warning is present. *schema_info* (table → columns)
-    enables the deeper column-level checks; *use_llm* adds advisory notes.
+    enables the deeper column-level checks; *use_llm* adds advisory notes;
+    *query_runner* (a read-only SQL executor) enables replaying the generated
+    query templates against the data.
     """
     entities = draft.get("entities", []) or []
     metrics = draft.get("metrics", []) or []
     relations = draft.get("relations", []) or []
+    templates = draft.get("templates", []) or []
 
     entity_tables = {e.get("table") for e in entities if e.get("table")}
     cols = _columns_by_table(schema_info)
@@ -177,6 +215,11 @@ def verify_model(
     warnings += _check_relations(relations, entity_tables, cols)
     warnings += _check_metrics(metrics, cols)
     warnings += _check_entities(entities)
+
+    templates_tested = 0
+    if query_runner is not None and templates:
+        tpl_warnings, templates_tested = _check_templates(templates, query_runner)
+        warnings += tpl_warnings
 
     advisory = _llm_critique(draft) if use_llm else []
 
@@ -187,7 +230,8 @@ def verify_model(
         "metric_no_formula",
         "entity_no_columns",
         "duplicate_entity_table",
-        # TODO: golden-question replay, faithfulness scoring
+        "template_query_failed",
+        # TODO: faithfulness scoring on NL answers
     ]
 
     blocking = [w for w in warnings if w.get("severity") in _BLOCKING]
@@ -200,6 +244,7 @@ def verify_model(
             "entities": len(entities),
             "metrics": len(metrics),
             "relations": len(relations),
+            "templates_tested": templates_tested,
             "warnings": len(warnings),
             "blocking": len(blocking),
             "advisory": len(advisory),

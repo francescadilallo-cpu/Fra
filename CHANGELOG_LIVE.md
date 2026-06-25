@@ -10,6 +10,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Pipeline — stadio 5: replay query sul dato mappato)
+
+Rafforzata la verifica (stadio 5) con un *query smoke test* read-only: l'orchestratore riesegue i template di query generati contro il dato reale (`mgr.execute`, token `{year}`/`{limit}` sostituiti, `LIMIT 1`) e segnala come warning `template_query_failed` quelli che non girano — verifica concreta che il modello mappato produce query eseguibili.
+
+### `backend/app/agentic/verifier.py`
+- `verify_model()` accetta `query_runner`; nuovo `_check_templates()` (cap 25 template) + `templates_tested` nel summary.
+
+### `backend/app/pipeline/orchestrator.py`
+- passa un `query_runner` read-only basato sul source manager alla verifica.
+
+### Test
+- `test_pipeline.py`: +1 (replay rileva i template falliti). Totale 25; suite completa 1161 passed.
+
+---
+
 ## 2026-06-25 (Pipeline — stadio 4 integrazione conversazionale + stadio 5 verifica)
 
 Completati i due stadi prima stub. La pipeline ora copre l'intero flusso a 5 stadi.

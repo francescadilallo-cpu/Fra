@@ -599,8 +599,11 @@ Aggiornamento 2026-06-25 (stadi 4–5 completati):
 - stadio 4: integrazione conversazionale reale (`semantic/integrate.py` + `POST /api/semantic/integrate`), ops additive sanificate.
 - stadio 5: `verify_model()` con controlli reali schema-aware + critica LLM opzionale; report in `PipelineRun.report`.
 
+Aggiornamento (stadio 5 — replay query):
+- aggiunto query smoke test: i template generati vengono rieseguiti read-only sul dato (`query_runner`); i fallimenti diventano warning `template_query_failed`.
+
 Follow-up residui:
-- verifica: manca ancora replay golden questions + faithfulness scoring (TODO esplicito nel modulo).
+- verifica: manca ancora faithfulness scoring sulle risposte NL (TODO esplicito nel modulo); il replay copre ora l'eseguibilità delle query.
 - integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
 - due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
 - `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).

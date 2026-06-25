@@ -78,6 +78,7 @@ def run_build_pipeline(
     # ── Stage 2: sources ─────────────────────────────────────────────────────
     schema_info: dict = {}
     live_tables: list[str] = []
+    mgr = None
     run.start(STAGE_SOURCES)
     try:
         from ..connectors.duckdb_source_manager import (  # noqa: PLC0415
@@ -162,7 +163,16 @@ def run_build_pipeline(
 
         if not draft:
             draft = _get_semantic_draft(hidden)
-        report = verify_model(draft, schema_info=schema_info or None, use_llm=True)
+        # Read-only SQL replay of generated templates against the live data.
+        query_runner = None
+        if mgr is not None and live_tables:
+            query_runner = lambda sql: mgr.execute(sql, limit=1)  # noqa: E731
+        report = verify_model(
+            draft,
+            schema_info=schema_info or None,
+            use_llm=True,
+            query_runner=query_runner,
+        )
         run.report["verification"] = report
         summary = report["summary"]
         detail = (

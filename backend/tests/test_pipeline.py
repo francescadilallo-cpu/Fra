@@ -282,6 +282,26 @@ class TestVerifierDeep:
         report = verify_model(draft)
         assert any(w["type"] == "duplicate_entity_table" for w in report["warnings"])
 
+    def test_template_replay_flags_failures(self):
+        draft = {
+            "entities": [],
+            "metrics": [],
+            "relations": [],
+            "templates": [
+                {"name": "good", "sql_query": "SELECT 1"},
+                {"name": "bad", "sql_query": "SELECT {limit} FROM nope"},
+            ],
+        }
+
+        def runner(sql: str):
+            if "nope" in sql:
+                raise RuntimeError("no such table: nope")
+
+        report = verify_model(draft, query_runner=runner)
+        assert report["summary"]["templates_tested"] == 2
+        failed = [w for w in report["warnings"] if w["type"] == "template_query_failed"]
+        assert len(failed) == 1 and "bad" in failed[0]["detail"]
+
 
 # ── conversational integration (interpret + apply ops) ────────────────────────
 
