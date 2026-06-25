@@ -183,12 +183,17 @@ def run_build_pipeline(
         if mgr is not None and live_tables:
             query_runner = lambda sql: mgr.execute(sql, limit=1)  # noqa: E731
 
-        # Faithfulness sampling: ask a few model-derived questions and check the
-        # answers are grounded in data (have SQL / touched sources).
+        # Faithfulness sampling + LLM critique only make sense when a provider is
+        # configured. Without one, layer.ask() returns "no LLM" messages that
+        # would score as ungrounded — a spurious low_faithfulness warning on every
+        # build — so gate both on provider availability (also avoids wasted calls).
+        from ..semantic.layer import _llm_intent_provider  # noqa: PLC0415
+
+        llm_available = _llm_intent_provider() is not None
         layer = _semantic_state.get("layer")
-        questions = _sample_questions(draft)
+        questions = _sample_questions(draft) if llm_available else []
         answer_runner = None
-        if layer is not None and questions:
+        if llm_available and layer is not None and questions:
 
             def answer_runner(q: str) -> dict:
                 r = layer.ask(q, hidden_tables=hidden)
@@ -200,7 +205,7 @@ def run_build_pipeline(
         report = verify_model(
             draft,
             schema_info=schema_info or None,
-            use_llm=True,
+            use_llm=llm_available,
             query_runner=query_runner,
             answer_runner=answer_runner,
             questions=questions,

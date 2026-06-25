@@ -124,6 +124,10 @@ def test_pipeline_builds_unified_multisource_model(pipeline_env):
     # Verification ran and produced a report.
     report = run.to_dict()["report"].get("verification")
     assert report is not None and "summary" in report
+    # No LLM provider in the test env → faithfulness is skipped (not a spurious
+    # low_faithfulness warning from "no LLM" answers).
+    assert report["summary"]["faithfulness_sampled"] == 0
+    assert not any(w["type"] == "low_faithfulness" for w in report["warnings"])
 
 
 def test_pipeline_no_sources_degrades(monkeypatch, tmp_path):

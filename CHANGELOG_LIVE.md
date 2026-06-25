@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Bug-hunt — faithfulness falso-positivo senza LLM)
+
+Bug trovato in review: nello stadio 5 la **faithfulness** e la critica LLM giravano anche senza provider LLM configurato. Senza LLM, `layer.ask()` ritorna messaggi "no LLM" → tutte le risposte campionate risultavano non-grounded → **warning `low_faithfulness` falso-positivo a ogni build**, più ~5 chiamate `ask` inutili.
+
+### `backend/app/pipeline/orchestrator.py`
+- faithfulness sampling (`answer_runner` + domande) e `use_llm` ora **gated** su `_llm_intent_provider() is not None`. Senza LLM: faithfulness saltata, nessun warning spurio, nessuna chiamata sprecata. Il replay query (deterministico) resta sempre attivo.
+
+### Test
+- `test_pipeline_e2e.py`: assert che senza LLM `faithfulness_sampled == 0` e nessun warning `low_faithfulness`. Suite completa **1196 passed**.
+
+---
+
 ## 2026-06-25 (Hardening — integrazione conversazionale robusta)
 
 `POST /api/semantic/integrate` (stage 4) reso resiliente e più chiaro.
