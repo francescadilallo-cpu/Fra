@@ -751,7 +751,7 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
                     return {
                         k: v
                         for k, v in self._inner.get_schema_info().items()
-                        if not re.match(r"sf_[a-z0-9_]+_(objects|fields)$", k)
+                        if not _SF_META_TABLE_RE.match(k)
                     }
 
                 def __getattr__(self, name):
@@ -933,7 +933,11 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     kg = _semantic_state.get("kg")
 
     all_entities = catalog.get_draft_entities() if catalog else []
-    entities = [e for e in all_entities if e["table"] not in hidden]
+    entities = [
+        e
+        for e in all_entities
+        if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+    ]
     metrics = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.
@@ -1812,7 +1816,10 @@ def _semantic_status_payload(hidden: frozenset[str] = frozenset()) -> dict[str, 
     )
     if hidden:
         draft_entities = catalog.get_draft_entities()
-        visible = [e for e in draft_entities if e["table"] not in hidden]
+        visible = [
+            e for e in draft_entities
+            if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+        ]
         entities = [e["name"] for e in visible]
         metadata_rows = sum(e.get("record_count") or 0 for e in visible)
         kg_nodes, kg_edges = _kg_counts_excluding(kg, hidden)
@@ -3278,6 +3285,11 @@ def build_salesforce_schema_graph(
 # client_secret, source_id, expires_at}.  State expires in 10 minutes.
 _SF_PKCE_SESSIONS: dict[str, dict] = {}
 _SF_PKCE_TTL = 600
+
+# Matches the internal Salesforce schema-catalog tables (sf_*_objects / sf_*_fields).
+# These are bookkeeping metadata, not real business entities — excluded from all
+# entity/draft views even though they live in DuckDB.
+_SF_META_TABLE_RE = re.compile(r"sf_[a-z0-9_]+_(objects|fields)$")
 
 
 def _sf_callback_url(req: Request) -> str:
@@ -4947,7 +4959,10 @@ def get_live_config(
 
     # ── Entities & relations from catalog/kg ──────────────────────────────────
     all_entities: list[dict] = catalog.get_draft_entities() if catalog else []
-    entities = [e for e in all_entities if e["table"] not in hidden]
+    entities = [
+        e for e in all_entities
+        if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+    ]
     metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.

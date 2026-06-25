@@ -1418,15 +1418,17 @@ class DuckDBSourceManager:
     def _ingest_salesforce(
         self, conn: duckdb.DuckDBPyConnection, cfg: SourceConfig
     ) -> None:
-        """Retrieve Salesforce schema using stored PKCE tokens and load into DuckDB.
+        """Retrieve Salesforce schema + data using stored PKCE tokens and load into DuckDB.
 
         Credentials are loaded from salesforce_config.json (written at OAuth callback
         time), not from cfg.params. cfg.params only carries non-sensitive metadata
         (instance_url, client_id) stored at registration time.
 
-        Creates two tables per source:
-          sf_{id}_objects  — one row per SObject (name, label, is_custom, field_count)
-          sf_{id}_fields   — one row per field (object_name, field_name, type, ...)
+        Creates the following tables per source:
+          sf_{id}_objects            — one row per SObject (metadata)
+          sf_{id}_fields             — one row per field across all objects (metadata)
+          sf_{id}_{object_lower}     — actual records for each priority object
+            e.g. sf_{id}_account, sf_{id}_contact, sf_{id}_opportunity, …
         """
         from .salesforce_connector import (
             SalesforceConnector,
@@ -1435,6 +1437,7 @@ class DuckDBSourceManager:
             load_salesforce_config,
             save_salesforce_schema,
             build_salesforce_dataframes,
+            _PRIORITY_OBJECTS,
         )
 
         stored = load_salesforce_config(cfg.id)
@@ -1443,6 +1446,11 @@ class DuckDBSourceManager:
                 f"Salesforce source '{cfg.id}' has no stored access token. "
                 "Re-authorise via the Data Sources connector panel."
             )
+
+        # Collect data DataFrames inside the connector context so the HTTP
+        # client is alive for all SOQL queries.
+        import pandas as pd  # type: ignore[import]
+        data_dfs: dict[str, "pd.DataFrame"] = {}
 
         try:
             with SalesforceConnector(
@@ -1455,12 +1463,28 @@ class DuckDBSourceManager:
                 # Limit to priority objects only on free-tier deployments to
                 # avoid OOM on 512 MB instances during KG rebuild.
                 schema = sf.get_schema(max_objects=25)
+
+                # Fetch actual records for priority objects found in the schema.
+                for sf_obj in schema.objects:
+                    if sf_obj.name not in _PRIORITY_OBJECTS:
+                        continue
+                    if not sf_obj.fields:
+                        continue
+                    try:
+                        df = sf.fetch_object_dataframe(sf_obj, limit=1000)
+                    except Exception as exc:
+                        logger.warning(
+                            "Skipping data fetch for %s: %s", sf_obj.name, exc
+                        )
+                        continue
+                    if not df.empty:
+                        data_dfs[sf_obj.name] = df
         except (SalesforceAuthError, SalesforceAPIError) as exc:
             raise ValueError(str(exc)) from exc
 
         save_salesforce_schema(cfg.id, schema)
 
-        # Build DataFrames and load into DuckDB
+        # Build metadata DataFrames and load into DuckDB
         objects_df, fields_df = build_salesforce_dataframes(schema)
 
         safe_id = cfg.id.replace("-", "_")
@@ -1468,19 +1492,36 @@ class DuckDBSourceManager:
         fields_table = f"sf_{safe_id}_fields"
 
         conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{objects_table}" AS SELECT * FROM objects_df'
+            f'CREATE OR REPLACE TABLE "{objects_table}" AS SELECT * FROM objects_df'
         )
         conn.execute(
-            f'CREATE TABLE IF NOT EXISTS "{fields_table}" AS SELECT * FROM fields_df'
+            f'CREATE OR REPLACE TABLE "{fields_table}" AS SELECT * FROM fields_df'
         )
 
         n_objects = len(objects_df)
         n_fields = len(fields_df)
         self._row_counts[f"{cfg.id}.{objects_table}"] = n_objects
         self._row_counts[f"{cfg.id}.{fields_table}"] = n_fields
+        if objects_table not in cfg.target_tables:
+            cfg.target_tables.append(objects_table)
+        if fields_table not in cfg.target_tables:
+            cfg.target_tables.append(fields_table)
+
+        # Load actual records for each priority object
+        for obj_name, df in data_dfs.items():
+            table_name = f"sf_{safe_id}_{obj_name.lower()}"
+            conn.execute(
+                f'CREATE OR REPLACE TABLE "{table_name}" AS SELECT * FROM df'
+            )
+            n_rows = len(df)
+            self._row_counts[f"{cfg.id}.{table_name}"] = n_rows
+            if table_name not in cfg.target_tables:
+                cfg.target_tables.append(table_name)
+            logger.info("SF   %-25s %7d rows", table_name, n_rows)
 
         logger.info(
-            "SF   %-25s %3d objects  %5d fields", cfg.label, n_objects, n_fields
+            "SF   %-25s %3d objects  %5d fields  %2d data tables",
+            cfg.label, n_objects, n_fields, len(data_dfs),
         )
 
     # ── Auto-discovery ─────────────────────────────────────────────────────────

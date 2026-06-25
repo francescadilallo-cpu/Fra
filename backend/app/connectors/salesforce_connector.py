@@ -309,6 +309,64 @@ class SalesforceConnector:
             )
         return resp.json()
 
+    def query_records(self, soql: str) -> list[dict]:
+        """Execute a SOQL query and return all records (auto-paginates)."""
+        from urllib.parse import quote as _quote
+
+        data = self._get(f"/query?q={_quote(soql)}")
+        records: list[dict] = list(data.get("records", []))
+        while not data.get("done", True) and data.get("nextRecordsUrl"):
+            # nextRecordsUrl: "/services/data/v59.0/query/01g..." — strip prefix
+            next_path = data["nextRecordsUrl"].split(f"/{_SF_API_VERSION}", 1)[-1]
+            data = self._get(next_path)
+            records.extend(data.get("records", []))
+        return records
+
+    def fetch_object_dataframe(
+        self, sf_obj: "SalesforceObject", limit: int = 1000
+    ) -> "pd.DataFrame":
+        """Query up to *limit* records for one SObject and return as a DataFrame.
+
+        Filters out compound/binary field types that SOQL doesn't support
+        directly (address, location, base64, anyType, encryptedstring).
+        On SOQL failure falls back to SELECT Id, Name.
+        """
+        import pandas as pd  # type: ignore[import]
+
+        _SKIP = frozenset(
+            {"address", "location", "anytype", "base64", "encryptedstring", "complexvalue"}
+        )
+        queryable = [
+            f.name for f in sf_obj.fields if f.type.lower() not in _SKIP
+        ]
+        # Id first; cap at 150 to stay under SOQL length limits
+        if "Id" in queryable:
+            queryable.remove("Id")
+        queryable = ["Id"] + queryable[:149]
+
+        soql = f"SELECT {', '.join(queryable)} FROM {sf_obj.name} LIMIT {limit}"
+        try:
+            records = self.query_records(soql)
+        except SalesforceAPIError as exc:
+            logger.warning(
+                "SOQL query for %s failed (%s), retrying with minimal fields",
+                sf_obj.name, exc,
+            )
+            has_name = any(f.name == "Name" for f in sf_obj.fields)
+            minimal = "Id, Name" if has_name else "Id"
+            try:
+                records = self.query_records(
+                    f"SELECT {minimal} FROM {sf_obj.name} LIMIT {limit}"
+                )
+            except SalesforceAPIError:
+                return pd.DataFrame()
+
+        if not records:
+            return pd.DataFrame()
+
+        clean = [{k: v for k, v in r.items() if k != "attributes"} for r in records]
+        return pd.DataFrame(clean)
+
     def get_org_id(self) -> str:
         """Return the Organisation ID via a lightweight SOQL query."""
         try:
