@@ -530,6 +530,73 @@ function StepsTrace({ steps }: { steps: string[] }) {
   )
 }
 
+// ── Knowledge-graph grounding (citations) ───────────────────────────────────────
+
+interface GraphCtxNode { id: string; label: string; kind: string }
+interface GraphCtxEdge { from: string; to: string; type: string }
+
+const KIND_STYLE: Record<string, string> = {
+  table: 'bg-blue-50 text-blue-700 border-blue-200',
+  concept: 'bg-violet-50 text-violet-700 border-violet-200',
+  metric: 'bg-amber-50 text-amber-700 border-amber-200',
+}
+
+function relPhrase(e: GraphCtxEdge): string {
+  if (e.type.startsWith('FK')) {
+    const via = e.type.startsWith('FK_') ? e.type.slice(3) : ''
+    return `${e.from} → ${e.to}${via ? ` (via ${via})` : ''}`
+  }
+  if (e.type === 'DESCRIBES') return `${e.from} describes ${e.to}`
+  if (e.type === 'MEASURES') return `${e.from} measures ${e.to}`
+  return `${e.from} → ${e.to}`
+}
+
+function GraphCitations({ provenance }: { provenance?: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false)
+  const gc = provenance?.graph_context as
+    | { nodes?: GraphCtxNode[]; edges?: GraphCtxEdge[] }
+    | undefined
+  const nodes = gc?.nodes ?? []
+  const edges = gc?.edges ?? []
+  if (nodes.length === 0) return null
+  // De-duplicate relation phrases for a compact display.
+  const rels = Array.from(new Set(edges.map(relPhrase))).slice(0, 8)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <GitBranch className="w-3 h-3" />
+        <span>Grounded on {nodes.length} model element{nodes.length !== 1 ? 's' : ''}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 pl-1">
+          <div className="flex flex-wrap gap-1">
+            {nodes.map(n => (
+              <span
+                key={n.id}
+                title={n.kind}
+                className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${KIND_STYLE[n.kind] ?? 'bg-slate-50 text-slate-600 border-slate-200'}`}
+              >
+                {n.label}
+              </span>
+            ))}
+          </div>
+          {rels.length > 0 && (
+            <ul className="space-y-0.5">
+              {rels.map((r, i) => (
+                <li key={i} className="text-[11px] text-slate-500 font-mono leading-snug">{r}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
 function SqlBlock({ sql }: { sql: string }) {
@@ -706,9 +773,10 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           </div>
         )}
 
-        {/* Steps trace + SQL in a compact row */}
+        {/* Steps trace + graph grounding + SQL in a compact row */}
         <div className="flex flex-col gap-1.5">
           {r.steps && <StepsTrace steps={r.steps} />}
+          <GraphCitations provenance={r.provenance} />
           <SqlBlock sql={r.sql} />
         </div>
 

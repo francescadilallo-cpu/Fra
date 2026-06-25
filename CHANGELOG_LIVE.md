@@ -10,6 +10,17 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Query UI — citazioni di provenienza dal Knowledge Graph)
+
+Le risposte NL ora mostrano **su cosa sono fondate**: un pannello "Grounded on N model elements" elenca gli elementi del modello usati (tabelle/concetti/metriche come chip colorati per tipo) e le relazioni rilevanti, consumando `provenance.graph_context` prodotto dal GraphRAG. Aumenta la fiducia/trasparienza (stile Graphwise). Compare solo quando presente (risposte LLM-SQL live), nessuna fuga di termini demo.
+
+### Frontend
+- `data/queryEngine.ts`: `EngineResult.provenance` aggiunto.
+- `api/semantic.ts`: `adaptAskResult` propaga `provenance`.
+- `components/QueryInterface.tsx`: nuovo componente `GraphCitations` (chip nodi per tipo + frasi relazione), reso sotto la tabella risultati.
+
+---
+
 ## 2026-06-25 (Semantic Layer — GraphRAG: retrieval sul Knowledge Graph)
 
 Quando il semantic layer genera SQL via LLM, il prompt è ora **grounded sul grafo**: dato il quesito si fa entity-linking ai nodi del KG (tabelle, `Concept`, `Metric`), si estrae il sotto-grafo rilevante (relazioni FK/manual, `DESCRIBES`, `MEASURES`) e lo si inietta come contesto. I nodi/archi usati finiscono nella `provenance` (base per citazioni). Ispirato al GraphRAG di Graphwise/Ontotext, ma **KG-only e lessicale** (niente embeddings/vector DB), coerente coi vincoli memoria.

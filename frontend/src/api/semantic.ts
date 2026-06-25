@@ -372,6 +372,7 @@ export function adaptAskResult(result: AskResult): EngineResult {
     sources,
     isDisambiguation: result.disambiguation_required || result.ambiguity_error,
     candidates: result.candidates ?? [],
+    provenance: result.provenance,
     followUps: [],
     steps: touched.length > 0
       ? [`Queried: ${touched.join(', ')} — ${totalRows} rows in ${result.latency_ms?.toFixed(0) ?? '?'}ms`]
