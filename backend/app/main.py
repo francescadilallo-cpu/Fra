@@ -23,6 +23,7 @@ from typing import Annotated, Any, Callable, Literal
 
 from dotenv import load_dotenv
 from fastapi import (
+    BackgroundTasks,
     Depends,
     FastAPI,
     Form,
@@ -2992,27 +2993,41 @@ def remove_source(
 def sync_source(
     source_id: Annotated[str, _ApiPath(max_length=128)],
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> SourceResponse:
-    """Re-ingest a single source and rebuild the DuckDB snapshot."""
+    """Re-ingest a single source in the background.
+
+    Returns immediately with status='syncing'.  The ingest runs in a
+    background thread; poll GET /api/sources until status flips to
+    'active' or 'error'.
+    """
     from .connectors.duckdb_source_manager import get_source_manager, _safe_ingest_error
 
     mgr = get_source_manager(_SCENARIO_PATH)
     cfg = mgr.registry.get(source_id)
     if cfg is None:
         raise HTTPException(status_code=404, detail=f"Source '{source_id}' not found")
-    try:
-        mgr.ingest_one(source_id)
-        _refresh_catalog_and_kg_after_rebuild(mgr)
-    except NotImplementedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=_safe_ingest_error(exc)) from exc
+
+    # Mark as syncing so the caller knows the job started
+    mgr.registry.patch(source_id, status="syncing", error_msg=None)
+
+    def _run_sync() -> None:
+        try:
+            mgr.ingest_one(source_id)
+            _refresh_catalog_and_kg_after_rebuild(mgr)
+        except Exception as exc:
+            safe_msg = _safe_ingest_error(exc)
+            logger.error("Background sync failed for %s: %s", source_id, exc)
+            try:
+                mgr.registry.patch(source_id, status="error", error_msg=safe_msg)
+            except Exception:
+                pass
+
+    background_tasks.add_task(_run_sync)
+
     cfg = mgr.registry.get(source_id) or cfg
-    _audit(request, current_user, "Synced data source", source_id, category="data")
+    _audit(request, current_user, "Synced data source (background)", source_id, category="data")
     return _source_cfg_to_response(cfg)
 
 

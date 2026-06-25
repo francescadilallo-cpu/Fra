@@ -2211,14 +2211,32 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     if (src) disconnectSource(src.id)
   }
 
-  // ── Sync → POST /api/sources/{id}/sync
+  // ── Sync → POST /api/sources/{id}/sync (async background)
+  // Backend returns immediately with status='syncing'; we poll until done.
   const syncById = async (sourceId: string) => {
     setSources(prev => prev.map(s => s.id === sourceId ? { ...s, status: 'syncing' } : s))
     try {
-      const updated = await syncSource(sourceId)
-      setSources(prev => prev.map(s => s.id === sourceId ? updated : s))
-      showToast(`${updated.label} synced · ${updated.row_count.toLocaleString('en-US')} records`)
-      window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
+      await syncSource(sourceId)
+      // Poll GET /api/sources every 3 s until this source is no longer 'syncing'
+      const MAX_POLLS = 100 // ~5 minutes
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise(r => setTimeout(r, 3000))
+        const all = await listSources()
+        const updated = all.find(s => s.id === sourceId)
+        if (!updated || updated.status !== 'syncing') {
+          if (updated) setSources(prev => prev.map(s => s.id === sourceId ? updated : s))
+          if (updated?.status === 'active') {
+            showToast(`${updated.label} synced · ${updated.row_count.toLocaleString('en-US')} records`)
+            window.dispatchEvent(new CustomEvent('pipeline-run-updated'))
+          } else {
+            showToast(updated?.error_msg || 'Sync failed', 'error')
+          }
+          return
+        }
+        // Keep UI current while waiting
+        setSources(prev => prev.map(s => s.id === sourceId ? { ...s, ...updated } : s))
+      }
+      showToast('Sync is taking longer than expected — check back soon', 'error')
     } catch (err: unknown) {
       const msg = backendErrorMessage(err) || 'Sync failed'
       setSources(prev => prev.map(s => s.id === sourceId ? { ...s, status: 'error', error_msg: msg } : s))
