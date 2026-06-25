@@ -108,7 +108,7 @@ def build_graph_context(
     ``context`` is a prompt-ready text block (empty when nothing matches);
     ``nodes``/``edges`` capture what was retrieved, for provenance/citations.
     """
-    empty = {"context": "", "nodes": [], "edges": []}
+    empty = {"context": "", "nodes": [], "edges": [], "tables": []}
     if kg is None or not question:
         return empty
     try:
@@ -220,16 +220,24 @@ def build_graph_context(
     lines: list[str] = []
     out_edges: list[dict] = []
     out_nodes: list[dict] = []
+    rel_tables: list[str] = []
+
+    def _add_table(name: str | None) -> None:
+        if name and name not in rel_tables:
+            rel_tables.append(name)
+
     for nid in visible:
         attrs = attrs_by_id[nid]
         kind = _kind(attrs)
         label = label_cache[nid]
         out_nodes.append({"id": nid, "label": label, "kind": kind})
+        _add_table(node_table.get(nid))  # the matched node's own data table
         phrases: list[str] = []
         for other_id, etype, direction in adjacency.get(nid, [])[:_MAX_EDGES_PER_NODE]:
             phrase = _rel_phrase(other_id, etype, direction)
             if phrase:
                 phrases.append(phrase)
+                _add_table(node_table.get(other_id))  # FK/described/measured table
                 out_edges.append(
                     {
                         "from": label,
@@ -245,4 +253,9 @@ def build_graph_context(
         "### Knowledge graph context (grounded model — use these names and links)\n"
         + "\n".join(lines)
     )
-    return {"context": context, "nodes": out_nodes, "edges": out_edges}
+    return {
+        "context": context,
+        "nodes": out_nodes,
+        "edges": out_edges,
+        "tables": rel_tables,
+    }

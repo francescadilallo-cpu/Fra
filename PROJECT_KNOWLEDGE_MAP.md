@@ -75,6 +75,7 @@ Responsabilita:
 - generazione query deterministica (template tipizzati, nessun SQL arbitrario generato da LLM)
 - composizione risultato con lineage completo (connectors/tabelle/entita/proprieta)
 - GraphRAG (`semantic/graph_rag.py`): nel path LLM-SQL (`_execute_llm_sql`) il prompt è grounded sul KG — entity-linking del quesito ai nodi (tabelle/`Concept`/`Metric`), estrazione sotto-grafo (relazioni, `DESCRIBES`, `MEASURES`) iniettata nel prompt; nodi/archi usati in `provenance.graph_context`. KG-only, lessicale, degrade se nessun match
+- selezione tabelle del prompt guidata dal GraphRAG: `build_graph_context` ritorna le `tables` rilevanti → passate come `priority_tables` a `catalog.get_schema_context` (sempre incluse, mai droppate dal cap `max_tables`). Risolve il caso schemi grandi/multi-fonte: la tabella che serve è sempre nel prompt
 
 Controlli security specifici nel semantic layer:
 

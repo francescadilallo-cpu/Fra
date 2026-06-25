@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Schema prompt — selezione tabelle guidata dal GraphRAG)
+
+Risolto il limite strutturale del cap fisso: con più fonti fuse il totale tabelle supera qualsiasi N, e includere "le prime N" lasciava fuori dal prompt la tabella che serve. Ora lo schema del prompt LLM-SQL è **scoped alla domanda**.
+
+### `backend/app/semantic/graph_rag.py`
+- `build_graph_context` ritorna anche `tables`: le tabelle rilevanti (matchate + vicini FK/DESCRIBES/MEASURES nel grafo).
+
+### `backend/app/metadata/catalog.py`
+- `get_schema_context(priority_tables=...)`: le priority tables (rilevanti) sono **sempre incluse e mai droppate** dal cap; le altre riempiono il budget fino a `max_tables`. Le chiamate con priority non usano la cache (variano per domanda).
+
+### `backend/app/semantic/layer.py`
+- `_execute_llm_sql`: il GraphRAG gira prima dello schema; le sue `tables` diventano le priority del prompt. Senza match → schema globale come prima (nessuna regressione).
+
+### Effetto
+La tabella che serve alla domanda è **sempre nel prompt**, a qualsiasi numero totale di tabelle e su più fonti (le priority attraversano le fonti via relazioni cross-source). Prompt comunque limitato.
+
+### Test
+- `test_graph_rag` (tables + vicini), `test_metadata_catalog` (priority mai droppata, skip cache). Suite completa **1201 passed**.
+
+---
+
 ## 2026-06-25 (Schema prompt — più tabelle + tunable via env)
 
 Il cap di 30 tabelle nel prompt LLM-SQL era troppo basso per CRM/ERP reali (Salesforce ha decine di oggetti): le tabelle oltre la 30ª restavano fuori dal prompt e l'LLM non poteva interrogarle.

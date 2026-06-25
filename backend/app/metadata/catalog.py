@@ -476,20 +476,27 @@ class MetadataCatalog:
         max_tables: int = SCHEMA_MAX_TABLES,
         exclude_tables: frozenset[str] = frozenset(),
         max_cols: int = SCHEMA_MAX_COLS,
+        priority_tables: frozenset[str] = frozenset(),
     ) -> str:
-        """Return a compact LLM-ready description of all catalogued tables.
+        """Return a compact LLM-ready description of catalogued tables.
 
         Used in the LLM SQL-generation prompt so the model knows exactly which
         tables and columns are available in the DuckDB snapshot.
-        ``exclude_tables`` removes tables from the description (live-mode
-        users must not see demo tables). ``max_cols`` bounds the columns listed
-        per table so a very wide source (e.g. a Salesforce object with hundreds
-        of fields) cannot blow up the prompt size/cost.
+        ``exclude_tables`` removes tables (live-mode users must not see demo
+        tables). ``max_cols`` bounds columns per table so a very wide source
+        cannot blow up the prompt. ``priority_tables`` (the GraphRAG-relevant
+        tables for the question) are listed first and **never dropped** by the
+        ``max_tables`` cap — so the tables a question needs are always present,
+        no matter how many tables the unified model has.
 
-        The result is memoised per ``(max_tables, exclude_tables, max_cols)`` and
-        invalidated whenever the schema changes, so the hot query path does
-        not rescan every entity and attribute row on each request.
+        The global (no-priority) result is memoised per
+        ``(max_tables, exclude_tables, max_cols)``. Calls with *priority_tables*
+        vary per question and are computed without caching to avoid cache bloat.
         """
+        if priority_tables:
+            return self._compute_schema_context(
+                max_tables, exclude_tables, max_cols, priority_tables
+            )
         cache_key = (max_tables, exclude_tables, max_cols)
         with self._schema_ctx_lock:
             cached = self._schema_ctx_cache.get(cache_key)
@@ -504,6 +511,7 @@ class MetadataCatalog:
         max_tables: int,
         exclude_tables: frozenset[str] = frozenset(),
         max_cols: int = 40,
+        priority_tables: frozenset[str] = frozenset(),
     ) -> str:
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
@@ -517,14 +525,11 @@ class MetadataCatalog:
         for ar in attr_rows:
             attrs_by_entity.setdefault(ar.entity, []).append(ar)
 
-        # Deduplicate by actual DuckDB table name — prefer first occurrence
+        # Resolve each entity's DuckDB table, dedup by table (first wins), and
+        # drop excluded tables.
+        resolved: list[tuple] = []  # (table, row)
         seen_tables: set[str] = set()
-        lines: list[str] = ["Available tables in DuckDB:\n"]
-        count = 0
-
         for row in sorted(entity_rows, key=lambda r: r.name):
-            if count >= max_tables:
-                break
             sources = json.loads(row.sources_json or "[]")
             table = next(
                 (s.get("table", row.name) for s in sources if isinstance(s, dict)),
@@ -533,8 +538,17 @@ class MetadataCatalog:
             if table in seen_tables or table in exclude_tables:
                 continue
             seen_tables.add(table)
-            count += 1
+            resolved.append((table, row))
 
+        # Priority (GraphRAG-relevant) tables first and always included; the rest
+        # fill the remaining budget up to max_tables.
+        priority = [(t, r) for t, r in resolved if t in priority_tables]
+        others = [(t, r) for t, r in resolved if t not in priority_tables]
+        budget = max(0, max_tables - len(priority))
+        ordered = priority + others[:budget]
+
+        lines: list[str] = ["Available tables in DuckDB:\n"]
+        for table, row in ordered:
             record_count = row.record_count or 0
             lines.append(f"Table: {table} ({record_count:,} rows)")
             attrs = attrs_by_entity.get(row.name, [])

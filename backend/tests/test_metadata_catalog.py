@@ -506,6 +506,22 @@ class TestSchemaContextCache:
         ctx = cat.get_schema_context(max_cols=40)
         assert "(+20 more columns)" in ctx
 
+    def test_priority_tables_never_dropped(self, cat):
+        _seed_entity(cat, "A", "a")
+        _seed_entity(cat, "B", "b")
+        _seed_entity(cat, "C", "c")
+        # Top-1 alphabetically would be 'a', but 'b' is a priority table.
+        ctx = cat.get_schema_context(max_tables=1, priority_tables=frozenset({"b"}))
+        assert "Table: b" in ctx
+        assert "Table: a" not in ctx  # budget consumed by the priority table
+
+    def test_priority_calls_skip_cache(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        before = len(cat._schema_ctx_cache)
+        cat.get_schema_context(priority_tables=frozenset({"orders"}))
+        # Priority calls vary per question → not memoised (avoids cache bloat).
+        assert len(cat._schema_ctx_cache) == before
+
     def test_exclude_tables_removes_table_from_context(self, cat):
         _seed_entity(cat, "Orders", "orders")
         _seed_entity(cat, "Demo", "demo_table")

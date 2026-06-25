@@ -1458,8 +1458,30 @@ class SemanticLayer:
         _hidden: frozenset[str] = getattr(
             SemanticLayer._thread_local, "hidden_tables", frozenset()
         )
+        # GraphRAG: retrieve the relevant sub-graph (relations, concepts,
+        # metrics) for this question first. Its tables seed the schema prompt as
+        # *priority tables* (always included, never dropped by the table cap), so
+        # the tables a question needs are present no matter how many tables the
+        # unified multi-source model has. Degrades to empty when nothing matches.
+        _graph_block = ""
+        _graph_prov: dict[str, Any] = {}
+        _priority_tables: frozenset[str] = frozenset()
+        if self._kg is not None:
+            try:
+                from .graph_rag import build_graph_context
+
+                _gr = build_graph_context(self._kg, intent.raw_question, _hidden)
+                _priority_tables = frozenset(_gr.get("tables") or [])
+                if _gr.get("context"):
+                    _graph_block = "\n\n" + _gr["context"]
+                    _graph_prov = {"nodes": _gr["nodes"], "edges": _gr["edges"]}
+            except Exception as _gr_exc:  # noqa: BLE001 — never break the query
+                logger.debug("graph context retrieval skipped: %s", _gr_exc)
+
         schema_ctx = (
-            self._catalog.get_schema_context(exclude_tables=_hidden)
+            self._catalog.get_schema_context(
+                exclude_tables=_hidden, priority_tables=_priority_tables
+            )
             if self._catalog
             else "No schema available."
         )
@@ -1483,22 +1505,6 @@ class SemanticLayer:
             ]
             if _ctx_parts:
                 _ctx_block = "\n\n### Business Context\n" + "\n\n".join(_ctx_parts)
-
-        # GraphRAG: retrieve the relevant sub-graph (relations, concepts,
-        # metrics) for this question and ground the prompt in it. Degrades to an
-        # empty block when nothing matches.
-        _graph_block = ""
-        _graph_prov: dict[str, Any] = {}
-        if self._kg is not None:
-            try:
-                from .graph_rag import build_graph_context
-
-                _gr = build_graph_context(self._kg, intent.raw_question, _hidden)
-                if _gr.get("context"):
-                    _graph_block = "\n\n" + _gr["context"]
-                    _graph_prov = {"nodes": _gr["nodes"], "edges": _gr["edges"]}
-            except Exception as _gr_exc:  # noqa: BLE001 — never break the query
-                logger.debug("graph context retrieval skipped: %s", _gr_exc)
 
         system_prompt = (
             "You are a SQL generator for a DuckDB analytical database. "

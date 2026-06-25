@@ -71,3 +71,14 @@ class TestBuildGraphContext:
         gr = build_graph_context(kg, "orders and customers")
         for e in gr["edges"]:
             assert {"from", "to", "type"} <= set(e)
+
+    def test_returns_relevant_tables_incl_neighbors(self):
+        kg = _sample_kg()
+        gr = build_graph_context(kg, "show top customers by revenue")
+        # 'customers' matched directly; 'orders' pulled in as its FK neighbor.
+        assert {"customers", "orders"} <= set(gr["tables"])
+
+    def test_no_match_no_tables(self):
+        kg = _sample_kg()
+        gr = build_graph_context(kg, "unrelated weather forecast")
+        assert gr["tables"] == []
