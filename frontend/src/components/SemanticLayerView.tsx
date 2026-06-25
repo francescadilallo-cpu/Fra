@@ -2131,7 +2131,6 @@ export default function SemanticLayerView() {
   useEffect(() => { loadFromBackend() }, [loadFromBackend])
 
   useEffect(() => {
-    if (IS_DEMO_MODE) return
     window.addEventListener('pipeline-run-updated', loadFromBackend)
     return () => window.removeEventListener('pipeline-run-updated', loadFromBackend)
   }, [loadFromBackend])

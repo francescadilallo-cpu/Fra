@@ -3142,7 +3142,16 @@ def sync_source(
     def _run_sync() -> None:
         try:
             mgr.ingest_one(source_id)
-            _refresh_catalog_and_kg_after_rebuild(mgr)
+            # Full semantic reload so the KG is rebuilt from the updated DuckDB
+            # snapshot (new tables are discovered via build_from_schema).
+            # A partial catalog-only refresh is not enough when the ontology YAML
+            # is present: build_from_ontology() would not see new tables, leaving
+            # Entity Graph and Data Model empty after a Salesforce sync.
+            if _semantic_state.get("loaded"):
+                reload_semantic()
+            else:
+                _refresh_catalog_and_kg_after_rebuild(mgr)
+            logger.info("Sync complete for source %s", source_id)
         except Exception as exc:
             safe_msg = _safe_ingest_error(exc)
             logger.error("Background sync failed for %s: %s", source_id, exc)
@@ -5105,6 +5114,14 @@ def get_live_config(
         e for e in all_entities
         if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
     ]
+    logger.info(
+        "live-config: catalog=%s all_entities=%d visible=%d hidden=%d user_mode=%s",
+        "ok" if catalog else "NONE",
+        len(all_entities),
+        len(entities),
+        len(hidden),
+        _user.mode,
+    )
     metrics_raw: list[dict] = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.
