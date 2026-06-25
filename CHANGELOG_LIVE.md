@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (MCP — il Semantic Layer esposto agli agenti AI)
+
+Nuovo **server MCP** (Model Context Protocol) che espone il modello unificato del cliente ad agenti esterni (Claude, ecc.) via un endpoint JSON-RPC 2.0: `POST /api/mcp`. Read-only, JWT-autenticato, confine demo/live rispettato; ispirato a GraphDB 11 di Graphwise ("il grafo come cervello degli agenti"). Nessuna nuova dipendenza (subset MCP implementato a mano).
+
+### `backend/app/mcp_server.py` (nuovo)
+- Tool read-only: `ask` (NL→risposta del semantic layer con SQL/sources/graph_context), `list_metrics`, `get_data_model` (entità + relazioni).
+- `handle_jsonrpc`: `initialize`, `tools/list`, `tools/call`, `ping`, ack `notifications/initialized`; envelope JSON-RPC con `result`/`error`; supporto batch.
+- Dispatch riusa le funzioni esistenti (`semantic_ask`, `get_metrics`, `_get_semantic_draft`) col principal autenticato; errori dei tool ritornati come `isError` (no 500).
+- Sicurezza: solo read-only (niente write/azioni agentiche), JWT obbligatorio, hidden-tables per-caller, guardie SQL/ontologia del layer.
+
+### `backend/app/main.py`
+- `include_router(mcp_router)` (auth dentro la route).
+
+### Test
+- `tests/test_mcp_server.py` (+9): JSON-RPC (initialize/tools.list/errori), 401 senza Bearer, tools/list e get_data_model autenticati. Suite completa 1190 passed.
+
+### Fuori scope v1
+- Streaming SSE/notifiche server→client; tool di scrittura/azioni; OAuth MCP dedicato (si riusa il JWT).
+
+---
+
 ## 2026-06-25 (Query UI — citazioni di provenienza dal Knowledge Graph)
 
 Le risposte NL ora mostrano **su cosa sono fondate**: un pannello "Grounded on N model elements" elenca gli elementi del modello usati (tabelle/concetti/metriche come chip colorati per tipo) e le relazioni rilevanti, consumando `provenance.graph_context` prodotto dal GraphRAG. Aumenta la fiducia/trasparienza (stile Graphwise). Compare solo quando presente (risposte LLM-SQL live), nessuna fuga di termini demo.

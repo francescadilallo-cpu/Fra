@@ -248,6 +248,16 @@ Responsabilita:
 - endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)
 - frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio, report di verifica e box "Refine by instruction"
 
+### 3.8-quater MCP server (Semantic Layer per agenti AI)
+
+File: backend/app/mcp_server.py
+
+- endpoint JSON-RPC 2.0 `POST /api/mcp` (Model Context Protocol), read-only, JWT-autenticato
+- tool: `ask` (NL→risposta layer con SQL/sources/graph_context), `list_metrics`, `get_data_model`
+- `handle_jsonrpc`: initialize/tools.list/tools.call/ping + ack notifiche; dispatch riusa `semantic_ask`/`get_metrics`/`_get_semantic_draft` col principal; errori tool come `isError`
+- subset MCP implementato a mano (nessuna dipendenza); SSE/notifiche e tool di scrittura fuori scope v1
+- confine demo/live via `_hidden_demo_tables(principal)`; guardie SQL/ontologia ereditate dal layer
+
 ### 3.9 Query engine legacy LLM-to-SQL
 
 Stato:

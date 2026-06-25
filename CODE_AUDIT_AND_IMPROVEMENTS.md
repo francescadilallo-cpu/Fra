@@ -617,9 +617,12 @@ Aggiornamento (metriche dai documenti nel KG):
 Aggiornamento (GraphRAG):
 - nel path LLM-SQL il prompt è ora grounded sul KG (`semantic/graph_rag.build_graph_context`): relazioni/concetti/metriche rilevanti iniettati + `provenance.graph_context`. Ispirato a Graphwise/Ontotext ma KG-only (no embeddings).
 
+Aggiornamento (idee Graphwise completate):
+- citazioni di provenienza in UI: fatte (`GraphCitations` consuma `provenance.graph_context`).
+- server MCP: fatto (`mcp_server.py`, `POST /api/mcp`, read-only, JWT).
+
 Follow-up residui:
-- citazioni di provenienza in UI (consumare `provenance.graph_context`) — quick win complementare.
-- server MCP che espone il semantic layer (idea strategica).
+- MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
 - GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
 - **unificazione dei due store metriche** (`sl_metrics` vs draft metrics del catalog): debito tecnico, NON parte dei 5 step del piano; da affrontare in un giro dedicato con analisi d'impatto (tocca molti endpoint).

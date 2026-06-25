@@ -60,6 +60,7 @@ from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
 from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
+from .mcp_server import router as mcp_router
 from .audit.router import router as audit_router
 from .audit.store import get_audit_store
 from .users.router import router as users_router
@@ -1431,6 +1432,8 @@ app.include_router(
     workspace_router,
     dependencies=[Depends(require_roles("user", "admin"))],
 )
+# MCP server: auth is enforced inside the route (JWT, user/admin) — see mcp_server.py
+app.include_router(mcp_router)
 
 
 def _audit(
