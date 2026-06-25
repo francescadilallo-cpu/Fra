@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Stadi 1-3 — alias glossario, FK più forte, proposta più ricca)
+
+Tre migliorie ai primi stadi (tutte KG-only, bounded, zero dipendenze):
+
+### 1. Alias da glossario + sinonimi → recall NL
+- `KnowledgeGraph.attach_aliases()` appende alias (sinonimi) ai nodi type-level; `graph_rag` li indicizza già → la terminologia di business aggancia il nodo giusto.
+- `ingest_glossary_aliases()`: un termine di glossario diventa alias di un nodo **solo se la sua definizione cita un label noto** (conservativo, niente alias spuri). Chiamato in `_ensure_semantic_loaded`/`_refresh` (`_glossary_terms()`).
+
+### 2. FK detection più forte (value-overlap)
+- `build_from_schema` Fase 3: per le colonne id/ref/key non risolte per nome, campiona i valori e li confronta con le colonne PK-candidate delle altre tabelle → crea FK anche con **nomi diversi e cross-source**. Bounded (`_FK_VALUE_SAMPLE=50`, `_FK_MAX_PROBES=200`), gated da `FRA_KG_FK_VALUE_SCAN`, degrade su errore.
+
+### 3. Proposta semantic più ricca
+- `analyze` propone anche **synonyms** per entità; `apply_proposal` li raccoglie (`entity_aliases`) → l'orchestratore li attacca al KG dopo il reload. Le metriche con formula che referenzia **colonne inesistenti vengono scartate** (`_formula_refs_ok`, schema-aware).
+
+### Test
+- `test_pipeline` (+9: alias/glossario/FK value-overlap/proposta), `test_graph_rag` (alias migliora il linking). Suite completa **1211 passed**.
+
+---
+
 ## 2026-06-25 (GraphRAG — fallback fuzzy nel linking, zero dipendenze)
 
 Via di mezzo per il recall del table-linking senza appesantire Render: il match della domanda ai nodi del KG ora ha un **fallback fuzzy** (stdlib `difflib`, nessuna dipendenza/memoria) oltre a esatto + singolare/plurale + sinonimi. Cattura refusi/varianti (es. "custmers"→`customers`) senza falsi positivi (cutoff 0.86, solo per token altrimenti non matchati).

@@ -61,6 +61,11 @@ def _node_limit() -> int:
     return val if val >= 0 else 200000
 
 
+# Value-overlap FK detection bounds (Phase 3 of build_from_schema).
+_FK_VALUE_SAMPLE = 50  # distinct values sampled per column
+_FK_VALUE_OVERLAP = 0.5  # min share of FK values found in a PK column
+_FK_MAX_PROBES = 200  # cap on candidate columns sampled (whole build)
+
 _SENTINEL = object()
 
 
@@ -448,8 +453,9 @@ class KnowledgeGraph:
                 provenance=[{"source": "schema", "original_id": table, "table": table}],
             )
 
-        # Phase 2 — FK-heuristic edges
+        # Phase 2 — FK-heuristic edges (by column-name suffix → table-name match)
         _FK_SUFFIXES = ("_id", "_ref", "_fk", "Id", "Ref", "FK")
+        resolved: set[tuple[str, str]] = set()  # (table, col) already linked by name
 
         for table, info in schema.items():
             from_node = f"{table}:__schema__"
@@ -472,6 +478,7 @@ class KnowledgeGraph:
                         if candidate in table_names and candidate != table:
                             to_node = f"{candidate}:__schema__"
                             self._add_edge(from_node, to_node, f"FK_{col_name}")
+                            resolved.add((table, col_name))
                             logger.debug(
                                 "build_from_schema: %s.%s → %s",
                                 table,
@@ -481,11 +488,96 @@ class KnowledgeGraph:
                             break
                     break  # first matching suffix wins per column
 
+        # Phase 3 — value-overlap FK detection (names that don't match table
+        # names, and cross-source joins). Gated + bounded; degrades on error.
+        if os.getenv("FRA_KG_FK_VALUE_SCAN", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            try:
+                self._value_overlap_fk(mgr, schema, resolved)
+            except Exception as exc:  # noqa: BLE001 — never break the build
+                logger.warning(
+                    "build_from_schema value-overlap FK scan skipped: %s", exc
+                )
+
         logger.info(
             "KG built from schema: %d nodes, %d edges",
             self._g.number_of_nodes(),
             self._g.number_of_edges(),
         )
+
+    def _value_overlap_fk(self, mgr, schema: dict, resolved: set) -> None:
+        """Detect FKs by sampled value overlap: a candidate column whose values
+        substantially fall within another table's primary-key values is a FK,
+        even when its name doesn't match the table (incl. cross-source). Bounded
+        by sample size and a probe cap; all queries are read-only with LIMIT."""
+
+        def _norm(v) -> str | None:
+            return None if v is None else str(v)
+
+        # Primary-key candidate columns per table.
+        pk_candidates: dict[str, list[str]] = {}
+        for t, info in schema.items():
+            names = [c.get("name", "") for c in info.get("columns", [])]
+            tl = t.lower()
+            pk_candidates[t] = [
+                n for n in names if n.lower() in ("id", "pk", f"{tl}_id", f"{tl}id")
+            ]
+
+        val_cache: dict[tuple[str, str], set] = {}
+
+        def _sample(table: str, col: str) -> set:
+            key = (table, col)
+            if key in val_cache:
+                return val_cache[key]
+            vals: set = set()
+            try:
+                rows = mgr.execute(
+                    f'SELECT DISTINCT "{col}" AS v FROM "{table}" '
+                    f'WHERE "{col}" IS NOT NULL LIMIT {_FK_VALUE_SAMPLE}'
+                )
+                vals = {_norm(r.get("v")) for r in rows}
+                vals.discard(None)
+            except Exception:  # noqa: BLE001
+                vals = set()
+            val_cache[key] = vals
+            return vals
+
+        probes = 0
+        for table, info in schema.items():
+            from_node = f"{table}:__schema__"
+            for col in info.get("columns", []):
+                name = col.get("name", "")
+                ln = name.lower()
+                if (table, name) in resolved:
+                    continue
+                if not any(k in ln for k in ("id", "ref", "key")):
+                    continue
+                if probes >= _FK_MAX_PROBES:
+                    return
+                fk_vals = _sample(table, name)
+                probes += 1
+                if not fk_vals:
+                    continue
+                target = None
+                for other, _oinfo in schema.items():
+                    if other == table:
+                        continue
+                    for pkcol in pk_candidates.get(other, []):
+                        pk_vals = _sample(other, pkcol)
+                        if not pk_vals:
+                            continue
+                        inter = len(fk_vals & pk_vals)
+                        if inter and inter / len(fk_vals) >= _FK_VALUE_OVERLAP:
+                            target = other
+                            break
+                    if target:
+                        break
+                if target:
+                    self._add_edge(from_node, f"{target}:__schema__", f"FK_{name}")
+                    logger.debug("value-overlap FK: %s.%s → %s", table, name, target)
 
     def _table_node(self, table: str) -> str:
         """Return a table-level node id for *table*, creating a minimal schema
@@ -662,6 +754,99 @@ class KnowledgeGraph:
         if added:
             logger.info("KG ingested %d context metric(s)", added)
         return added
+
+    def _type_level_label_index(self) -> dict[str, str]:
+        """Map label/entity_type/canonical_id (lowercased) → node id for the
+        type-level nodes (tables, Concept, Metric). Schema/table nodes win ties."""
+        index: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_table = attrs.get("canonical_id") == "__schema__"
+            et = str(attrs.get("entity_type") or "")
+            if not (is_table or et in ("Concept", "Metric")):
+                continue
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                et.lower(),
+                str(attrs.get("canonical_id") or "").lower(),
+                str(attrs.get("label") or "").lower(),
+            ):
+                if key and key not in {"__schema__", "concept", "metric"}:
+                    if key not in index or is_table:
+                        index[key] = nid
+        return index
+
+    def attach_aliases(self, aliases: dict[str, list[str]]) -> int:
+        """Append business aliases (synonyms) onto matching type-level nodes.
+
+        *aliases* maps a label (table/entity/concept/metric name) → alias terms.
+        graph_rag already indexes node ``synonyms`` for linking, so attaching
+        aliases here makes business terminology (glossary, proposed synonyms)
+        link to the right node. Unknown labels are ignored. Returns the number
+        of alias terms added.
+        """
+        if not aliases:
+            return 0
+        index = self._type_level_label_index()
+
+        def _resolve(label: str) -> str | None:
+            key = label.strip().lower()
+            return index.get(key) or index.get(key.rstrip("s")) or index.get(key + "s")
+
+        added = 0
+        for label, terms in aliases.items():
+            nid = _resolve(str(label))
+            if nid is None:
+                continue
+            current = list(self._g.nodes[nid].get("synonyms") or [])
+            seen = {s.lower() for s in current}
+            for term in terms:
+                t = str(term).strip()
+                if t and t.lower() not in seen:
+                    current.append(t)
+                    seen.add(t.lower())
+                    added += 1
+            self._g.nodes[nid]["synonyms"] = current
+        if added:
+            logger.info("KG attached %d alias term(s)", added)
+        return added
+
+    def ingest_glossary_aliases(self, glossary: list[dict]) -> int:
+        """Attach glossary terms as aliases of the node their definition refers to.
+
+        Conservative: a term becomes an alias of a node only when that node's
+        label appears in the term's *definition* (so "ARR" defined as "annual
+        recurring revenue" aliases the Revenue node). Terms that already name a
+        node, or whose definition references nothing known, are skipped — no
+        spurious aliases. Returns the number of alias terms attached.
+        """
+        if not glossary:
+            return 0
+        index = self._type_level_label_index()
+        label_set = set(index.keys())
+        aliases: dict[str, list[str]] = {}
+        for g in glossary:
+            term = str(g.get("term", "")).strip()
+            definition = str(g.get("definition", "")).strip().lower()
+            if not term or not definition:
+                continue
+            tl = term.lower()
+            # Term already names a node → it links directly, no alias needed.
+            if tl in label_set or tl.rstrip("s") in label_set or tl + "s" in label_set:
+                continue
+            def_words = set(re.findall(r"[a-z0-9_]+", definition))
+            matched: str | None = None
+            for lbl in label_set:
+                hit = (
+                    (lbl in def_words or lbl.rstrip("s") in def_words)
+                    if " " not in lbl
+                    else lbl in definition
+                )
+                if hit:
+                    matched = lbl
+                    break
+            if matched:
+                aliases.setdefault(matched, []).append(term)
+        return self.attach_aliases(aliases)
 
     @property
     def node_count(self) -> int:

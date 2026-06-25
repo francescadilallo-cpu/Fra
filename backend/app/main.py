@@ -598,6 +598,17 @@ def _context_metrics() -> list[dict]:
         return []
 
 
+def _glossary_terms() -> list[dict]:
+    """Glossary terms from the context store, for KG alias attachment."""
+    try:
+        return [
+            {"term": g.term, "definition": g.definition}
+            for g in _context_store.list_glossary()
+        ]
+    except Exception:  # noqa: BLE001 — glossary aliases are optional enrichment
+        return []
+
+
 def _ensure_semantic_loaded() -> None:
     """Lazily build semantic stack exactly once (thread-safe).
 
@@ -683,6 +694,7 @@ def _ensure_semantic_loaded() -> None:
         try:
             kg.ingest_context_entities(_doc_context_entities())
             kg.ingest_context_metrics(_context_metrics())
+            kg.ingest_glossary_aliases(_glossary_terms())
         except Exception as _ctx_exc:
             logger.warning("KG context ingest skipped: %s", _ctx_exc)
 
@@ -813,6 +825,7 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
             try:
                 new_kg.ingest_context_entities(_doc_context_entities())
                 new_kg.ingest_context_metrics(_context_metrics())
+                new_kg.ingest_glossary_aliases(_glossary_terms())
             except Exception as _ctx_exc:
                 logger.warning("KG context ingest skipped: %s", _ctx_exc)
             _semantic_state["kg"] = new_kg

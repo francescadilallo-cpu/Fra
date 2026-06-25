@@ -133,10 +133,23 @@ def run_build_pipeline(
 
             result = analyze(schema_info, live_tables, priors=priors or None)
             proposal = result.get("proposal", {})
-            applied = apply_proposal(proposal, catalog=catalog, sector_id=sector_id)
+            applied = apply_proposal(
+                proposal,
+                catalog=catalog,
+                sector_id=sector_id,
+                schema_info=schema_info,
+            )
 
             # Rebuild KG + Semantic Layer so the applied model takes effect.
             reload_semantic()
+
+            # Attach the proposed entity synonyms as KG aliases (better NL recall).
+            kg = _semantic_state.get("kg")
+            if kg is not None and applied.get("entity_aliases"):
+                try:
+                    kg.attach_aliases(applied["entity_aliases"])
+                except Exception as _al_exc:  # noqa: BLE001
+                    logger.debug("alias attach skipped: %s", _al_exc)
 
             # Regenerate query templates from the (proposal-augmented) draft.
             catalog = _semantic_state.get("catalog")

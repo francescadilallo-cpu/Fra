@@ -632,8 +632,14 @@ Hardening del flusso principale (2026-06-25):
 Aggiornamento (selezione tabelle prompt guidata dal GraphRAG):
 - risolto il limite del cap fisso: le tabelle rilevanti alla domanda (GraphRAG) sono `priority_tables` sempre incluse nel prompt, mai droppate. Copre schemi grandi e multi-fonte (le priority attraversano le fonti).
 
+Aggiornamento (migliorie stadi 1-3):
+- alias da glossario + sinonimi proposta sui nodi KG (`attach_aliases`/`ingest_glossary_aliases`) → recall NL migliore.
+- FK value-overlap in `build_from_schema` (nomi diversi + cross-source), bounded e gated da `FRA_KG_FK_VALUE_SCAN`.
+- proposta `analyze` con synonyms; metriche con colonne inesistenti scartate in apply.
+
 Follow-up residui:
-- recall del linking ancora lessicale (GraphRAG): se serve, aggiungere un canale vettoriale per le tabelle. Costo verifica con LLM (~5 ask) tunable.
+- recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.
+- value-overlap FK: euristica a campione (possibili falsi positivi su id generici condivisi) — valutare soglia/whitelist su dati reali.
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
 - GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.

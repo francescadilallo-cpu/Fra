@@ -518,3 +518,127 @@ class TestIntegrate:
         assert result["counts"]["relations"] == 1
         assert result["counts"]["entities"] == 1
         assert cat.descriptions["Customer"] == "Buyers"
+
+
+# ── Stage 1-3 enrichments: aliases, value-overlap FK, richer proposal ─────────
+
+
+class _FakeMgr:
+    """Minimal source manager for build_from_schema value-overlap tests."""
+
+    def __init__(self, schema: dict, data: dict):
+        self._schema = schema
+        self._data = data
+
+    def get_schema_info(self):
+        return self._schema
+
+    def execute(self, sql, *a, **kw):
+        import re as _re
+
+        m = _re.search(r'"(\w+)" AS v FROM "(\w+)"', sql)
+        if not m:
+            return []
+        col, table = m.group(1), m.group(2)
+        return [{"v": v} for v in self._data.get((table, col), set())]
+
+
+class TestKGAliases:
+    def test_attach_aliases_adds_and_dedups(self):
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "customers", "to_table": "orders", "edge_type": "FK"}]
+        )
+        assert kg.attach_aliases({"customers": ["clients", "accounts"]}) == 2
+        syn = next(
+            a.get("synonyms")
+            for _n, a in kg.all_nodes()
+            if a.get("table") == "customers"
+        )
+        assert "clients" in syn and "accounts" in syn
+        assert kg.attach_aliases({"customers": ["clients"]}) == 0  # dedup
+        assert kg.attach_aliases({"ghost": ["x"]}) == 0  # unknown label ignored
+
+    def test_glossary_alias_by_definition(self):
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "customers", "to_table": "orders", "edge_type": "FK"}]
+        )
+        n = kg.ingest_glossary_aliases(
+            [{"term": "accounts", "definition": "our customers in the CRM"}]
+        )
+        assert n == 1
+        syn = next(
+            a.get("synonyms")
+            for _n, a in kg.all_nodes()
+            if a.get("table") == "customers"
+        )
+        assert "accounts" in syn
+        # A term that already names a node is skipped.
+        assert (
+            kg.ingest_glossary_aliases(
+                [{"term": "customers", "definition": "the customers table"}]
+            )
+            == 0
+        )
+
+
+class TestValueOverlapFK:
+    schema = {
+        "orders": {"columns": [{"name": "account_id", "type": "int"}]},
+        "customers": {
+            "columns": [{"name": "id", "type": "int"}, {"name": "name", "type": "str"}]
+        },
+    }
+
+    def test_detects_cross_name_fk(self):
+        data = {("orders", "account_id"): {1, 2}, ("customers", "id"): {1, 2, 3}}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_FakeMgr(self.schema, data))
+        edges = {
+            (s.split(":")[0], d.split(":")[0], dd.get("type"))
+            for s, d, dd in kg.iter_edges()
+        }
+        assert ("orders", "customers", "FK_account_id") in edges
+
+    def test_no_overlap_no_edge(self):
+        data = {("orders", "account_id"): {97, 98}, ("customers", "id"): {1, 2, 3}}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_FakeMgr(self.schema, data))
+        assert not any(
+            dd.get("type") == "FK_account_id" for _s, _d, dd in kg.iter_edges()
+        )
+
+
+class TestProposalEnrichment:
+    def test_sanitize_includes_synonyms(self):
+        from app.semantic.analyzer import _sanitize_proposal
+
+        raw = {
+            "entities": [
+                {"table": "t", "name": "T", "synonyms": ["a", "b"], "confidence": 0.9}
+            ],
+            "metrics": [],
+            "relations": [],
+        }
+        out = _sanitize_proposal(raw, {"t"})
+        assert out["entities"][0]["synonyms"] == ["a", "b"]
+
+    def test_formula_refs_validation(self):
+        from app.semantic.apply import _formula_refs_ok
+
+        cols = {"orders": {"id", "total"}}
+        assert _formula_refs_ok("SUM(orders.total)", cols) is True
+        assert _formula_refs_ok("SUM(orders.ghost)", cols) is False
+        assert _formula_refs_ok("SUM(unknown.x)", cols) is True  # unknown table skipped
+
+    def test_proposal_entity_aliases(self):
+        from app.semantic.apply import _proposal_entity_aliases
+
+        prop = {
+            "entities": [
+                {"table": "customers", "synonyms": ["clients", "accounts"]},
+                {"table": "orders", "synonyms": []},
+            ]
+        }
+        assert _proposal_entity_aliases(prop) == {"customers": ["clients", "accounts"]}

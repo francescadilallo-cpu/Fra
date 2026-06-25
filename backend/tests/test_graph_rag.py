@@ -94,3 +94,12 @@ class TestBuildGraphContext:
         # A clearly unrelated word must not fuzzy-link to any node.
         gr = build_graph_context(kg, "weather")
         assert gr["nodes"] == [] and gr["tables"] == []
+
+    def test_attached_alias_improves_linking(self):
+        kg = _sample_kg()
+        # A business term that doesn't match any label/synonym out of the box…
+        assert build_graph_context(kg, "show clientele")["tables"] == []
+        # …links once attached as an alias of the customers table node.
+        kg.attach_aliases({"customers": ["clientele"]})
+        gr = build_graph_context(kg, "show clientele")
+        assert "customers" in set(gr["tables"])
