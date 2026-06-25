@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (KG — metriche di business dai documenti come nodi)
+
+Le metriche estratte dai documenti di contesto (e quelle aggiunte a mano nella vista Context) entrano nel Knowledge Graph come **nodi `Metric`** (`source="document"`), ancorate via arco `MEASURES` al concetto/tabella che misurano. Completa la rappresentazione della conoscenza dal contesto nel grafo (concetti + metriche).
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_context_metrics(metrics)`: crea nodi `Metric:{name}` e, se una parola del nome combacia con tabella/entità/concetto, aggiunge un arco `MEASURES`. Idempotente.
+
+### `backend/app/main.py`
+- helper `_context_metrics()` (metriche non-seeded dal context store); ingerite nel KG dopo i concetti in `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`.
+- `_get_semantic_draft()`: gli archi `MEASURES` (oltre a `DESCRIBES`) sono esclusi dalle relazioni tabella-tabella.
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGContextMetrics`). Suite completa 1175 passed. Smoke: metrica doc → nodo `Metric` + arco `MEASURES`.
+
+---
+
 ## 2026-06-25 (KG — concetti di business dai documenti come nodi)
 
 Le entità di business estratte dai documenti di contesto entrano nel Knowledge Graph come **nodi `Concept`** (`source="document"`), ancorati alle tabelle dati che descrivono tramite archi `DESCRIBES`. Così il vocabolario di business dal contesto vive nel grafo accanto alla struttura dei dati.

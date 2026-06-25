@@ -600,6 +600,69 @@ class KnowledgeGraph:
             logger.info("KG ingested %d context concept(s)", added)
         return added
 
+    def ingest_context_metrics(self, metrics: list[dict]) -> int:
+        """Add document-derived business metrics as graph nodes.
+
+        Metrics extracted from context documents become ``Metric:{name}`` nodes
+        tagged ``source="document"``. When a word of the metric name matches a
+        data table, entity or already-ingested concept, a ``MEASURES`` edge
+        grounds the metric to what it quantifies. Returns the number of metric
+        nodes added.
+        """
+        if not metrics:
+            return 0
+
+        # Index data/concept nodes by table, entity type, and canonical label.
+        label_to_node: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_schema = attrs.get("canonical_id") == "__schema__"
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                str(attrs.get("entity_type") or "").lower(),
+                str(attrs.get("canonical_id") or "").lower(),
+                str(attrs.get("label") or "").lower(),
+            ):
+                if key and key not in {"__schema__", "concept", "metric"}:
+                    if key not in label_to_node or is_schema:
+                        label_to_node[key] = nid
+
+        def _match(word: str) -> str | None:
+            w = word.lower()
+            return (
+                label_to_node.get(w)
+                or label_to_node.get(w.rstrip("s"))
+                or label_to_node.get(w + "s")
+            )
+
+        added = 0
+        for m in metrics:
+            name = str(m.get("name", "")).strip()
+            if not name:
+                continue
+            mnode = f"Metric:{name}"
+            if mnode not in self._g:
+                self._add_node(
+                    mnode,
+                    entity_type="Metric",
+                    canonical_id=name,
+                    data={
+                        "label": name,
+                        "source": "document",
+                        "unit": str(m.get("unit", "")),
+                    },
+                    provenance=[{"source": "document", "original_id": name}],
+                )
+                added += 1
+            # Ground the metric to what it measures (first word match wins).
+            for word in name.replace("_", " ").split():
+                target = _match(word)
+                if target and target != mnode:
+                    self._add_edge(mnode, target, "MEASURES", source="document")
+                    break
+        if added:
+            logger.info("KG ingested %d context metric(s)", added)
+        return added
+
     @property
     def node_count(self) -> int:
         return self._g.number_of_nodes()

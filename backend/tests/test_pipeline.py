@@ -415,6 +415,39 @@ class TestKGContextEntities:
         assert kg.ingest_context_entities([{"name": ""}, {}]) == 0
 
 
+class TestKGContextMetrics:
+    def test_adds_metric_node(self):
+        kg = KnowledgeGraph()
+        added = kg.ingest_context_metrics([{"name": "Churn rate", "unit": "%"}])
+        assert added == 1
+        assert any(
+            nid == "Metric:Churn rate" and attrs.get("entity_type") == "Metric"
+            for nid, attrs in kg.all_nodes()
+        )
+
+    def test_grounds_to_measured_table(self):
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "customers", "to_table": "orders", "edge_type": "FK"}]
+        )
+        kg.ingest_context_metrics([{"name": "Customer count", "unit": ""}])
+        assert any(
+            s == "Metric:Customer count"
+            and d.split(":")[0] == "customers"
+            and data.get("type") == "MEASURES"
+            for s, d, data in kg.iter_edges()
+        )
+
+    def test_idempotent_node(self):
+        kg = KnowledgeGraph()
+        kg.ingest_context_metrics([{"name": "Revenue"}])
+        assert kg.ingest_context_metrics([{"name": "Revenue"}]) == 0
+
+    def test_skips_empty(self):
+        kg = KnowledgeGraph()
+        assert kg.ingest_context_metrics([{"name": ""}, {}]) == 0
+
+
 # ── conversational integration (interpret + apply ops) ────────────────────────
 
 

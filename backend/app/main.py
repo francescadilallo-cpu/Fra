@@ -585,6 +585,18 @@ def _doc_context_entities() -> list[dict]:
         return []
 
 
+def _context_metrics() -> list[dict]:
+    """Non-seeded context metrics (document-derived or hand-added in the Context
+    view), shaped for KnowledgeGraph.ingest_context_metrics()."""
+    try:
+        return [
+            {"name": m.name, "unit": m.unit}
+            for m in _context_store.list_metrics(exclude_seeded=True)
+        ]
+    except Exception:  # noqa: BLE001 — context metrics are optional enrichment
+        return []
+
+
 def _ensure_semantic_loaded() -> None:
     """Lazily build semantic stack exactly once (thread-safe).
 
@@ -669,8 +681,9 @@ def _ensure_semantic_loaded() -> None:
         # data tables they describe), so context knowledge enters the graph.
         try:
             kg.ingest_context_entities(_doc_context_entities())
+            kg.ingest_context_metrics(_context_metrics())
         except Exception as _ctx_exc:
-            logger.warning("KG context-entity ingest skipped: %s", _ctx_exc)
+            logger.warning("KG context ingest skipped: %s", _ctx_exc)
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
@@ -798,8 +811,9 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
                     logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
             try:
                 new_kg.ingest_context_entities(_doc_context_entities())
+                new_kg.ingest_context_metrics(_context_metrics())
             except Exception as _ctx_exc:
-                logger.warning("KG context-entity ingest skipped: %s", _ctx_exc)
+                logger.warning("KG context ingest skipped: %s", _ctx_exc)
             _semantic_state["kg"] = new_kg
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)
@@ -993,8 +1007,8 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     if kg:
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
-            # Concept→table grounding edges are not table-to-table relations.
-            if edge_type == "DESCRIBES":
+            # Concept/Metric grounding edges are not table-to-table relations.
+            if edge_type in ("DESCRIBES", "MEASURES"):
                 continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
@@ -5017,8 +5031,8 @@ def get_live_config(
         seen: set[tuple] = set()
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
-            # Concept→table grounding edges are not table-to-table relations.
-            if edge_type == "DESCRIBES":
+            # Concept/Metric grounding edges are not table-to-table relations.
+            if edge_type in ("DESCRIBES", "MEASURES"):
                 continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
