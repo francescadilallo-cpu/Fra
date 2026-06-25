@@ -1590,6 +1590,67 @@ def login_for_access_token(
     )
 
 
+@app.get("/api/admin/debug", tags=["admin"])
+def get_debug_state(
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Diagnostic snapshot of the semantic state — use for troubleshooting only."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    mgr = get_source_manager(_SCENARIO_PATH)
+    catalog = _semantic_state.get("catalog")
+    kg = _semantic_state.get("kg")
+
+    # DuckDB tables
+    try:
+        schema = mgr.get_schema_info()
+        duckdb_tables = {
+            t: {"cols": len(info["columns"]), "rows": info["row_count"]}
+            for t, info in schema.items()
+        }
+    except Exception as exc:
+        duckdb_tables = {"error": str(exc)}
+
+    # entity_meta rows
+    try:
+        all_entities = catalog.get_draft_entities() if catalog else []
+        entity_summary = [
+            {"name": e["name"], "table": e["table"], "record_count": e.get("record_count", 0)}
+            for e in all_entities
+        ]
+    except Exception as exc:
+        entity_summary = [{"error": str(exc)}]
+
+    # KG stats
+    kg_info = {}
+    if kg:
+        try:
+            kg_info = {"nodes": kg.node_count, "edges": kg.edge_count}
+        except Exception as exc:
+            kg_info = {"error": str(exc)}
+
+    # Source registry
+    from .connectors.source_registry import get_source_registry
+    sources_info = [
+        {"id": c.id, "label": c.label, "status": c.status, "tables": c.target_tables}
+        for c in get_source_registry().list()
+    ]
+
+    hidden = _hidden_demo_tables(current_user)
+
+    return {
+        "semantic_loaded": _semantic_state.get("loaded", False),
+        "user_mode": current_user.mode,
+        "hidden_table_count": len(hidden),
+        "duckdb_table_count": len(duckdb_tables) if isinstance(duckdb_tables, dict) and "error" not in duckdb_tables else "error",
+        "duckdb_tables": duckdb_tables,
+        "entity_meta_count": len(entity_summary),
+        "entity_meta": entity_summary,
+        "kg": kg_info,
+        "sources": sources_info,
+    }
+
+
 @app.get("/api/admin/logs", tags=["admin"])
 def get_admin_logs(
     n: int = Query(200, ge=1, le=1000, description="Max entries to return"),
