@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Hardening — run pipeline concorrenti & stuck-state)
+
+Indurito il path live della pipeline contro i casi limite di concorrenza.
+
+### `backend/app/pipeline/runs.py`
+- nuovo `PipelineRunStore.begin_run()`: prenotazione **atomica** del run sotto lock (guard + reserve in un'unica sezione critica).
+
+### `backend/app/pipeline/orchestrator.py`
+- `run_build_pipeline(..., run=None)`: accetta un run già prenotato; se un run è in corso ritorna quello in-flight invece di avviarne un secondo.
+
+### `backend/app/main.py` (`POST /api/pipeline/run`)
+- prenota il run con `begin_run()` **prima** di schedulare l'executor → elimina la race check-then-act tra due POST concorrenti (prima entrambi passavano `is_running()`).
+- se il build esplode nell'executor, il run viene marcato `error`+completato (niente più stato "running" bloccato che restituirebbe 409 per sempre); 500 pulito al client.
+
+### Test
+- `test_pipeline.py`: `test_begin_run_is_atomic_guard`. Suite completa **1193 passed**.
+
+---
+
 ## 2026-06-25 (Consolidamento — test end-to-end della pipeline auto-build)
 
 Aggiunto il regression guard mancante per il flusso principale: un test d'integrazione **multi-fonte** che esegue davvero tutti i 5 stadi dell'orchestratore su dati reali e verifica il modello unificato. Finora c'erano solo unit test dei pezzi + smoke manuali.

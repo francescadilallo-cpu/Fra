@@ -37,8 +37,15 @@ def run_build_pipeline(
     mode: str,
     hidden: frozenset[str],
     store: PipelineRunStore,
+    run: PipelineRun | None = None,
 ) -> PipelineRun:
-    """Execute the auto-build pipeline once and return the completed run."""
+    """Execute the auto-build pipeline once and return the completed run.
+
+    *run* may be a run already reserved by the caller (e.g. the endpoint, which
+    reserves atomically to avoid concurrent runs). When omitted, one is reserved
+    here; if another run is already in progress, the in-flight run is returned
+    without starting a second build.
+    """
     # Lazy imports — avoid a module-load cycle with app.main.
     from app.main import (  # noqa: PLC0415
         _SCENARIO_PATH,
@@ -50,7 +57,15 @@ def run_build_pipeline(
 
     # Live mode is always the "manufacturing" default sector (see CLAUDE.md).
     sector_id = "manufacturing"
-    run = store.new_run()
+    if run is None:
+        run = store.begin_run()
+        if run is None:
+            existing = store.current_or_last()
+            if existing is not None:
+                return existing
+            run = store.new_run()
+    else:
+        store.set_current(run)
 
     # ── Stage 1: context ─────────────────────────────────────────────────────
     priors: dict = {}

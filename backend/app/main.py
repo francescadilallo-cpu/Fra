@@ -3913,19 +3913,34 @@ async def run_pipeline_endpoint(
     from .pipeline.orchestrator import run_build_pipeline
     from .pipeline.runs import default_run_store
 
-    if default_run_store.is_running():
+    # Atomically reserve the run — closes the check-then-act race between two
+    # concurrent POSTs (both passing an is_running() check before either starts).
+    reserved = default_run_store.begin_run()
+    if reserved is None:
         raise HTTPException(
             status_code=409, detail="A pipeline run is already in progress"
         )
 
     hidden = _hidden_demo_tables(current_user)
     loop = asyncio.get_event_loop()
-    run = await loop.run_in_executor(
-        None,
-        lambda: run_build_pipeline(
-            mode=current_user.mode, hidden=hidden, store=default_run_store
-        ),
-    )
+    try:
+        run = await loop.run_in_executor(
+            None,
+            lambda: run_build_pipeline(
+                mode=current_user.mode,
+                hidden=hidden,
+                store=default_run_store,
+                run=reserved,
+            ),
+        )
+    except Exception as exc:
+        # Never leave the reserved run stuck as "running" — that would block all
+        # future runs with a 409. Mark it failed and surface a 500.
+        reserved.fail("build", str(exc))
+        reserved.complete()
+        default_run_store.set_current(reserved)
+        logger.error("pipeline run failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Pipeline run failed") from exc
     return run.to_dict()
 
 

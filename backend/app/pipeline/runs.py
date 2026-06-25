@@ -135,6 +135,20 @@ class PipelineRunStore:
             self._current = run
         return run
 
+    def begin_run(self) -> PipelineRun | None:
+        """Atomically reserve a new run, or return None if one is in progress.
+
+        Closes the check-then-act race the endpoint would otherwise have between
+        ``is_running()`` and starting the work: the guard and the reservation
+        happen under a single lock acquisition.
+        """
+        with self._lock:
+            if self._current is not None and self._current.running:
+                return None
+            run = PipelineRun()
+            self._current = run
+            return run
+
     def set_current(self, run: PipelineRun) -> None:
         with self._lock:
             self._current = run

@@ -72,6 +72,17 @@ class TestPipelineRunStore:
         run.complete()
         assert store.is_running() is False
 
+    def test_begin_run_is_atomic_guard(self):
+        store = PipelineRunStore()
+        first = store.begin_run()
+        assert first is not None
+        # A second reservation while the first is running is refused.
+        assert store.begin_run() is None
+        first.complete()
+        # Once finished, a new run can be reserved again.
+        second = store.begin_run()
+        assert second is not None and second is not first
+
 
 # ── apply bridge ──────────────────────────────────────────────────────────────
 
