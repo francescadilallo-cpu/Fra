@@ -10,6 +10,31 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Salesforce — real data ingestion via SOQL)
+
+After OAuth sync, the backend now queries actual records for priority Salesforce
+objects (Account, Contact, Opportunity, Lead, OpportunityLineItem, etc.) in addition
+to the existing schema metadata tables.
+
+**What changed:**
+- `salesforce_connector.py`: new `query_records(soql)` method (SOQL with auto-pagination)
+  and `fetch_object_dataframe(sf_obj, limit=1000)` that returns a pandas DataFrame,
+  filtering out compound/binary field types unsupported by SOQL, with Id+Name fallback.
+- `duckdb_source_manager.py`: `_ingest_salesforce()` now creates `sf_{id}_{object_lower}`
+  DuckDB tables (e.g. `sf_abc123_account`, `sf_abc123_contact`) for every priority object
+  returned by the schema. Also fixes a pre-existing bug where `sf_*_objects` / `sf_*_fields`
+  tables were not registered in `cfg.target_tables`, breaking incremental re-ingest.
+  Switched to `CREATE OR REPLACE TABLE` so re-syncs always refresh data.
+- `main.py`: added `_SF_META_TABLE_RE` module constant; applied in `_get_semantic_draft()`,
+  `_semantic_status_payload()`, and the live-mode entity builder to exclude the internal
+  `sf_*_objects` / `sf_*_fields` metadata tables from Entity Graph, Schema Config, and
+  Data Model views. Real business objects (Account, Contact, …) now appear as proper KG entities.
+
+**Files:** `backend/app/connectors/salesforce_connector.py`,
+`backend/app/connectors/duckdb_source_manager.py`, `backend/app/main.py`
+
+---
+
 ## 2026-06-24 (Salesforce — OAuth 2.0 Authorization Code + PKCE, MFA-compatible)
 
 Sostituito il flusso username-password (deprecato da Salesforce, incompatibile con MFA) con Authorization Code + PKCE. Nessuna password viene più memorizzata.
