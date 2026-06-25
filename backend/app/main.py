@@ -74,13 +74,15 @@ load_dotenv()
 
 
 def _configure_logging() -> None:
-    """Set up console + rotating-file logging for the Fra backend.
+    """Set up console + rotating-file + in-memory buffer logging.
 
     Environment variables:
-      LOG_LEVEL   — Python level name (DEBUG/INFO/WARNING/ERROR). Default: INFO.
-      LOG_DIR     — Directory for log files. Default: backend/logs/ next to this file.
-      LOG_TO_FILE — Set to 'false' to disable file logging (console only). Default: true.
+      LOG_LEVEL   — DEBUG / INFO / WARNING / ERROR.  Default: INFO.
+      LOG_DIR     — Directory for log files.  Default: backend/logs/.
+      LOG_TO_FILE — Set to 'false' to skip the log file.  Default: true.
     """
+    from .log_store import BufferHandler
+
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
 
@@ -88,32 +90,40 @@ def _configure_logging() -> None:
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    brief_fmt = logging.Formatter("%(levelname)-8s | %(name)s | %(message)s")
 
     root = logging.getLogger()
     root.setLevel(level)
 
-    # Console handler — always on
-    if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
-               for h in root.handlers):
+    # ── Console ──────────────────────────────────────────────────────────────
+    if not any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        for h in root.handlers
+    ):
         console = logging.StreamHandler()
         console.setFormatter(fmt)
         root.addHandler(console)
 
-    # Rotating file handler
+    # ── Rotating file ─────────────────────────────────────────────────────────
     if os.getenv("LOG_TO_FILE", "true").lower() not in ("0", "false", "no"):
         log_dir = Path(os.getenv("LOG_DIR", Path(__file__).parent.parent / "logs"))
         log_dir.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.handlers.RotatingFileHandler(
+        fh = logging.handlers.RotatingFileHandler(
             log_dir / "fra.log",
-            maxBytes=10 * 1024 * 1024,  # 10 MB
+            maxBytes=10 * 1024 * 1024,  # 10 MB per file
             backupCount=5,
             encoding="utf-8",
         )
-        file_handler.setFormatter(fmt)
-        root.addHandler(file_handler)
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
 
-    # Quiet noisy third-party loggers
-    for noisy in ("httpx", "httpcore", "uvicorn.access", "multipart"):
+    # ── In-memory ring buffer (serves /api/admin/logs) ───────────────────────
+    buf = BufferHandler()
+    buf.setFormatter(brief_fmt)
+    root.addHandler(buf)
+
+    # ── Quiet noisy third-party loggers ───────────────────────────────────────
+    for noisy in ("httpx", "httpcore", "uvicorn.access", "multipart", "passlib"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
@@ -1367,6 +1377,58 @@ async def _reject_oversized_requests(request: Request, call_next):
     return await call_next(request)
 
 
+# ── HTTP request logger ────────────────────────────────────────────────────────
+
+_http_logger = logging.getLogger("fra.http")
+# Paths too noisy to log at INFO (polled frequently by the frontend)
+_SILENT_PATHS = frozenset({
+    "/api/semantic/status",
+    "/api/sources",
+    "/health",
+    "/healthz",
+})
+
+
+@app.middleware("http")
+async def _log_http_requests(request: Request, call_next):
+    """Log every HTTP request with method, path, user, status, and duration."""
+    import base64 as _b64
+
+    # Decode JWT sub without signature verification (logging only)
+    user = "anon"
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            part = auth[7:].split(".")[1]
+            padding = (-len(part)) % 4
+            payload = json.loads(_b64.b64decode(part + "=" * padding))
+            user = payload.get("sub", "?")
+        except Exception:
+            pass
+
+    start = _time.monotonic()
+    response = await call_next(request)
+    ms = (_time.monotonic() - start) * 1000
+
+    path = request.url.path
+    code = response.status_code
+
+    if code >= 500:
+        _http_logger.error(
+            "%-6s %-55s %d  %5.0fms  %s", request.method, path, code, ms, user
+        )
+    elif code >= 400:
+        _http_logger.warning(
+            "%-6s %-55s %d  %5.0fms  %s", request.method, path, code, ms, user
+        )
+    elif path not in _SILENT_PATHS:
+        _http_logger.info(
+            "%-6s %-55s %d  %5.0fms  %s", request.method, path, code, ms, user
+        )
+
+    return response
+
+
 def _get_agentic_ontology() -> Any:
     _ensure_semantic_loaded()
     return _semantic_state.get("ontology")
@@ -1526,6 +1588,23 @@ def login_for_access_token(
         role=user["role"],
         mode=resolved_mode,
     )
+
+
+@app.get("/api/admin/logs", tags=["admin"])
+def get_admin_logs(
+    n: int = Query(200, ge=1, le=1000, description="Max entries to return"),
+    level: str = Query("INFO", description="Minimum log level (DEBUG/INFO/WARNING/ERROR)"),
+    search: str = Query("", description="Filter entries whose message contains this string"),
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> list[dict]:
+    """Return recent log entries from the in-memory ring buffer (last 1000 events)."""
+    from .log_store import get_recent_logs
+
+    entries = get_recent_logs(n=n, min_level=level)
+    if search:
+        q = search.lower()
+        entries = [e for e in entries if q in e.get("msg", "").lower()]
+    return entries
 
 
 @app.get("/api/auth/me", tags=["auth"])
