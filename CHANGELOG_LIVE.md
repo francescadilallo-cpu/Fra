@@ -10,6 +10,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (Semantic Layer — GraphRAG: retrieval sul Knowledge Graph)
+
+Quando il semantic layer genera SQL via LLM, il prompt è ora **grounded sul grafo**: dato il quesito si fa entity-linking ai nodi del KG (tabelle, `Concept`, `Metric`), si estrae il sotto-grafo rilevante (relazioni FK/manual, `DESCRIBES`, `MEASURES`) e lo si inietta come contesto. I nodi/archi usati finiscono nella `provenance` (base per citazioni). Ispirato al GraphRAG di Graphwise/Ontotext, ma **KG-only e lessicale** (niente embeddings/vector DB), coerente coi vincoli memoria.
+
+### `backend/app/semantic/graph_rag.py` (nuovo)
+- `build_graph_context(kg, question, hidden_tables, max_nodes)` → `{context, nodes, edges}`. Entity-linking lessicale su nodi type-level (sinonimi inclusi), estrazione archi, filtro tabelle hidden, render compatto. Degrada a contesto vuoto se nessun match.
+
+### `backend/app/semantic/layer.py`
+- `_execute_llm_sql`: costruisce il blocco grafo e lo appende al prompt dopo schema + business context; aggiunge `provenance.graph_context` (nodi/archi). Guard/degrade totale.
+
+### Test
+- `tests/test_graph_rag.py` (+6): linking, sinonimi, filtro hidden, no-match, edge shape. Suite completa 1181 passed. Smoke su KG reale: contesto con relazioni + grounding concetto/metrica.
+
+---
+
 ## 2026-06-25 (KG — metriche di business dai documenti come nodi)
 
 Le metriche estratte dai documenti di contesto (e quelle aggiunte a mano nella vista Context) entrano nel Knowledge Graph come **nodi `Metric`** (`source="document"`), ancorate via arco `MEASURES` al concetto/tabella che misurano. Completa la rappresentazione della conoscenza dal contesto nel grafo (concetti + metriche).

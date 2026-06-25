@@ -614,7 +614,13 @@ Aggiornamento (concetti dai documenti nel KG):
 Aggiornamento (metriche dai documenti nel KG):
 - le metriche di contesto diventano nodi `Metric` ancorati via `MEASURES` (`ingest_context_metrics`). Conoscenza dal contesto ora completa nel grafo: concetti + metriche.
 
+Aggiornamento (GraphRAG):
+- nel path LLM-SQL il prompt è ora grounded sul KG (`semantic/graph_rag.build_graph_context`): relazioni/concetti/metriche rilevanti iniettati + `provenance.graph_context`. Ispirato a Graphwise/Ontotext ma KG-only (no embeddings).
+
 Follow-up residui:
+- citazioni di provenienza in UI (consumare `provenance.graph_context`) — quick win complementare.
+- server MCP che espone il semantic layer (idea strategica).
+- GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
 - **unificazione dei due store metriche** (`sl_metrics` vs draft metrics del catalog): debito tecnico, NON parte dei 5 step del piano; da affrontare in un giro dedicato con analisi d'impatto (tocca molti endpoint).
 - integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
