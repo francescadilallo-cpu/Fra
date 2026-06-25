@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-25 (KG — concetti di business dai documenti come nodi)
+
+Le entità di business estratte dai documenti di contesto entrano nel Knowledge Graph come **nodi `Concept`** (`source="document"`), ancorati alle tabelle dati che descrivono tramite archi `DESCRIBES`. Così il vocabolario di business dal contesto vive nel grafo accanto alla struttura dei dati.
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_context_entities(entities)`: crea nodi `Concept:{name}` e, se nome/sinonimi combaciano con una tabella/entità, aggiunge un arco `DESCRIBES` (match singolare/plurale, preferisce i nodi schema). Idempotente.
+
+### `backend/app/main.py`
+- helper `_doc_context_entities()` (entità con `source="document"` dal context store); ingerite nel KG in `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`.
+- `_get_semantic_draft()` (entrambe le derivazioni relazioni da KG): gli archi `DESCRIBES` sono esclusi dalle relazioni tabella-tabella.
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGContextEntities`). Suite completa 1171 passed. Smoke: entità doc → nodo `Concept` + arco `DESCRIBES` → tabella, senza inquinare le relazioni.
+
+---
+
 ## 2026-06-25 (Pipeline — anello Contesto → Knowledge Graph)
 
 Le relazioni *applicate* (proposta auto-build + integrazione conversazionale) ora diventano **archi reali del Knowledge Graph**, non solo voci del catalog. Così il grafo riflette il modello integrato e informato dal contesto, non solo la struttura FK inferita.

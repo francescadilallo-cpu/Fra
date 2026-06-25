@@ -608,9 +608,12 @@ Aggiornamento (stadio 5 — faithfulness):
 Aggiornamento (anello contesto→KG):
 - le relazioni applicate ora diventano archi del KG (`KnowledgeGraph.ingest_manual_relations`), chiudendo il gap per cui vivevano solo nel catalog accanto al grafo.
 
+Aggiornamento (concetti dai documenti nel KG):
+- le entità di business dei documenti diventano nodi `Concept` ancorati alle tabelle via `DESCRIBES` (`ingest_context_entities`). La conoscenza dal contesto è ora rappresentata anche nel grafo.
+
 Follow-up residui:
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
-- estensione possibile: ingerire nel KG anche entità/metriche derivate dai documenti come nodi a sé (oggi la struttura dal contesto arriva via relazioni applicate).
+- estensione possibile: rappresentare nel KG anche le metriche derivate dai documenti (oggi entrano nel modello via proposta/SL, non come nodi del grafo) — valore basso, da valutare.
 - **unificazione dei due store metriche** (`sl_metrics` vs draft metrics del catalog): debito tecnico, NON parte dei 5 step del piano; da affrontare in un giro dedicato con analisi d'impatto (tocca molti endpoint).
 - integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
 - due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.

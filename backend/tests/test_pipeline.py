@@ -380,6 +380,41 @@ class TestKGManualRelations:
         assert kg.node_count == n0 + 1
 
 
+class TestKGContextEntities:
+    def test_adds_concept_node(self):
+        kg = KnowledgeGraph()
+        added = kg.ingest_context_entities([{"name": "Churn", "synonyms": []}])
+        assert added == 1
+        assert any(
+            nid == "Concept:Churn" and attrs.get("source") == "document"
+            for nid, attrs in kg.all_nodes()
+        )
+
+    def test_grounds_to_matching_table(self):
+        kg = KnowledgeGraph()
+        # A data-backed table node (as build_from_schema would create).
+        kg.ingest_manual_relations(
+            [{"from_table": "customers", "to_table": "orders", "edge_type": "FK"}]
+        )
+        kg.ingest_context_entities([{"name": "Customer", "synonyms": ["client"]}])
+        # DESCRIBES edge Concept:Customer → customers node (singular→plural match).
+        assert any(
+            s == "Concept:Customer"
+            and d.split(":")[0] == "customers"
+            and data.get("type") == "DESCRIBES"
+            for s, d, data in kg.iter_edges()
+        )
+
+    def test_idempotent_node(self):
+        kg = KnowledgeGraph()
+        kg.ingest_context_entities([{"name": "Churn"}])
+        assert kg.ingest_context_entities([{"name": "Churn"}]) == 0
+
+    def test_skips_empty(self):
+        kg = KnowledgeGraph()
+        assert kg.ingest_context_entities([{"name": ""}, {}]) == 0
+
+
 # ── conversational integration (interpret + apply ops) ────────────────────────
 
 

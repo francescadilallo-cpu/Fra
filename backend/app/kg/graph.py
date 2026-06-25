@@ -535,6 +535,71 @@ class KnowledgeGraph:
             logger.info("KG ingested %d manual relation(s)", added)
         return added
 
+    def ingest_context_entities(self, entities: list[dict]) -> int:
+        """Add document-derived business concepts as graph nodes.
+
+        Entities extracted from uploaded context documents (see
+        ``context/doc_analyzer``) become ``Concept:{name}`` nodes tagged
+        ``source="document"`` and, when their name/synonyms match a data-backed
+        table or entity, a ``DESCRIBES`` edge grounds the concept to that node.
+        This folds business vocabulary from the context into the graph alongside
+        the data structure. Returns the number of concept nodes added.
+        """
+        if not entities:
+            return 0
+
+        # Index data-backed nodes by table name and entity type, preferring
+        # schema-level (table) nodes over per-row nodes.
+        label_to_node: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_schema = attrs.get("canonical_id") == "__schema__"
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                str(attrs.get("entity_type") or "").lower(),
+            ):
+                if key and (key not in label_to_node or is_schema):
+                    label_to_node[key] = nid
+
+        def _match(label: str) -> str | None:
+            lbl = label.lower()
+            return (
+                label_to_node.get(lbl)
+                or label_to_node.get(lbl.rstrip("s"))
+                or label_to_node.get(lbl + "s")
+            )
+
+        added = 0
+        for e in entities:
+            name = str(e.get("name", "")).strip()
+            if not name:
+                continue
+            synonyms = [
+                str(s).strip() for s in (e.get("synonyms") or []) if str(s).strip()
+            ]
+            cnode = f"Concept:{name}"
+            if cnode not in self._g:
+                self._add_node(
+                    cnode,
+                    entity_type="Concept",
+                    canonical_id=name,
+                    data={
+                        "label": name,
+                        "source": "document",
+                        "synonyms": synonyms,
+                    },
+                    provenance=[{"source": "document", "original_id": name}],
+                )
+                added += 1
+            # Ground the concept to the data node it describes, if any.
+            for label in [name, *synonyms]:
+                target = _match(label)
+                if target and target != cnode:
+                    self._add_edge(cnode, target, "DESCRIBES", source="document")
+                    break
+        if added:
+            logger.info("KG ingested %d context concept(s)", added)
+        return added
+
     @property
     def node_count(self) -> int:
         return self._g.number_of_nodes()

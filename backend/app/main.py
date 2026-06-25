@@ -572,6 +572,19 @@ _semantic_init_lock = threading.RLock()
 _SCENARIO_PATH = Path(__file__).parent.parent.parent / "test_scenario"
 
 
+def _doc_context_entities() -> list[dict]:
+    """Document-derived business concepts (source='document') from the context
+    store, shaped for KnowledgeGraph.ingest_context_entities()."""
+    try:
+        return [
+            {"name": e.name, "synonyms": e.synonyms}
+            for e in _context_store.list_entities()
+            if getattr(e, "source", "") == "document"
+        ]
+    except Exception:  # noqa: BLE001 — context entities are optional enrichment
+        return []
+
+
 def _ensure_semantic_loaded() -> None:
     """Lazily build semantic stack exactly once (thread-safe).
 
@@ -652,6 +665,12 @@ def _ensure_semantic_loaded() -> None:
             kg.ingest_manual_relations(catalog.list_manual_relations())
         except Exception as _rel_exc:
             logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+        # Fold document-derived business concepts into the KG (grounded to the
+        # data tables they describe), so context knowledge enters the graph.
+        try:
+            kg.ingest_context_entities(_doc_context_entities())
+        except Exception as _ctx_exc:
+            logger.warning("KG context-entity ingest skipped: %s", _ctx_exc)
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
@@ -771,12 +790,16 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
                 new_kg.build_from_ontology(filtered_mgr, ontology)
             else:
                 new_kg.build_from_schema(filtered_mgr)
-            # Re-fold manual/applied relations into the freshly rebuilt KG.
+            # Re-fold manual/applied relations + context concepts into the KG.
             if catalog is not None:
                 try:
                     new_kg.ingest_manual_relations(catalog.list_manual_relations())
                 except Exception as _rel_exc:
                     logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+            try:
+                new_kg.ingest_context_entities(_doc_context_entities())
+            except Exception as _ctx_exc:
+                logger.warning("KG context-entity ingest skipped: %s", _ctx_exc)
             _semantic_state["kg"] = new_kg
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)
@@ -970,6 +993,9 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     if kg:
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
+            # Concept→table grounding edges are not table-to-table relations.
+            if edge_type == "DESCRIBES":
+                continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
             if src_table in hidden_keys or dst_table in hidden_keys:
@@ -4991,6 +5017,9 @@ def get_live_config(
         seen: set[tuple] = set()
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
+            # Concept→table grounding edges are not table-to-table relations.
+            if edge_type == "DESCRIBES":
+                continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
             if src_table in hidden_keys or dst_table in hidden_keys:
