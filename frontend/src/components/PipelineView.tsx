@@ -54,6 +54,8 @@ const STAGE_META: Record<string, { label: string; detail: string }> = {
 }
 
 const POLL_MS = 1500
+// ~45s of transient backend unavailability tolerated before we give up polling.
+const MAX_POLL_FAILS = 30
 
 function StateIcon({ state }: { state: PipelineStageState }) {
   switch (state) {
@@ -112,6 +114,12 @@ export default function PipelineView({ onNavigate }: Props) {
   const [instruction, setInstruction] = useState('')
   const [integrating, setIntegrating] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Consecutive failed polls. A heavy stage-3 build can briefly starve the
+  // backend's single worker (a 502/timeout reaches the browser as a CORS/
+  // network error), so we tolerate a run of failures rather than giving up on
+  // the first one — otherwise the UI would stick on "RUNNING" forever even
+  // though the build finishes server-side.
+  const pollFailsRef = useRef(0)
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -123,10 +131,16 @@ export default function PipelineView({ onNavigate }: Props) {
   const poll = useCallback(async () => {
     try {
       const status = await getPipelineStatus()
+      pollFailsRef.current = 0
       setRun(status)
       if (!status.running) stopPolling()
     } catch {
-      stopPolling()
+      pollFailsRef.current += 1
+      if (pollFailsRef.current >= MAX_POLL_FAILS) {
+        stopPolling()
+        toast('Lost contact with the build — refresh to check its status.', 'error')
+      }
+      // else: transient — keep polling; the build is likely still running.
     }
   }, [stopPolling])
 
@@ -137,6 +151,7 @@ export default function PipelineView({ onNavigate }: Props) {
         const status = await getPipelineStatus()
         setRun(status)
         if (status.running && !pollRef.current) {
+          pollFailsRef.current = 0
           pollRef.current = setInterval(() => void poll(), POLL_MS)
         }
       } catch {
@@ -152,6 +167,7 @@ export default function PipelineView({ onNavigate }: Props) {
       const started = await runPipeline()
       setRun(started)
       if (started.running && !pollRef.current) {
+        pollFailsRef.current = 0
         pollRef.current = setInterval(() => void poll(), POLL_MS)
       } else {
         toast('Auto-build complete', started.ok ? 'success' : 'error')

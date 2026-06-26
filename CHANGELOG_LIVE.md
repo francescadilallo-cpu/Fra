@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Auto-Build: polling resiliente ai 502 transitori)
+
+Con la build in background (fix precedente), il polling di `GET /api/pipeline/status`
+si interrompeva al **primo** errore (`PipelineView.poll` chiamava `stopPolling()`
+nel catch). Durante lo stadio 3 (build), su Render free-tier il singolo worker può
+restare brevemente occupato → un 502/timeout dal proxy arriva al browser come errore
+CORS/network → il polling moriva e la UI restava bloccata su "RUNNING" anche a build
+completata lato server.
+
+- `frontend/src/components/PipelineView.tsx`: il polling ora **tollera fino a
+  `MAX_POLL_FAILS=30` fallimenti consecutivi** (~45s di indisponibilità) prima di
+  arrendersi; ogni poll riuscito azzera il contatore. Al superamento della soglia,
+  toast esplicito ("refresh to check its status") invece di un blocco silenzioso.
+  Contatore resettato all'avvio di ogni loop di polling.
+- Lo stadio 3 in live (proposta LLM + build KG + reload + verifica) può richiedere
+  decine di secondi: non è bloccato, e ora la UI riflette il completamento appena
+  il worker torna disponibile.
+
+---
+
 ## 2026-06-26 (Fix Auto-Build "network error" — run in background)
 
 `POST /api/pipeline/run` eseguiva l'intera build a 5 stadi **in modo sincrono**
