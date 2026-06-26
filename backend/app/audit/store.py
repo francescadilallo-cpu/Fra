@@ -14,9 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..paths import data_dir
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "audit.db"
+DB_PATH = data_dir() / "audit.db"
 
 VALID_CATEGORIES = {"auth", "config", "data", "reports"}
 

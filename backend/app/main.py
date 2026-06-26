@@ -43,6 +43,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from .database import get_connection, get_table_counts, init_db
+from .paths import data_dir
 from .models import (
     DashboardData,
     HierarchyCreate,
@@ -1418,7 +1419,7 @@ _agentic_layer = ExecutiveAgenticLayer(
     cache_invalidator=_agentic_cache_invalidator,
     # File-backed state so the pending-approval queue and audit trail survive
     # restarts and are shared across worker processes.
-    state_db_path=Path(__file__).parent.parent / "data" / "agent_state.db",
+    state_db_path=data_dir() / "agent_state.db",
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 app.include_router(
@@ -5212,7 +5213,7 @@ def get_live_config(
 # persists user-defined agent definitions so they survive browser cache clears
 # and work across devices.
 
-_DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data"
+_DEFAULT_DATA_DIR = data_dir()
 
 
 def _user_db_path(filename: str) -> Path:

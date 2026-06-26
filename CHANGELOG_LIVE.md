@@ -10,6 +10,32 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Persistenza: data dir configurabile via FRA_DATA_DIR)
+
+**Causa del "perdo le connessioni a ogni refresh"**: tutto lo stato mutabile
+(registry sorgenti, token/schema Salesforce, DB SQLite users/workspace/audit/
+notifications/agent_state, DuckDB unificato) vive sotto `backend/data/`, un path
+**hardcoded**. Su Render free-tier il filesystem del container è effimero: viene
+azzerato a ogni deploy, spin-down per inattività (~15 min) e restart per OOM
+(come quello durante l'Auto-Build). Quindi le sorgenti registrate spariscono al
+restart — il refresh del browser lo rende solo visibile.
+
+- Nuovo `app/paths.py::data_dir()`: risolve la dir dati onorando l'env
+  **`FRA_DATA_DIR`** (default invariato: `backend/data`). Instradati tutti gli
+  store hardcoded (`source_registry`, `salesforce_connector`, `duckdb_source_manager`,
+  `users/audit/workspace/notifications` store, `agent_state` e `_DEFAULT_DATA_DIR`
+  in `main.py`). Lasciato fuori `database.py::erp_mock.db` (fixture demo read-only
+  bundled, deve restare al path del repo).
+- **Questa è la condizione necessaria, non la soluzione completa**: per persistere
+  davvero su Render serve montare un **persistent disk** (piano a pagamento) e
+  puntarci `FRA_DATA_DIR=/var/data`; in locale persiste già di default. Nessun
+  cambiamento di comportamento senza l'env impostato.
+
+### Verifica
+- Suite completa **1213 passed, 6 skipped**; smoke import OK (`data_dir()` → `backend/data`).
+
+---
+
 ## 2026-06-26 (Auto-Build: polling resiliente ai 502 transitori)
 
 Con la build in background (fix precedente), il polling di `GET /api/pipeline/status`

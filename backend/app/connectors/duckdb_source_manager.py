@@ -37,6 +37,8 @@ import threading
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
+
+from ..paths import data_dir
 from typing import Any
 
 import duckdb
@@ -184,9 +186,7 @@ def get_source_manager(
         return _MANAGER
     with _MANAGER_LOCK:
         if _MANAGER is None:
-            effective_db = db_path or (
-                Path(__file__).parent.parent.parent / "data" / "fra_unified.duckdb"
-            )
+            effective_db = db_path or (data_dir() / "fra_unified.duckdb")
             effective_db.parent.mkdir(parents=True, exist_ok=True)
             registry = get_source_registry()
             _MANAGER = DuckDBSourceManager(scenario_path, effective_db, registry)

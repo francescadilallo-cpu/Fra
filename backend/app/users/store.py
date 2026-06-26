@@ -10,11 +10,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+from ..paths import data_dir
+
 UserRole = Literal["admin", "editor", "viewer"]
 UserStatus = Literal["active", "pending"]
 
 _VALID_ROLES: frozenset[str] = frozenset({"admin", "editor", "viewer"})
-_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "users.db"
+_DEFAULT_DB = data_dir() / "users.db"
 
 
 @dataclass

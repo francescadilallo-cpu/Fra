@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ..paths import data_dir
+
 _REGISTRY: "SourceRegistry | None" = None
 _REGISTRY_LOCK = threading.RLock()
 
@@ -25,9 +27,7 @@ def get_source_registry(db_path: Path | None = None) -> "SourceRegistry":
         return _REGISTRY
     with _REGISTRY_LOCK:
         if _REGISTRY is None:
-            effective = db_path or (
-                Path(__file__).parent.parent.parent / "data" / "source_registry.db"
-            )
+            effective = db_path or (data_dir() / "source_registry.db")
             _REGISTRY = SourceRegistry(effective)
     return _REGISTRY
 
