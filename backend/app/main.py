@@ -3210,13 +3210,17 @@ def sync_source(
             # so the frontend keeps polling until the semantic layer is fully
             # rebuilt and we explicitly mark "active" below.
             mgr.registry.patch(source_id, status="syncing")
-            # Full semantic reload so the KG is rebuilt from the updated DuckDB
-            # snapshot (new tables are discovered via build_from_schema).
-            if _semantic_state.get("loaded"):
-                reload_semantic()
-            else:
-                _refresh_catalog_and_kg_after_rebuild(mgr)
-            # Semantic state is now fully rebuilt — mark active so frontend fires
+            # Refresh catalog (adds SF entities to entity_meta) + rebuild KG.
+            # reload_semantic() also works but takes 5+ minutes for large KGs
+            # (173k nodes) because it resets loaded=False and blocks every
+            # request on _semantic_init_lock for the entire rebuild duration.
+            # _refresh_catalog_and_kg_after_rebuild() never resets loaded,
+            # completes in <10 seconds, and is sufficient for Entity Graph:
+            # get_live_config() reads from catalog.get_draft_entities() (SQLite),
+            # not the KG — so SF entities appear as soon as populate_from_manager
+            # upserts them, without a full semantic stack reload.
+            _refresh_catalog_and_kg_after_rebuild(mgr)
+            # Catalog is now updated — mark active so frontend fires
             # pipeline-run-updated and refreshes the Entity Graph with real data.
             mgr.registry.patch(source_id, status="active", error_msg=None)
             logger.info("Sync complete for source %s", source_id)
