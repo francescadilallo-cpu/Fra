@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Fix Auto-Build "network error" — run in background)
+
+`POST /api/pipeline/run` eseguiva l'intera build a 5 stadi **in modo sincrono**
+e rispondeva solo a fine corsa. Su una build reale (analisi documenti + KG +
+proposta semantic + verifica, tutti LLM-backed) il tempo supera il timeout HTTP
+del client (axios 60s) → la richiesta abortiva e l'UI mostrava "network error"
+pur con la build ancora in corso lato server.
+
+- `backend/app/main.py`: l'endpoint ora **ritorna subito** la run riservata
+  (`running=true`) e fa partire `run_build_pipeline` in un thread di background
+  (fire-and-forget); il client traccia l'avanzamento con il polling già esistente
+  su `GET /api/pipeline/status`. Guard di sicurezza: se la build lancia prima di
+  `run.complete()`, la run viene marcata `fail`+`complete` così non resta mai
+  bloccata su "running" (che bloccherebbe ogni run futura con un 409).
+- Allineato al design del frontend (`PipelineView.handleRun` si aspetta già
+  `running=true` → polling). Nessuna modifica ai test: gli e2e invocano
+  `run_build_pipeline` direttamente.
+
+---
+
 ## 2026-06-26 (Restyle UI — identità brand teal→indigo, bold)
 
 Restyle visivo bold, a parità di layout e di copy (nessun termine demo/AW toccato).

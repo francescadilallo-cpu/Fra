@@ -3920,6 +3920,12 @@ async def run_pipeline_endpoint(
     Stages 1–3 (context → sources → build) run and AUTO-APPLY the inferred model
     to the live KG + Semantic Layer; stages 4–5 are stubs for now. Runs in a
     worker thread so the event loop stays responsive (like build_semantic_layer).
+
+    Returns *immediately* with the reserved run (``running=true``); the build
+    proceeds in a background thread and the client tracks progress by polling
+    ``GET /api/pipeline/status``. Awaiting the full build here would routinely
+    exceed the client's HTTP timeout on a real (LLM-backed) build and surface as
+    a spurious "network error", even though the build was still running.
     """
     import asyncio
 
@@ -3935,26 +3941,29 @@ async def run_pipeline_endpoint(
         )
 
     hidden = _hidden_demo_tables(current_user)
-    loop = asyncio.get_event_loop()
-    try:
-        run = await loop.run_in_executor(
-            None,
-            lambda: run_build_pipeline(
-                mode=current_user.mode,
+    mode = current_user.mode
+
+    def _run_in_background() -> None:
+        # The orchestrator marks per-stage failures and always calls
+        # run.complete(); this guard covers an unexpected throw before that so a
+        # crashed build can never leave the run stuck "running" (which would
+        # block every future run with a 409).
+        try:
+            run_build_pipeline(
+                mode=mode,
                 hidden=hidden,
                 store=default_run_store,
                 run=reserved,
-            ),
-        )
-    except Exception as exc:
-        # Never leave the reserved run stuck as "running" — that would block all
-        # future runs with a 409. Mark it failed and surface a 500.
-        reserved.fail("build", str(exc))
-        reserved.complete()
-        default_run_store.set_current(reserved)
-        logger.error("pipeline run failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Pipeline run failed") from exc
-    return run.to_dict()
+            )
+        except Exception as exc:  # noqa: BLE001 — background task, log & recover
+            logger.error("pipeline run failed: %s", exc, exc_info=True)
+            reserved.fail("build", str(exc))
+            reserved.complete()
+            default_run_store.set_current(reserved)
+
+    # Fire-and-forget on the default executor; do not await — the client polls.
+    asyncio.get_event_loop().run_in_executor(None, _run_in_background)
+    return reserved.to_dict()
 
 
 @app.get(
