@@ -576,7 +576,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       </div>
 
       {/* ── Pipeline executor ─────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -704,7 +704,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
 
         {/* Next steps after successful live pipeline run */}
         {runState === 'done' && !IS_DEMO_MODE && (
-          <div className="mx-6 mb-5 flex items-center justify-between gap-4 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+          <div className="mx-6 mb-5 flex items-center justify-between gap-4 bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
             <p className="text-xs text-slate-600 font-medium">Data model ready — start exploring your data</p>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
@@ -725,7 +725,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       </div>
 
       {/* ── Lifecycle stages ──────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-6">Lifecycle</h2>
         {processStages.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
@@ -774,7 +774,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       </div>
 
       {/* ── Conversion funnel ─────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
         <h2 className="font-semibold text-slate-900 mb-5">Conversion Funnel</h2>
         {funnel.length === 0 && !IS_DEMO_MODE ? (
           <div className="py-8 text-center">
@@ -826,7 +826,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
       </div>
 
       {/* ── Active records ────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-slate-900">
             {isAWDemo ? 'Recent Orders — ERP OrionSales' : 'Active Cases'}

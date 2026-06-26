@@ -74,7 +74,7 @@ function TrendChart({ values, label, unit }: { values: number[]; label: string; 
   const WEEKS = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12']
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-teal-600" />
@@ -169,7 +169,7 @@ function AgentIntelligence({ sectorId, onNavigate }: { sectorId: SectorId; onNav
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <BotMessageSquare className="w-4 h-4 text-blue-600" />
@@ -230,7 +230,7 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
   useEffect(() => { load() }, [])
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2">
           <Layers className="w-4 h-4 text-teal-600" />
@@ -315,7 +315,7 @@ function SemanticLayerStats({ onNavigate }: { sectorId: SectorId; onNavigate?: (
           <p className="text-[11px] text-slate-400 mt-0.5 mb-3">Connect sources and build your data model</p>
           <button
             onClick={() => onNavigate?.('sources')}
-            className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+            className="text-xs bg-brand hover:brightness-110 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
           >
             <Zap className="w-3 h-3 inline mr-1" />Build Data Model
           </button>
@@ -665,7 +665,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           const TrendIcon = kpi.trend >= 0 ? ArrowUp : ArrowDown
           const trendColor = kpi.trend >= 0 ? 'text-teal-600' : 'text-red-500'
           return (
-            <div key={kpi.label} className="bg-white border border-slate-200 rounded-xl p-5">
+            <div key={kpi.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
               <div className="flex items-start justify-between mb-3">
                 <div className={`${kpi.bg} rounded-lg p-2.5`}>
                   <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
@@ -712,7 +712,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
 
       {/* Process Funnel */}
       {funnel.length > 0 && (
-      <div className="bg-white border border-slate-200 rounded-xl p-5">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-teal-600" />
@@ -743,7 +743,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
 
         {/* Recent Activity */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-4">
             <Activity className="w-4 h-4 text-teal-600" />
             Recent Activity
@@ -774,7 +774,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
         </div>
 
         {/* Recent Records / Data Entities */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-4">
             {IS_DEMO_MODE
               ? <ShoppingCart className="w-4 h-4 text-purple-600" />
@@ -817,7 +817,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
         </div>
 
         {/* Data Sources */}
-        <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
               <Database className="w-4 h-4 text-teal-600" />

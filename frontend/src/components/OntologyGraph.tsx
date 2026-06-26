@@ -103,7 +103,7 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
   const srcKey = getSourceKey(node.db_table ?? null)
   const src = SOURCE_COLORS[srcKey]
   return (
-    <div className="absolute top-4 right-4 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-10 p-4 max-h-[calc(100%-2rem)] overflow-y-auto">
+    <div className="absolute top-4 right-4 w-80 bg-white rounded-2xl shadow-lifted z-10 p-4 max-h-[calc(100%-2rem)] overflow-y-auto">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${src.dot}`} />
@@ -160,7 +160,7 @@ function DetailPanel({ node, onClose }: { node: OntologyNodeData; onClose: () =>
 function LegendPanel() {
   const sources = Object.entries(SOURCE_COLORS) as [SourceKey, typeof SOURCE_COLORS[SourceKey]][]
   return (
-    <div className="absolute bottom-4 left-4 bg-white border border-slate-200 rounded-xl shadow-md z-10 p-3 text-xs space-y-2 max-w-[200px]">
+    <div className="absolute bottom-4 left-4 bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-md z-10 p-3 text-xs space-y-2 max-w-[200px]">
       <p className="font-semibold text-slate-700 text-[10px] uppercase tracking-wide">Source Systems</p>
       <div className="space-y-1">
         {sources.map(([key, val]) => (
@@ -253,7 +253,7 @@ function EntitiesView() {
           const src = SOURCE_COLORS[srcKey]
           const isOpen = expandedNode === node.id
           return (
-            <div key={node.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div key={node.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
               <button
                 onClick={() => setExpandedNode(isOpen ? null : node.id)}
                 className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
@@ -367,7 +367,7 @@ function ArchitectureDiagram() {
           ))}
         </div>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl p-6">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-6">
         <h3 className="text-sm font-semibold text-slate-900 mb-3">Data Model Components</h3>
         <table className="w-full text-sm">
           <thead>
@@ -522,7 +522,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
   return (
     <div className="p-8 space-y-6">
       {/* OWL/RDF */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <FileCode className="w-4 h-4 text-teal-600" />
@@ -542,7 +542,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
       </section>
 
       {/* SPARQL */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <Code2 className="w-4 h-4 text-teal-600" />
@@ -562,7 +562,7 @@ SELECT (COUNT(?x) AS ?total) WHERE {
       </section>
 
       {/* MCP */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <Server className="w-4 h-4 text-teal-600" />

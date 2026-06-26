@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Restyle UI — identità brand teal→indigo, bold)
+
+Restyle visivo bold, a parità di layout e di copy (nessun termine demo/AW toccato).
+L'identità diventa un **gradiente teal→indigo**; la fondazione è ridefinita una
+volta sui token/classi condivise così tutte le 28 view ne beneficiano.
+
+### Fondazione (`tailwind.config.js`, `src/index.css`)
+- Font **Inter**; scala ombre a livelli (`soft`/`elevated`/`lifted`/`glow-brand`/`glow-teal`); gradienti (`bg-brand`, `bg-brand-vivid`, `bg-brand-soft`, `bg-sidebar`, `bg-mesh`, `bg-hero`); animazioni (`fade-up`, `float`, `shimmer`, `pulse-soft`).
+- Classi condivise ridisegnate (stessi nomi → zero breakage): `.card`/`.panel` rounded-2xl + ring hairline + profondità; `.btn-primary` gradiente + glow; input glass; chip a ring. Nuovi helper: `.text-gradient`, `.brand-mark`, `.glass`, `.card-interactive`, `.chip-brand`.
+
+### Shell + viste
+- `Layout.tsx`: sidebar `bg-sidebar` con glow brand, logo `brand-mark`, nav attiva a gradiente con barra indicatore, header glass, sfondo contenuti `bg-mesh`.
+- `OverviewScreen.tsx`: headline a gradiente, CTA brand, card journey/solution con hover-lift ed elevazione, finale `bg-hero`.
+- `AccessGate.tsx`: logo brand-mark, wordmark a gradiente, sfondo `bg-hero` (verificato via screenshot).
+- Sweep cross-view: bottoni primari inline `teal-600→700/500` → gradiente brand; card piatte `border slate-200` → ring + shadow-soft. Collisioni su menu flottanti risolte (rounded-2xl + shadow-lifted).
+
+### Verifica
+- `npx tsc --noEmit` pulito; `npm run build` OK; screenshot login renderizzato correttamente.
+
+---
+
 ## 2026-06-25 (Hardening Fase 3 FK + glossario deterministico)
 
 Giro di review-for-improvement sui tre stadi appena rilasciati. Due fonti di

@@ -353,7 +353,7 @@ function CaseCard({ uc, onLoad, onNavigate }: { uc: UseCase; onLoad: () => void;
               className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${
                 uc.demoQuery
                   ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+                  : 'bg-brand hover:brightness-110 text-white'
               }`}
             >
               Load scenario → Dashboard
@@ -362,7 +362,7 @@ function CaseCard({ uc, onLoad, onNavigate }: { uc: UseCase; onLoad: () => void;
         ) : (
           <button
             onClick={() => onNavigate('sources')}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            className="w-full bg-brand hover:brightness-110 text-white rounded-xl px-4 py-3 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
           >
             <ArrowRight className="w-4 h-4" />
             Replicate this with your data →
@@ -448,7 +448,7 @@ export default function UseCasesView({ onNavigate }: Props) {
               { step: '03', title: 'Agents', desc: 'AI agents operate directly on your data: finding anomalies, generating alerts, automating workflows.', color: 'border-l-violet-500' },
               { step: '04', title: 'ROI', desc: 'Value is measurable: hours saved, revenue recovered, risks avoided — all traceable in the data model.', color: 'border-l-amber-500' },
             ].map(({ step, title, desc, color }) => (
-              <div key={step} className={`bg-white border border-slate-200 rounded-xl p-5 border-l-4 ${color}`}>
+              <div key={step} className={`bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5 border-l-4 ${color}`}>
                 <p className="text-2xl font-extrabold text-slate-200 mb-2">{step}</p>
                 <h3 className="font-bold text-slate-900 mb-2">{title}</h3>
                 <p className="text-sm text-slate-500 leading-relaxed">{desc}</p>

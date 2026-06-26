@@ -1021,7 +1021,7 @@ function ExecutiveActionsPanel() {
       </div>
 
       {/* Command input */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 mb-3">
+      <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 mb-3">
         <p className="text-[10px] text-slate-400 mb-2 font-mono">
           E.g. "Update [entity] field to [value]" · "Mark [entity] ID as [status]" · "Assign [entity] to [user]"
         </p>
@@ -1257,7 +1257,7 @@ function WorkflowRunCard({ run, onExpand, expanded }: {
   }[run.status]
 
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+    <div className="ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden bg-white">
       <button
         onClick={onExpand}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
@@ -2146,7 +2146,7 @@ response = client.messages.create(
 print(response.content)`
             const snippets: Record<string, string> = { Python: pythonSnippet, 'Claude Agent': claudeSnippet }
             return (
-              <section className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+              <section className="ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden bg-white">
                 <button
                   onClick={() => setShowIntegrations(v => !v)}
                   className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors"

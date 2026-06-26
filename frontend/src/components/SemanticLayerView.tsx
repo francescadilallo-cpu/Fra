@@ -354,7 +354,7 @@ function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions }: {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors">
         {open ? <ChevronDown className="w-4 h-4 text-teal-500 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
@@ -459,7 +459,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5 space-y-4">
       <div>
         <p className="text-sm font-semibold text-slate-900 mb-0.5">New entity</p>
         <p className="text-xs text-slate-400">Define an entity with field names that map to your physical database schema.</p>
@@ -639,7 +639,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
       </p>
 
       {/* Form */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">New bridge</p>
         {/* Row 1: from entity + field */}
         <div className="grid grid-cols-2 gap-2">
@@ -848,7 +848,7 @@ function UserSourceCard({ source, onDelete }: { source: SourceDef; onDelete: () 
   const chips: Record<string, string> = { PostgreSQL: 'bg-blue-50 text-blue-700', MySQL: 'bg-orange-50 text-orange-700', SQLite: 'bg-sky-50 text-sky-700', MongoDB: 'bg-green-50 text-green-700', Snowflake: 'bg-cyan-50 text-cyan-700', BigQuery: 'bg-yellow-50 text-yellow-700', CSV: 'bg-violet-50 text-violet-700', JSON: 'bg-amber-50 text-amber-700', 'REST API': 'bg-teal-50 text-teal-700' }
   const chip = chips[source.type] ?? 'bg-slate-100 text-slate-600'
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-start gap-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 flex items-start gap-3">
       <Server className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -949,7 +949,7 @@ function saveMetrics(sid: string, m: Metric[]) {
 function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => void }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button className="w-full text-left" onClick={() => setOpen(v => !v)}>
         <div className="px-4 py-3 flex items-start gap-3">
           <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -1041,7 +1041,7 @@ function saveHierarchies(sid: string, h: DimHierarchy[]) {
 
 function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
       <div className="flex items-start gap-3">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${h.type === 'time' ? 'bg-blue-50 border border-blue-200' : 'bg-violet-50 border border-violet-200'}`}>
           {h.type === 'time'
@@ -1101,7 +1101,7 @@ function saveSegments(sid: string, s: Segment[]) {
 
 function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center flex-shrink-0 mt-0.5">
           <Filter className="w-4 h-4 text-orange-600" />
@@ -1242,7 +1242,7 @@ function DemoBridgeCard({ bridge }: { bridge: DemoBridge }) {
   const color = pct === 100 ? 'bg-teal-500' : pct >= 95 ? 'bg-blue-500' : 'bg-amber-500'
   const textColor = pct === 100 ? 'text-teal-700 bg-teal-100' : pct >= 95 ? 'text-blue-700 bg-blue-100' : 'text-amber-700 bg-amber-100'
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">From</p>
@@ -1311,7 +1311,7 @@ function DemoDisambiguationCard({ rule }: { rule: DemoDisambiguationRule }) {
 function DemoQueryExampleCard({ ex }: { ex: DemoQueryExample }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4">
       <div className="flex items-start gap-3">
         <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -1337,7 +1337,7 @@ function DemoQueryExampleCard({ ex }: { ex: DemoQueryExample }) {
             <p className="text-xs font-semibold text-teal-700 max-w-[160px] leading-snug">{ex.result}</p>
           </div>
           <button onClick={() => tryInQueryAI(ex.question)}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors">
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-brand hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-colors">
             <Play className="w-3 h-3" />Try
           </button>
         </div>
@@ -1521,7 +1521,7 @@ function MappingTableGroup({ table, rows, savedEdits, onSave }: {
 }) {
   const [open, setOpen] = useState(true)
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
+    <div className="ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200">
         <div className="flex items-center gap-2.5">
@@ -1610,7 +1610,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
         </button>
       </div>
       {showAdd && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
           <p className="text-xs font-semibold text-slate-700">New field definition</p>
           <div className="grid grid-cols-3 gap-3">
             {(['entity', 'field', 'definition'] as const).map(f => (
@@ -1626,7 +1626,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
         </div>
       )}
       {Object.entries(grouped).map(([entity, entityDefs]) => (
-        <div key={entity} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div key={entity} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
           <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Tag className="w-3.5 h-3.5 text-teal-600" />
             <span className="text-sm font-semibold text-slate-800">{entity}</span>
@@ -1807,7 +1807,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
 
       {/* Inline add form */}
       {showForm && (
-        <form onSubmit={handleAddRelation} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <form onSubmit={handleAddRelation} className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
           <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Define a join between two tables</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1875,7 +1875,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           { label: 'N:1 (many-to-one)', value: nToOne, color: 'text-teal-600' },
           { label: 'Soft / denormalized', value: softCount, color: 'text-amber-600' },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-center">
+          <div key={s.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
           </div>
@@ -2412,7 +2412,7 @@ export default function SemanticLayerView() {
           </div>
           {/* Search results dropdown */}
           {searchFocused && sidebarSearch && searchResults.length > 0 && (
-            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-lg z-50 overflow-hidden">
               {searchResults.map((r, i) => (
                 <button key={i} onMouseDown={() => { setSection(r.section); setSidebarSearch('') }}
                   className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors">
@@ -2430,7 +2430,7 @@ export default function SemanticLayerView() {
             </div>
           )}
           {searchFocused && sidebarSearch && searchResults.length === 0 && (
-            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 px-3 py-2 text-[11px] text-slate-400">
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-lg z-50 px-3 py-2 text-[11px] text-slate-400">
               No results for "{sidebarSearch}"
             </div>
           )}
@@ -2566,7 +2566,7 @@ export default function SemanticLayerView() {
             {isDemoWorkspace && (
               <div className="grid grid-cols-4 gap-3">
                 {Object.values(DEMO_SOURCE_FRESHNESS).map(f => (
-                  <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                  <div key={f.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-xs font-bold text-slate-800">{f.label}</p>
                       <FreshnessBadge status={f.status} lastSync={f.lastSync} sla={f.sla} />
@@ -2586,7 +2586,7 @@ export default function SemanticLayerView() {
             {!isDemoWorkspace && backendSources.length > 0 && (
               <div className="grid grid-cols-4 gap-3">
                 {backendSources.map(src => (
-                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                  <div key={src.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-xs font-bold text-slate-800">{src.name}</p>
                       <FreshnessBadge status={src.freshness_status} lastSync={src.loaded_at ?? '—'} sla="Live" />
@@ -2714,7 +2714,7 @@ export default function SemanticLayerView() {
                 <p className="text-xs text-slate-400 mb-3">Saved query templates from your data model. Use these as starting points.</p>
                 <div className="space-y-2">
                   {queryTemplates.slice(0, 6).map(t => (
-                    <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4">
+                    <div key={t.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-900">{t.name}</p>
@@ -2728,7 +2728,7 @@ export default function SemanticLayerView() {
                           )}
                         </div>
                         <button onClick={() => tryInQueryAI(t.name)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors flex-shrink-0">
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-brand hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-colors flex-shrink-0">
                           <Play className="w-3 h-3" />Try
                         </button>
                       </div>
@@ -2771,7 +2771,7 @@ export default function SemanticLayerView() {
                   : useBackendData
                     ? 'Ask a question about your data…'
                     : 'Connect the backend to use the live playground'}
-                className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
+                className="flex-1 text-sm ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
                 disabled={!useBackendData}
               />
               <button onClick={runPlayground} disabled={pgRunning || !useBackendData}
@@ -2866,7 +2866,7 @@ export default function SemanticLayerView() {
                 {/* Sample results table */}
                 <div>
                   <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Sample Results</p>
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>{pgResult.columns.map(c => (
@@ -2951,7 +2951,7 @@ export default function SemanticLayerView() {
             {!isDemoWorkspace && useBackendData && backendSources.length > 0 && (
               <div className="grid grid-cols-3 gap-3 pb-1">
                 {backendSources.map(src => (
-                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div key={src.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-bold text-slate-800">{src.name.toUpperCase()}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">{src.total_rows.toLocaleString()} rows · {src.source_type}</p>
@@ -3182,7 +3182,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddMetric && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New metric</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
@@ -3260,7 +3260,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddHierarchy && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New hierarchy</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
@@ -3329,7 +3329,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddSegment && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New segment</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>

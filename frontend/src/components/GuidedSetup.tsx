@@ -104,7 +104,7 @@ function StepRow({
         {state === 'current' ? (
           <button
             onClick={() => onNavigate(step.tab)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-4 py-2 bg-brand hover:brightness-110 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
           >
             {meta.cta}
             <ArrowRight className="w-3.5 h-3.5" />
@@ -163,7 +163,7 @@ export default function GuidedSetup({ onNavigate }: Props) {
           </button>
           <button
             onClick={() => onNavigate('query')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-4 py-2 bg-brand hover:brightness-110 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
           >
             Ask a question
             <ArrowRight className="w-4 h-4" />

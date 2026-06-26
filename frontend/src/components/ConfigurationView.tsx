@@ -246,7 +246,7 @@ const AGENT_SECTOR: Record<SectorId, { name: string; desc: string; model: string
 
 function AgentCard({ name, icon: Icon, desc, model, traffic }: { name: string; icon: typeof Bot; desc: string; model: string; traffic: string }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 hover:border-teal-200 transition-colors">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 hover:border-teal-200 transition-colors">
       <div className="flex items-start gap-3">
         <div className="w-10 h-10 bg-teal-50 rounded-lg flex items-center justify-center flex-shrink-0">
           <Icon className="w-5 h-5 text-teal-600" />
@@ -406,7 +406,7 @@ export default function ConfigurationView() {
 
       {/* Section 0: AI Provider (live users only) */}
       {!IS_DEMO_MODE && (
-        <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+        <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
           <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
             <Cpu className="w-4 h-4 text-teal-600" />
             AI Provider
@@ -446,7 +446,7 @@ export default function ConfigurationView() {
       )}
 
       {/* Section 1: Connectors */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <div className="flex items-start justify-between mb-1">
           <div>
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -519,7 +519,7 @@ export default function ConfigurationView() {
       </section>
 
       {/* Section 2: Governance */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <div className="flex items-start justify-between mb-1">
           <div>
             <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -561,7 +561,7 @@ export default function ConfigurationView() {
       </section>
 
       {/* Section 3: Agents */}
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
           <Bot className="w-4 h-4 text-teal-600" />
           Configured AI Agents
@@ -575,7 +575,7 @@ export default function ConfigurationView() {
       </section>
 
       {/* Section 4: Sector templates — demo only (live workspaces have a single real sector) */}
-      {IS_DEMO_MODE && <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+      {IS_DEMO_MODE && <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
         <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
           <Database className="w-4 h-4 text-teal-600" />
           Sector Templates

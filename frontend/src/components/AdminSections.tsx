@@ -233,7 +233,7 @@ export function UsersSection() {
   const pending = users.filter(u => u.status === 'pending').length
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showInvite && <InviteUserModal onClose={() => setShowInvite(false)} onInvite={invite} />}
 
       <div className="flex items-start justify-between mb-1">
@@ -549,7 +549,7 @@ export function ApiTokensSection() {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showModal && <GenerateTokenModal onClose={() => setShowModal(false)} onCreate={createToken} />}
 
       <div className="flex items-start justify-between mb-1">
@@ -882,7 +882,7 @@ export function NotificationsSection() {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showAdd && <AddChannelModal onClose={() => setShowAdd(false)} onAdd={addChannel} />}
       <div className="flex items-start justify-between mb-1">
         <div>
@@ -989,7 +989,7 @@ export function NotificationsSection() {
       </div>
 
       {/* Routing matrix */}
-      <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
+      <div className="mt-6 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
         <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-700">Severity routing</p>
           <p className="text-[11px] text-slate-500 mt-0.5">Choose which channels receive each severity level.</p>
@@ -1135,7 +1135,7 @@ export function AuditLogSection() {
   })
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       <div className="flex items-start justify-between mb-1">
         <div>
           <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -1265,7 +1265,7 @@ export function WorkspaceSection() {
   }
 
   return (
-    <section id="workspace-section" className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section id="workspace-section" className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
         <Building2 className="w-4 h-4 text-teal-600" />
         Workspace
@@ -1282,7 +1282,7 @@ export function WorkspaceSection() {
         <button
           onClick={() => void handleSave()}
           disabled={loading || !name.trim()}
-          className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-sm font-medium bg-brand hover:brightness-110 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
           {saved ? 'Saved' : 'Save'}

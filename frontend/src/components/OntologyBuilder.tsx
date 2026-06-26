@@ -1478,7 +1478,7 @@ export default function OntologyBuilder() {
               <button
                 onClick={() => send(input)}
                 disabled={!input.trim()}
-                className="w-7 h-7 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white flex items-center justify-center transition-colors flex-shrink-0"
+                className="w-7 h-7 rounded-lg bg-brand hover:brightness-110 disabled:bg-slate-200 text-white flex items-center justify-center transition-colors flex-shrink-0"
               >
                 <Send className="w-3.5 h-3.5" />
               </button>
@@ -1540,7 +1540,7 @@ export default function OntologyBuilder() {
               {pendingCount > 0 && (
                 <button
                   onClick={approveAll}
-                  className="text-xs bg-teal-600 hover:bg-teal-700 text-white font-medium rounded-md px-2.5 py-1.5 transition-colors"
+                  className="text-xs bg-brand hover:brightness-110 text-white font-medium rounded-md px-2.5 py-1.5 transition-colors"
                 >
                   Approve all
                 </button>
@@ -1723,7 +1723,7 @@ function InlineChangeChip({
             </button>
             <button
               onClick={() => onApprove(change.id)}
-              className="w-5 h-5 rounded bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center"
+              className="w-5 h-5 rounded bg-brand hover:brightness-110 text-white flex items-center justify-center"
               aria-label="Approve"
             >
               <CheckCircle2 className="w-3 h-3" />
@@ -1814,7 +1814,7 @@ function ChangeCard({
           </button>
           <button
             onClick={() => onApprove(change.id)}
-            className="flex-1 text-xs font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
+            className="flex-1 text-xs font-medium bg-brand hover:brightness-110 text-white rounded-md py-1.5 transition-colors flex items-center justify-center gap-1"
           >
             <CheckCircle2 className="w-3 h-3" />
             Approve
@@ -1998,7 +1998,7 @@ function EditChangeModal({
                   <button
                     onClick={addProperty}
                     disabled={!newProp.trim()}
-                    className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
+                    className="px-3 py-2 text-sm bg-brand hover:brightness-110 disabled:bg-slate-200 text-white rounded-lg font-medium transition-colors flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add
@@ -2099,7 +2099,7 @@ function EditChangeModal({
           </button>
           <button
             onClick={handleSave}
-            className="text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
+            className="text-sm bg-brand hover:brightness-110 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             Save changes
@@ -2336,7 +2336,7 @@ function EditEntityModal({
             <button
               onClick={handleSave}
               disabled={!dirty}
-              className="text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-500 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
+              className="text-sm bg-brand hover:brightness-110 disabled:bg-slate-200 disabled:text-slate-500 text-white rounded-lg px-4 py-2 font-medium transition-colors flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
               Save

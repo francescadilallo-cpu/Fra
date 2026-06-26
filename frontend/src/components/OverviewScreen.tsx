@@ -175,7 +175,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => onNavigate('query')} className="text-xs bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
+            <button onClick={() => onNavigate('query')} className="text-xs bg-brand hover:brightness-110 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
               Query AI →
             </button>
             <button onClick={() => onNavigate('process')} className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors">
@@ -192,15 +192,15 @@ export default function OverviewScreen({ onNavigate }: Props) {
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
             {`Demo — ${sector.name}`}
           </span>
-          <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-3">
-            Data<span className="text-teal-600">Intelligence</span>
+          <h1 className="text-5xl font-extrabold text-slate-900 leading-[1.05] tracking-tight mb-3">
+            Data<span className="text-gradient">Intelligence</span>
           </h1>
           <p className="text-lg text-slate-500 mb-6">
             The data model that transforms distributed, heterogeneous data into AI-queryable knowledge.
           </p>
 
           {isAW ? (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
+            <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5 mb-8">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Demo scenario — AdventureWorks Cycles</p>
               <p className="text-sm text-slate-600 mb-3 leading-relaxed">
                 A bicycle manufacturer with <strong>real data distributed across 4 systems</strong>: ERP (orders),
@@ -223,7 +223,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
               </div>
             </div>
           ) : (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-8">
+            <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5 mb-8">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
                 {`Active sector — ${sector.name}`}
               </p>
@@ -244,10 +244,10 @@ export default function OverviewScreen({ onNavigate }: Props) {
           )}
 
           <div className="flex items-center gap-3">
-            <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-700 transition-colors">
+            <button onClick={() => onNavigate('sources')} className="btn-primary px-6 py-3">
               Start from Connect →
             </button>
-            <button onClick={() => onNavigate('dashboard')} className="border border-slate-200 text-slate-600 rounded-lg px-6 py-3 text-sm font-semibold hover:border-teal-300 hover:text-teal-700 transition-colors">
+            <button onClick={() => onNavigate('dashboard')} className="btn btn-secondary px-6 py-3">
               Go to Dashboard
             </button>
           </div>
@@ -280,18 +280,18 @@ export default function OverviewScreen({ onNavigate }: Props) {
                 <button
                   key={`${tab}-${step}`}
                   onClick={() => onNavigate(tab)}
-                  className={`group text-left rounded-xl p-4 transition-all hover:shadow-sm border ${
+                  className={`group text-left rounded-2xl p-4 transition-all duration-200 ring-1 hover:-translate-y-0.5 hover:shadow-lifted ${
                     done
-                      ? 'bg-teal-50/40 border-teal-200 hover:border-teal-300'
-                      : 'bg-white border-slate-200 hover:border-teal-300'
+                      ? 'bg-brand-soft ring-indigo-200/70 hover:ring-indigo-300'
+                      : 'bg-white ring-slate-900/[0.06] hover:ring-indigo-300/70'
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                        done ? 'bg-teal-100 group-hover:bg-teal-200' : 'bg-teal-50 group-hover:bg-teal-100'
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                        done ? 'brand-mark' : 'bg-brand-soft group-hover:scale-105'
                       }`}>
-                        <Icon className="w-4 h-4 text-teal-600" />
+                        <Icon className={`w-4 h-4 ${done ? 'text-white' : 'text-indigo-600'}`} />
                       </div>
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{section} {step}</span>
                     </div>
@@ -321,12 +321,12 @@ export default function OverviewScreen({ onNavigate }: Props) {
             The data is there. It just can't be understood.
           </h2>
           <div className="grid grid-cols-3 gap-6">
-            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-red-400">
+            <div className="bg-white rounded-2xl p-5 shadow-soft ring-1 ring-slate-900/[0.06] border-l-4 border-l-red-400">
               <p className="text-3xl font-extrabold text-red-500 mb-2">{connectors.length > 0 ? connectors.length : registeredSources.length > 0 ? registeredSources.length : 'N'}</p>
               <p className="text-sm font-semibold text-slate-900 mb-1">systems that don't talk to each other</p>
               <p className="text-xs text-slate-500">{liveConfig?.domain ?? (IS_DEMO_MODE ? sector.domain : 'Your data landscape')} — each with different keys, naming conventions, and schemas. No reliable join without a common data model.</p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-amber-400">
+            <div className="bg-white rounded-2xl p-5 shadow-soft ring-1 ring-slate-900/[0.06] border-l-4 border-l-amber-400">
               {isAW ? (
                 <>
                   <p className="text-3xl font-extrabold text-amber-500 mb-2">{semStatus?.dedup_count ?? 372}</p>
@@ -341,7 +341,7 @@ export default function OverviewScreen({ onNavigate }: Props) {
                 </>
               )}
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-5 border-l-4 border-l-violet-400">
+            <div className="bg-white rounded-2xl p-5 shadow-soft ring-1 ring-slate-900/[0.06] border-l-4 border-l-violet-400">
               {isAW ? (
                 <>
                   <p className="text-3xl font-extrabold text-violet-500 mb-2">"fatturato"</p>
@@ -390,8 +390,8 @@ export default function OverviewScreen({ onNavigate }: Props) {
                 desc: 'Agents operate on a shared, verified vocabulary. No hallucinations from inconsistent data. Every decision is traceable.',
               },
             ].map(({ icon: Icon, color, bg, title, desc }) => (
-              <div key={title} className={`bg-white border border-slate-200 rounded-xl p-5 border-l-4 ${color}`}>
-                <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center mb-3`}>
+              <div key={title} className={`group bg-white rounded-2xl p-5 shadow-soft ring-1 ring-slate-900/[0.06] border-l-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-elevated ${color}`}>
+                <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-105`}>
                   <Icon className="w-4 h-4 text-slate-700" />
                 </div>
                 <h3 className="font-semibold text-slate-900 mb-2">{title}</h3>
@@ -403,9 +403,9 @@ export default function OverviewScreen({ onNavigate }: Props) {
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────────────────── */}
-      <section className="px-4 md:px-8 lg:px-12 py-16 bg-slate-900">
+      <section className="px-4 md:px-8 lg:px-12 py-16 bg-hero">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-2xl font-bold text-white leading-snug mb-6">
+          <h2 className="text-3xl font-bold text-white leading-snug mb-6 tracking-tight">
             {IS_DEMO_MODE ? 'Ready to explore the demo?' : 'Ready to build your data model?'}
           </h2>
           <ul className="text-sm text-slate-400 space-y-2 mb-8 text-left inline-block">
@@ -434,19 +434,19 @@ export default function OverviewScreen({ onNavigate }: Props) {
           </ul>
           <div className="flex items-center justify-center gap-3 flex-wrap">
             {IS_DEMO_MODE ? (
-              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+              <button onClick={() => onNavigate('sources')} className="btn-primary px-6 py-3">
                 Start from Connect →
               </button>
             ) : semBuilt ? (
-              <button onClick={() => onNavigate('query')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+              <button onClick={() => onNavigate('query')} className="btn-primary px-6 py-3">
                 Query Your Data →
               </button>
             ) : (registeredSources.length > 0 || connectors.length > 0) ? (
-              <button onClick={() => onNavigate('process')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+              <button onClick={() => onNavigate('process')} className="btn-primary px-6 py-3">
                 Run Setup →
               </button>
             ) : (
-              <button onClick={() => onNavigate('sources')} className="bg-teal-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-teal-500 transition-colors">
+              <button onClick={() => onNavigate('sources')} className="btn-primary px-6 py-3">
                 Connect First Source →
               </button>
             )}

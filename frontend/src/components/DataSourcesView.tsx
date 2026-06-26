@@ -830,7 +830,7 @@ function ReviewPanel({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
         <ClipboardCheck className="w-4 h-4 text-slate-500" />
@@ -998,7 +998,7 @@ function ContinuousEvolutionPanel({
     s === 'fresh' ? 'Fresh' : s === 'warning' ? 'Aging' : 'Stale'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
         <TrendingUp className="w-4 h-4 text-slate-500" />
@@ -1571,7 +1571,7 @@ function ConnectedSourcesPanel({
     )
   }
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {userSources.map((s, i) => {
         const c = connectorById(s.id.split('-')[0]) ?? connectorById(s.connector_type)
         const tables = s.target_tables ?? []
@@ -1766,7 +1766,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
 
   const acceptedCount = Object.values(upload.accepted).filter(Boolean).length
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
         <FileText className="w-4 h-4 text-teal-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -1824,7 +1824,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
           <AlertCircle className="w-3.5 h-3.5 text-slate-400" />Toggle to include/exclude columns — unmatched columns (dashed) can still be included
         </div>
         <button onClick={onIngest} disabled={acceptedCount === 0}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${acceptedCount > 0 ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${acceptedCount > 0 ? 'bg-brand hover:brightness-110 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
           <Zap className="w-3.5 h-3.5" />Ingest {upload.rows.length.toLocaleString('en-US')} rows
         </button>
       </div>
@@ -2466,7 +2466,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                       <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
                       <p className="text-xs text-teal-700 mt-0.5">{sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered</p>
                     </div>
-                    <button onClick={handleBuildSemanticLayer} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm">
+                    <button onClick={handleBuildSemanticLayer} className="flex items-center gap-2 px-4 py-2 bg-brand hover:brightness-110 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm">
                       <Zap className="w-4 h-4" /> Build Data Model
                     </button>
                   </div>
