@@ -278,9 +278,11 @@ export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavT
       <div className="mb-6">
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck size={22} className="text-teal-600" />
-              <h1 className="text-xl font-bold text-slate-900">Compliance &amp; Governance</h1>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+                <ShieldCheck size={18} className="text-white" />
+              </span>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">Compliance &amp; Governance</h1>
             </div>
             <p className="text-sm text-slate-500">
               GDPR data map and EU AI Act risk register —{IS_DEMO_MODE ? ' sector' : ''}{' '}

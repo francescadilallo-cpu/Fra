@@ -415,9 +415,9 @@ export default function UseCasesView({ onNavigate }: Props) {
           <span className="inline-block text-xs font-semibold tracking-widest text-teal-600 uppercase mb-4">
             04 — Use Cases
           </span>
-          <h1 className="text-3xl font-bold text-slate-900 mb-3">
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-3 leading-[1.1]">
             Not a generic demo.<br />
-            <span className="text-teal-600">Real companies, real data, real problems.</span>
+            <span className="text-gradient">Real companies, real data, real problems.</span>
           </h1>
           <p className="text-base text-slate-500 max-w-2xl">
             Each case shows the complete journey: the concrete operational problem, the AI agents activated on your data, the automatically generated findings, and the results measured after 90 days.

@@ -403,8 +403,11 @@ export default function DataExplorer() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-slate-900">Data Explorer</h1>
+        <div className="flex items-center gap-2.5">
+          <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+            <Table2 className="h-4 w-4 text-white" />
+          </span>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Data Explorer</h1>
           {selected && (
             <span className="text-sm text-slate-400 font-normal ml-1">
               · {selected.data.label}

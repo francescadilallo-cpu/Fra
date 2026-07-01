@@ -477,9 +477,11 @@ export default function MappingView() {
       <div className="px-8 py-5 border-b border-slate-200 bg-white flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <BookOpen className="w-5 h-5 text-teal-600" />
-              <h1 className="text-2xl font-bold text-slate-900">Data Model</h1>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+                <BookOpen className="w-4 h-4 text-white" />
+              </span>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Data Model</h1>
             </div>
             <p className="text-slate-400 mt-1 text-sm">
               {workspaceLabel(sector.name)} · {totalTables} tables · {totalFields} field mappings · field definitions and ambiguities

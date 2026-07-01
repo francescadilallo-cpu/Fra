@@ -1379,8 +1379,10 @@ export default function OntologyBuilder() {
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 bg-white flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Wand2 className="w-6 h-6 text-teal-600" />
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
+            <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+              <Wand2 className="w-4 h-4 text-white" />
+            </span>
             Builder AI
           </h1>
           <p className="text-sm text-slate-500 mt-1">

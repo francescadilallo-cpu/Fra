@@ -10,6 +10,19 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Restyle: identità header viste secondarie)
+
+Esteso il trattamento header con tile `brand-mark` alle viste secondarie, così
+tutte le schermate condividono la stessa identità:
+- Data Explorer, Setup (ProcessView), Compliance & Governance, Data Model
+  (MappingView), Builder AI (OntologyBuilder) → tile gradiente col simbolo sezione.
+- Use Cases: headline hero portata a `text-gradient` (teal→indigo) + scala maggiore.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK. Con questo il brand teal→indigo
+copre tutte le viste principali e secondarie.
+
+---
+
 ## 2026-06-26 (Restyle: identità header + bottoni/tile brand)
 
 - **Header con identità brand**: aggiunta una "tile" `brand-mark` (gradiente) col

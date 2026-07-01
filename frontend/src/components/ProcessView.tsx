@@ -570,9 +570,14 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Setup</h1>
-        <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
+      <div className="flex items-center gap-2.5">
+        <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+          <Play className="h-4 w-4 text-white" />
+        </span>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Setup</h1>
+          <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
+        </div>
       </div>
 
       {/* ── Pipeline executor ─────────────────────────────────────────────── */}
