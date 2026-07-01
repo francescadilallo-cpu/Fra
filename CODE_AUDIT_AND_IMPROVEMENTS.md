@@ -641,7 +641,16 @@ Aggiornamento (hardening Fase 3 FK + glossario deterministico):
 - value-overlap FK ora resiste agli **id generici condivisi**: si crea l'arco solo su match **univoco** (overlap con più tabelle → dominio condiviso, si scarta) e solo se la colonna ha ≥`_FK_MIN_DISTINCT=4` valori distinti (codici a bassa cardinalità saltati).
 - `ingest_glossary_aliases` deterministico (scansione label ordinata per lunghezza/alfabetico) → alias stabili tra run e match più specifico.
 
+Aggiornamento (review sorgenti → KG → SL con Salesforce reale):
+- **Salesforce record ingestion**: prima solo metadati (sf_*_objects/fields) → modello non interrogabile sui dati veri. Ora record reali per gli oggetti prioritari in tabelle `sf_<oggetto>` (bounded `FRA_SF_ROW_LIMIT`, gate `FRA_SF_INGEST_RECORDS`); `target_tables` popolato (UI + drop su re-sync).
+- **FK dichiarate dal describe** (`referenceTo`) → KG via `metadata_relations` (lazy, snapshot-safe): join esatti per SF, le euristiche nome/valore restano per le altre fonti.
+- **GraphRAG**: indice per parole-componenti dei label (split su underscore) → "accounts" linka `sf_account`, "order" linka `sales_order_header`.
+- **Persistenza**: chiusi 3 buchi FRA_DATA_DIR sfuggiti (metadata.db, context.db, tokens.db) — erano hardcoded, il modello auto-costruito e i documenti di contesto sparivano al restart anche col disco.
+
 Follow-up residui:
+- Salesforce: ingestion limitata a `_PRIORITY_OBJECTS` e a 150 campi/oggetto; oggetti custom (`__c`) non ingeriti come record — valutare selezione utente degli oggetti da ingerire.
+- SF record tables: `CREATE OR REPLACE` a ogni sync (full refresh); niente delta/incremental sync — accettabile ai volumi attuali (≤2000 righe/oggetto default).
+- Le tabelle metadati sf_*_objects/sf_*_fields restano nel modello e nel prompt schema: valutare se escluderle dalla proposta entità (rumore) ora che esistono le tabelle record.
 - recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.
 - value-overlap FK: i due guard (univocità + cardinalità minima) riducono i falsi positivi; resta da validare le soglie su dati reali (es. FK legittime a bassa cardinalità su dataset piccoli verrebbero saltate — accettabile perché la Fase 2 per nome le copre).
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.

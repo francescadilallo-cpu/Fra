@@ -145,10 +145,12 @@ def build_graph_context(
         _index(label, node_id, prefer=is_table)
         if is_table:
             _index(str(attrs.get("entity_type") or ""), node_id, prefer=True)
-        # Index synonyms and significant words of multi-word labels.
+        # Index synonyms and significant words of multi-word labels. Words are
+        # split on underscores too, so snake_case table names link by their
+        # components ("top accounts" → sf_account, sales_order_header → "order").
         for syn in attrs.get("synonyms") or []:
             _index(str(syn), node_id, prefer=False)
-        for word in re.findall(r"[a-zA-Z0-9_]+", label.lower()):
+        for word in re.findall(r"[a-z0-9]+", label.lower()):
             if len(word) >= _MIN_TOKEN and word not in _STOPWORDS:
                 _index(word, node_id, prefer=False)
 

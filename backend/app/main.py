@@ -666,7 +666,7 @@ def _ensure_semantic_loaded() -> None:
         # and populate_*() are idempotent upserts, so reopening an existing
         # file is safe.
         metadata_db_url = os.getenv("METADATA_DB_URL", "").strip() or (
-            f"sqlite:///{Path(__file__).parent.parent / 'data' / 'metadata.db'}"
+            f"sqlite:///{data_dir() / 'metadata.db'}"
         )
         catalog = MetadataCatalog(metadata_db_url)
         # Schema-driven discovery first — source of truth for table/column
@@ -690,6 +690,12 @@ def _ensure_semantic_loaded() -> None:
             kg.ingest_manual_relations(catalog.list_manual_relations())
         except Exception as _rel_exc:
             logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+        # Joins *declared* by the source system (Salesforce referenceTo) — exact
+        # relations from describe metadata, better than name/value heuristics.
+        try:
+            kg.ingest_manual_relations(getattr(_mgr, "metadata_relations", []) or [])
+        except Exception as _md_exc:
+            logger.warning("KG source-metadata relation ingest skipped: %s", _md_exc)
         # Fold document-derived business concepts into the KG (grounded to the
         # data tables they describe), so context knowledge enters the graph.
         try:
@@ -823,6 +829,14 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
                     new_kg.ingest_manual_relations(catalog.list_manual_relations())
                 except Exception as _rel_exc:
                     logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+            try:
+                new_kg.ingest_manual_relations(
+                    getattr(mgr, "metadata_relations", []) or []
+                )
+            except Exception as _md_exc:
+                logger.warning(
+                    "KG source-metadata relation ingest skipped: %s", _md_exc
+                )
             try:
                 new_kg.ingest_context_entities(_doc_context_entities())
                 new_kg.ingest_context_metrics(_context_metrics())

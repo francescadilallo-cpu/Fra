@@ -10,6 +10,51 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Review flusso sorgenti → KG → Semantic Layer: Salesforce dati veri + fix persistenza)
+
+Review end-to-end del flusso "connessione sorgenti → KG → semantic layer automatico"
+con Salesforce reale collegato. Tre problemi strutturali trovati e risolti:
+
+### 1. Salesforce ora ingerisce i **record veri**, non solo lo schema
+Prima l'ingest creava solo 2 tabelle di *metadati* (`sf_{id}_objects`, `sf_{id}_fields`)
+→ il modello auto-costruito descriveva "la forma di Salesforce", non i dati del cliente
+(impossibile chiedere "top opportunity per amount").
+- `SalesforceConnector.fetch_records()`: SOQL con paginazione (`nextRecordsUrl`),
+  envelope `attributes` rimosso, solo campi scalari (`ingestable_field_names`).
+- `_ingest_salesforce`: per gli oggetti prioritari (Account, Opportunity, Contact…)
+  crea una tabella record `sf_<oggetto>` con righe reali. Bounded: `FRA_SF_ROW_LIMIT`
+  (default 2000/oggetto, 0=illimitato), gate `FRA_SF_INGEST_RECORDS`. Naming con
+  fallback anti-collisione multi-sorgente (`sf_<id8>_<oggetto>`).
+- `cfg.target_tables` ora popolato (prima vuoto per SF) → la UI Sorgenti mostra le
+  tabelle e il re-sync incrementale droppa correttamente le tabelle vecchie.
+
+### 2. Join **dichiarati** da Salesforce → KG (niente più euristica per SF)
+Il describe metadata porta `referenceTo`: FK esatte. Nuova
+`salesforce_metadata_relations()` (pura, dal JSON schema cache) +
+`DuckDBSourceManager.metadata_relations` (lazy, funziona anche a snapshot caricato
+senza re-sync) → iniettate nel KG via `ingest_manual_relations` in entrambi i punti
+di build (`_ensure_semantic_loaded` e `_refresh_catalog_and_kg_after_rebuild`).
+Lookup polimorfici (WhoId → Contact/Lead) = un arco per target ingerito.
+
+### 3. Recall NL per tabelle snake_case (GraphRAG)
+`sf_account` era un token unico → "top accounts" non linkava. Ora i label sono
+indicizzati anche per **parole componenti** (split su underscore): "accounts" →
+`sf_account`, "order" → `sales_order_header`.
+
+### 4. Fix persistenza (buchi FRA_DATA_DIR sfuggiti al giro precedente)
+`metadata.db` (il modello semantic auto-applicato!), `context.db` (i documenti di
+contesto dello stadio 1!) e `tokens.db` erano ancora hardcoded su `backend/data` →
+**anche col disco Render il modello costruito e i documenti sparivano al restart**.
+Ora instradati via `data_dir()`.
+
+### Test
+Nuovo `test_salesforce_ingest.py` (14 test: relazioni da metadata, campi ingeribili,
+row limit, fetch_records con paginazione fake, naming collisioni, property lazy) +
+`test_graph_rag.py::test_snake_case_table_links_by_component_word`.
+Suite completa **1227 passed, 6 skipped**.
+
+---
+
 ## 2026-06-26 (Restyle: identità header viste secondarie)
 
 Esteso il trattamento header con tile `brand-mark` alle viste secondarie, così

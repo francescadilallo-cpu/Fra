@@ -103,3 +103,20 @@ class TestBuildGraphContext:
         kg.attach_aliases({"customers": ["clientele"]})
         gr = build_graph_context(kg, "show clientele")
         assert "customers" in set(gr["tables"])
+
+    def test_snake_case_table_links_by_component_word(self):
+        # Salesforce-style record tables (sf_account) and snake_case tables
+        # must link from their component words, not only the full name.
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [
+                {
+                    "from_table": "sf_opportunity",
+                    "to_table": "sf_account",
+                    "via_column": "AccountId",
+                    "edge_type": "FK_AccountId",
+                }
+            ]
+        )
+        gr = build_graph_context(kg, "top accounts by opportunity amount")
+        assert {"sf_account", "sf_opportunity"} <= set(gr["tables"])

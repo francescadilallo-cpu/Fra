@@ -118,7 +118,9 @@ Ruoli:
 - PostgresConnector: carica dump SQL ERP in SQLite in-memory (demo legacy)
 - SQLiteConnector: accesso a clienthub.db CRM (demo legacy)
 - FileConnector: carica HR CSV e PIM JSON; normalizza date; query via DuckDB in-memory
-- **SalesforceConnector**: OAuth2 username-password flow; recupera schema SObject completo (fino a 150 oggetti) via Metadata REST API v59.0; crea tabelle DuckDB sf_{id}_objects e sf_{id}_fields; persiste credentials in backend/data/salesforce_config.json e schema in salesforce_schema_{id}.json
+- **SalesforceConnector**: OAuth2 PKCE flow; recupera schema SObject via REST API v59.0; crea tabelle metadati DuckDB sf_{id}_objects/sf_{id}_fields; persiste credentials in `data_dir()/salesforce_config.json` e schema in `salesforce_schema_{id}.json`
+  - **Record ingestion**: per gli oggetti prioritari (Account, Opportunity, …) `fetch_records()` (SOQL + paginazione nextRecordsUrl, solo campi scalari via `ingestable_field_names`) → tabelle record `sf_<oggetto>` (collisione multi-sorgente → `sf_<id8>_<oggetto>`); bounded `FRA_SF_ROW_LIMIT` (default 2000, 0=unlimited), gate `FRA_SF_INGEST_RECORDS`; `cfg.target_tables` popolato (UI + drop su re-sync)
+  - **Relazioni dichiarate**: `salesforce_metadata_relations()` deriva FK esatte dal describe (`referenceTo`, anche lookup polimorfici) dal JSON cache; esposte da `DuckDBSourceManager.metadata_relations` (lazy, snapshot-safe) e iniettate nel KG via `ingest_manual_relations` dopo `build_from_schema` (entrambi i build sites in main.py)
 
 
 ### 3.4 Knowledge Graph

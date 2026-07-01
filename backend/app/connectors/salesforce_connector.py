@@ -26,6 +26,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -372,6 +373,41 @@ class SalesforceConnector:
             fetched_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def fetch_records(
+        self, obj_name: str, field_names: list[str], limit: int = 2000
+    ) -> list[dict]:
+        """Fetch up to *limit* records of *obj_name* via SOQL (0 = unlimited).
+
+        Follows ``nextRecordsUrl`` pagination and strips the SOQL ``attributes``
+        envelope from each record so the result is a flat list of scalar dicts,
+        ready for tabular ingestion.
+        """
+        from urllib.parse import quote  # noqa: PLC0415
+
+        # SOQL field list must not exceed ~200 fields due to URL length limits
+        # (same bound the profiler uses).
+        fields = field_names[:150]
+        if not fields:
+            return []
+        soql = f"SELECT {', '.join(fields)} FROM {obj_name}"
+        if limit > 0:
+            soql += f" LIMIT {limit}"
+
+        records: list[dict] = []
+        path: str | None = f"/query?q={quote(soql)}"
+        while path:
+            raw = self._get(path)
+            for r in raw.get("records", []):
+                r.pop("attributes", None)
+                records.append(r)
+            if limit > 0 and len(records) >= limit:
+                return records[:limit]
+            # nextRecordsUrl is root-relative: /services/data/vXX.X/query/01g…
+            nxt = raw.get("nextRecordsUrl")
+            marker = f"/services/data/{_SF_API_VERSION}"
+            path = nxt[len(marker) :] if nxt and nxt.startswith(marker) else None
+        return records
+
     def close(self) -> None:
         self._http.close()
 
@@ -380,6 +416,67 @@ class SalesforceConnector:
 
     def __exit__(self, *_: Any) -> None:
         self.close()
+
+
+def sf_record_row_limit() -> int:
+    """Per-object row cap when ingesting real Salesforce records into DuckDB.
+
+    Bounds memory/disk on small instances. Defaults to 2000; set
+    FRA_SF_ROW_LIMIT=0 for unlimited. Invalid/negative values fall back.
+    """
+    raw = os.getenv("FRA_SF_ROW_LIMIT", "2000").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 2000
+    return val if val >= 0 else 2000
+
+
+def ingestable_field_names(fields: list) -> list[str]:
+    """Names of scalar fields safe for tabular ingestion (skips compound types
+    like address/location and binary blobs). Accepts SalesforceField objects or
+    the equivalent dicts from a cached schema JSON."""
+    names: list[str] = []
+    for f in fields:
+        ftype = f.get("type") if isinstance(f, dict) else f.type
+        name = f.get("name") if isinstance(f, dict) else f.name
+        if name and ftype in _PROFILABLE_TYPES:
+            names.append(name)
+    return names
+
+
+def salesforce_metadata_relations(
+    schema: dict, table_by_object: dict[str, str]
+) -> list[dict]:
+    """FK relations *declared* by Salesforce describe metadata (``referenceTo``),
+    restricted to objects actually ingested as record tables.
+
+    Pure and schema-JSON-driven so it works from the on-disk cache without a
+    network call. Polymorphic lookups (e.g. WhoId → Contact, Lead) yield one
+    relation per ingested target. The result feeds
+    ``KnowledgeGraph.ingest_manual_relations`` — declared joins beat name/value
+    heuristics.
+    """
+    relations: list[dict] = []
+    for obj in schema.get("objects", []):
+        from_table = table_by_object.get(obj.get("name") or "")
+        if not from_table:
+            continue
+        for fld in obj.get("fields", []):
+            if not fld.get("is_relation") or not fld.get("name"):
+                continue
+            for target in (fld.get("relation_to") or "").split(","):
+                to_table = table_by_object.get(target.strip())
+                if to_table and to_table != from_table:
+                    relations.append(
+                        {
+                            "from_table": from_table,
+                            "to_table": to_table,
+                            "via_column": fld["name"],
+                            "edge_type": f"FK_{fld['name']}",
+                        }
+                    )
+    return relations
 
 
 # ── Config + schema persistence ───────────────────────────────────────────────
