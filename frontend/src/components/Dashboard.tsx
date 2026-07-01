@@ -665,9 +665,9 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           const TrendIcon = kpi.trend >= 0 ? ArrowUp : ArrowDown
           const trendColor = kpi.trend >= 0 ? 'text-teal-600' : 'text-red-500'
           return (
-            <div key={kpi.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5">
+            <div key={kpi.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-2xl p-5 transition-all duration-200 hover:shadow-elevated">
               <div className="flex items-start justify-between mb-3">
-                <div className={`${kpi.bg} rounded-lg p-2.5`}>
+                <div className={`${kpi.bg} rounded-xl p-2.5`}>
                   <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
                 </div>
                 {showSynthetic && <Sparkline values={kpi.spark} color={kpi.sparkColor} />}

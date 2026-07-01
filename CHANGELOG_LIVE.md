@@ -10,6 +10,18 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Restyle: rifinitura viste core + componenti globali)
+
+Rollout del restyle sulle superfici più viste (dopo fondazione + sweep):
+- `QueryInterface`: icona empty-state "AI Data Assistant" → `brand-mark` gradiente con `animate-float`; titolo più marcato.
+- `Dashboard`: KPI card allineate al linguaggio card (`rounded-2xl`) con hover-elevation.
+- `Toast` (globale): elevazione `shadow-lifted` + ring + entrata `animate-fade-up` (colori semantici invariati).
+- `CommandPalette` (⌘K, globale): backdrop blur più profondo, contenitore `shadow-lifted` + ring + `animate-fade-up`, item selezionato in `brand-soft` con barra indicatore a gradiente.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
 ## 2026-06-26 (Persistenza: data dir configurabile via FRA_DATA_DIR)
 
 **Causa del "perdo le connessioni a ogni refresh"**: tutto lo stato mutabile

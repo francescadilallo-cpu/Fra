@@ -1195,11 +1195,11 @@ export default function QueryInterface() {
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6 pb-20">
-            <div className="w-16 h-16 bg-teal-500/10 rounded-2xl flex items-center justify-center border border-teal-500/20">
-              <Bot className="w-8 h-8 text-teal-400" />
+            <div className="w-16 h-16 brand-mark rounded-2xl flex items-center justify-center animate-float">
+              <Bot className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">AI Data Assistant</h3>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">AI Data Assistant</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
                 Ask questions about your data in natural language and get real results with charts.
               </p>
