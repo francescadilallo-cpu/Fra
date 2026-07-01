@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Restyle: identità header + bottoni/tile brand)
+
+- **Header con identità brand**: aggiunta una "tile" `brand-mark` (gradiente) col
+  simbolo della sezione accanto al titolo su 6 viste principali — Query AI,
+  Dashboard, Data Sources/Workbench, Agent Orchestration, Configuration, Context.
+- **Bottoni mancati dallo sweep**: 54 bottoni teal pieni con classi non adiacenti
+  (`bg-teal-600 … hover:bg-teal-700`) convertiti al gradiente brand, in 13 viste.
+- **Tile focali → `brand-mark`**: banner "Welcome" della Dashboard e empty-state
+  "Build Your Data Model" del SemanticDraftView (icona bianca, animazione float).
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
 ## 2026-06-26 (Restyle: coerenza palette + onboarding)
 
 - **Cohesion neutra**: swap `gray-*` → `slate-*` su tutte le viste (109 occorrenze).

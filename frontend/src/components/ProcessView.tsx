@@ -598,7 +598,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
             ) : (
               <button
                 onClick={runPipeline}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
               >
                 <Play className="w-3.5 h-3.5" />
                 {runState === 'done' ? 'Re-run Setup' : 'Run Setup'}
@@ -715,7 +715,7 @@ export default function ProcessView({ onNavigate }: { onNavigate?: (tab: NavTab)
               </button>
               <button
                 onClick={() => onNavigate?.('query' as NavTab)}
-                className="text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                className="text-xs font-semibold px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
               >
                 Ask Questions →
               </button>

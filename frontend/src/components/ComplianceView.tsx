@@ -296,7 +296,7 @@ export default function ComplianceView({ onNavigate }: { onNavigate?: (tab: NavT
             </button>
             <button
               onClick={() => showToast('DPA Checklist downloaded — downloading')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm hover:bg-teal-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-sm hover:brightness-110 transition-colors"
             >
               <Download size={14} /> Download DPA
             </button>

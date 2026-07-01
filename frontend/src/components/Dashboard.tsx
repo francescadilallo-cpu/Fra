@@ -617,8 +617,8 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
   return (
     <div className="p-8 space-y-6">
       {showWelcome && companyName && (
-        <div className="bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-          <div className="w-11 h-11 rounded-xl bg-teal-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-teal-200">
+        <div className="bg-brand-soft ring-1 ring-indigo-200/60 rounded-2xl p-4 flex items-center gap-4 shadow-soft">
+          <div className="w-11 h-11 rounded-xl brand-mark flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
@@ -641,9 +641,14 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
         </div>
       )}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
+        <div className="flex items-center gap-2.5">
+          <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+            <Activity className="h-4 w-4 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
+            <p className="text-slate-500 mt-1 text-sm">{IS_DEMO_MODE ? `${sector.name} · ${sector.domain}` : workspaceLabel(sector.name)}</p>
+          </div>
         </div>
         <button
           onClick={handleGenerateReport}
@@ -694,7 +699,7 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
           </div>
           <button
             onClick={() => onNavigate?.(journeyNextStep.tab)}
-            className="flex-shrink-0 text-xs font-medium px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex-shrink-0 text-xs font-medium px-4 py-2 bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             {journeyNextStep.label} →
           </button>

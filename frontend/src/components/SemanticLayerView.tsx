@@ -311,7 +311,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
             <FieldEditor field={newField} entityOptions={entityOptions} onChange={setNewField} isNew />
             <div className="flex gap-2 px-2">
               <button onClick={commitNewField} disabled={!newField.name.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                 Add field
               </button>
               <button onClick={() => { setAddingField(false); setNewField(EMPTY_FIELD) }}
@@ -323,7 +323,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
 
       <div className="flex gap-2 pt-2 border-t border-slate-100">
         <button onClick={saveEntity}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Save className="w-3.5 h-3.5" /> Save entity
         </button>
         <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
@@ -514,7 +514,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
             <FieldEditor field={newField} entityOptions={entityOptions} onChange={setNewField} isNew />
             <div className="flex gap-2 px-2">
               <button onClick={commitField} disabled={!newField.name.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                 Add field
               </button>
               <button onClick={() => { setAddingField(false); setNewField(EMPTY_FIELD) }}
@@ -535,7 +535,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 
       <div className="flex gap-2 pt-1 border-t border-slate-100">
         <button onClick={create} disabled={!name.trim()}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" /> Create entity
         </button>
         <button onClick={onDone} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
@@ -683,7 +683,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
           </div>
         </div>
         <button onClick={add} disabled={!canAdd}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />Add bridge
         </button>
       </div>
@@ -1605,7 +1605,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">{defs.length} definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
         <button onClick={() => setShowAdd(v => !v)}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />Add definition
         </button>
       </div>
@@ -1622,7 +1622,7 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
               </div>
             ))}
           </div>
-          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+          <button onClick={addDef} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
         </div>
       )}
       {Object.entries(grouped).map(([entity, entityDefs]) => (
@@ -1799,7 +1799,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           desc="Foreign-key relationships within each data source" />
         <button
           onClick={() => setShowForm(v => !v)}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium flex-shrink-0"
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium flex-shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New relation'}
         </button>
@@ -1856,7 +1856,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           </div>
           <div className="flex items-center gap-2">
             <button type="submit" disabled={saving || !form.from_table || !form.to_table}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors font-medium">
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-50 transition-colors font-medium">
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               {saving ? 'Saving…' : 'Add relation'}
             </button>
@@ -2661,7 +2661,7 @@ export default function SemanticLayerView() {
                   {backendSources.length > 0 && (
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
-                      className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                      className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
                     >
                       Run Setup →
                     </button>
@@ -2775,7 +2775,7 @@ export default function SemanticLayerView() {
                 disabled={!useBackendData}
               />
               <button onClick={runPlayground} disabled={pgRunning || !useBackendData}
-                className="px-5 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
+                className="px-5 py-3 bg-brand text-white rounded-xl hover:brightness-110 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
                 {pgRunning
                   ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   : <Play className="w-4 h-4" />}
@@ -2933,7 +2933,7 @@ export default function SemanticLayerView() {
               action={
                 <button onClick={() => setShowAddSource(v => !v)}
                     className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
-                      showAddSource ? 'bg-slate-200 text-slate-700' : 'bg-teal-600 text-white hover:bg-teal-700'
+                      showAddSource ? 'bg-slate-200 text-slate-700' : 'bg-brand text-white hover:brightness-110'
                     }`}>
                     <Plus className="w-3.5 h-3.5" /> Add source
                   </button>
@@ -3004,7 +3004,7 @@ export default function SemanticLayerView() {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={addSource} disabled={!sourceForm.name.trim()}
-                        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                        className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                         Save source
                       </button>
                       <button onClick={() => setShowAddSource(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">Cancel</button>
@@ -3024,7 +3024,7 @@ export default function SemanticLayerView() {
                         <div className="flex items-center justify-center gap-3 flex-wrap">
                           <button
                             onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-                            className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                            className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium"
                           >
                             Go to Connect →
                           </button>
@@ -3038,7 +3038,7 @@ export default function SemanticLayerView() {
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
                           Document each database, CSV, API, or warehouse you want to query.
                         </p>
-                        <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                        <button onClick={() => setShowAddSource(true)} className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium">
                           + Add first source
                         </button>
                       </>
@@ -3063,7 +3063,7 @@ export default function SemanticLayerView() {
               action={
                 <button onClick={() => setShowAddEntity(v => !v)}
                   className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
-                    showAddEntity ? 'bg-slate-200 text-slate-700' : 'bg-teal-600 text-white hover:bg-teal-700'
+                    showAddEntity ? 'bg-slate-200 text-slate-700' : 'bg-brand text-white hover:brightness-110'
                   }`}>
                   <Plus className="w-3.5 h-3.5" /> Add entity
                 </button>
@@ -3083,7 +3083,7 @@ export default function SemanticLayerView() {
                 </div>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-                  className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                  className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium"
                 >
                   Connect a data source →
                 </button>
@@ -3171,7 +3171,7 @@ export default function SemanticLayerView() {
               desc="Reusable business measures — certified, versioned, and referenced by Query AI"
               action={
                 <button onClick={() => setShowAddMetric(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Define metric
                 </button>
               }
@@ -3212,7 +3212,7 @@ export default function SemanticLayerView() {
                       placeholder="What does this measure?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addMetric} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addMetric} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddMetric(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>
@@ -3249,7 +3249,7 @@ export default function SemanticLayerView() {
               desc="Structured drill-down paths — Year → Quarter → Month → Day, Category → Product"
               action={
                 <button onClick={() => setShowAddHierarchy(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Add hierarchy
                 </button>
               }
@@ -3285,7 +3285,7 @@ export default function SemanticLayerView() {
                       placeholder="What does this hierarchy represent?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addHierarchy} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addHierarchy} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddHierarchy(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>
@@ -3318,7 +3318,7 @@ export default function SemanticLayerView() {
               desc="Named filter conditions — reused by metrics and referenced by Query AI"
               action={
                 <button onClick={() => setShowAddSegment(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Add segment
                 </button>
               }
@@ -3357,7 +3357,7 @@ export default function SemanticLayerView() {
                       placeholder="e.g. 'Company'" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addSegment} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addSegment} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddSegment(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>

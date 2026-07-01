@@ -652,7 +652,7 @@ function OntologyGenerationPanel({
             <p className="text-xs text-teal-600 mt-0.5">{appliedCount} item{appliedCount !== 1 ? 's' : ''} added to your semantic layer.</p>
           </div>
           <button onClick={onNavigateToOntology}
-            className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+            className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
             Open Ontology Builder →
           </button>
         </div>
@@ -849,7 +849,7 @@ function ReviewPanel({
         {pendingCount > 0 && (
           <button
             onClick={onCertifyAll}
-            className="ml-auto flex items-center gap-1 text-[10px] bg-teal-600 text-white px-2.5 py-1 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+            className="ml-auto flex items-center gap-1 text-[10px] bg-brand text-white px-2.5 py-1 rounded-lg hover:brightness-110 transition-colors font-medium"
           >
             <CheckCircle2 className="w-3 h-3" />Certify all
           </button>
@@ -925,7 +925,7 @@ function ReviewPanel({
                 />
                 <button
                   onClick={() => { onUpdate(item.id, item.status, noteText); setEditingId(null) }}
-                  className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700"
+                  className="text-[10px] bg-brand text-white px-2 py-0.5 rounded hover:brightness-110"
                 >Save</button>
                 <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400">Cancel</button>
               </div>
@@ -1064,7 +1064,7 @@ function ContinuousEvolutionPanel({
               <button
                 onClick={submitForm}
                 disabled={!formTitle.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1 rounded hover:bg-teal-700 transition-colors disabled:opacity-40 font-medium"
+                className="text-xs bg-brand text-white px-3 py-1 rounded hover:brightness-110 transition-colors disabled:opacity-40 font-medium"
               >Submit</button>
               <button onClick={() => setShowForm(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
             </div>
@@ -1363,7 +1363,7 @@ function ProfilingPanel({
                                           Cancel
                                         </button>
                                         <button onClick={saveRule}
-                                          className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700 transition-colors">
+                                          className="text-[10px] bg-brand text-white px-2 py-0.5 rounded hover:brightness-110 transition-colors">
                                           Save
                                         </button>
                                       </div>
@@ -2403,13 +2403,18 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{IS_DEMO_MODE ? 'Data Sources' : 'Data Workbench'}</h1>
-          <p className="text-slate-500 mt-1 text-sm">
-            {IS_DEMO_MODE
-              ? `${workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly`
-              : `${workspaceLabel(sector.name)} · From raw sources to a governed, queryable data model — one guided pipeline`}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+            <Plug className="h-4 w-4 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{IS_DEMO_MODE ? 'Data Sources' : 'Data Workbench'}</h1>
+            <p className="text-slate-500 mt-1 text-sm">
+              {IS_DEMO_MODE
+                ? `${workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly`
+                : `${workspaceLabel(sector.name)} · From raw sources to a governed, queryable data model — one guided pipeline`}
+            </p>
+          </div>
         </div>
         {!IS_DEMO_MODE && (
           <div className="hidden md:flex items-center gap-2 flex-shrink-0">

@@ -152,8 +152,8 @@ function EmptyState() {
   return (
     <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-slate-50 to-white p-12 text-center space-y-8 mb-6">
       <div className="flex justify-center">
-        <div className="w-16 h-16 rounded-2xl bg-teal-100 flex items-center justify-center">
-          <Layers className="w-8 h-8 text-teal-600" />
+        <div className="w-16 h-16 rounded-2xl brand-mark flex items-center justify-center animate-float">
+          <Layers className="w-8 h-8 text-white" />
         </div>
       </div>
 
@@ -566,7 +566,7 @@ function RelationsTab({
             <button
               type="submit"
               disabled={saving || !form.from_table || !form.to_table}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-50 transition-colors"
             >
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               {saving ? 'Saving…' : 'Add relation'}

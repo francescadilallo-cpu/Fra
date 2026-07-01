@@ -215,7 +215,7 @@ function DataTable({ node }: { node: OntologyNode }) {
           </div>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-query', { detail: { question: `SELECT * FROM ${node.data.db_table ?? node.data.label} LIMIT 20` } }))}
-            className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+            className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium"
           >
             <Zap className="w-3.5 h-3.5" />
             Open in Query AI
@@ -438,7 +438,7 @@ export default function DataExplorer() {
                 </button>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
-                  className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                  className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium"
                 >
                   2. Run Setup →
                 </button>

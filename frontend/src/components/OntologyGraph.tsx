@@ -233,7 +233,7 @@ function EntitiesView() {
           <div className="flex justify-center gap-2">
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-              className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+              className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium"
             >
               Connect sources →
             </button>
@@ -744,7 +744,7 @@ export default function OntologyGraph({ onNavigate }: { onNavigate?: (tab: NavTa
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={() => onNavigate?.('sources')}
-                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium"
                     >
                       Connect a data source <ArrowRight className="w-3.5 h-3.5" />
                     </button>

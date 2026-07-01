@@ -106,7 +106,7 @@ function SemanticDefinitionsPanel() {
       <BookOpen className="w-10 h-10 text-slate-200" />
       <p className="text-sm font-medium text-slate-500">No field definitions yet</p>
       <p className="text-xs text-slate-400 max-w-xs">Run setup to auto-generate field definitions, or add one manually below.</p>
-      <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+      <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
         <Plus className="w-3.5 h-3.5" />Add first definition
       </button>
     </div>
@@ -116,7 +116,7 @@ function SemanticDefinitionsPanel() {
     <div className="flex-1 px-8 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{defs.length} field definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
-        <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+        <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />
           Add definition
         </button>
@@ -139,7 +139,7 @@ function SemanticDefinitionsPanel() {
               <input value={newForm.definition} onChange={e => setNewForm(f => ({ ...f, definition: e.target.value }))} placeholder="What does this field mean?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
             </div>
           </div>
-          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors">Add</button>
+          <button onClick={addDef} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors">Add</button>
         </div>
       )}
 

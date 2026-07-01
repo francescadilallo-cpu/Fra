@@ -137,7 +137,7 @@ function InviteUserModal({ onClose, onInvite }: { onClose: () => void; onInvite:
           <button
             onClick={handleSend}
             disabled={!email.trim() || !email.includes('@') || sending}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             {sending ? 'Sending…' : 'Send invite'}
@@ -250,7 +250,7 @@ export function UsersSection() {
           {pending > 0 && <span className="text-xs bg-amber-50 text-amber-700 font-medium px-2 py-1 rounded-full">{pending} pending</span>}
           <button
             onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Invite
@@ -470,7 +470,7 @@ function GenerateTokenModal({ onClose, onCreate }: { onClose: () => void; onCrea
           <button
             onClick={handleGenerate}
             disabled={!name.trim() || scopes.length === 0 || generating}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             {generating ? 'Generating…' : 'Generate token'}
@@ -567,7 +567,7 @@ export function ApiTokensSection() {
           )}
           <button
             onClick={() => { setNewToken(null); setShowModal(true) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Generate token
@@ -772,7 +772,7 @@ function AddChannelModal({ onClose, onAdd }: {
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
           <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
           <button onClick={handleAdd} disabled={!name.trim() || !dest.trim() || saving}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             {saving ? 'Adding…' : 'Add channel'}
           </button>
@@ -898,7 +898,7 @@ export function NotificationsSection() {
           </span>
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add channel

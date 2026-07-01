@@ -1129,11 +1129,16 @@ export default function QueryInterface() {
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 bg-white">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
-            <p className="text-slate-400 mt-1 text-sm">
-              {workspaceLabel(sector.name)} · Ask questions in natural language — powered by your data model
-            </p>
+          <div className="flex items-center gap-2.5">
+            <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+              <Sparkles className="h-4 w-4 text-white" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Query AI</h1>
+              <p className="text-slate-400 mt-1 text-sm">
+                {workspaceLabel(sector.name)} · Ask questions in natural language — powered by your data model
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Conversation context indicator */}
