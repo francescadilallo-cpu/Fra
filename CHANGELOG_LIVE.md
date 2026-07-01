@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Restyle: coerenza palette + onboarding)
+
+- **Cohesion neutra**: swap `gray-*` → `slate-*` su tutte le viste (109 occorrenze).
+  `OnboardingWizard` e `ComplianceView` usavano `gray` invece del neutro `slate`
+  dell'app → ora uniformi (scale Tailwind identiche, swap sicuro). Il `blue` è
+  lasciato invariato: è un accento voluto tra i colori-categoria.
+- **OnboardingWizard** (prima esperienza): bottoni Next/Get-started → `.btn-primary`
+  (gradiente brand, prima erano solid teal sfuggiti allo sweep), cerchi di successo
+  → `brand-mark`, wordmark "DataIntelligence" a gradiente.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
 ## 2026-06-26 (Restyle: rifinitura viste core + componenti globali)
 
 Rollout del restyle sulle superfici più viste (dopo fondazione + sweep):

@@ -115,11 +115,11 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
             {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map(s => (
               <span
                 key={s}
-                className={`w-2.5 h-2.5 rounded-full transition-colors ${s === step ? 'bg-teal-600' : s < step ? 'bg-teal-300' : 'bg-gray-200'}`}
+                className={`w-2.5 h-2.5 rounded-full transition-colors ${s === step ? 'bg-teal-600' : s < step ? 'bg-teal-300' : 'bg-slate-200'}`}
               />
             ))}
           </div>
-          <button onClick={onSkip} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onSkip} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -134,21 +134,21 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                 <div className="bg-teal-50 rounded-full p-4">
                   <Brain size={40} className="text-teal-600" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 text-center">Welcome to DataIntelligence</h1>
-                <p className="text-gray-500 text-sm text-center">AI-powered data platform for European businesses</p>
+                <h1 className="text-2xl font-bold text-slate-900 text-center">Welcome to <span className="text-gradient">DataIntelligence</span></h1>
+                <p className="text-slate-500 text-sm text-center">AI-powered data platform for European businesses</p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Company name</label>
+                <label className="text-sm font-medium text-slate-700">Company name</label>
                 <input
                   type="text"
                   value={companyName}
                   onChange={e => setCompanyName(e.target.value)}
                   placeholder="e.g. Acme Industries Ltd"
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Industry</p>
+                <p className="text-sm font-medium text-slate-700 mb-2">Industry</p>
                 <div className="grid grid-cols-2 gap-3">
                   {SECTOR_CARDS.map(s => (
                     <button
@@ -157,12 +157,12 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                       className={`flex flex-col gap-0.5 text-left rounded-xl border-2 px-4 py-3 transition-all ${
                         selectedSector === s.id
                           ? 'border-teal-500 bg-teal-50'
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                     >
                       <span className="text-xl">{s.emoji}</span>
-                      <span className="text-sm font-semibold text-gray-800">{s.label}</span>
-                      <span className="text-xs text-gray-500">{s.desc}</span>
+                      <span className="text-sm font-semibold text-slate-800">{s.label}</span>
+                      <span className="text-xs text-slate-500">{s.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -176,10 +176,10 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               <div>
                 <div className="flex items-center gap-2">
                   <Database size={18} className="text-teal-600" />
-                  <h2 className="text-xl font-bold text-gray-900">Map your data sources</h2>
+                  <h2 className="text-xl font-bold text-slate-900">Map your data sources</h2>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Which systems does <span className="font-medium text-gray-700">{companyName}</span> use?
+                <p className="text-sm text-slate-500 mt-1">
+                  Which systems does <span className="font-medium text-slate-700">{companyName}</span> use?
                   Mark the ones you have and adjust priority — we'll guide the connection order.
                 </p>
               </div>
@@ -201,7 +201,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                       <button
                         onClick={() => togglePlanEntry(s.connectorId)}
                         className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                          isSelected ? 'bg-teal-500 border-teal-500' : 'border-gray-300 bg-white'
+                          isSelected ? 'bg-teal-500 border-teal-500' : 'border-slate-300 bg-white'
                         }`}
                       >
                         {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
@@ -215,7 +215,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                       {/* Name + use cases */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-gray-900">{s.name}</span>
+                          <span className="text-sm font-semibold text-slate-900">{s.name}</span>
                           <span className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5 font-medium">{s.category}</span>
                         </div>
                         <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -262,23 +262,23 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
           {/* ── Step 3 (live): Summary ───────────────────────────────────── */}
           {!IS_DEMO_MODE && step === 3 && selectedSector && (
             <div className="flex flex-col items-center gap-5 pt-2">
-              <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full brand-mark flex items-center justify-center">
                 <Check size={32} className="text-white" strokeWidth={3} />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-gray-900">Ready to connect</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Workspace configured for <span className="font-semibold text-gray-700">{companyName}</span>
+                <h2 className="text-2xl font-bold text-slate-900">Ready to connect</h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  Workspace configured for <span className="font-semibold text-slate-700">{companyName}</span>
                 </p>
               </div>
-              <div className="w-full flex flex-col gap-2 bg-gray-50 rounded-xl p-4">
+              <div className="w-full flex flex-col gap-2 bg-slate-50 rounded-xl p-4">
                 {[
                   { icon: <GitBranch size={15} className="text-teal-600" />, text: `${ontologyEntities.length} entities pre-built for ${SECTOR_NAMES[selectedSector]}` },
                   { icon: <Database size={15} className="text-teal-600" />, text: `${planSelected.size} data source${planSelected.size !== 1 ? 's' : ''} in your source plan` },
                   { icon: <Zap size={15} className="text-teal-600" />, text: 'AI will profile data quality and propose your model automatically' },
                   { icon: <Package size={15} className="text-teal-600" />, text: 'GDPR + EU AI Act compliance already mapped' },
                 ].map(({ icon, text }, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                  <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
                     {icon}
                     <span>{text}</span>
                   </div>
@@ -295,31 +295,31 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               <div>
                 <div className="flex items-center gap-2">
                   <GitBranch size={18} className="text-teal-600" />
-                  <h2 className="text-xl font-bold text-gray-900">Your ontology</h2>
+                  <h2 className="text-xl font-bold text-slate-900">Your ontology</h2>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-slate-500 mt-1">
                   Pre-built semantic layer for {SECTOR_NAMES[selectedSector]} · {ontologyEntities.length} entities ready to use
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2 bg-gradient-to-br from-teal-50/50 to-slate-50 rounded-xl p-4 border border-gray-100">
+              <div className="flex flex-wrap gap-2 bg-gradient-to-br from-teal-50/50 to-slate-50 rounded-xl p-4 border border-slate-100">
                 {ontologyEntities.map(n => (
-                  <span key={n.id} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 shadow-sm">
+                  <span key={n.id} className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 shadow-sm">
                     {n.data.label}
                   </span>
                 ))}
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">
-                  Want to add a business-specific entity? <span className="text-gray-400 font-normal">(optional)</span>
+                <label className="text-sm font-medium text-slate-700">
+                  Want to add a business-specific entity? <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="text"
                   value={customEntity}
                   onChange={e => setCustomEntity(e.target.value)}
                   placeholder='e.g. "Plant" or "Production Line"'
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-400">You can add properties and relations later in the Builder AI section</p>
+                <p className="text-xs text-slate-400">You can add properties and relations later in the Builder AI section</p>
               </div>
             </div>
           )}
@@ -328,8 +328,8 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
           {IS_DEMO_MODE && step === 3 && selectedSector && (
             <div className="flex flex-col gap-4">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Connect your systems</h2>
-                <p className="text-sm text-gray-500 mt-1">Select the data sources to integrate. You can add more at any time.</p>
+                <h2 className="text-xl font-bold text-slate-900">Connect your systems</h2>
+                <p className="text-sm text-slate-500 mt-1">Select the data sources to integrate. You can add more at any time.</p>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {CONNECTORS[selectedSector].map(name => (
@@ -339,17 +339,17 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
                     className={`flex flex-col items-center gap-1 rounded-xl border-2 py-3 px-2 text-center transition-all ${
                       selectedConnectors.has(name)
                         ? 'border-teal-500 bg-teal-50'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                    <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
                       {name[0]}
                     </span>
-                    <span className="text-xs text-gray-700 leading-tight">{name}</span>
+                    <span className="text-xs text-slate-700 leading-tight">{name}</span>
                   </button>
                 ))}
               </div>
-              <button onClick={() => setStep(4)} className="text-xs text-gray-400 hover:text-gray-600 underline self-start mt-1">
+              <button onClick={() => setStep(4)} className="text-xs text-slate-400 hover:text-slate-600 underline self-start mt-1">
                 Skip
               </button>
             </div>
@@ -359,22 +359,22 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
           {IS_DEMO_MODE && step === 4 && selectedSector && (
             <div className="flex flex-col gap-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Your first suggested agent</h2>
-                <p className="text-sm text-gray-500 mt-1">Recommended agent for {SECTOR_NAMES[selectedSector]}</p>
+                <h2 className="text-xl font-bold text-slate-900">Your first suggested agent</h2>
+                <p className="text-sm text-slate-500 mt-1">Recommended agent for {SECTOR_NAMES[selectedSector]}</p>
               </div>
               <div className="border-2 border-teal-200 rounded-xl p-5 bg-teal-50 flex flex-col gap-3">
                 <div className="flex items-start gap-3">
                   <span className="text-3xl">{AGENTS[selectedSector].emoji}</span>
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-900 text-base">{AGENTS[selectedSector].name}</span>
+                      <span className="font-bold text-slate-900 text-base">{AGENTS[selectedSector].name}</span>
                       <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">Template</span>
                     </div>
-                    <p className="text-sm text-gray-600">{AGENTS[selectedSector].desc}</p>
+                    <p className="text-sm text-slate-600">{AGENTS[selectedSector].desc}</p>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-3">
                 <Zap size={14} className="text-teal-500 shrink-0" />
                 <span>It will be pre-configured in the Agents section</span>
               </div>
@@ -384,26 +384,26 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
           {/* Demo Step 5 — Complete */}
           {IS_DEMO_MODE && step === 5 && (
             <div className="flex flex-col items-center gap-5 pt-2">
-              <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full brand-mark flex items-center justify-center">
                 <Check size={32} className="text-white" strokeWidth={3} />
               </div>
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-gray-900">All set!</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  Your semantic layer is configured for <span className="font-semibold text-gray-700">{companyName}</span>
+                <h2 className="text-2xl font-bold text-slate-900">All set!</h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  Your semantic layer is configured for <span className="font-semibold text-slate-700">{companyName}</span>
                   {customEntity && (
                     <> with custom entity <span className="font-semibold text-teal-700">{customEntity}</span></>
                   )}
                 </p>
               </div>
-              <div className="w-full flex flex-col gap-2 bg-gray-50 rounded-xl p-4">
+              <div className="w-full flex flex-col gap-2 bg-slate-50 rounded-xl p-4">
                 {[
                   { icon: <GitBranch size={15} className="text-teal-600" />, text: `${ontologyEntities.length}${customEntity ? '+1' : ''} entities in your ontology` },
                   { icon: <Building2 size={15} className="text-teal-600" />, text: `${selectedConnectors.size} data source${selectedConnectors.size !== 1 ? 's' : ''} ready to connect` },
                   { icon: <Zap size={15} className="text-teal-600" />, text: '1 recommended agent ready for first run' },
                   { icon: <Package size={15} className="text-teal-600" />, text: 'GDPR + EU AI Act compliance already mapped' },
                 ].map(({ icon, text }, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                  <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
                     {icon}
                     <span>{text}</span>
                   </div>
@@ -414,25 +414,25 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 mt-2">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 mt-2">
           <div>
             {step > 1 && (
               <button
                 onClick={() => setStep(s => s - 1)}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 transition-colors"
               >
                 <ChevronLeft size={16} />
                 Back
               </button>
             )}
           </div>
-          {TOTAL_STEPS > 1 && <span className="text-xs text-gray-400">Step {step} of {TOTAL_STEPS}</span>}
+          {TOTAL_STEPS > 1 && <span className="text-xs text-slate-400">Step {step} of {TOTAL_STEPS}</span>}
           <div>
             {step < TOTAL_STEPS ? (
               <button
                 onClick={() => setStep(s => s + 1)}
                 disabled={step === 1 && !canAdvanceStep1}
-                className="flex items-center gap-1 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="btn-primary disabled:opacity-40"
               >
                 Next
                 <ChevronRight size={16} />
@@ -441,7 +441,7 @@ export default function OnboardingWizard({ onComplete, onSkip }: Props) {
               <button
                 onClick={handleComplete}
                 disabled={step === 1 && !canAdvanceStep1}
-                className="flex items-center gap-1 text-sm font-semibold bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="btn-primary disabled:opacity-40"
               >
                 {IS_DEMO_MODE ? 'Go to Dashboard' : 'Get started'}
                 <ChevronRight size={16} />
