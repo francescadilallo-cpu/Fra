@@ -60,25 +60,30 @@ const MAX_POLL_FAILS = 30
 function StateIcon({ state }: { state: PipelineStageState }) {
   switch (state) {
     case 'running':
-      return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
+      return <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
     case 'done':
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />
+      return <CheckCircle2 className="h-5 w-5 text-teal-500" />
     case 'error':
       return <XCircle className="h-5 w-5 text-red-500" />
     case 'skipped':
-      return <MinusCircle className="h-5 w-5 text-gray-400" />
+      return <MinusCircle className="h-5 w-5 text-slate-300" />
     default:
-      return <Circle className="h-5 w-5 text-gray-300" />
+      return <Circle className="h-5 w-5 text-slate-300" />
   }
 }
 
 function StageRow({ stage }: { stage: PipelineStage }) {
   const meta = STAGE_META[stage.name] ?? { label: stage.name, detail: '' }
   const active = stage.state === 'running'
+  const errored = stage.state === 'error'
   return (
     <div
-      className={`flex items-start gap-3 rounded-xl border p-4 transition-all ${
-        active ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
+      className={`flex items-start gap-3 rounded-2xl p-4 shadow-soft transition-all ring-1 ${
+        errored
+          ? 'bg-red-50 ring-red-200'
+          : active
+            ? 'bg-brand-soft ring-indigo-200/70'
+            : 'bg-white ring-slate-900/[0.06]'
       }`}
     >
       <div className="mt-0.5">
@@ -86,10 +91,10 @@ function StageRow({ stage }: { stage: PipelineStage }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium text-gray-900">{meta.label}</span>
-          <span className="text-xs uppercase tracking-wide text-gray-400">{stage.state}</span>
+          <span className="font-semibold text-slate-900">{meta.label}</span>
+          <span className={`text-xs font-semibold uppercase tracking-wide ${errored ? 'text-red-500' : 'text-slate-400'}`}>{stage.state}</span>
         </div>
-        <p className="mt-0.5 text-sm text-gray-500">{stage.detail || meta.detail}</p>
+        <p className={`mt-0.5 text-sm ${errored ? 'text-red-700' : 'text-slate-500'}`}>{stage.detail || meta.detail}</p>
       </div>
     </div>
   )
@@ -98,10 +103,10 @@ function StageRow({ stage }: { stage: PipelineStage }) {
 function WarningRow({ w }: { w: VerificationWarning }) {
   const isAdvisory = w.severity === 'info'
   const color =
-    w.severity === 'high' ? 'text-red-500' : w.severity === 'medium' ? 'text-amber-500' : 'text-gray-400'
+    w.severity === 'high' ? 'text-red-500' : w.severity === 'medium' ? 'text-amber-500' : 'text-slate-400'
   const Icon = isAdvisory ? Info : AlertTriangle
   return (
-    <li className="flex items-start gap-2 text-sm text-gray-600">
+    <li className="flex items-start gap-2 text-sm text-slate-600">
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${color}`} />
       <span>{w.detail}</span>
     </li>
@@ -211,23 +216,26 @@ export default function PipelineView({ onNavigate }: Props) {
   const finished = run && !run.running
   const verification = run?.report?.verification
   const issues = [...(verification?.warnings ?? []), ...(verification?.advisory ?? [])]
+  const erroredStages = (run?.stages ?? []).filter((s) => s.state === 'error')
 
   return (
     <div className="mx-auto max-w-3xl p-6">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900">
-            <Sparkles className="h-6 w-6 text-blue-500" />
+          <h1 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-slate-900">
+            <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl">
+              <Sparkles className="h-4 w-4 text-white" />
+            </span>
             Auto-Build
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-500">
             Turn your documents and connected data sources into a working data model — automatically.
           </p>
         </div>
         <button
           onClick={() => void handleRun()}
           disabled={starting || running}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary shrink-0"
         >
           {starting || running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {running ? 'Building…' : 'Run auto-build'}
@@ -248,29 +256,56 @@ export default function PipelineView({ onNavigate }: Props) {
 
       {finished && (
         <>
-          <div className="mt-6 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <span className="text-sm text-gray-600">
+          {erroredStages.length > 0 && (
+            <div className="mt-6 rounded-2xl bg-red-50 p-4 ring-1 ring-red-200 shadow-soft">
+              <div className="mb-1.5 flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-red-500" />
+                <span className="font-semibold text-slate-900">
+                  {erroredStages.length === 1 ? 'A stage failed' : `${erroredStages.length} stages failed`}
+                </span>
+              </div>
+              <ul className="space-y-1.5">
+                {erroredStages.map((s) => (
+                  <li key={s.name} className="text-sm text-red-700">
+                    <span className="font-semibold">{STAGE_META[s.name]?.label ?? s.name}:</span>{' '}
+                    {s.detail || 'failed without a message — check the backend logs.'}
+                  </li>
+                ))}
+              </ul>
+              <button
+                onClick={() => void handleRun()}
+                disabled={starting || running}
+                className="btn btn-secondary btn-sm mt-3"
+              >
+                <Loader2 className={`h-3.5 w-3.5 ${starting || running ? 'animate-spin' : 'hidden'}`} />
+                Retry build
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-white p-4 ring-1 ring-slate-900/[0.06] shadow-soft">
+            <span className="text-sm text-slate-600">
               {run?.ok ? 'Your data model is ready.' : 'Build finished with issues — review the stages above.'}
             </span>
             <button
               onClick={() => onNavigate('sembuilder')}
-              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
             >
               Open data model preview <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
           {verification && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+            <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-slate-900/[0.06] shadow-soft">
               <div className="mb-2 flex items-center gap-2">
                 {verification.ok ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 text-teal-500" />
                 ) : (
                   <AlertTriangle className="h-5 w-5 text-amber-500" />
                 )}
-                <span className="font-medium text-gray-900">Verification</span>
+                <span className="font-semibold text-slate-900">Verification</span>
                 {typeof verification.summary?.faithfulness_score === 'number' && (
-                  <span className="ml-auto text-xs text-gray-500">
+                  <span className="ml-auto text-xs text-slate-500">
                     Faithfulness {Math.round((verification.summary.faithfulness_score as number) * 100)}%
                     {' · '}
                     {verification.summary.templates_tested ?? 0} queries replayed
@@ -278,7 +313,7 @@ export default function PipelineView({ onNavigate }: Props) {
                 )}
               </div>
               {issues.length === 0 ? (
-                <p className="text-sm text-gray-500">No consistency issues found.</p>
+                <p className="text-sm text-slate-500">No consistency issues found.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {issues.map((w, i) => (
@@ -289,12 +324,12 @@ export default function PipelineView({ onNavigate }: Props) {
             </div>
           )}
 
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-slate-900/[0.06] shadow-soft">
             <div className="mb-2 flex items-center gap-2">
-              <Wand2 className="h-5 w-5 text-blue-500" />
-              <span className="font-medium text-gray-900">Refine by instruction</span>
+              <Wand2 className="h-5 w-5 text-indigo-500" />
+              <span className="font-semibold text-slate-900">Refine by instruction</span>
             </div>
-            <p className="mb-3 text-sm text-gray-500">
+            <p className="mb-3 text-sm text-slate-500">
               Adjust the model in plain language, e.g. “link orders to customers via customer_id”
               or “add a revenue metric = SUM(orders.total)”.
             </p>
@@ -307,12 +342,12 @@ export default function PipelineView({ onNavigate }: Props) {
                 }}
                 placeholder="Describe a change…"
                 disabled={integrating}
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none disabled:opacity-50"
+                className="input flex-1"
               />
               <button
                 onClick={() => void handleIntegrate()}
                 disabled={integrating || !instruction.trim()}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-primary shrink-0"
               >
                 {integrating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
                 Apply

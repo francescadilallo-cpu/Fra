@@ -18,6 +18,7 @@ endpoints that call this).
 
 from __future__ import annotations
 
+import gc
 import logging
 
 from .runs import (
@@ -142,6 +143,10 @@ def run_build_pipeline(
 
             # Rebuild KG + Semantic Layer so the applied model takes effect.
             reload_semantic()
+            # The previous KG (a cyclic networkx graph) is now unreferenced but
+            # not yet reclaimed by refcounting; collect it before the next heavy
+            # step to keep peak memory down on small (512 MB) instances.
+            gc.collect()
 
             # Attach the proposed entity synonyms as KG aliases (better NL recall).
             kg = _semantic_state.get("kg")
@@ -237,6 +242,10 @@ def run_build_pipeline(
 
     run.complete()
     store.set_current(run)
+    # Release the build's intermediate structures (proposal, schema samples,
+    # analyze output) now that the model is persisted — keeps the resident set
+    # low after a run on memory-bounded instances.
+    gc.collect()
     return run
 
 
