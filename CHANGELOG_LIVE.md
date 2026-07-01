@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Tabelle metadati connettore fuori dalla superficie semantica)
+
+Seguito della review: ora che esistono le tabelle record vere, i cataloghi
+`sf_*_objects`/`sf_*_fields` erano rumore nel modello (l'analyzer li proponeva
+come entità; "fields"/"objects" in una domanda li agganciava nel graph context;
+il filtro regex esisteva **solo** nel path di refresh, non al primo boot).
+
+- Nuova property esatta `DuckDBSourceManager.internal_metadata_tables`
+  (derivata dal registry, niente regex).
+- `KnowledgeGraph.build_from_schema` la consulta e **salta** quelle tabelle
+  (copre nodi, FK per nome e value-scan in un punto solo → primo boot e refresh
+  ora coerenti); rimosso il wrapper `_FilteredMgr` regex ridondante in main.
+- Stadio 2 pipeline: `live_tables` esclude le tabelle interne → l'analyzer non
+  propone più entità per i cataloghi. Restano interrogabili in SQL (Data
+  Explorer) e nel prompt schema.
+
+Test: +2 (property, skip in build_from_schema). Suite **1229 passed**.
+
+---
+
 ## 2026-06-26 (Review flusso sorgenti → KG → Semantic Layer: Salesforce dati veri + fix persistenza)
 
 Review end-to-end del flusso "connessione sorgenti → KG → semantic layer automatico"

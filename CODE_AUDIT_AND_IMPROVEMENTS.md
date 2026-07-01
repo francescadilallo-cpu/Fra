@@ -650,7 +650,7 @@ Aggiornamento (review sorgenti → KG → SL con Salesforce reale):
 Follow-up residui:
 - Salesforce: ingestion limitata a `_PRIORITY_OBJECTS` e a 150 campi/oggetto; oggetti custom (`__c`) non ingeriti come record — valutare selezione utente degli oggetti da ingerire.
 - SF record tables: `CREATE OR REPLACE` a ogni sync (full refresh); niente delta/incremental sync — accettabile ai volumi attuali (≤2000 righe/oggetto default).
-- Le tabelle metadati sf_*_objects/sf_*_fields restano nel modello e nel prompt schema: valutare se escluderle dalla proposta entità (rumore) ora che esistono le tabelle record.
+- ~~Le tabelle metadati sf_*_objects/sf_*_fields restano nel modello~~ → RISOLTO: `internal_metadata_tables` (property esatta dal registry) esclusa da `build_from_schema` e dallo stadio 2 pipeline; restano interrogabili in SQL. Rimosso il filtro regex `_FilteredMgr` (era solo nel path refresh → primo boot incoerente).
 - recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.
 - value-overlap FK: i due guard (univocità + cardinalità minima) riducono i falsi positivi; resta da validare le soglie su dati reali (es. FK legittime a bassa cardinalità su dataset piccoli verrebbero saltate — accettabile perché la Fase 2 per nome le copre).
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.

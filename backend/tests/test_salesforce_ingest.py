@@ -228,3 +228,42 @@ class TestManagerMetadataRelations:
         mgr._registry = _Reg()
         mgr.get_schema_info = lambda: {"orders": {}}  # type: ignore[method-assign]
         assert mgr.metadata_relations == []
+
+
+class TestInternalMetadataTables:
+    def test_property_lists_sf_catalog_tables(self):
+        mgr = DuckDBSourceManager.__new__(DuckDBSourceManager)
+        sf = SourceConfig(id="src-1", connector_type="salesforce", label="SF")
+        csv = SourceConfig(id="src-2", connector_type="csv", label="CSV")
+
+        class _Reg:
+            def list(self):
+                return [sf, csv]
+
+        mgr._registry = _Reg()
+        assert mgr.internal_metadata_tables == frozenset(
+            {"sf_src_1_objects", "sf_src_1_fields"}
+        )
+
+    def test_build_from_schema_skips_internal_tables(self):
+        from app.kg.graph import KnowledgeGraph
+
+        class _Mgr:
+            internal_metadata_tables = frozenset({"sf_src_1_objects"})
+
+            def get_schema_info(self):
+                return {
+                    "sf_account": {"columns": [{"name": "Id", "type": "id"}]},
+                    "sf_src_1_objects": {
+                        "columns": [{"name": "object_name", "type": "str"}]
+                    },
+                }
+
+            def execute(self, sql, *a, **kw):
+                return []
+
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_Mgr())
+        tables = {a.get("table") for _n, a in kg.all_nodes()}
+        assert "sf_account" in tables
+        assert "sf_src_1_objects" not in tables

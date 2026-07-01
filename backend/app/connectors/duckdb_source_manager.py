@@ -1551,6 +1551,21 @@ class DuckDBSourceManager:
         return base
 
     @property
+    def internal_metadata_tables(self) -> frozenset[str]:
+        """Connector bookkeeping tables (Salesforce ``sf_<id>_objects`` /
+        ``sf_<id>_fields`` describe catalogs). They stay queryable in SQL but
+        are excluded from the semantic surface (KG nodes, entity proposal) —
+        they describe the *source system*, not the customer's business data."""
+        names: set[str] = set()
+        for cfg in self._registry.list():
+            if cfg.connector_type != "salesforce":
+                continue
+            safe_id = cfg.id.replace("-", "_")
+            names.add(f"sf_{safe_id}_objects")
+            names.add(f"sf_{safe_id}_fields")
+        return frozenset(names)
+
+    @property
     def metadata_relations(self) -> list[dict]:
         """FK relations declared by source-system metadata (currently the
         Salesforce ``referenceTo`` describe data), limited to objects whose

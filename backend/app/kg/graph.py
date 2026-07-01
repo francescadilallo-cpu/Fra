@@ -436,6 +436,13 @@ class KnowledgeGraph:
             logger.warning("build_from_schema: schema discovery failed: %s", exc)
             return
 
+        # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are
+        # not business data — keep them out of the graph so they never surface
+        # in NL linking, FK inference, or the model draft.
+        internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+        if internal:
+            schema = {t: info for t, info in schema.items() if t not in internal}
+
         table_names = set(schema.keys())
 
         # Phase 1 — one schema-level node per table

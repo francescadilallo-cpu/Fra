@@ -800,29 +800,14 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
             # the Salesforce connector to hold object/field metadata) are
             # invisible to the KG builder — they are not business entities
             # and would inflate the graph with thousands of spurious nodes.
-            class _FilteredMgr:
-                """Thin proxy that hides sf_*_objects / sf_*_fields tables."""
-
-                def __init__(self, inner):
-                    self._inner = inner
-
-                def get_schema_info(self):
-                    return {
-                        k: v
-                        for k, v in self._inner.get_schema_info().items()
-                        if not re.match(r"sf_[a-z0-9_]+_(objects|fields)$", k)
-                    }
-
-                def __getattr__(self, name):
-                    return getattr(self._inner, name)
-
             new_kg = KnowledgeGraph()
             ontology = _semantic_state.get("ontology")
-            filtered_mgr = _FilteredMgr(mgr)
+            # Connector bookkeeping tables (sf_*_objects / sf_*_fields) are
+            # excluded inside build_from_schema via mgr.internal_metadata_tables.
             if ontology is not None:
-                new_kg.build_from_ontology(filtered_mgr, ontology)
+                new_kg.build_from_ontology(mgr, ontology)
             else:
-                new_kg.build_from_schema(filtered_mgr)
+                new_kg.build_from_schema(mgr)
             # Re-fold manual/applied relations + context concepts into the KG.
             if catalog is not None:
                 try:

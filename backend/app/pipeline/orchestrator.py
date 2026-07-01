@@ -103,7 +103,10 @@ def run_build_pipeline(
 
         mgr = get_source_manager(_SCENARIO_PATH)
         schema_info = mgr.get_schema_info()
-        live_tables = [t for t in schema_info if t not in hidden]
+        # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are
+        # not business data — the analyzer must not propose entities for them.
+        internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+        live_tables = [t for t in schema_info if t not in hidden and t not in internal]
         if not live_tables:
             run.skip(STAGE_SOURCES, "No data sources connected.")
         else:
