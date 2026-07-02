@@ -314,3 +314,55 @@ class TestMaxObjects:
         assert sf_max_objects() == 10
         monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "0")
         assert sf_max_objects() == 40  # invalid → fallback
+
+
+class TestRelationDedupe:
+    def test_declared_relation_upgrades_heuristic_edge(self):
+        """A join found by value-overlap AND declared by metadata must yield ONE
+        edge, upgraded to manual — not a parallel duplicate in the draft."""
+        from app.kg.graph import KnowledgeGraph
+
+        class _Mgr:
+            def get_schema_info(self):
+                return {
+                    "sf_opportunity": {
+                        "columns": [
+                            {"name": "Id", "type": "id"},
+                            {"name": "AccountId", "type": "reference"},
+                        ]
+                    },
+                    "sf_account": {"columns": [{"name": "Id", "type": "id"}]},
+                }
+
+            def execute(self, sql, *a, **kw):
+                if '"AccountId"' in sql:
+                    return [{"v": v} for v in ("a1", "a2", "a3", "a4", "a5")]
+                if '"Id"' in sql and "sf_account" in sql:
+                    return [{"v": v} for v in ("a1", "a2", "a3", "a4", "a5", "a6")]
+                return []
+
+        kg = KnowledgeGraph()
+        kg.build_from_schema(_Mgr())  # value-overlap finds FK_AccountId
+        edges_before = kg.edge_count
+        assert any(
+            d.get("type") == "FK_AccountId" and not d.get("manual")
+            for _s, _t, d in kg.iter_edges()
+        )
+
+        declared = [
+            {
+                "from_table": "sf_opportunity",
+                "to_table": "sf_account",
+                "via_column": "AccountId",
+                "edge_type": "FK_AccountId",
+            }
+        ]
+        kg.ingest_manual_relations(declared)
+        assert kg.edge_count == edges_before  # upgraded in place, not duplicated
+        assert any(
+            d.get("type") == "FK_AccountId" and d.get("manual") is True
+            for _s, _t, d in kg.iter_edges()
+        )
+        # Re-ingesting (e.g. catalog + metadata both carry it) still no growth.
+        kg.ingest_manual_relations(declared)
+        assert kg.edge_count == edges_before

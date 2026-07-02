@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (KG: dedupe relazioni cross-call + draft senza tabelle interne)
+
+Due fix di coerenza del modello trovati continuando la review:
+
+- **Dedupe/upgrade relazioni** (`ingest_manual_relations`): il dedupe era locale
+  alla singola chiamata, ma la stessa join può arrivare da tre strade (value-overlap
+  in `build_from_schema`, relazioni del catalog, relazioni dichiarate Salesforce) →
+  archi paralleli duplicati nel MultiDiGraph. Caso tipico con SF: `FK_AccountId`
+  scoperta dal value-scan E dichiarata dal describe. Ora, se un arco con lo stesso
+  tipo esiste già tra i due nodi, viene **promosso a `manual=True` in place**
+  invece di essere duplicato.
+- **Draft senza cataloghi interni** (`_get_semantic_draft`): le entità del draft
+  venivano filtrate solo su `hidden` → `sf_*_objects`/`sf_*_fields` comparivano
+  come "entità" nella vista Data Model. Ora `internal_metadata_tables` è fusa in
+  `hidden` all'ingresso (copre entità, relazioni e template in un punto solo).
+
+Test: +1 (`test_declared_relation_upgrades_heuristic_edge`: heuristic→declared
+stesso arco, edge_count invariato, re-ingest idempotente). Suite **1235 passed**.
+
+---
+
 ## 2026-06-26 (Salesforce: oggetti custom + selezione utente)
 
 In una org reale i dati che contano spesso stanno negli **oggetti custom (`__c`)**,

@@ -993,6 +993,16 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     *hidden* is a set of table names whose derived entities, relations and
     templates must be excluded (live-mode users hiding the demo dataset).
     """
+    # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are not
+    # part of the business model — keep them out of the draft like hidden ones.
+    try:
+        from .connectors.duckdb_source_manager import get_source_manager
+
+        _mgr = get_source_manager(_SCENARIO_PATH)
+        hidden = hidden | frozenset(getattr(_mgr, "internal_metadata_tables", ()) or ())
+    except Exception:  # noqa: BLE001 — draft must render even without sources
+        pass
+
     catalog = _semantic_state.get("catalog")
     kg = _semantic_state.get("kg")
 

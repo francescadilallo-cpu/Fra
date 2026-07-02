@@ -635,6 +635,20 @@ class KnowledgeGraph:
             if key in seen:
                 continue
             seen.add(key)
+            # Cross-call dedupe: the same join may already be in the graph from
+            # FK inference (build_from_schema) or an earlier ingest — upgrade it
+            # to manual in place instead of adding a parallel edge (the
+            # MultiDiGraph would happily duplicate it, and the model draft
+            # would then list the relation twice).
+            existing = self._g.get_edge_data(src, dst) or {}
+            upgraded = False
+            for data in existing.values():
+                if data.get("type") == edge_type:
+                    data["manual"] = True
+                    upgraded = True
+                    break
+            if upgraded:
+                continue
             self._add_edge(src, dst, edge_type, manual=True)
             added += 1
         if added:
