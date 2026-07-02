@@ -78,7 +78,7 @@ def test_degrades_without_llm(client, headers):
     # No LLM provider in the test env → nothing applied, clear note, no crash.
     assert body["llm_used"] is False
     assert body["applied"] == []
-    assert "LLM" in body["notes"]
+    assert "no AI configured" in body["notes"]
     assert "draft" in body
 
 

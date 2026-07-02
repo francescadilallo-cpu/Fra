@@ -732,3 +732,44 @@ class TestVerifierEntityNameRelations:
         report = verify_model(draft)
         kinds = [w.get("type") for w in report.get("warnings", [])]
         assert "relation_unknown_table" not in kinds
+
+
+class TestRuleBasedIntegrateFallback:
+    _draft = {
+        "entities": [
+            {"name": "erp_orders", "table": "erp_orders", "columns": ["total"]},
+            {"name": "Accounts", "table": "crm_accounts", "columns": ["id"]},
+        ]
+    }
+
+    def test_link_with_spaces_and_entity_name(self):
+        from app.semantic.integrate import interpret_instruction
+
+        out = interpret_instruction(
+            "link erp orders to Accounts via account_id", self._draft
+        )
+        assert out["llm_used"] is False
+        assert out["ops"] == [
+            {
+                "op": "add_relation",
+                "from_table": "erp_orders",
+                "to_table": "crm_accounts",
+                "via_column": "account_id",
+            }
+        ]
+
+    def test_add_metric(self):
+        from app.semantic.integrate import interpret_instruction
+
+        out = interpret_instruction(
+            "add a revenue metric = SUM(erp_orders.total)", self._draft
+        )
+        assert out["ops"][0]["op"] == "add_metric"
+        assert out["ops"][0]["name"] == "revenue"
+        assert out["ops"][0]["formula"] == "SUM(erp_orders.total)"
+
+    def test_unknown_table_yields_no_ops(self):
+        from app.semantic.integrate import interpret_instruction
+
+        out = interpret_instruction("link ghosts to Accounts via x", self._draft)
+        assert out["ops"] == []

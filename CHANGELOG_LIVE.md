@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Stadio 4 senza LLM + matching template mode-aware)
+
+Smoke live dello stadio 4 ("Refine by instruction") — mai esercitato prima:
+
+1. **Parser rule-based di fallback** (`_rule_based_ops` in integrate.py): senza
+   LLM lo stadio 4 era un vicolo cieco proprio per le due istruzioni che l'UI
+   suggerisce come placeholder. Ora `link <A> to <B> via <col>` e
+   `add a <name> metric = <formula>` funzionano deterministicamente (accettano
+   nomi entità, tabelle e snake_case con spazi).
+2. **Dedupe metriche solo contro le user-defined** (`insert_sl_metric`): la
+   collisione con una metrica builtin demo ("Revenue", invisibile ai live)
+   bloccava la creazione senza spiegazione. Ora i builtin non contano; in più
+   `apply_ops` riporta gli `skipped` con motivo e le note dell'endpoint dicono
+   la verità ("metric 'revenue' already exists — not re-added" invece del
+   fuorviante "AI unavailable").
+3. **Matching template mode-aware** (layer `_detect_intent`): "total revenue"
+   agganciava il template demo "Revenue" (id più basso, tabella nascosta) e il
+   guardrail SQL rispondeva "not available for your workspace". Ora i template
+   che toccano tabelle nascoste (sources o SQL) vengono **saltati al match** →
+   vince il template dell'utente. Il guardrail resta come rete di sicurezza.
+
+Verifica live end-to-end (senza LLM): add metric → applied; "total revenue" →
+**48.067,5** (esatto: Σ i·110,5, i=1..29). Idempotenza con nota chiara.
+Test: +3 (parser fallback). Suite **1247 passed**.
+
+---
+
 ## 2026-07-02 (Smoke "sorgente utente → modello" live: 3 fix)
 
 Secondo smoke end-to-end, stavolta sul percorso del cliente: 2 sorgenti CSV

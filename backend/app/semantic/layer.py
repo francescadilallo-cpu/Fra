@@ -423,10 +423,35 @@ class _RuleParser:
         if templates:
             q_lower = q.lower()
             raw_lower = question.lower()
+            # Live workspaces must not match demo templates: without this the
+            # lowest-id demo template ("Revenue" on a hidden table) shadows the
+            # user's own metric template, and the SQL guardrail then rejects
+            # the query with an unhelpful "not available" instead of answering.
+            _hidden_tbls = {
+                str(h).lower()
+                for h in getattr(
+                    SemanticLayer._thread_local, "hidden_tables", frozenset()
+                )
+            }
+
+            def _touches_hidden(tpl: dict) -> bool:
+                if not _hidden_tbls:
+                    return False
+                if {str(s).lower() for s in tpl.get("sources") or []} & _hidden_tbls:
+                    return True
+                sql_tokens = set(
+                    re.findall(
+                        r"[a-z_][a-z0-9_]*", (tpl.get("sql_query") or "").lower()
+                    )
+                )
+                return bool(sql_tokens & _hidden_tbls)
+
             best_len = -1
             best_tpl: dict | None = None
             for tpl in templates:
                 if not tpl.get("is_active", True):
+                    continue
+                if _touches_hidden(tpl):
                     continue
                 for kw in tpl.get("keywords", []):
                     k = kw.lower()

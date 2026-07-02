@@ -14,11 +14,75 @@ fully reversible from the Data Model editor.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _ALLOWED_OPS = {"add_relation", "set_entity_description", "add_metric"}
+
+# Deterministic fallback patterns — the two instruction shapes the UI itself
+# suggests as placeholders, so "Refine by instruction" stays functional when
+# no LLM provider is configured.
+_LINK_RE = re.compile(
+    r"\b(?:link|connect|join)\s+(.+?)\s+(?:to|with)\s+(.+?)\s+(?:via|using|on)\s+([\w.]+)",
+    re.IGNORECASE,
+)
+_METRIC_RE = re.compile(
+    r"\badd\s+(?:a\s+|an\s+)?(.+?)\s+metric\s*=\s*(.+)$", re.IGNORECASE
+)
+
+
+def _rule_based_ops(instruction: str, draft: dict) -> list[dict]:
+    """Parse the two common instruction shapes without an LLM.
+
+    Handles ``link <A> to <B> via <column>`` and ``add a <name> metric =
+    <formula>``. Table tokens accept entity names, table names, and snake_case
+    typed with spaces ("erp orders" → erp_orders). Anything unresolvable is
+    dropped — the ops still pass through ``_sanitize_ops``.
+    """
+    entities = draft.get("entities", []) or []
+    by_key: dict[str, str] = {}
+    for e in entities:
+        tbl = str(e.get("table") or "")
+        if not tbl:
+            continue
+        for key in (tbl, str(e.get("name") or "")):
+            if key:
+                by_key[key.lower()] = tbl
+                by_key[key.lower().replace("_", " ")] = tbl
+
+    def _table(token: str) -> str | None:
+        t = token.strip().strip("\"'").lower()
+        return by_key.get(t) or by_key.get(t.replace(" ", "_"))
+
+    ops: list[dict] = []
+    m = _LINK_RE.search(instruction)
+    if m:
+        ft, tt = _table(m.group(1)), _table(m.group(2))
+        if ft and tt and ft != tt:
+            ops.append(
+                {
+                    "op": "add_relation",
+                    "from_table": ft,
+                    "to_table": tt,
+                    "via_column": m.group(3).strip(),
+                }
+            )
+    m = _METRIC_RE.search(instruction)
+    if m:
+        name, formula = m.group(1).strip(), m.group(2).strip()
+        if name and formula:
+            ops.append(
+                {
+                    "op": "add_metric",
+                    "name": name,
+                    "formula": formula,
+                    "description": "",
+                    "unit": "",
+                }
+            )
+    return ops
 
 
 def _build_prompt(instruction: str, draft: dict) -> tuple[str, str]:
@@ -109,11 +173,21 @@ def interpret_instruction(instruction: str, draft: dict) -> dict[str, Any]:
         system, user = _build_prompt(instruction, draft)
         raw = complete_json_llm(system, user, max_tokens=800)
         if raw is None:
-            return {"ops": [], "llm_used": False}
+            # No LLM provider — fall back to the deterministic parser so the
+            # UI's own example instructions keep working.
+            fallback = _sanitize_ops(
+                {"ops": _rule_based_ops(instruction, draft)},
+                valid_tables,
+                entity_names,
+            )
+            return {"ops": fallback, "llm_used": False}
         return {"ops": _sanitize_ops(raw, valid_tables, entity_names), "llm_used": True}
     except Exception as exc:  # noqa: BLE001 — degrade gracefully
         logger.warning("integrate interpret failed: %s", exc, exc_info=True)
-        return {"ops": [], "llm_used": False}
+        fallback = _sanitize_ops(
+            {"ops": _rule_based_ops(instruction, draft)}, valid_tables, entity_names
+        )
+        return {"ops": fallback, "llm_used": False}
 
 
 def apply_ops(
@@ -146,6 +220,7 @@ def apply_ops(
             pass
 
     applied: list[str] = []
+    skipped: list[str] = []
     added_metrics: list[dict] = []
     counts = {"relations": 0, "entities": 0, "metrics": 0}
 
@@ -182,5 +257,12 @@ def apply_ops(
                 counts["metrics"] += 1
                 added_metrics.append(op)
                 applied.append(f"added metric {op['name']}")
+            else:
+                skipped.append(f"metric '{op['name']}' already exists — not re-added")
 
-    return {"counts": counts, "applied": applied, "added_metrics": added_metrics}
+    return {
+        "counts": counts,
+        "applied": applied,
+        "skipped": skipped,
+        "added_metrics": added_metrics,
+    }

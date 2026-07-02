@@ -109,8 +109,12 @@ def insert_sl_metric(
 
     conn = get_definitions_connection()
     try:
+        # Dedupe only against user-defined metrics: builtin demo rows are
+        # invisible to live users, so a name collision with one of them would
+        # block a metric the user cannot even see.
         exists = conn.execute(
-            "SELECT 1 FROM sl_metrics WHERE sector_id=? AND lower(name)=lower(?)",
+            "SELECT 1 FROM sl_metrics"
+            " WHERE sector_id=? AND is_builtin=0 AND lower(name)=lower(?)",
             (sector_id, name),
         ).fetchone()
         if exists:

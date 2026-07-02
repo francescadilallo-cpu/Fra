@@ -4121,12 +4121,19 @@ def integrate_model(
         except Exception:
             pass
 
-    if not interpreted["llm_used"]:
-        notes = "AI interpretation unavailable — no LLM configured."
-    elif not result["applied"]:
+    skipped = result.get("skipped") or []
+    if not interpreted["llm_used"] and not ops:
+        notes = (
+            "Could not interpret that instruction (no AI configured). Try e.g. "
+            "“link <table A> to <table B> via <column>” or "
+            "“add a <name> metric = SUM(<table>.<column>)”."
+        )
+    elif not result["applied"] and not skipped:
         notes = "No applicable changes were found for that instruction."
     else:
-        notes = ""
+        notes = "; ".join(skipped)
+    if notes and not interpreted["llm_used"] and ops:
+        notes = f"{notes} (interpreted without AI)".strip()
 
     return {
         "ops": ops,
