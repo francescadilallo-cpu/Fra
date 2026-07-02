@@ -302,8 +302,9 @@ class SalesforceConnector:
 
         Priority order:
           1. Standard priority objects (Account, Contact, Opportunity, …)
-          2. Other standard objects
-          3. Custom objects (__c suffix)
+          2. Custom objects (__c) — business-specific by definition, so they
+             beat generic standard objects when the describe budget is tight
+          3. Other standard objects
         """
         raw_objects = self.list_sobjects()
 
@@ -322,9 +323,7 @@ class SalesforceConnector:
         ]
         custom = [o for o in queryable if o.get("custom")]
 
-        remaining = max_objects - len(priority)
-        selected = priority + standard[: remaining // 2] + custom[: remaining // 2]
-        selected = selected[:max_objects]
+        selected = (priority + custom + standard)[:max_objects]
 
         objects: list[SalesforceObject] = []
         for obj_meta in selected:
@@ -416,6 +415,44 @@ class SalesforceConnector:
 
     def __exit__(self, *_: Any) -> None:
         self.close()
+
+
+def sf_max_objects() -> int:
+    """Max SObjects described per sync (one API call each). Defaults to 40 so
+    real orgs get their custom objects described, not just the standard
+    priority set. Set FRA_SF_MAX_OBJECTS to tune; invalid values fall back."""
+    raw = os.getenv("FRA_SF_MAX_OBJECTS", "40").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 40
+    return val if val > 0 else 40
+
+
+def select_record_objects(objects: list, explicit) -> list:
+    """Which SObjects get their *records* ingested as DuckDB tables.
+
+    *explicit* is the user's selection from the source params — a list or a
+    comma-separated string of object API names. When given, it wins entirely
+    (full user control). Otherwise the default rule: standard priority objects
+    plus every custom object (``__c`` — business-specific by definition).
+    Accepts SalesforceObject instances or schema-JSON dicts.
+    """
+    names: set[str] = set()
+    if isinstance(explicit, str):
+        names = {s.strip() for s in explicit.split(",") if s.strip()}
+    elif isinstance(explicit, (list, tuple, set)):
+        names = {str(s).strip() for s in explicit if str(s).strip()}
+
+    def _name(o) -> str:
+        return o.get("name") if isinstance(o, dict) else o.name
+
+    def _is_custom(o) -> bool:
+        return bool(o.get("is_custom") if isinstance(o, dict) else o.is_custom)
+
+    if names:
+        return [o for o in objects if _name(o) in names]
+    return [o for o in objects if _name(o) in _PRIORITY_OBJECTS or _is_custom(o)]
 
 
 def sf_record_row_limit() -> int:

@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Salesforce: oggetti custom + selezione utente)
+
+In una org reale i dati che contano spesso stanno negli **oggetti custom (`__c`)**,
+che prima restavano fuori: l'ingestion record copriva solo i prioritari standard e
+nella describe i custom finivano in coda al budget (con ~23 prioritari presenti ne
+entrava ~1).
+
+- `get_schema`: ordine di selezione ora **priority → custom → standard** (i custom
+  sono business-specific per definizione, battono gli standard generici); budget
+  describe env-tunable `FRA_SF_MAX_OBJECTS` (default 40, prima 25 hardcoded).
+- Regola record ingestion (`select_record_objects`, pura): selezione **esplicita
+  dell'utente** via `params.objects` (lista o stringa comma-separated) vince su
+  tutto; default = prioritari standard + **tutti i custom**.
+- UI: campo opzionale "Objects to sync" nel form Salesforce (comma-separated,
+  vuoto = default).
+
+Test: +5 (regola selezione esplicita/default/blank, cap env). Suite **1234 passed**.
+
+---
+
 ## 2026-06-26 (Tabelle metadati connettore fuori dalla superficie semantica)
 
 Seguito della review: ora che esistono le tabelle record vere, i cataloghi

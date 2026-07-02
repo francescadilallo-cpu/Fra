@@ -648,7 +648,7 @@ Aggiornamento (review sorgenti → KG → SL con Salesforce reale):
 - **Persistenza**: chiusi 3 buchi FRA_DATA_DIR sfuggiti (metadata.db, context.db, tokens.db) — erano hardcoded, il modello auto-costruito e i documenti di contesto sparivano al restart anche col disco.
 
 Follow-up residui:
-- Salesforce: ingestion limitata a `_PRIORITY_OBJECTS` e a 150 campi/oggetto; oggetti custom (`__c`) non ingeriti come record — valutare selezione utente degli oggetti da ingerire.
+- ~~Salesforce: oggetti custom non ingeriti / nessuna selezione utente~~ → RISOLTO: default = prioritari + tutti i custom; selezione esplicita via `params.objects` (UI: campo "Objects to sync"); describe budget `FRA_SF_MAX_OBJECTS` (40) con ordine priority→custom→standard. Resta il cap 150 campi/oggetto (limite URL SOQL) — eventuale chunking multi-query se servisse.
 - SF record tables: `CREATE OR REPLACE` a ogni sync (full refresh); niente delta/incremental sync — accettabile ai volumi attuali (≤2000 righe/oggetto default).
 - ~~Le tabelle metadati sf_*_objects/sf_*_fields restano nel modello~~ → RISOLTO: `internal_metadata_tables` (property esatta dal registry) esclusa da `build_from_schema` e dallo stadio 2 pipeline; restano interrogabili in SQL. Rimosso il filtro regex `_FilteredMgr` (era solo nel path refresh → primo boot incoerente).
 - recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.

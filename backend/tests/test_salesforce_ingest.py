@@ -267,3 +267,50 @@ class TestInternalMetadataTables:
         tables = {a.get("table") for _n, a in kg.all_nodes()}
         assert "sf_account" in tables
         assert "sf_src_1_objects" not in tables
+
+
+class TestSelectRecordObjects:
+    _objs = [
+        {"name": "Account", "is_custom": False},
+        {"name": "EmailMessage", "is_custom": False},  # standard, non-priority
+        {"name": "Progetto__c", "is_custom": True},
+    ]
+
+    def test_default_priority_plus_custom(self):
+        from app.connectors.salesforce_connector import select_record_objects
+
+        names = [o["name"] for o in select_record_objects(self._objs, None)]
+        assert names == ["Account", "Progetto__c"]  # EmailMessage excluded
+
+    def test_explicit_string_selection_wins(self):
+        from app.connectors.salesforce_connector import select_record_objects
+
+        names = [
+            o["name"]
+            for o in select_record_objects(self._objs, "EmailMessage, Progetto__c")
+        ]
+        assert names == ["EmailMessage", "Progetto__c"]
+
+    def test_explicit_list_selection(self):
+        from app.connectors.salesforce_connector import select_record_objects
+
+        names = [o["name"] for o in select_record_objects(self._objs, ["Account"])]
+        assert names == ["Account"]
+
+    def test_blank_explicit_falls_back_to_default(self):
+        from app.connectors.salesforce_connector import select_record_objects
+
+        names = [o["name"] for o in select_record_objects(self._objs, "  ,  ")]
+        assert names == ["Account", "Progetto__c"]
+
+
+class TestMaxObjects:
+    def test_default_and_env(self, monkeypatch):
+        from app.connectors.salesforce_connector import sf_max_objects
+
+        monkeypatch.delenv("FRA_SF_MAX_OBJECTS", raising=False)
+        assert sf_max_objects() == 40
+        monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "10")
+        assert sf_max_objects() == 10
+        monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "0")
+        assert sf_max_objects() == 40  # invalid → fallback

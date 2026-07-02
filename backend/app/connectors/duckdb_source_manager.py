@@ -1437,13 +1437,14 @@ class DuckDBSourceManager:
         import pandas as pd
 
         from .salesforce_connector import (
-            _PRIORITY_OBJECTS,
             SalesforceConnector,
             SalesforceAuthError,
             SalesforceAPIError,
             ingestable_field_names,
             load_salesforce_config,
             save_salesforce_schema,
+            select_record_objects,
+            sf_max_objects,
             sf_record_row_limit,
             build_salesforce_dataframes,
         )
@@ -1470,15 +1471,18 @@ class DuckDBSourceManager:
                 client_id=stored.get("client_id"),
                 client_secret=stored.get("client_secret"),
             ) as sf:
-                # Limit to priority objects only on free-tier deployments to
-                # avoid OOM on 512 MB instances during KG rebuild.
-                schema = sf.get_schema(max_objects=25)
+                # Bounded describe budget (one API call per object); priority
+                # business objects first, then custom (__c), then standard.
+                schema = sf.get_schema(max_objects=sf_max_objects())
 
                 if ingest_records:
                     row_limit = sf_record_row_limit()
-                    for obj in schema.objects:
-                        if obj.name not in _PRIORITY_OBJECTS:
-                            continue
+                    # Records: user's explicit selection (params.objects) wins;
+                    # default = priority standard objects + all custom objects.
+                    wanted = select_record_objects(
+                        schema.objects, cfg.params.get("objects")
+                    )
+                    for obj in wanted:
                         fields = ingestable_field_names(obj.fields)
                         if not fields:
                             continue
