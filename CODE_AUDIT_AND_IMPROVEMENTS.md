@@ -656,7 +656,7 @@ Follow-up residui:
 - MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
 - GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
 - stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
-- **unificazione dei due store metriche** (`sl_metrics` vs draft metrics del catalog): debito tecnico, NON parte dei 5 step del piano; da affrontare in un giro dedicato con analisi d'impatto (tocca molti endpoint).
+- **unificazione dei due store metriche** — PASSO 1 FATTO: `sl_metrics`/`sl_hierarchies`/`sl_segments` estratte da `erp_mock.db` (effimero!) nel nuovo `definitions_store.py` (`data_dir()/definitions.db`, migrazione one-shot con flag anti-resurrezione, seed builtin nel nuovo store). Ora c'è un solo store durabile per le definizioni; resta il passo 2 (fondere la *vista* draft del catalog con questo store — solo se emerge attrito reale).
 - integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
 - due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
 - `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).

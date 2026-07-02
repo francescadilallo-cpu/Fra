@@ -247,11 +247,21 @@ def init_db() -> None:
             _seed_orders(conn, quote_rows, product_ids)
             conn.commit()
 
-        # Always seed semantic definitions (idempotent per-row checks inside)
-        _seed_semantic_definitions(conn)
-        conn.commit()
     finally:
         conn.close()
+
+    # Semantic definitions (sl_metrics/hierarchies/segments) live in the
+    # persistent definitions store, not in this demo fixture DB — user rows
+    # must survive deploys. Seeding is idempotent per-row; the store migrates
+    # legacy rows from this DB once on first open.
+    from .definitions_store import get_definitions_connection  # noqa: PLC0415
+
+    dconn = get_definitions_connection()
+    try:
+        _seed_semantic_definitions(dconn)
+        dconn.commit()
+    finally:
+        dconn.close()
 
 
 def _seed_customers(conn: sqlite3.Connection) -> None:

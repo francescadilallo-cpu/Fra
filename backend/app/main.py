@@ -43,6 +43,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from .database import get_connection, get_table_counts, init_db
+from .definitions_store import get_definitions_connection
 from .paths import data_dir
 from .models import (
     DashboardData,
@@ -3589,7 +3590,7 @@ def get_metrics(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_metrics WHERE sector_id = ?{builtin_filter} "
@@ -3615,7 +3616,7 @@ def create_metric(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     mid = f"m-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_metrics
@@ -3653,7 +3654,7 @@ def delete_metric(
     metric_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_metrics WHERE id = ?", (metric_id,)
@@ -3677,7 +3678,7 @@ def get_hierarchies(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_hierarchies WHERE sector_id = ?{builtin_filter} "
@@ -3701,7 +3702,7 @@ def create_hierarchy(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     hid = f"h-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_hierarchies
@@ -3728,7 +3729,7 @@ def delete_hierarchy(
     hierarchy_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_hierarchies WHERE id = ?", (hierarchy_id,)
@@ -3752,7 +3753,7 @@ def get_segments(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_segments WHERE sector_id = ?{builtin_filter} "
@@ -3778,7 +3779,7 @@ def create_segment(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     sid = f"seg-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_segments
@@ -3806,7 +3807,7 @@ def delete_segment(
     segment_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_segments WHERE id = ?", (segment_id,)
@@ -3833,7 +3834,7 @@ def semantic_coverage(
     _ensure_semantic_loaded()
     hidden = _hidden_demo_tables(current_user)
     builtin_filter = " AND is_builtin = 0" if hidden else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         n_metrics = conn.execute(
             f"SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?{builtin_filter}",

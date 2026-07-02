@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (Persistenza definizioni: sl_* fuori dal DB demo effimero)
+
+**Bug di persistenza serio trovato aprendo il cantiere metriche**: `sl_metrics`,
+`sl_hierarchies` e `sl_segments` vivevano dentro `erp_mock.db` — la *fixture demo*
+al path del repo (correttamente esclusa da FRA_DATA_DIR perché read-only). Ma quelle
+tabelle contengono **dati utente** (metriche/gerarchie/segmenti custom + metriche
+applicate dall'Auto-Build) → anche col disco Render montato, sparivano a ogni deploy.
+
+- Nuovo `app/definitions_store.py`: le tre tabelle vivono in
+  `data_dir()/definitions.db` (WAL, stesso posture di concorrenza degli altri store).
+- **Migrazione one-shot** dal DB legacy al primo open (INSERT OR IGNORE per PK),
+  con flag in `_defs_meta` nel **nuovo** DB → le righe cancellate dall'utente non
+  "risorgono" ai boot successivi.
+- Seed dei builtin demo (`_seed_semantic_definitions`) ora scrive direttamente nel
+  nuovo store (idempotente per riga, come prima). API invariate: switchati i 10
+  endpoint CRUD in main.py + `insert_sl_metric` in apply.py; le altre letture
+  erp_mock (dati demo) restano dove sono.
+
+È di fatto il primo passo dell'unificazione store metriche: ora esiste **un solo
+store durabile** per le definizioni; il draft del catalog resta una vista derivata.
+
+Test: nuovo `test_definitions_store.py` (schema sotto FRA_DATA_DIR, migrazione
+one-shot, no-resurrezione, legacy assente); aggiornati i 3 seed-test di
+`test_database.py`. Suite **1238 passed**.
+
+---
+
 ## 2026-06-26 (SF ingest: streaming write anti-OOM + stadio 2 con righe totali)
 
 - **Memoria durante il sync Salesforce** (`_ingest_salesforce`): i DataFrame dei

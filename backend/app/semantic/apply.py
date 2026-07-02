@@ -105,9 +105,9 @@ def insert_sl_metric(
     formula = (formula or "").strip()
     if not name or not formula:
         return False
-    from ..database import get_connection
+    from ..definitions_store import get_definitions_connection
 
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         exists = conn.execute(
             "SELECT 1 FROM sl_metrics WHERE sector_id=? AND lower(name)=lower(?)",
