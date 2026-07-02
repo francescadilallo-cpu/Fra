@@ -1461,7 +1461,8 @@ class DuckDBSourceManager:
             "true",
             "yes",
         }
-        record_tables: list[tuple[str, "pd.DataFrame"]] = []
+        n_records = 0
+        n_record_tables = 0
 
         try:
             with SalesforceConnector(
@@ -1498,7 +1499,19 @@ class DuckDBSourceManager:
                         if not records:
                             continue
                         table = self._sf_record_table_name(cfg, obj.name)
-                        record_tables.append((table, pd.DataFrame(records)))
+                        # Write each object straight into DuckDB and release the
+                        # frame — peak memory stays at one object's rows instead
+                        # of the whole org (matters on 512 MB instances).
+                        records_df = pd.DataFrame(records)
+                        conn.execute(
+                            f'CREATE OR REPLACE TABLE "{table}" '
+                            "AS SELECT * FROM records_df"
+                        )
+                        self._row_counts[f"{cfg.id}.{table}"] = len(records_df)
+                        cfg.target_tables.append(table)
+                        n_records += len(records_df)
+                        n_record_tables += 1
+                        del records_df, records
         except (SalesforceAuthError, SalesforceAPIError) as exc:
             raise ValueError(str(exc)) from exc
 
@@ -1524,22 +1537,13 @@ class DuckDBSourceManager:
         self._row_counts[f"{cfg.id}.{fields_table}"] = n_fields
         cfg.target_tables.extend([objects_table, fields_table])
 
-        n_records = 0
-        for table, records_df in record_tables:  # noqa: B007 — df referenced in SQL
-            conn.execute(
-                f'CREATE OR REPLACE TABLE "{table}" AS SELECT * FROM records_df'
-            )
-            self._row_counts[f"{cfg.id}.{table}"] = len(records_df)
-            cfg.target_tables.append(table)
-            n_records += len(records_df)
-
         logger.info(
             "SF   %-25s %3d objects  %5d fields  %6d records in %d tables",
             cfg.label,
             n_objects,
             n_fields,
             n_records,
-            len(record_tables),
+            n_record_tables,
         )
 
     def _sf_record_table_name(self, cfg: SourceConfig, obj_name: str) -> str:

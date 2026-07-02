@@ -110,7 +110,13 @@ def run_build_pipeline(
         if not live_tables:
             run.skip(STAGE_SOURCES, "No data sources connected.")
         else:
-            run.finish(STAGE_SOURCES, f"{len(live_tables)} source tables")
+            total_rows = sum(
+                int((schema_info[t] or {}).get("row_count") or 0) for t in live_tables
+            )
+            run.finish(
+                STAGE_SOURCES,
+                f"{len(live_tables)} source tables · {total_rows:,} rows",
+            )
     except Exception as exc:  # noqa: BLE001
         logger.error("pipeline sources stage failed: %s", exc, exc_info=True)
         run.fail(STAGE_SOURCES, str(exc))

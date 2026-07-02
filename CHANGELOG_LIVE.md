@@ -10,6 +10,21 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-06-26 (SF ingest: streaming write anti-OOM + stadio 2 con righe totali)
+
+- **Memoria durante il sync Salesforce** (`_ingest_salesforce`): i DataFrame dei
+  record venivano accumulati tutti in lista e scritti a fine fetch → picco RAM =
+  intera org. Ora ogni oggetto viene scritto in DuckDB **dentro il loop** e il
+  frame rilasciato subito → picco = un oggetto alla volta (2000 righe default).
+  Rilevante sull'istanza da 512 MB.
+- **Auto-Build stadio 2 più informativo**: il dettaglio ora mostra anche le righe
+  totali ("5 source tables · 7,420 rows") — colpo d'occhio immediato su quanto
+  è stato letto dalle sorgenti.
+
+Suite completa **1235 passed**.
+
+---
+
 ## 2026-06-26 (KG: dedupe relazioni cross-call + draft senza tabelle interne)
 
 Due fix di coerenza del modello trovati continuando la review:
