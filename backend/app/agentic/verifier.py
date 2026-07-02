@@ -262,7 +262,13 @@ def verify_model(
     relations = draft.get("relations", []) or []
     templates = draft.get("templates", []) or []
 
-    entity_tables = {e.get("table") for e in entities if e.get("table")}
+    # Relations may reference entities by *name* (ontology/business KG nodes,
+    # e.g. "SalesOrder") or by *table* (schema-built KG) — both are valid
+    # endpoints, so the known-set carries both. Checking tables alone flagged
+    # every ontology relation as "no entity" on a perfectly healthy model.
+    entity_tables = {e.get("table") for e in entities if e.get("table")} | {
+        e.get("name") for e in entities if e.get("name")
+    }
     cols = _columns_by_table(schema_info)
 
     warnings: list[dict] = []

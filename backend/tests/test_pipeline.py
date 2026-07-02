@@ -676,3 +676,59 @@ class TestProposalEnrichment:
             ]
         }
         assert _proposal_entity_aliases(prop) == {"customers": ["clients", "accounts"]}
+
+
+class TestDraftEntityDedupe:
+    def test_business_entity_wins_and_inherits_columns(self):
+        from app.main import _dedupe_draft_entities
+
+        entities = [
+            {
+                "name": "sales_order_header",
+                "table": "sales_order_header",
+                "columns": ["id", "total_due"],
+                "column_types": {"id": "int"},
+            },
+            {"name": "SalesOrder", "table": "sales_order_header", "columns": []},
+            {"name": "customers", "table": "customers", "columns": ["id"]},
+        ]
+        out = _dedupe_draft_entities(entities)
+        assert [e["name"] for e in out] == ["SalesOrder", "customers"]
+        # Business twin had no columns → inherits them from the schema twin.
+        assert out[0]["columns"] == ["id", "total_due"]
+        assert out[0]["column_types"] == {"id": "int"}
+
+    def test_no_duplicates_passthrough(self):
+        from app.main import _dedupe_draft_entities
+
+        entities = [{"name": "a", "table": "a", "columns": ["x"]}]
+        assert _dedupe_draft_entities(entities) == entities
+
+
+class TestVerifierEntityNameRelations:
+    def test_relation_by_entity_name_not_flagged(self):
+        from app.agentic.verifier import verify_model
+
+        draft = {
+            "entities": [
+                {
+                    "name": "SalesOrder",
+                    "table": "sales_order_header",
+                    "columns": ["id"],
+                },
+                {"name": "Customer", "table": "account", "columns": ["id"]},
+            ],
+            # Ontology-built KGs emit relations keyed by entity NAME.
+            "relations": [
+                {
+                    "from_table": "SalesOrder",
+                    "to_table": "Customer",
+                    "edge_type": "PLACED_BY",
+                }
+            ],
+            "metrics": [],
+            "templates": [],
+        }
+        report = verify_model(draft)
+        kinds = [w.get("type") for w in report.get("warnings", [])]
+        assert "relation_unknown_table" not in kinds

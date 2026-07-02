@@ -988,6 +988,38 @@ def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
     return len(visible), edge_count
 
 
+def _dedupe_draft_entities(entities: list[dict]) -> list[dict]:
+    """Collapse duplicate entities that map to the same table.
+
+    The catalog can hold two entities for one table: the schema-discovered one
+    (named after the table) and the business one (ontology/proposal name).
+    Showing both duplicates the model in the UI and trips the verifier — keep
+    one per table, preferring the business name and inheriting columns from
+    the discarded twin when the kept one has none.
+    """
+    by_table: dict[str, dict] = {}
+    deduped: list[dict] = []
+    for e in entities:
+        tbl = e.get("table") or ""
+        prev = by_table.get(tbl)
+        if not tbl or prev is None:
+            if tbl:
+                by_table[tbl] = e
+            deduped.append(e)
+            continue
+        prev_biz = (prev.get("name") or "") != tbl
+        e_biz = (e.get("name") or "") != tbl
+        keep, drop = (e, prev) if (e_biz and not prev_biz) else (prev, e)
+        if not keep.get("columns") and drop.get("columns"):
+            keep["columns"] = drop["columns"]
+            if drop.get("column_types"):
+                keep["column_types"] = drop["column_types"]
+        if keep is not prev:
+            deduped[deduped.index(prev)] = keep
+            by_table[tbl] = keep
+    return deduped
+
+
 def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     """Return the current semantic layer state as an editable draft dict.
 
@@ -1008,7 +1040,9 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     kg = _semantic_state.get("kg")
 
     all_entities = catalog.get_draft_entities() if catalog else []
-    entities = [e for e in all_entities if e["table"] not in hidden]
+    entities = _dedupe_draft_entities(
+        [e for e in all_entities if e["table"] not in hidden]
+    )
     metrics = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.

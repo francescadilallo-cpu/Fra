@@ -10,6 +10,32 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Smoke test HTTP end-to-end + 2 fix trovati dal vivo)
+
+Validazione end-to-end del flusso HTTP reale su backend locale pulito
+(FRA_DATA_DIR scratch): login live/demo → `POST /api/pipeline/run` (**risponde in
+63ms** con `running=true` — fix background verificato) → polling → draft → ask.
+Confermato anche: tutti gli store (incluso il nuovo `definitions.db`) creati
+sotto `FRA_DATA_DIR`; run live senza sorgenti = skip puliti; run demo (seed
+`FRA_SEED_DEMO_SOURCES`) = 14 tabelle · 233.995 righe, 25 template replayed.
+
+Il giro ha scovato **2 difetti reali** (demo sano segnava "13 warnings, 11 blocking"):
+
+- **Verifier — falsi bloccanti sulle relazioni**: il known-set era costruito solo
+  con le *tabelle* delle entità, ma i KG da ontologia emettono relazioni per
+  *nome* entità ("SalesOrder") → ogni relazione ontologica segnata "no entity".
+  Ora il set include nomi ∪ tabelle.
+- **Draft — entità duplicate per tabella**: il catalog tiene sia l'entità
+  schema-discovered (nome=tabella) sia quella business (ontologia/proposta) →
+  doppioni in UI e nel verifier. Nuovo `_dedupe_draft_entities()` (puro):
+  una entità per tabella, vince il nome business, eredita le colonne dalla
+  gemella scartata se ne è priva (risolve anche "Entity has no columns").
+
+Dopo i fix, stessa run demo: **0 warnings, 0 blocking**; entità 21→14;
+template 49→36 (spariti quelli dei doppioni). Test: +3. Suite **1241 passed**.
+
+---
+
 ## 2026-06-26 (Persistenza definizioni: sl_* fuori dal DB demo effimero)
 
 **Bug di persistenza serio trovato aprendo il cantiere metriche**: `sl_metrics`,
