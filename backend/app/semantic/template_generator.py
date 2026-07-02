@@ -100,7 +100,19 @@ def _parse_formula(formula: str) -> tuple[str | None, str | None]:
 
 
 def _kws(*phrases: str) -> list[str]:
-    return [p for p in phrases if p]
+    """Keyword list with snake_case space-variants.
+
+    Users ask "how many erp orders", not "how many erp_orders" — every phrase
+    containing an underscore also matches with spaces.
+    """
+    out: list[str] = []
+    for p in phrases:
+        if not p:
+            continue
+        for v in (p, p.replace("_", " ")):
+            if v not in out:
+                out.append(v)
+    return out
 
 
 def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
@@ -167,8 +179,8 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
         )
         templates.append(
             {
-                "name": f"{label} totale",
-                "description": f"Totale di {label}{unit_str} con filtro anno opzionale",
+                "name": f"Total {label}",
+                "description": f"Total {label}{unit_str}, with optional year filter",
                 "sql_query": sql_total,
                 "keywords": _kws(
                     f"totale {label.lower()}",
@@ -191,8 +203,8 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
         )
         templates.append(
             {
-                "name": f"{label} medio",
-                "description": f"Media di {label}{unit_str}",
+                "name": f"Average {label}",
+                "description": f"Average {label}{unit_str}",
                 "sql_query": sql_avg,
                 "keywords": _kws(
                     f"media {label.lower()}",
@@ -218,8 +230,8 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
             )
             templates.append(
                 {
-                    "name": f"{label} per {seg}",
-                    "description": f"{label} raggruppato per {seg}",
+                    "name": f"{label} by {seg}",
+                    "description": f"{label} grouped by {seg}",
                     "sql_query": sql_seg,
                     "keywords": _kws(
                         f"per {seg.lower()}",
@@ -256,8 +268,8 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
             )
             templates.append(
                 {
-                    "name": f"Top {ent_label} per {label}",
-                    "description": f"Classifica {ent_label} ordinata per {label}",
+                    "name": f"Top {ent_label} by {label}",
+                    "description": f"{ent_label} ranked by {label}",
                     "sql_query": sql_top,
                     "keywords": _kws(
                         f"top {ent_label.lower()}",
@@ -285,9 +297,9 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
         # Count
         templates.append(
             {
-                "name": f"Quanti {ename}",
-                "description": f"Numero totale di record in {tbl}",
-                "sql_query": f"SELECT COUNT(*) AS totale_{tbl}\nFROM {tbl}",
+                "name": f"How many {ename}",
+                "description": f"Total record count in {tbl}",
+                "sql_query": f"SELECT COUNT(*) AS total_{tbl}\nFROM {tbl}",
                 "keywords": _kws(
                     f"quanti {ename.lower()}",
                     f"how many {ename.lower()}",
@@ -305,8 +317,8 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
         for seg in seg_cols[:2]:
             templates.append(
                 {
-                    "name": f"{ename} per {seg}",
-                    "description": f"Distribuzione di {ename} per {seg}",
+                    "name": f"{ename} by {seg}",
+                    "description": f"Distribution of {ename} by {seg}",
                     "sql_query": (
                         f"SELECT {seg}, COUNT(*) AS count\n"
                         f"FROM {tbl}\n"
@@ -329,13 +341,13 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
         if date_col:
             templates.append(
                 {
-                    "name": f"Nuovi {ename} per anno",
-                    "description": f"Numero di {ename} acquisiti per anno",
+                    "name": f"New {ename} per year",
+                    "description": f"New {ename} per year",
                     "sql_query": (
-                        f"SELECT YEAR({date_col}) AS anno, COUNT(*) AS nuovi\n"
+                        f"SELECT YEAR({date_col}) AS year, COUNT(*) AS new_count\n"
                         f"FROM {tbl}\n"
                         f"GROUP BY YEAR({date_col})\n"
-                        f"ORDER BY anno DESC"
+                        f"ORDER BY year DESC"
                     ),
                     "keywords": _kws(
                         f"nuovi {ename.lower()}",

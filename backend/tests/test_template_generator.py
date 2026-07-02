@@ -332,3 +332,81 @@ class TestGenerateTemplates:
         result = generate_templates_from_draft(MINIMAL_DRAFT)
         for t in result:
             assert isinstance(t["keywords"], list)
+
+
+class TestKeywordSpaceVariants:
+    def test_snake_case_gets_space_variant(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        draft = {
+            "entities": [
+                {
+                    "name": "erp_orders",
+                    "table": "erp_orders",
+                    "columns": ["order_id", "total"],
+                }
+            ],
+            "metrics": [],
+            "relations": [],
+        }
+        tpls = generate_templates_from_draft(draft)
+        count_tpl = next(t for t in tpls if t["name"].startswith("How many"))
+        # Users type spaces, not underscores.
+        assert "how many erp orders" in count_tpl["keywords"]
+        assert "how many erp_orders" in count_tpl["keywords"]
+
+
+class TestUpsertPrunesStaleAutoTemplates:
+    def test_renamed_auto_template_retires_old_name(self, tmp_path):
+        from app.metadata.catalog import MetadataCatalog
+
+        cat = MetadataCatalog(f"sqlite:///{tmp_path / 'cat.db'}")
+        v1 = [
+            {
+                "name": "Quanti x",
+                "sql_query": "SELECT 1",
+                "keywords": [],
+                "sources": ["x"],
+            }
+        ]
+        cat.upsert_auto_templates(v1)
+        v2 = [
+            {
+                "name": "How many x",
+                "sql_query": "SELECT 1",
+                "keywords": [],
+                "sources": ["x"],
+            }
+        ]
+        cat.upsert_auto_templates(v2)
+        names = {t["name"] for t in cat.list_templates()}
+        assert "How many x" in names
+        assert "Quanti x" not in names  # stale name retired
+
+    def test_templates_on_other_tables_untouched(self, tmp_path):
+        from app.metadata.catalog import MetadataCatalog
+
+        cat = MetadataCatalog(f"sqlite:///{tmp_path / 'cat.db'}")
+        cat.upsert_auto_templates(
+            [
+                {
+                    "name": "Demo tpl",
+                    "sql_query": "SELECT 1",
+                    "keywords": [],
+                    "sources": ["dipendenti_hr"],
+                }
+            ]
+        )
+        # Regenerating templates for a different table must not retire it.
+        cat.upsert_auto_templates(
+            [
+                {
+                    "name": "How many x",
+                    "sql_query": "SELECT 1",
+                    "keywords": [],
+                    "sources": ["x"],
+                }
+            ]
+        )
+        names = {t["name"] for t in cat.list_templates()}
+        assert {"Demo tpl", "How many x"} <= names

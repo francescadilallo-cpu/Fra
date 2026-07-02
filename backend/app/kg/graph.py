@@ -418,7 +418,21 @@ class KnowledgeGraph:
             self._g.number_of_edges(),
         )
 
-    def build_from_schema(self, mgr) -> None:
+    @staticmethod
+    def ontology_covered_tables(ontology) -> set[str]:
+        """DuckDB table names mapped by the ontology's entities (normalised)."""
+        covered: set[str] = set()
+        entities_cfg = getattr(ontology, "_entities_cfg", {}) or {}
+        for cfg in entities_cfg.values():
+            if not isinstance(cfg, dict):
+                continue
+            for src in cfg.get("sources") or []:
+                raw = src.get("table", "") if isinstance(src, dict) else ""
+                if raw:
+                    covered.add(_normalize_table_name(raw))
+        return covered
+
+    def build_from_schema(self, mgr, include: set[str] | None = None) -> None:
         """Build a lightweight schema graph from the DuckDB unified snapshot.
 
         Creates one representative node per table and detects potential FK
@@ -427,6 +441,9 @@ class KnowledgeGraph:
         making it safe and fast for any schema size.
 
         Suitable as a zero-config fallback when no ontology YAML is present.
+        With *include*, only those tables are added — used to augment an
+        ontology-built graph with user-registered tables the ontology doesn't
+        cover, so their FK inference and NL linking still work.
         """
         logger.info("Building knowledge graph from schema…")
 
@@ -435,6 +452,9 @@ class KnowledgeGraph:
         except Exception as exc:
             logger.warning("build_from_schema: schema discovery failed: %s", exc)
             return
+
+        if include is not None:
+            schema = {t: info for t, info in schema.items() if t in include}
 
         # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are
         # not business data — keep them out of the graph so they never surface

@@ -1007,6 +1007,27 @@ class MetadataCatalog:
                     )
                     s.add(row)
                     count += 1
+
+            # Retire stale auto-templates for the tables just regenerated: a
+            # rename (e.g. Italian → English template names) would otherwise
+            # leave the old name active forever alongside the new one.
+            # Conservative: only rows whose sources are entirely within the
+            # regenerated tables — templates on other tables (e.g. the demo
+            # dataset, absent from a live user's draft) are never touched.
+            new_names = {t["name"] for t in templates}
+            touched = {src for t in templates for src in (t.get("sources") or [])}
+            if touched:
+                for row in (
+                    s.query(QueryTemplateRow)
+                    .filter_by(auto_generated=1, is_active=1)
+                    .all()
+                ):
+                    if row.name in new_names:
+                        continue
+                    row_sources = set(json.loads(row.sources_json or "[]"))
+                    if row_sources and row_sources <= touched:
+                        row.is_active = 0
+                        row.updated_at = now
             s.commit()
         return count
 

@@ -10,6 +10,35 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Smoke "sorgente utente → modello" live: 3 fix)
+
+Secondo smoke end-to-end, stavolta sul percorso del cliente: 2 sorgenti CSV
+registrate via `POST /api/sources` (inline) → Auto-Build da utente **live** →
+draft → domanda NL. Trovati e risolti tre difetti:
+
+1. **Le tabelle utente non entravano mai nel KG** quando l'ontologia demo è
+   presente (sempre): `build_from_ontology` mappa solo le entità AW → niente
+   nodi per le tabelle utente → niente FK inference né linking NL. Ora, dopo il
+   build da ontologia, `build_from_schema(mgr, include=<tabelle non coperte>)`
+   aggiunge i nodi schema per le sole tabelle utente
+   (`KnowledgeGraph.ontology_covered_tables`). Verificato: la FK
+   `erp_orders.account_id → crm_accounts.id` ora viene scoperta dal value-scan.
+2. **Template auto-generati in italiano** ("Quanti X", alias `totale_`/`anno`)
+   — violava la regola live no-italiano. Nomi/descrizioni/alias ora in inglese;
+   `upsert_auto_templates` **ritira i nomi vecchi** (solo auto-generati, solo
+   sulle tabelle rigenerate — i template demo restano intatti).
+3. **Matching NL snake_case nei template**: "how many erp orders" non matchava
+   il keyword "how many erp_orders". `_kws` ora emette anche la variante con
+   spazi. Verificato: "how many erp orders?" → risposta **29** (esatta).
+
+Hardening extra: filtro template del draft anche per **tabelle nel SQL** (non
+solo il campo `sources`) contro leak demo→live con `sources` vuoto.
+
+Run finale su ambiente pulito: 0 warnings, 1 relazione, template inglesi,
+domanda NL risposta. Test: +4. Suite **1244 passed**.
+
+---
+
 ## 2026-07-02 (Smoke test HTTP end-to-end + 2 fix trovati dal vivo)
 
 Validazione end-to-end del flusso HTTP reale su backend locale pulito

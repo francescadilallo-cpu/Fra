@@ -657,6 +657,16 @@ def _ensure_semantic_loaded() -> None:
             # Schema-driven: reads entity→table mappings from the YAML, works with
             # any registered source including custom domains beyond ERP/CRM/HR/PIM.
             kg.build_from_ontology(_mgr, ontology)
+            # User-registered tables the ontology doesn't map would otherwise
+            # never enter the graph — no FK inference, no NL linking. Augment
+            # with schema nodes for exactly those tables.
+            try:
+                covered = KnowledgeGraph.ontology_covered_tables(ontology)
+                extra = set(_mgr.get_schema_info()) - covered
+                if extra:
+                    kg.build_from_schema(_mgr, include=extra)
+            except Exception as _aug_exc:  # noqa: BLE001
+                logger.warning("KG schema augmentation skipped: %s", _aug_exc)
         else:
             # Fallback: schema-driven, works with any registered source.
             kg.build_from_schema(_mgr)
@@ -807,6 +817,15 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
             # excluded inside build_from_schema via mgr.internal_metadata_tables.
             if ontology is not None:
                 new_kg.build_from_ontology(mgr, ontology)
+                # Cover user tables the ontology doesn't map (see the twin
+                # block in _ensure_semantic_loaded).
+                try:
+                    covered = KnowledgeGraph.ontology_covered_tables(ontology)
+                    extra = set(mgr.get_schema_info()) - covered
+                    if extra:
+                        new_kg.build_from_schema(mgr, include=extra)
+                except Exception as _aug_exc:  # noqa: BLE001
+                    logger.warning("KG schema augmentation skipped: %s", _aug_exc)
             else:
                 new_kg.build_from_schema(mgr)
             # Re-fold manual/applied relations + context concepts into the KG.
@@ -1110,9 +1129,23 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
 
     templates = catalog.list_templates() if catalog else []
     if hidden:
-        templates = [
-            t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
-        ]
+        # A template belongs to the demo dataset if its declared sources OR the
+        # tables referenced in its SQL touch a hidden table. Checking sources
+        # alone let demo templates with an empty sources list leak into live
+        # drafts (and their Italian names into the live verification report).
+        _hidden_lower = {str(h).lower() for h in hidden_keys}
+
+        def _refs_hidden(t: dict) -> bool:
+            if set(t.get("sources") or []) & hidden_keys:
+                return True
+            sql_tokens = set(
+                re.findall(
+                    r"[A-Za-z_][A-Za-z0-9_]*", (t.get("sql_query") or "").lower()
+                )
+            )
+            return bool(sql_tokens & _hidden_lower)
+
+        templates = [t for t in templates if not _refs_hidden(t)]
         if not entities:
             templates = []
 
