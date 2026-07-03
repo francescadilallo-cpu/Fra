@@ -773,3 +773,61 @@ class TestRuleBasedIntegrateFallback:
 
         out = interpret_instruction("link ghosts to Accounts via x", self._draft)
         assert out["ops"] == []
+
+
+class TestSameAsCoverageCheck:
+    def _runner(self, missing_by_query: dict):
+        def run(sql: str):
+            for key, n in missing_by_query.items():
+                if key in sql:
+                    return [{"n": n}]
+            return [{"n": 0}]
+
+        return run
+
+    _draft = {
+        "entities": [
+            {"name": "crm_accounts", "table": "crm_accounts", "columns": ["id"]},
+            {
+                "name": "legacy_customers",
+                "table": "legacy_customers",
+                "columns": ["id"],
+            },
+        ],
+        "metrics": [],
+        "templates": [],
+        "relations": [
+            {
+                "from_table": "crm_accounts",
+                "to_table": "legacy_customers",
+                "edge_type": "SAME_AS",
+            },
+        ],
+    }
+    _schema = {
+        "crm_accounts": {"columns": [{"name": "id"}]},
+        "legacy_customers": {"columns": [{"name": "id"}]},
+    }
+
+    def test_gap_reported_as_advisory(self):
+        report = verify_model(
+            self._draft,
+            schema_info=self._schema,
+            query_runner=self._runner({'(SELECT "id" FROM "legacy_customers"': 1}),
+        )
+        gaps = [
+            a for a in report["advisory"] if a.get("type") == "same_as_coverage_gap"
+        ]
+        assert len(gaps) == 1
+        assert "1 record(s) of 'legacy_customers' are missing" in gaps[0]["detail"]
+        assert report["ok"] is True  # advisory only — never blocks
+
+    def test_full_coverage_no_advisory(self):
+        report = verify_model(
+            self._draft,
+            schema_info=self._schema,
+            query_runner=self._runner({}),
+        )
+        assert not [
+            a for a in report["advisory"] if a.get("type") == "same_as_coverage_gap"
+        ]

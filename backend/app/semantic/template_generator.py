@@ -99,6 +99,15 @@ def _parse_formula(formula: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _pk_col(table: str, columns: list[str]) -> str | None:
+    """Primary-key candidate column (same rule as the KG scans)."""
+    tl = table.lower()
+    for c in columns:
+        if c.lower() in ("id", "pk", f"{tl}_id", f"{tl}id"):
+            return c
+    return None
+
+
 def _kws(*phrases: str) -> list[str]:
     """Keyword list with snake_case space-variants.
 
@@ -361,6 +370,49 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
                     "auto_generated": True,
                 }
             )
+
+    # ── Merged-entity templates (SAME_AS bridges) ─────────────────────────────
+    # Two tables declared the same entity (cross-source merge) get a distinct-
+    # union count, so "how many unique customers" spans BOTH sources instead of
+    # silently counting one table.
+    for r in relations:
+        if r.get("edge_type") != "SAME_AS":
+            continue
+        ta, tb = r.get("from_table", ""), r.get("to_table", "")
+        ea, eb = table_to_entity.get(ta), table_to_entity.get(tb)
+        if not (ea and eb):
+            continue
+        pk_a = _pk_col(ta, ea.get("columns", []))
+        pk_b = _pk_col(tb, eb.get("columns", []))
+        if not (pk_a and pk_b):
+            continue
+        base_a, base_b = ta.split("_")[-1], tb.split("_")[-1]
+        templates.append(
+            {
+                "name": f"Unique {ta} across sources",
+                "description": (
+                    f"Distinct records across {ta} and {tb} — the two tables "
+                    "describe the same entity from different sources"
+                ),
+                "sql_query": (
+                    f"SELECT COUNT(*) AS unique_records\n"
+                    f'FROM (SELECT "{pk_a}" AS k FROM {ta}\n'
+                    f'      UNION SELECT "{pk_b}" FROM {tb})'
+                ),
+                "keywords": _kws(
+                    f"unique {ta}",
+                    f"unique {tb}",
+                    f"unique {base_a}",
+                    f"unique {base_b}",
+                    f"{base_a} across sources",
+                    f"{base_b} across sources",
+                    f"all {base_a} across sources",
+                    "across sources",
+                ),
+                "sources": [ta, tb],
+                "auto_generated": True,
+            }
+        )
 
     # Deduplicate by name (first wins)
     seen: set[str] = set()

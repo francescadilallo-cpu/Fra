@@ -410,3 +410,53 @@ class TestUpsertPrunesStaleAutoTemplates:
         )
         names = {t["name"] for t in cat.list_templates()}
         assert {"Demo tpl", "How many x"} <= names
+
+
+class TestMergedEntityTemplates:
+    _draft = {
+        "entities": [
+            {
+                "name": "crm_accounts",
+                "table": "crm_accounts",
+                "columns": ["id", "company"],
+            },
+            {
+                "name": "legacy_customers",
+                "table": "legacy_customers",
+                "columns": ["id", "company", "phone"],
+            },
+        ],
+        "metrics": [],
+        "relations": [
+            {
+                "from_table": "crm_accounts",
+                "to_table": "legacy_customers",
+                "edge_type": "SAME_AS",
+            },
+        ],
+    }
+
+    def test_union_count_template_generated(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        tpls = generate_templates_from_draft(self._draft)
+        merged = next(t for t in tpls if "across sources" in t["name"])
+        assert "UNION" in merged["sql_query"]
+        assert set(merged["sources"]) == {"crm_accounts", "legacy_customers"}
+        # "how many unique customers" must be matchable.
+        assert "unique customers" in merged["keywords"]
+        assert "unique accounts" in merged["keywords"]
+
+    def test_no_template_without_pk(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        draft = {
+            "entities": [
+                {"name": "a", "table": "a", "columns": ["x"]},
+                {"name": "b", "table": "b", "columns": ["y"]},
+            ],
+            "metrics": [],
+            "relations": [{"from_table": "a", "to_table": "b", "edge_type": "SAME_AS"}],
+        }
+        tpls = generate_templates_from_draft(draft)
+        assert not any("across sources" in t["name"] for t in tpls)

@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Merge interrogabile + verifica di copertura cross-source)
+
+Il merge SAME_AS diventa **interrogabile** e **verificato** (stadio 5):
+
+- **Template merged-entity** (`generate_templates_from_draft`): per ogni coppia
+  SAME_AS con PK riconoscibili, template `COUNT` su **UNION deduplicata** delle
+  due tabelle ("Unique <t> across sources"), con keyword sulle parole base
+  ("unique customers", "unique accounts", "across sources"). "How many unique
+  customers?" ora conta l'entità fusa, non una tabella sola.
+- **Check di copertura nello stadio 5** (`_check_same_as_coverage`): per ogni
+  coppia SAME_AS, `EXCEPT` bidirezionale sulle PK (bounded, max 10 coppie) →
+  nota **advisory** quando una fonte ha record che mancano all'altra, con
+  suggerimento ("aggregate on the union for complete numbers"). Non blocca mai.
+
+Verifica live (4 fonti): advisory "1 record of legacy_customers missing from
+crm_accounts" ✅; ask "how many unique customers?" → **9** (8 comuni + 1 solo
+in legacy — unione esatta). Test: +4. Suite **1260 passed**.
+
+---
+
 ## 2026-07-02 (N fonti: merge same-entity nel Knowledge Graph)
 
 Con N fonti due tabelle possono descrivere la **stessa entità di business**

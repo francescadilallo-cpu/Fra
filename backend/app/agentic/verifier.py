@@ -157,6 +157,65 @@ def _check_templates(
     return warnings, tested
 
 
+_MAX_SAME_AS_CHECKS = 10
+
+
+def _pk_of(table: str, cols: dict[str, set[str]]) -> str | None:
+    """Primary-key candidate column of *table* (same rule as the KG scans)."""
+    tl = table.lower()
+    for c in cols.get(table, set()):
+        if c.lower() in ("id", "pk", f"{tl}_id", f"{tl}id"):
+            return c
+    return None
+
+
+def _check_same_as_coverage(
+    relations: list[dict],
+    cols: dict[str, set[str]],
+    query_runner: Callable[[str], Any],
+) -> list[dict]:
+    """Reliability check on cross-source entity merges (SAME_AS bridges).
+
+    Two tables declared the same entity should cover the same records; keys
+    present in one but missing from the other are a data-consistency finding
+    the user should know about. Advisory (info) — a partial export is often
+    legitimate, but it changes which table you should aggregate on.
+    """
+    notes: list[dict] = []
+    checked = 0
+    for rel in relations:
+        if rel.get("edge_type") != "SAME_AS" or checked >= _MAX_SAME_AS_CHECKS:
+            continue
+        ta, tb = rel.get("from_table"), rel.get("to_table")
+        pk_a, pk_b = _pk_of(ta or "", cols), _pk_of(tb or "", cols)
+        if not (ta and tb and pk_a and pk_b):
+            continue
+        checked += 1
+        for x, px, y, py in ((ta, pk_a, tb, pk_b), (tb, pk_b, ta, pk_a)):
+            try:
+                rows = query_runner(
+                    f'SELECT COUNT(*) AS n FROM (SELECT "{px}" FROM "{x}" '
+                    f'EXCEPT SELECT "{py}" FROM "{y}")'
+                )
+                n = int((rows or [{}])[0].get("n") or 0)
+            except Exception:  # noqa: BLE001 — advisory check, never blocks
+                continue
+            if n > 0:
+                notes.append(
+                    {
+                        "type": "same_as_coverage_gap",
+                        "severity": "info",
+                        "detail": (
+                            f"'{x}' and '{y}' describe the same entity, but "
+                            f"{n} record(s) of '{x}' are missing from '{y}' — "
+                            f"aggregate on the union (or on '{x}') for complete "
+                            "numbers."
+                        ),
+                    }
+                )
+    return notes
+
+
 def _check_faithfulness(
     questions: list[str], answer_runner: Callable[[str], dict]
 ) -> tuple[list[dict], float | None, int]:
@@ -290,6 +349,8 @@ def verify_model(
         warnings += f_warnings
 
     advisory = _llm_critique(draft) if use_llm else []
+    if query_runner is not None:
+        advisory += _check_same_as_coverage(relations, cols, query_runner)
 
     checks = [
         "relation_unknown_table",
@@ -299,6 +360,7 @@ def verify_model(
         "entity_no_columns",
         "duplicate_entity_table",
         "template_query_failed",
+        "same_as_coverage_gap",
         "low_faithfulness",
     ]
 
