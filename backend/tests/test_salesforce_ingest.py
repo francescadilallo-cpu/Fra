@@ -366,3 +366,186 @@ class TestRelationDedupe:
         # Re-ingesting (e.g. catalog + metadata both carry it) still no growth.
         kg.ingest_manual_relations(declared)
         assert kg.edge_count == edges_before
+
+
+class TestSameEntityMerge:
+    """Phase 4 of build_from_schema: SAME_AS bridges across N sources."""
+
+    def _mgr(self, schema, data):
+        class _Mgr:
+            def get_schema_info(self_inner):
+                return schema
+
+            def execute(self_inner, sql, *a, **kw):
+                import re as _re
+
+                m = _re.search(r'"(\w+)" AS v FROM "(\w+)"', sql)
+                if not m:
+                    return []
+                col, table = m.group(1), m.group(2)
+                return [{"v": v} for v in data.get((table, col), set())]
+
+        return _Mgr()
+
+    _schema = {
+        "crm_accounts": {
+            "columns": [
+                {"name": "id"},
+                {"name": "company"},
+                {"name": "region"},
+            ]
+        },
+        "legacy_customers": {
+            "columns": [
+                {"name": "id"},
+                {"name": "company"},
+                {"name": "phone"},
+            ]
+        },
+    }
+
+    def _edges(self, kg):
+        return {
+            (s.split(":")[0], d.split(":")[0], dd.get("type"))
+            for s, d, dd in kg.iter_edges()
+        }
+
+    def test_merge_when_keys_and_columns_agree(self):
+        from app.kg.graph import KnowledgeGraph
+
+        ids = {str(i) for i in range(1, 9)}
+        data = {
+            ("crm_accounts", "id"): ids,
+            ("legacy_customers", "id"): ids | {"9"},  # jaccard 8/9 ≈ 0.89
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(self._schema, data))
+        assert ("crm_accounts", "legacy_customers", "SAME_AS") in self._edges(kg)
+
+    def test_no_merge_when_keys_disjoint(self):
+        from app.kg.graph import KnowledgeGraph
+
+        data = {
+            ("crm_accounts", "id"): {"1", "2", "3", "4", "5"},
+            ("legacy_customers", "id"): {"91", "92", "93", "94", "95"},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(self._schema, data))
+        assert not any(t == "SAME_AS" for _s, _d, t in self._edges(kg))
+
+    def test_no_merge_when_columns_differ(self):
+        from app.kg.graph import KnowledgeGraph
+
+        schema = {
+            "crm_accounts": {
+                "columns": [{"name": "id"}, {"name": "company"}, {"name": "region"}]
+            },
+            "shipments": {
+                "columns": [{"name": "id"}, {"name": "carrier"}, {"name": "weight"}]
+            },
+        }
+        ids = {str(i) for i in range(1, 9)}  # same generic ids 1..8
+        data = {("crm_accounts", "id"): ids, ("shipments", "id"): ids}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(schema, data))
+        assert not any(t == "SAME_AS" for _s, _d, t in self._edges(kg))
+
+    def test_gate_off_disables_merge(self, monkeypatch):
+        from app.kg.graph import KnowledgeGraph
+
+        monkeypatch.setenv("FRA_KG_ENTITY_MERGE", "false")
+        ids = {str(i) for i in range(1, 9)}
+        data = {("crm_accounts", "id"): ids, ("legacy_customers", "id"): ids}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(self._schema, data))
+        assert not any(t == "SAME_AS" for _s, _d, t in self._edges(kg))
+
+    def test_graph_rag_narrates_merge_and_pulls_both_tables(self):
+        from app.kg.graph import KnowledgeGraph
+        from app.semantic.graph_rag import build_graph_context
+
+        ids = {str(i) for i in range(1, 9)}
+        data = {("crm_accounts", "id"): ids, ("legacy_customers", "id"): ids}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(self._schema, data))
+        gr = build_graph_context(kg, "show all accounts")
+        assert "same entity as" in gr["context"]
+        assert {"crm_accounts", "legacy_customers"} <= set(gr["tables"])
+
+    def test_fk_routed_to_canonical_twin(self):
+        """A FK whose values match BOTH merged twins is not ambiguous — it is
+        routed to one deterministic canonical twin instead of being dropped."""
+        from app.kg.graph import KnowledgeGraph
+
+        schema = dict(self._schema)
+        schema["erp_orders"] = {
+            "columns": [{"name": "order_id"}, {"name": "account_id"}]
+        }
+        ids = {str(i) for i in range(1, 9)}
+        data = {
+            ("crm_accounts", "id"): ids,
+            ("legacy_customers", "id"): ids,
+            ("erp_orders", "account_id"): {"1", "2", "3", "4", "5"},
+            ("erp_orders", "order_id"): {str(i) for i in range(101, 130)},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(schema, data))
+        edges = self._edges(kg)
+        assert ("erp_orders", "crm_accounts", "FK_account_id") in edges  # sorted first
+        assert ("crm_accounts", "legacy_customers", "SAME_AS") in edges
+
+    def test_no_fk_between_merged_twins(self):
+        """The twins' own id↔id overlap must not produce FK edges — the
+        SAME_AS merge already carries that knowledge."""
+        from app.kg.graph import KnowledgeGraph
+
+        ids = {str(i) for i in range(1, 9)}
+        data = {("crm_accounts", "id"): ids, ("legacy_customers", "id"): ids}
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(self._schema, data))
+        fk_types = {t for _s, _d, t in self._edges(kg) if t and t.startswith("FK_")}
+        assert fk_types == set()  # only the SAME_AS edge
+
+    def test_generic_id_not_routed_to_twins(self):
+        """emp_id values overlapping both twins is a generic domain, not a FK:
+        without name affinity the twin routing must drop it."""
+        from app.kg.graph import KnowledgeGraph
+
+        schema = dict(self._schema)
+        schema["hr_people"] = {"columns": [{"name": "emp_id"}, {"name": "full_name"}]}
+        ids = {str(i) for i in range(1, 9)}
+        data = {
+            ("crm_accounts", "id"): ids,
+            ("legacy_customers", "id"): ids,
+            ("hr_people", "emp_id"): {"1", "2", "3", "4", "5", "6"},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(schema, data))
+        assert not any(
+            s == "hr_people" and t and t.startswith("FK_")
+            for s, _d, t in self._edges(kg)
+        )
+
+    def test_fk_routed_to_affine_twin_not_alphabetical(self):
+        """customer_id must route to legacy_CUSTOMERS (name-affine), not to
+        crm_accounts (alphabetically first)."""
+        from app.kg.graph import KnowledgeGraph
+
+        schema = dict(self._schema)
+        schema["tickets"] = {
+            "columns": [{"name": "ticket_id"}, {"name": "customer_id"}]
+        }
+        ids = {str(i) for i in range(1, 9)}
+        data = {
+            ("crm_accounts", "id"): ids,
+            ("legacy_customers", "id"): ids,
+            ("tickets", "customer_id"): {"1", "2", "3", "4", "5"},
+            ("tickets", "ticket_id"): {str(i) for i in range(900, 930)},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(schema, data))
+        assert (
+            "tickets",
+            "legacy_customers",
+            "FK_customer_id",
+        ) in self._edges(kg)

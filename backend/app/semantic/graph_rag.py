@@ -232,6 +232,9 @@ def build_graph_context(
                 if direction == "out"
                 else f"measured by metric {other}"
             )
+        if etype == "SAME_AS":
+            # Cross-source entity merge: both tables describe the same records.
+            return f"same entity as {other} (cross-source — same records)"
         return f"linked to {other}"
 
     lines: list[str] = []

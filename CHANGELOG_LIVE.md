@@ -10,6 +10,34 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (N fonti: merge same-entity nel Knowledge Graph)
+
+Con N fonti due tabelle possono descrivere la **stessa entità di business**
+(es. `crm_accounts` e `legacy_customers` = gli stessi clienti da due sistemi).
+Nuova **Fase 3 di `build_from_schema`**: merge same-entity via archi `SAME_AS`.
+
+- **Criteri conservativi (entrambi richiesti)**: le chiavi identificano gli
+  stessi record (Jaccard bidirezionale sui campioni PK ≥ `_MERGE_KEY_JACCARD`
+  =0.6, ≥4 distinti per lato) **e** la struttura combacia (colonne condivise ≥
+  `_MERGE_COL_OVERLAP`=0.4 del set minore). Bounded (`_MERGE_MAX_PAIRS`=100),
+  gated da `FRA_KG_ENTITY_MERGE`, degrade su errore.
+- **FK scan merge-aware** (ora Fase 4, dopo il merge): una colonna i cui valori
+  combaciano con **più gemelle SAME_AS** non è ambigua — è la stessa entità.
+  Viene instradata alla gemella **affine per nome** (`customer_id` →
+  `legacy_customers`, non alla prima alfabetica); senza affinità di nome
+  (`emp_id`) si scarta — chiude il falso positivo che il routing cieco
+  reintroduceva. Le "FK" id↔id tra gemelle sono soppresse (ridondanti col merge).
+- **GraphRAG**: gli archi SAME_AS entrano nel contesto come "same entity as X
+  (cross-source — same records)" e portano entrambe le tabelle nel prompt.
+- Il draft espone il merge come relazione `SAME_AS` (visibile in UI Relations).
+
+Smoke live con **4 fonti** (accounts, orders, legacy_customers sovrapposta,
+hr_people non correlata): SAME_AS rilevato, FK instradata alla gemella giusta,
+niente falsi positivi, 0 warnings, ask corretti. Test: +9 (merge/gate/routing
+affine/anti-generico/GraphRAG). Suite **1256 passed**.
+
+---
+
 ## 2026-07-02 (Stadio 4 senza LLM + matching template mode-aware)
 
 Smoke live dello stadio 4 ("Refine by instruction") — mai esercitato prima:

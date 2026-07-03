@@ -67,6 +67,13 @@ _FK_VALUE_OVERLAP = 0.5  # min share of FK values found in a PK column
 _FK_MAX_PROBES = 200  # cap on candidate columns sampled (whole build)
 _FK_MIN_DISTINCT = 4  # min distinct FK values before overlap is trustworthy
 
+# Same-entity merge bounds (Phase 4 of build_from_schema): two tables from
+# different sources describing the SAME business entity (e.g. crm_accounts and
+# legacy_customers) get a SAME_AS edge when their keys AND structure agree.
+_MERGE_KEY_JACCARD = 0.6  # bidirectional key-sample overlap (|∩| / |∪|)
+_MERGE_COL_OVERLAP = 0.4  # shared column names / smaller column set
+_MERGE_MAX_PAIRS = 100  # cap on table pairs probed per build
+
 _SENTINEL = object()
 
 
@@ -94,6 +101,26 @@ def _normalize_table_name(name: str) -> str:
 
 
 _VIA_RE = re.compile(r"(\w+)\s*(?:→|->)\s*(\w+)\.(\w+)")
+
+
+def _column_names_table(column: str, table: str) -> bool:
+    """True when a FK-ish column name points at *table* semantically.
+
+    Strips the id/ref/key suffix from the column ("account_id" → "account")
+    and checks the base against the table's name tokens with singular/plural
+    tolerance ("account" ↔ crm_accounts). Used to keep merged-twin FK routing
+    honest: a generic id column (emp_id) must not be routed to an unrelated
+    entity just because the sampled values happen to overlap.
+    """
+    base = re.sub(r"[_-]?(id|ref|key)$", "", column.strip().lower())
+    if len(base) < 3:
+        return False
+    tokens = [t for t in re.split(r"[^a-z0-9]+", table.lower()) if t]
+    variants = {base, base + "s", base + "es"}
+    for tok in tokens:
+        if tok in variants or base in {tok, tok + "s", tok + "es"}:
+            return True
+    return False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -516,7 +543,22 @@ class KnowledgeGraph:
                             break
                     break  # first matching suffix wins per column
 
-        # Phase 3 — value-overlap FK detection (names that don't match table
+        # Phase 3 — same-entity merge: with N sources, two tables can describe
+        # the SAME business entity (e.g. crm_accounts + legacy_customers).
+        # When keys AND structure agree, a SAME_AS edge merges that knowledge
+        # in the graph. Runs BEFORE the FK scan so the scan can treat merged
+        # twins as one target. Gated + bounded; degrades on error.
+        if os.getenv("FRA_KG_ENTITY_MERGE", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            try:
+                self._same_entity_bridges(mgr, schema)
+            except Exception as exc:  # noqa: BLE001 — never break the build
+                logger.warning("build_from_schema same-entity merge skipped: %s", exc)
+
+        # Phase 4 — value-overlap FK detection (names that don't match table
         # names, and cross-source joins). Gated + bounded; degrades on error.
         if os.getenv("FRA_KG_FK_VALUE_SCAN", "true").strip().lower() in {
             "1",
@@ -573,6 +615,19 @@ class KnowledgeGraph:
             val_cache[key] = vals
             return vals
 
+        # SAME_AS groups from the merge phase (which runs first): a FK whose
+        # values match several merged twins is NOT ambiguous — the twins are
+        # one entity — and a "FK" between two twins is just the merge itself.
+        same_group: dict[str, set[str]] = {}
+        for s_node, d_node, edata in self._g.edges(data=True):
+            if edata.get("type") != "SAME_AS":
+                continue
+            a, b = s_node.split(":")[0], d_node.split(":")[0]
+            grp = same_group.get(a) or same_group.get(b) or set()
+            grp |= {a, b}
+            for member in grp:
+                same_group[member] = grp
+
         probes = 0
         for table, info in schema.items():
             from_node = f"{table}:__schema__"
@@ -604,14 +659,109 @@ class KnowledgeGraph:
                         if inter and inter / len(fk_vals) >= _FK_VALUE_OVERLAP:
                             targets.append(other)
                             break  # this table matched; move to the next table
+                # A match on the table's own SAME_AS twin is the merge itself,
+                # not a foreign key — drop it.
+                targets = [t for t in targets if t not in same_group.get(table, set())]
+                # Several targets that are all merged twins of each other are
+                # ONE entity, so the ambiguity is only apparent — but since the
+                # multi-match no longer proves a generic id domain, require the
+                # column name to actually point at that entity (account_id →
+                # crm_accounts yes, emp_id no) and route to the affine twin.
+                if len(targets) > 1:
+                    grp = same_group.get(targets[0])
+                    if grp and all(t in grp for t in targets):
+                        affine = [
+                            t for t in sorted(targets) if _column_names_table(name, t)
+                        ]
+                        targets = affine[:1]
                 # Link only on an unambiguous single match. Overlap with several
-                # tables means the values are a shared generic domain (1,2,3…),
-                # not a foreign key — skip rather than guess a wrong edge.
+                # unrelated tables means the values are a shared generic domain
+                # (1,2,3…), not a foreign key — skip rather than guess.
                 if len(targets) == 1:
                     self._add_edge(from_node, f"{targets[0]}:__schema__", f"FK_{name}")
                     logger.debug(
                         "value-overlap FK: %s.%s → %s", table, name, targets[0]
                     )
+
+    def _same_entity_bridges(self, mgr, schema: dict) -> None:
+        """Detect tables from different sources describing the same entity.
+
+        Conservative, two conditions BOTH required per pair:
+        1. **Keys agree** — the primary-key candidate columns share most of
+           their sampled values in *both* directions (Jaccard ≥
+           ``_MERGE_KEY_JACCARD``, each side with ≥ ``_FK_MIN_DISTINCT``
+           distinct values), i.e. the two tables identify the same records.
+        2. **Structure agrees** — the tables share a meaningful fraction of
+           column names (≥ ``_MERGE_COL_OVERLAP`` of the smaller column set).
+
+        A ``SAME_AS`` edge is added between the two table nodes so GraphRAG
+        links a question about either to both, the model draft shows the
+        bridge, and the LLM prompt learns the two tables are one entity.
+        Bounded by ``_MERGE_MAX_PAIRS`` pair probes; read-only LIMIT queries.
+        """
+
+        def _norm(v) -> str | None:
+            return None if v is None else str(v)
+
+        cols_by_table: dict[str, set[str]] = {}
+        pk_by_table: dict[str, str] = {}
+        for t, info in schema.items():
+            names = [c.get("name", "") for c in info.get("columns", [])]
+            cols_by_table[t] = {n.lower() for n in names if n}
+            tl = t.lower()
+            for n in names:
+                if n.lower() in ("id", "pk", f"{tl}_id", f"{tl}id"):
+                    pk_by_table[t] = n
+                    break
+
+        candidates = sorted(
+            t for t in schema if t in pk_by_table and len(cols_by_table[t]) >= 2
+        )
+
+        val_cache: dict[tuple[str, str], set] = {}
+
+        def _sample(table: str, col: str) -> set:
+            key = (table, col)
+            if key in val_cache:
+                return val_cache[key]
+            vals: set = set()
+            try:
+                rows = mgr.execute(
+                    f'SELECT DISTINCT "{col}" AS v FROM "{table}" '
+                    f'WHERE "{col}" IS NOT NULL LIMIT {_FK_VALUE_SAMPLE}'
+                )
+                vals = {_norm(r.get("v")) for r in rows}
+                vals.discard(None)
+            except Exception:  # noqa: BLE001
+                vals = set()
+            val_cache[key] = vals
+            return vals
+
+        pairs = 0
+        for i, ta in enumerate(candidates):
+            for tb in candidates[i + 1 :]:
+                if pairs >= _MERGE_MAX_PAIRS:
+                    return
+                # Structure first — it's free (no query).
+                shared = cols_by_table[ta] & cols_by_table[tb]
+                smaller = min(len(cols_by_table[ta]), len(cols_by_table[tb]))
+                if smaller == 0 or len(shared) / smaller < _MERGE_COL_OVERLAP:
+                    continue
+                pairs += 1
+                va = _sample(ta, pk_by_table[ta])
+                vb = _sample(tb, pk_by_table[tb])
+                if len(va) < _FK_MIN_DISTINCT or len(vb) < _FK_MIN_DISTINCT:
+                    continue
+                union = va | vb
+                if not union or len(va & vb) / len(union) < _MERGE_KEY_JACCARD:
+                    continue
+                self._add_edge(
+                    f"{ta}:__schema__",
+                    f"{tb}:__schema__",
+                    "SAME_AS",
+                    merge=True,
+                )
+                logger.info("same-entity merge: %s SAME_AS %s", ta, tb)
 
     def _table_node(self, table: str) -> str:
         """Return a table-level node id for *table*, creating a minimal schema
