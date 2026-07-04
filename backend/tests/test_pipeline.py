@@ -874,3 +874,32 @@ class TestFailedSourcesReport:
 
         monkeypatch.setattr("app.connectors.source_registry.get_source_registry", _boom)
         assert orch._failed_sources() == []
+
+
+class TestMetricOnMergedEntity:
+    _rels = [
+        {"from_table": "crm_accounts", "to_table": "legacy_customers",
+         "edge_type": "SAME_AS"},
+    ]
+
+    def test_metric_on_merged_table_flagged(self):
+        from app.agentic.verifier import _check_metrics_on_merged
+
+        metrics = [{"name": "Total value", "formula": "SUM(crm_accounts.value)"}]
+        notes = _check_metrics_on_merged(metrics, self._rels)
+        assert len(notes) == 1
+        assert notes[0]["type"] == "metric_on_merged_entity"
+        assert notes[0]["severity"] == "info"
+        assert "legacy_customers" in notes[0]["detail"]
+
+    def test_metric_on_unmerged_table_not_flagged(self):
+        from app.agentic.verifier import _check_metrics_on_merged
+
+        metrics = [{"name": "Order total", "formula": "SUM(orders.total)"}]
+        assert _check_metrics_on_merged(metrics, self._rels) == []
+
+    def test_no_relations_no_notes(self):
+        from app.agentic.verifier import _check_metrics_on_merged
+
+        metrics = [{"name": "X", "formula": "SUM(crm_accounts.value)"}]
+        assert _check_metrics_on_merged(metrics, []) == []

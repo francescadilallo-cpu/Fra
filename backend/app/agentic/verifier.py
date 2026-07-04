@@ -160,6 +160,54 @@ def _check_templates(
 _MAX_SAME_AS_CHECKS = 10
 
 
+def _same_as_twins(relations: list[dict]) -> dict[str, set[str]]:
+    """table → set of tables it is SAME_AS-merged with (transitive)."""
+    groups: dict[str, set[str]] = {}
+    for r in relations:
+        if r.get("edge_type") != "SAME_AS":
+            continue
+        a, b = r.get("from_table"), r.get("to_table")
+        if not (a and b):
+            continue
+        grp = groups.get(a) or groups.get(b) or set()
+        grp |= {a, b}
+        for m in grp:
+            groups[m] = grp
+    return {t: (grp - {t}) for t, grp in groups.items()}
+
+
+def _check_metrics_on_merged(
+    metrics: list[dict], relations: list[dict]
+) -> list[dict]:
+    """Advisory: a metric that aggregates a single table which is merged with
+    another source reports only that table's rows — a *partial* number. The
+    user should aggregate on the union (or confirm the metric is intentionally
+    per-source). Never blocks."""
+    twins = _same_as_twins(relations)
+    if not twins:
+        return []
+    notes: list[dict] = []
+    for m in metrics:
+        name = m.get("name", "?")
+        tables = {t for t, _c in _REF_RE.findall(m.get("formula") or "")}
+        merged = {t for t in tables if twins.get(t)}
+        for t in sorted(merged):
+            other = ", ".join(sorted(twins[t]))
+            notes.append(
+                {
+                    "type": "metric_on_merged_entity",
+                    "severity": "info",
+                    "detail": (
+                        f"Metric '{name}' aggregates '{t}', which is merged "
+                        f"with {other} (same entity across sources). It counts "
+                        f"only '{t}' — it may report a partial number; aggregate "
+                        "on the union for complete figures."
+                    ),
+                }
+            )
+    return notes
+
+
 def _pk_of(table: str, cols: dict[str, set[str]]) -> str | None:
     """Primary-key candidate column of *table* (same rule as the KG scans)."""
     tl = table.lower()
@@ -349,12 +397,14 @@ def verify_model(
         warnings += f_warnings
 
     advisory = _llm_critique(draft) if use_llm else []
+    advisory += _check_metrics_on_merged(metrics, relations)
     if query_runner is not None:
         advisory += _check_same_as_coverage(relations, cols, query_runner)
 
     checks = [
         "relation_unknown_table",
         "relation_unknown_column",
+        "metric_on_merged_entity",
         "metric_unknown_reference",
         "metric_no_formula",
         "entity_no_columns",

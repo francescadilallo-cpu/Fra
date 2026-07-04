@@ -10,6 +10,23 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Metriche su entità fuse: advisory numeri parziali)
+
+Ultimo anello "prova a romperlo": una metrica la cui formula aggrega una tabella
+**fusa** (SAME_AS) conta solo le righe di quella tabella → **numero parziale
+silenzioso** se la gemella ha record extra (es. `SUM(crm_accounts.value)` quando
+`legacy_customers` ha clienti in più).
+
+- `verifier._check_metrics_on_merged(metrics, relations)`: per ogni metrica che
+  referenzia una tabella con gemella SAME_AS (twin transitivi via
+  `_same_as_twins`), nota **advisory** "conta solo <t>, fuso con <twin> — può
+  riportare un numero parziale; aggrega sull'unione". Non blocca; il check di
+  esistenza colonne (`metric_unknown_reference`) resta invariato.
+
+Test: +3. Suite **1267 passed**.
+
+---
+
 ## 2026-07-02 (Resilienza N-fonti: sorgenti fallite segnalate)
 
 Smoke di resilienza (2 sorgenti buone + 1 con path inesistente): confermato che
