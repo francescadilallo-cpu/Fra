@@ -549,3 +549,38 @@ class TestSameEntityMerge:
             "legacy_customers",
             "FK_customer_id",
         ) in self._edges(kg)
+
+    def test_many_sources_no_false_merges(self):
+        """N sources sharing generic small-int ids (status_id, priority_id…):
+        only the ONE structurally-matching pair merges; nothing else does, and
+        the scan stays bounded (each PK sampled at most once)."""
+        from app.kg.graph import KnowledgeGraph
+
+        # 10 unrelated lookup/fact tables all keyed on ids 1..8, distinct shapes.
+        ids = {str(i) for i in range(1, 9)}
+        schema: dict = {}
+        data: dict = {}
+        for n in range(10):
+            t = f"tbl{n}"
+            schema[t] = {"columns": [{"name": "id"}, {"name": f"attr_{n}"}]}
+            data[(t, "id")] = ids
+        # Plus one genuine same-entity pair (shared columns + shared keys).
+        schema["crm_accounts"] = {
+            "columns": [{"name": "id"}, {"name": "company"}, {"name": "region"}]
+        }
+        schema["legacy_customers"] = {
+            "columns": [{"name": "id"}, {"name": "company"}, {"name": "phone"}]
+        }
+        data[("crm_accounts", "id")] = ids
+        data[("legacy_customers", "id")] = ids
+
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._mgr(schema, data))
+        same_as = [(s, d) for s, d, t in self._edges(kg) if t == "SAME_AS"]
+        # Exactly one merge — the structural pair — despite 12 tables sharing ids.
+        assert len(same_as) == 1
+        assert set(same_as[0]) == {"crm_accounts", "legacy_customers"}
+        # The 10 generic tables share ids but not columns → never merged.
+        assert not any(
+            "tbl" in s or "tbl" in d for s, d, t in self._edges(kg) if t == "SAME_AS"
+        )

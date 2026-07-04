@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Fix falso-positivo merge su chiave generica — trovato da stress test)
+
+Uno stress test con 12 tabelle che condividono id generici (1..8) ha scovato un
+**falso positivo reale**: due tabelle non correlate con `id` + una colonna
+ciascuna venivano fuse (`SAME_AS`), perché la sola colonna `id` condivisa
+superava la soglia di overlap 0.4 (1 colonna su 2). A scala N-fonti avrebbe
+corrotto silenziosamente le risposte.
+
+- **Fix** (`_same_entity_bridges`): l'overlap strutturale ora si misura sulle
+  colonne **non-chiave** (esclusa la PK) e richiede **almeno una colonna
+  business condivisa**. Due tabelle id-keyed non si fondono più solo perché
+  entrambe hanno un `id` e gli id si sovrappongono.
+- Nuovo test permanente `test_many_sources_no_false_merges`: 12 tabelle con id
+  1..8, solo la coppia con struttura reale condivisa si fonde.
+
+Suite **1262 passed**.
+
+---
+
 ## 2026-07-02 (Merge N-fonti: regression e2e + visibilità UI)
 
 Blindatura del merge cross-source su due fronti:

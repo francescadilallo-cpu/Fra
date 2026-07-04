@@ -692,7 +692,10 @@ class KnowledgeGraph:
            ``_MERGE_KEY_JACCARD``, each side with ≥ ``_FK_MIN_DISTINCT``
            distinct values), i.e. the two tables identify the same records.
         2. **Structure agrees** — the tables share a meaningful fraction of
-           column names (≥ ``_MERGE_COL_OVERLAP`` of the smaller column set).
+           their *non-key* column names (≥ ``_MERGE_COL_OVERLAP`` of the
+           smaller non-key column set, and at least one shared business
+           column). The key column is excluded so two unrelated id-keyed
+           tables can't merge just because both have an ``id``.
 
         A ``SAME_AS`` edge is added between the two table nodes so GraphRAG
         links a question about either to both, the model draft shows the
@@ -742,10 +745,17 @@ class KnowledgeGraph:
             for tb in candidates[i + 1 :]:
                 if pairs >= _MERGE_MAX_PAIRS:
                     return
-                # Structure first — it's free (no query).
-                shared = cols_by_table[ta] & cols_by_table[tb]
-                smaller = min(len(cols_by_table[ta]), len(cols_by_table[tb]))
-                if smaller == 0 or len(shared) / smaller < _MERGE_COL_OVERLAP:
+                # Structure first — it's free (no query). Measure on NON-KEY
+                # columns: two unrelated tables trivially share the "id" column,
+                # so counting it would merge any two id-keyed tables whose ids
+                # happen to overlap. Require a real shared *business* column.
+                cols_a = cols_by_table[ta] - {pk_by_table[ta].lower()}
+                cols_b = cols_by_table[tb] - {pk_by_table[tb].lower()}
+                shared = cols_a & cols_b
+                smaller = min(len(cols_a), len(cols_b))
+                if not shared or smaller == 0:
+                    continue
+                if len(shared) / smaller < _MERGE_COL_OVERLAP:
                     continue
                 pairs += 1
                 va = _sample(ta, pk_by_table[ta])
