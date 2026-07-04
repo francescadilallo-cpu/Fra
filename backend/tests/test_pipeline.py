@@ -709,6 +709,39 @@ class TestProposalEnrichment:
         }
         assert _proposal_entity_aliases(prop) == {"customers": ["clients", "accounts"]}
 
+    def test_apply_proposal_drops_bad_metric_keeps_good(self, tmp_path, monkeypatch):
+        # End-to-end seam: the column guard must be wired through apply_proposal,
+        # not just live in _formula_refs_ok. A regression that stops passing
+        # schema_info/cols_by_table would let a broken metric reach sl_metrics
+        # and silently produce wrong SQL — this asserts the good one lands and
+        # the bad one is dropped, and that aliases still flow, in one call.
+        monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path / "data"))
+        from app.semantic.apply import apply_proposal
+        from app.definitions_store import get_definitions_connection
+
+        proposal = {
+            "entities": [{"table": "orders", "synonyms": ["sales"]}],
+            "metrics": [
+                {"name": "Revenue", "formula": "SUM(orders.total)", "confidence": 0.9},
+                {"name": "Broken", "formula": "SUM(orders.ghost)", "confidence": 0.9},
+            ],
+            "relations": [],
+        }
+        schema = {"orders": {"columns": [{"name": "id"}, {"name": "total"}]}}
+        out = apply_proposal(proposal, catalog=None, schema_info=schema)
+
+        assert out["metrics"] == 1
+        assert out["entity_aliases"] == {"orders": ["sales"]}
+        conn = get_definitions_connection()
+        try:
+            names = {
+                r[0]
+                for r in conn.execute("SELECT name FROM sl_metrics WHERE is_builtin=0")
+            }
+        finally:
+            conn.close()
+        assert "Revenue" in names and "Broken" not in names
+
 
 class TestDraftEntityDedupe:
     def test_business_entity_wins_and_inherits_columns(self):
