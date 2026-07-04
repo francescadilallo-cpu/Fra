@@ -878,8 +878,11 @@ class TestFailedSourcesReport:
 
 class TestMetricOnMergedEntity:
     _rels = [
-        {"from_table": "crm_accounts", "to_table": "legacy_customers",
-         "edge_type": "SAME_AS"},
+        {
+            "from_table": "crm_accounts",
+            "to_table": "legacy_customers",
+            "edge_type": "SAME_AS",
+        },
     ]
 
     def test_metric_on_merged_table_flagged(self):

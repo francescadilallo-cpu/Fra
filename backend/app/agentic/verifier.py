@@ -176,9 +176,7 @@ def _same_as_twins(relations: list[dict]) -> dict[str, set[str]]:
     return {t: (grp - {t}) for t, grp in groups.items()}
 
 
-def _check_metrics_on_merged(
-    metrics: list[dict], relations: list[dict]
-) -> list[dict]:
+def _check_metrics_on_merged(metrics: list[dict], relations: list[dict]) -> list[dict]:
     """Advisory: a metric that aggregates a single table which is merged with
     another source reports only that table's rows — a *partial* number. The
     user should aggregate on the union (or confirm the metric is intentionally
