@@ -639,7 +639,7 @@ Aggiornamento (migliorie stadi 1-3):
 
 Aggiornamento (hardening Fase 3 FK + glossario deterministico):
 - value-overlap FK ora resiste agli **id generici condivisi**: si crea l'arco solo su match **univoco** (overlap con più tabelle → dominio condiviso, si scarta) e solo se la colonna ha ≥`_FK_MIN_DISTINCT=4` valori distinti (codici a bassa cardinalità saltati).
-- `ingest_glossary_aliases` deterministico (scansione label ordinata per lunghezza/alfabetico) → alias stabili tra run e match più specifico.
+- `ingest_glossary_aliases` deterministico (scansione label ordinata per lunghezza/alfabetico) → alias stabili tra run e match più specifico. Match anche sulle **parole-componente uniche** dei label multi-parola/snake_case (coerente con `graph_rag`, `_LABEL_MIN_TOKEN`/`_LABEL_STOPWORDS`); componenti condivise da più tabelle scartate → nessun alias ambiguo.
 
 Aggiornamento (review sorgenti → KG → SL con Salesforce reale):
 - **Salesforce record ingestion**: prima solo metadati (sf_*_objects/fields) → modello non interrogabile sui dati veri. Ora record reali per gli oggetti prioritari in tabelle `sf_<oggetto>` (bounded `FRA_SF_ROW_LIMIT`, gate `FRA_SF_INGEST_RECORDS`); `target_tables` popolato (UI + drop su re-sync).

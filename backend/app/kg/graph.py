@@ -74,6 +74,29 @@ _MERGE_KEY_JACCARD = 0.6  # bidirectional key-sample overlap (|∩| / |∪|)
 _MERGE_COL_OVERLAP = 0.4  # shared column names / smaller column set
 _MERGE_MAX_PAIRS = 100  # cap on table pairs probed per build
 
+# Glossary alias matching: a term aliases a node when a *component word* of that
+# node's label appears in the term's definition. Mirrors graph_rag's own label
+# tokenisation (min length 3) so "logo" defined as "customer account" reaches a
+# crm_accounts table the same way graph_rag would link the word "account".
+_LABEL_MIN_TOKEN = 3
+# Generic table-name noise words that must not act as linking components (a
+# definition mentioning "data" or "staging" should not alias every such table).
+_LABEL_STOPWORDS = frozenset(
+    {
+        "raw",
+        "tmp",
+        "temp",
+        "data",
+        "table",
+        "tbl",
+        "src",
+        "stg",
+        "staging",
+        "dim",
+        "fact",
+    }
+)
+
 _SENTINEL = object()
 
 
@@ -1022,19 +1045,52 @@ class KnowledgeGraph:
         """Attach glossary terms as aliases of the node their definition refers to.
 
         Conservative: a term becomes an alias of a node only when that node's
-        label appears in the term's *definition* (so "ARR" defined as "annual
-        recurring revenue" aliases the Revenue node). Terms that already name a
-        node, or whose definition references nothing known, are skipped — no
-        spurious aliases. Returns the number of alias terms attached.
+        label — or a *component word* of a multi-word/snake_case label — appears
+        in the term's definition (so "logo" defined as "a customer account"
+        aliases the ``crm_accounts`` table via its "account" component, and "ARR"
+        defined as "annual recurring revenue" aliases the Revenue node). Component
+        words that identify more than one node are ambiguous and ignored, as are
+        terms that already name a node or reference nothing known — no spurious
+        aliases. Returns the number of alias terms attached.
         """
         if not glossary:
             return 0
         index = self._type_level_label_index()
         label_set = set(index.keys())
-        # Deterministic, specificity-first scan order: longer labels first so a
-        # term whose definition cites both "annual revenue" and "revenue" aliases
-        # the more specific node; ties broken alphabetically for stable results.
-        ordered_labels = sorted(label_set, key=lambda s: (-len(s), s))
+        # One representative label per node, so a component-word match resolves
+        # back to a label ``attach_aliases`` can look up.
+        node_to_label: dict[str, str] = {}
+        for lbl, nid in index.items():
+            node_to_label.setdefault(nid, lbl)
+        # Significant component words of labels → the node(s) they belong to.
+        # Only words unique to a single node become linkable (drops ambiguous
+        # components like "id"/"date" shared across tables). Words that already
+        # are full labels are left to the exact-label path below.
+        word_nodes: dict[str, set[str]] = {}
+        for lbl, nid in index.items():
+            for w in re.findall(r"[a-z0-9]+", lbl.lower()):
+                if (
+                    len(w) >= _LABEL_MIN_TOKEN
+                    and w not in _LABEL_STOPWORDS
+                    and w not in label_set
+                ):
+                    word_nodes.setdefault(w, set()).add(nid)
+        word_to_label = {
+            w: node_to_label[next(iter(nids))]
+            for w, nids in word_nodes.items()
+            if len(nids) == 1
+        }
+        # Candidates = full labels + unique component words, each mapped to a
+        # resolvable label. Deterministic specificity-first order: longer tokens
+        # first so "crm_accounts" wins over "accounts" when both are cited; ties
+        # broken alphabetically for stable results.
+        candidates: dict[str, str] = {lbl: lbl for lbl in label_set}
+        for w, lbl in word_to_label.items():
+            candidates.setdefault(w, lbl)
+        ordered = sorted(candidates, key=lambda s: (-len(s), s))
+        # A term is redundant when it (or its singular/plural) already links —
+        # either as a full label or as a unique component word graph_rag indexes.
+        linked_terms = label_set | set(word_to_label)
         aliases: dict[str, list[str]] = {}
         for g in glossary:
             term = str(g.get("term", "")).strip()
@@ -1042,19 +1098,22 @@ class KnowledgeGraph:
             if not term or not definition:
                 continue
             tl = term.lower()
-            # Term already names a node → it links directly, no alias needed.
-            if tl in label_set or tl.rstrip("s") in label_set or tl + "s" in label_set:
+            if (
+                tl in linked_terms
+                or tl.rstrip("s") in linked_terms
+                or tl + "s" in linked_terms
+            ):
                 continue
-            def_words = set(re.findall(r"[a-z0-9_]+", definition))
+            def_words = set(re.findall(r"[a-z0-9]+", definition))
             matched: str | None = None
-            for lbl in ordered_labels:
+            for token in ordered:
                 hit = (
-                    (lbl in def_words or lbl.rstrip("s") in def_words)
-                    if " " not in lbl
-                    else lbl in definition
+                    (token in def_words or token.rstrip("s") in def_words)
+                    if " " not in token
+                    else token in definition
                 )
                 if hit:
-                    matched = lbl
+                    matched = candidates[token]
                     break
             if matched:
                 aliases.setdefault(matched, []).append(term)

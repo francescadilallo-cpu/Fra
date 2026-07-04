@@ -582,6 +582,38 @@ class TestKGAliases:
             == 0
         )
 
+    def test_glossary_alias_by_component_word(self):
+        # Real tables are multi-word (crm_accounts); definitions use the business
+        # word ("account"), not the full snake_case label. The component word
+        # must still resolve the alias — same tokenisation graph_rag links on.
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "crm_accounts", "to_table": "deals", "edge_type": "FK"}]
+        )
+        n = kg.ingest_glossary_aliases(
+            [{"term": "logo", "definition": "a single customer account we closed"}]
+        )
+        assert n == 1
+        syn = next(
+            a.get("synonyms")
+            for _n, a in kg.all_nodes()
+            if a.get("table") == "crm_accounts"
+        )
+        assert "logo" in syn
+
+    def test_glossary_ambiguous_component_word_skipped(self):
+        # "orders" is a component of BOTH tables → ambiguous, no alias attached.
+        kg = KnowledgeGraph()
+        kg.ingest_manual_relations(
+            [{"from_table": "east_orders", "to_table": "west_orders", "edge_type": "X"}]
+        )
+        assert (
+            kg.ingest_glossary_aliases(
+                [{"term": "backlog", "definition": "unshipped orders across regions"}]
+            )
+            == 0
+        )
+
 
 class TestValueOverlapFK:
     schema = {

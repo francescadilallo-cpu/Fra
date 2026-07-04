@@ -10,6 +10,30 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-04 (Glossario → alias: match sulle parole-componente delle tabelle multi-parola)
+
+Stress test NL su 3 fonti con nomi non combacianti (`crm_accounts`, `erp_customers`,
+`deals`): un termine di glossario tipo `logo` = "a customer **account**" **non
+agganciava nulla** perché `ingest_glossary_aliases` confrontava la definizione
+solo con i **label interi** (`crm_accounts`), mentre GraphRAG indicizza già le
+**parole-componente** dei nomi snake_case (`crm_accounts` → `accounts`). Recall
+mancato proprio dove gli alias servono di più.
+
+- `kg/graph.py` `ingest_glossary_aliases`: ora un termine può agganciare un nodo
+  anche quando una **parola-componente** del suo label (min 3 char, no stopword
+  generiche `_LABEL_STOPWORDS`) compare nella definizione. Solo parole **uniche
+  a un singolo nodo** diventano linkabili (le ambigue, condivise da più tabelle,
+  vengono ignorate → zero alias spuri). Ordine specificity-first invariato
+  (label pieno vince sulla componente). Coerente con la tokenizzazione di
+  `graph_rag` (min token 3).
+- Test: `test_glossary_alias_by_component_word` (positivo) e
+  `test_glossary_ambiguous_component_word_skipped` (skip ambiguità) in
+  `tests/test_pipeline.py`.
+- Effetto verificato sul driver: `logo`/`ARR`/`pipeline` ora agganciano le
+  tabelle giuste; prima 0 link.
+
+---
+
 ## 2026-07-02 (Metriche su entità fuse: advisory numeri parziali)
 
 Ultimo anello "prova a romperlo": una metrica la cui formula aggrega una tabella
