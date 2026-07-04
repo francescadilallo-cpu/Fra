@@ -10,6 +10,24 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-04 (Merge N≥3 fonti: template UNION su TUTTO il gruppo, non a coppie)
+
+Con **3+ fonti** che descrivono la stessa entità (es. `crm_cust` ≡ `erp_cust` ≡
+`legacy_cust`) gli archi `SAME_AS` sono **a coppie** (A-B, A-C, B-C). Il
+generatore di template creava un template UNION **per arco** → dedup per nome
+lasciava due template, ciascuno con solo **2 delle 3** tabelle. "Quanti clienti
+unici tra le fonti" **sottostimava silenziosamente** della terza tabella —
+proprio il fallimento N-fonti da evitare.
+
+- `semantic/template_generator.py`: gli archi `SAME_AS` vengono raggruppati in
+  **componenti connesse** (union-find deterministico, root = tabella minore) e
+  si genera **un solo** template "Unique … across sources" che fa UNION di
+  **tutte** le tabelle del gruppo. Caso a 2 tabelle invariato.
+- Test: `test_three_twins_union_all_sources` (un template, 3 sorgenti, 2 UNION)
+  in `tests/test_template_generator.py`.
+
+---
+
 ## 2026-07-04 (Glossario → alias: match sulle parole-componente delle tabelle multi-parola)
 
 Stress test NL su 3 fonti con nomi non combacianti (`crm_accounts`, `erp_customers`,

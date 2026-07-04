@@ -372,44 +372,79 @@ def generate_templates_from_draft(draft: dict[str, Any]) -> list[dict]:
             )
 
     # ── Merged-entity templates (SAME_AS bridges) ─────────────────────────────
-    # Two tables declared the same entity (cross-source merge) get a distinct-
-    # union count, so "how many unique customers" spans BOTH sources instead of
-    # silently counting one table.
+    # Tables declared the same entity (cross-source merge) get a distinct-union
+    # count, so "how many unique customers" spans EVERY source instead of
+    # silently counting one table. SAME_AS edges are pairwise, but with N≥3
+    # sources a customer can live in three tables (crm/erp/legacy) linked by
+    # A-B, A-C, B-C edges. Grouping the edges into connected components and
+    # unioning the WHOLE group avoids a per-pair template that would count only
+    # two of the three tables and undercount by the third.
+    parent: dict[str, str] = {}
+
+    def _find(x: str) -> str:
+        parent.setdefault(x, x)
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:  # path compression
+            parent[x], x = root, parent[x]
+        return root
+
+    def _union(a: str, b: str) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:  # deterministic root = lexicographically smaller
+            hi, lo = max(ra, rb), min(ra, rb)
+            parent[hi] = lo
+
     for r in relations:
         if r.get("edge_type") != "SAME_AS":
             continue
         ta, tb = r.get("from_table", ""), r.get("to_table", "")
-        ea, eb = table_to_entity.get(ta), table_to_entity.get(tb)
-        if not (ea and eb):
+        if ta and tb:
+            _union(ta, tb)
+
+    groups: dict[str, list[str]] = {}
+    for t in parent:
+        groups.setdefault(_find(t), []).append(t)
+
+    for _root, members in sorted(groups.items()):
+        # Resolve each member to (table, pk); drop those without an entity/pk.
+        resolved: list[tuple[str, str]] = []
+        for t in sorted(set(members)):
+            ent = table_to_entity.get(t)
+            if not ent:
+                continue
+            pk = _pk_col(t, ent.get("columns", []))
+            if pk:
+                resolved.append((t, pk))
+        if len(resolved) < 2:  # need at least two real tables to union
             continue
-        pk_a = _pk_col(ta, ea.get("columns", []))
-        pk_b = _pk_col(tb, eb.get("columns", []))
-        if not (pk_a and pk_b):
-            continue
-        base_a, base_b = ta.split("_")[-1], tb.split("_")[-1]
+        tables = [t for t, _ in resolved]
+        rep = tables[0]
+        selects = [
+            f'SELECT "{pk}"{" AS k" if i == 0 else ""} FROM {t}'
+            for i, (t, pk) in enumerate(resolved)
+        ]
+        inner = "\n      UNION ".join(selects)
+        kw: list[str] = [f"unique {t}" for t in tables]
+        for t in tables:
+            base = t.split("_")[-1]
+            kw += [
+                f"unique {base}",
+                f"{base} across sources",
+                f"all {base} across sources",
+            ]
+        kw.append("across sources")
         templates.append(
             {
-                "name": f"Unique {ta} across sources",
+                "name": f"Unique {rep} across sources",
                 "description": (
-                    f"Distinct records across {ta} and {tb} — the two tables "
+                    f"Distinct records across {', '.join(tables)} — these tables "
                     "describe the same entity from different sources"
                 ),
-                "sql_query": (
-                    f"SELECT COUNT(*) AS unique_records\n"
-                    f'FROM (SELECT "{pk_a}" AS k FROM {ta}\n'
-                    f'      UNION SELECT "{pk_b}" FROM {tb})'
-                ),
-                "keywords": _kws(
-                    f"unique {ta}",
-                    f"unique {tb}",
-                    f"unique {base_a}",
-                    f"unique {base_b}",
-                    f"{base_a} across sources",
-                    f"{base_b} across sources",
-                    f"all {base_a} across sources",
-                    "across sources",
-                ),
-                "sources": [ta, tb],
+                "sql_query": (f"SELECT COUNT(*) AS unique_records\nFROM ({inner})"),
+                "keywords": _kws(*kw),
+                "sources": tables,
                 "auto_generated": True,
             }
         )

@@ -460,3 +460,45 @@ class TestMergedEntityTemplates:
         }
         tpls = generate_templates_from_draft(draft)
         assert not any("across sources" in t["name"] for t in tpls)
+
+    def test_three_twins_union_all_sources(self):
+        # With N≥3 merged twins the SAME_AS edges are pairwise (A-B, A-C, B-C).
+        # A per-edge template would count only two tables and undercount by the
+        # third — the whole connected group must be unioned in ONE template.
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        draft = {
+            "entities": [
+                {"name": n, "table": n, "columns": ["id", "email", "company"]}
+                for n in ("crm_cust", "erp_cust", "legacy_cust")
+            ],
+            "metrics": [],
+            "relations": [
+                {
+                    "from_table": "crm_cust",
+                    "to_table": "erp_cust",
+                    "edge_type": "SAME_AS",
+                },
+                {
+                    "from_table": "crm_cust",
+                    "to_table": "legacy_cust",
+                    "edge_type": "SAME_AS",
+                },
+                {
+                    "from_table": "erp_cust",
+                    "to_table": "legacy_cust",
+                    "edge_type": "SAME_AS",
+                },
+            ],
+        }
+        merged = [
+            t
+            for t in generate_templates_from_draft(draft)
+            if "across sources" in t["name"]
+        ]
+        assert len(merged) == 1  # one template for the whole group, not per-pair
+        t = merged[0]
+        assert set(t["sources"]) == {"crm_cust", "erp_cust", "legacy_cust"}
+        assert t["sql_query"].count("UNION") == 2  # 3 SELECTs joined by 2 UNIONs
+        for tbl in ("crm_cust", "erp_cust", "legacy_cust"):
+            assert tbl in t["sql_query"]
