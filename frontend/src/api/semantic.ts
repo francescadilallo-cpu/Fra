@@ -481,9 +481,16 @@ export interface VerificationReport {
   summary: Record<string, number | null>
 }
 
+export interface FailedSource {
+  id: string
+  label: string
+  error: string
+}
+
 export interface PipelineReport {
   applied?: { relations: number; entities: number; metrics: number }
   verification?: VerificationReport
+  failed_sources?: FailedSource[]
 }
 
 export interface PipelineRun {

@@ -107,16 +107,29 @@ def run_build_pipeline(
         # not business data — the analyzer must not propose entities for them.
         internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
         live_tables = [t for t in schema_info if t not in hidden and t not in internal]
+
+        # Surface sources that failed to load: the build is resilient (a broken
+        # source is isolated so the rest still builds), but the user must know
+        # their data is missing rather than silently wonder where it went.
+        failed = _failed_sources()
+        if failed:
+            run.report["failed_sources"] = failed
+            fail_txt = "; ".join(f"{f['label']}: {f['error']}" for f in failed)
+            logger.warning("pipeline: %d source(s) failed to load", len(failed))
+
         if not live_tables:
-            run.skip(STAGE_SOURCES, "No data sources connected.")
+            detail = "No data sources connected."
+            if failed:
+                detail = f"{len(failed)} source(s) failed to load — {fail_txt}"
+            run.skip(STAGE_SOURCES, detail)
         else:
             total_rows = sum(
                 int((schema_info[t] or {}).get("row_count") or 0) for t in live_tables
             )
-            run.finish(
-                STAGE_SOURCES,
-                f"{len(live_tables)} source tables · {total_rows:,} rows",
-            )
+            detail = f"{len(live_tables)} source tables · {total_rows:,} rows"
+            if failed:
+                detail += f" · ⚠ {len(failed)} source(s) failed: {fail_txt}"
+            run.finish(STAGE_SOURCES, detail)
     except Exception as exc:  # noqa: BLE001
         logger.error("pipeline sources stage failed: %s", exc, exc_info=True)
         run.fail(STAGE_SOURCES, str(exc))
@@ -256,6 +269,31 @@ def run_build_pipeline(
     # low after a run on memory-bounded instances.
     gc.collect()
     return run
+
+
+def _failed_sources() -> list[dict]:
+    """User-registered (non-default) sources that failed to ingest.
+
+    Returns ``[{id, label, error}]`` so the pipeline can tell the user which of
+    their sources didn't make it into the model (a broken source is isolated at
+    ingest time, not fatal to the build).
+    """
+    try:
+        from ..connectors.source_registry import get_source_registry  # noqa: PLC0415
+
+        out: list[dict] = []
+        for cfg in get_source_registry().list():
+            if cfg.status == "error" and not cfg.is_default:
+                out.append(
+                    {
+                        "id": cfg.id,
+                        "label": cfg.label,
+                        "error": (cfg.error_msg or "ingest failed")[:200],
+                    }
+                )
+        return out
+    except Exception:  # noqa: BLE001 — observability only, never break the run
+        return []
 
 
 def _sample_questions(draft: dict, limit: int = 5) -> list[str]:

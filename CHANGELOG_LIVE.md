@@ -10,6 +10,26 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Resilienza N-fonti: sorgenti fallite segnalate)
+
+Smoke di resilienza (2 sorgenti buone + 1 con path inesistente): confermato che
+una sorgente rotta è **isolata** (status=error, resto del modello costruito,
+tabella rotta assente, query corrette). MA il report non diceva che una sorgente
+era fallita → l'utente non sapeva perché mancavano i suoi dati.
+
+- `orchestrator._failed_sources()`: elenca le sorgenti utente (non-default) in
+  errore `{id, label, error}`; salvate in `run.report['failed_sources']`.
+- Stadio 2: il dettaglio ora aggiunge "⚠ N source(s) failed: …" (o, se falliscono
+  tutte, lo skip lo dice esplicitamente).
+- UI `PipelineView`: pannello **amber** "N source(s) could not be loaded" con
+  label + errore per ciascuna e nota "il resto del modello è stato costruito —
+  correggi la connessione e ri-esegui".
+
+Test: +2 (elenco non-default in errore, degrade se registry KO). Suite
+**1264 passed**; `tsc` + build frontend puliti.
+
+---
+
 ## 2026-07-02 (Fix falso-positivo merge su chiave generica — trovato da stress test)
 
 Uno stress test con 12 tabelle che condividono id generici (1..8) ha scovato un

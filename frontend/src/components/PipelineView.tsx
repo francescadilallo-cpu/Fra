@@ -217,6 +217,7 @@ export default function PipelineView({ onNavigate }: Props) {
   const verification = run?.report?.verification
   const issues = [...(verification?.warnings ?? []), ...(verification?.advisory ?? [])]
   const erroredStages = (run?.stages ?? []).filter((s) => s.state === 'error')
+  const failedSources = run?.report?.failed_sources ?? []
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -256,6 +257,29 @@ export default function PipelineView({ onNavigate }: Props) {
 
       {finished && (
         <>
+          {failedSources.length > 0 && (
+            <div className="mt-6 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-200 shadow-soft">
+              <div className="mb-1.5 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <span className="font-semibold text-slate-900">
+                  {failedSources.length === 1
+                    ? '1 source could not be loaded'
+                    : `${failedSources.length} sources could not be loaded`}
+                </span>
+              </div>
+              <p className="mb-2 text-sm text-slate-500">
+                The rest of your model was built without them — fix the connection and re-run.
+              </p>
+              <ul className="space-y-1.5">
+                {failedSources.map((s) => (
+                  <li key={s.id} className="text-sm text-amber-800">
+                    <span className="font-semibold">{s.label}:</span> {s.error}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {erroredStages.length > 0 && (
             <div className="mt-6 rounded-2xl bg-red-50 p-4 ring-1 ring-red-200 shadow-soft">
               <div className="mb-1.5 flex items-center gap-2">

@@ -831,3 +831,46 @@ class TestSameAsCoverageCheck:
         assert not [
             a for a in report["advisory"] if a.get("type") == "same_as_coverage_gap"
         ]
+
+
+class TestFailedSourcesReport:
+    def test_lists_errored_non_default_sources(self, monkeypatch):
+        from app.connectors.source_registry import SourceConfig
+        from app.pipeline import orchestrator as orch
+
+        good = SourceConfig(id="g", connector_type="csv", label="Good", status="active")
+        bad = SourceConfig(
+            id="b",
+            connector_type="csv",
+            label="Broken",
+            status="error",
+            error_msg="CSV not found: /x.csv",
+        )
+        demo_bad = SourceConfig(
+            id="d",
+            connector_type="csv",
+            label="Demo",
+            status="error",
+            is_default=True,
+            error_msg="whatever",
+        )
+
+        class _Reg:
+            def list(self):
+                return [good, bad, demo_bad]
+
+        monkeypatch.setattr(
+            "app.connectors.source_registry.get_source_registry", lambda: _Reg()
+        )
+        out = orch._failed_sources()
+        # Only the user-added errored source — active and demo excluded.
+        assert out == [{"id": "b", "label": "Broken", "error": "CSV not found: /x.csv"}]
+
+    def test_degrades_when_registry_unavailable(self, monkeypatch):
+        from app.pipeline import orchestrator as orch
+
+        def _boom():
+            raise RuntimeError("no registry")
+
+        monkeypatch.setattr("app.connectors.source_registry.get_source_registry", _boom)
+        assert orch._failed_sources() == []
