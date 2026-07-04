@@ -7,7 +7,9 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "workspace.db"
+from ..paths import data_dir
+
+_DEFAULT_DB = data_dir() / "workspace.db"
 _VALID_SECTORS = frozenset({"manufacturing", "retail", "healthcare", "finance"})
 
 

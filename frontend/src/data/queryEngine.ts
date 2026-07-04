@@ -45,6 +45,8 @@ export interface EngineResult {
   candidates?: string[]
   sources?: SourceBadge[]
   steps?: string[]
+  provenance?: Record<string, unknown>
+  notes?: string
 }
 
 // ── Entity matching ───────────────────────────────────────────────────────────

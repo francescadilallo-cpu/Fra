@@ -10,6 +10,896 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-04 (Merge N≥3 fonti: template UNION su TUTTO il gruppo, non a coppie)
+
+Con **3+ fonti** che descrivono la stessa entità (es. `crm_cust` ≡ `erp_cust` ≡
+`legacy_cust`) gli archi `SAME_AS` sono **a coppie** (A-B, A-C, B-C). Il
+generatore di template creava un template UNION **per arco** → dedup per nome
+lasciava due template, ciascuno con solo **2 delle 3** tabelle. "Quanti clienti
+unici tra le fonti" **sottostimava silenziosamente** della terza tabella —
+proprio il fallimento N-fonti da evitare.
+
+- `semantic/template_generator.py`: gli archi `SAME_AS` vengono raggruppati in
+  **componenti connesse** (union-find deterministico, root = tabella minore) e
+  si genera **un solo** template "Unique … across sources" che fa UNION di
+  **tutte** le tabelle del gruppo. Caso a 2 tabelle invariato.
+- Test: `test_three_twins_union_all_sources` (un template, 3 sorgenti, 2 UNION)
+  in `tests/test_template_generator.py`.
+
+---
+
+## 2026-07-04 (Glossario → alias: match sulle parole-componente delle tabelle multi-parola)
+
+Stress test NL su 3 fonti con nomi non combacianti (`crm_accounts`, `erp_customers`,
+`deals`): un termine di glossario tipo `logo` = "a customer **account**" **non
+agganciava nulla** perché `ingest_glossary_aliases` confrontava la definizione
+solo con i **label interi** (`crm_accounts`), mentre GraphRAG indicizza già le
+**parole-componente** dei nomi snake_case (`crm_accounts` → `accounts`). Recall
+mancato proprio dove gli alias servono di più.
+
+- `kg/graph.py` `ingest_glossary_aliases`: ora un termine può agganciare un nodo
+  anche quando una **parola-componente** del suo label (min 3 char, no stopword
+  generiche `_LABEL_STOPWORDS`) compare nella definizione. Solo parole **uniche
+  a un singolo nodo** diventano linkabili (le ambigue, condivise da più tabelle,
+  vengono ignorate → zero alias spuri). Ordine specificity-first invariato
+  (label pieno vince sulla componente). Coerente con la tokenizzazione di
+  `graph_rag` (min token 3).
+- Test: `test_glossary_alias_by_component_word` (positivo) e
+  `test_glossary_ambiguous_component_word_skipped` (skip ambiguità) in
+  `tests/test_pipeline.py`.
+- Effetto verificato sul driver: `logo`/`ARR`/`pipeline` ora agganciano le
+  tabelle giuste; prima 0 link.
+
+---
+
+## 2026-07-02 (Metriche su entità fuse: advisory numeri parziali)
+
+Ultimo anello "prova a romperlo": una metrica la cui formula aggrega una tabella
+**fusa** (SAME_AS) conta solo le righe di quella tabella → **numero parziale
+silenzioso** se la gemella ha record extra (es. `SUM(crm_accounts.value)` quando
+`legacy_customers` ha clienti in più).
+
+- `verifier._check_metrics_on_merged(metrics, relations)`: per ogni metrica che
+  referenzia una tabella con gemella SAME_AS (twin transitivi via
+  `_same_as_twins`), nota **advisory** "conta solo <t>, fuso con <twin> — può
+  riportare un numero parziale; aggrega sull'unione". Non blocca; il check di
+  esistenza colonne (`metric_unknown_reference`) resta invariato.
+
+Test: +3. Suite **1267 passed**.
+
+---
+
+## 2026-07-02 (Resilienza N-fonti: sorgenti fallite segnalate)
+
+Smoke di resilienza (2 sorgenti buone + 1 con path inesistente): confermato che
+una sorgente rotta è **isolata** (status=error, resto del modello costruito,
+tabella rotta assente, query corrette). MA il report non diceva che una sorgente
+era fallita → l'utente non sapeva perché mancavano i suoi dati.
+
+- `orchestrator._failed_sources()`: elenca le sorgenti utente (non-default) in
+  errore `{id, label, error}`; salvate in `run.report['failed_sources']`.
+- Stadio 2: il dettaglio ora aggiunge "⚠ N source(s) failed: …" (o, se falliscono
+  tutte, lo skip lo dice esplicitamente).
+- UI `PipelineView`: pannello **amber** "N source(s) could not be loaded" con
+  label + errore per ciascuna e nota "il resto del modello è stato costruito —
+  correggi la connessione e ri-esegui".
+
+Test: +2 (elenco non-default in errore, degrade se registry KO). Suite
+**1264 passed**; `tsc` + build frontend puliti.
+
+---
+
+## 2026-07-02 (Fix falso-positivo merge su chiave generica — trovato da stress test)
+
+Uno stress test con 12 tabelle che condividono id generici (1..8) ha scovato un
+**falso positivo reale**: due tabelle non correlate con `id` + una colonna
+ciascuna venivano fuse (`SAME_AS`), perché la sola colonna `id` condivisa
+superava la soglia di overlap 0.4 (1 colonna su 2). A scala N-fonti avrebbe
+corrotto silenziosamente le risposte.
+
+- **Fix** (`_same_entity_bridges`): l'overlap strutturale ora si misura sulle
+  colonne **non-chiave** (esclusa la PK) e richiede **almeno una colonna
+  business condivisa**. Due tabelle id-keyed non si fondono più solo perché
+  entrambe hanno un `id` e gli id si sovrappongono.
+- Nuovo test permanente `test_many_sources_no_false_merges`: 12 tabelle con id
+  1..8, solo la coppia con struttura reale condivisa si fonde.
+
+Suite **1262 passed**.
+
+---
+
+## 2026-07-02 (Merge N-fonti: regression e2e + visibilità UI)
+
+Blindatura del merge cross-source su due fronti:
+
+- **Test e2e reale** (`test_pipeline_e2e.py::test_pipeline_merges_same_entity_
+  across_sources`): 3 CSV (customers + legacy_customers sovrapposta con 1 record
+  extra + orders) → snapshot DuckDB reale → orchestratore completo (no LLM).
+  Asserisce: arco `SAME_AS` nel draft, FK `orders→customers` presente e **non**
+  duplicata verso la gemella, advisory di copertura sullo stadio 5, template
+  "across sources" generato. Prima la garanzia viveva solo negli smoke manuali.
+- **Visibilità UI**: la relazione `SAME_AS` non appare più come una FK qualsiasi.
+  In `SemanticDraftView` (Data Model) → chip "merged entity" + glifo `≡` nella
+  colonna via + riga tinta brand. In `SemanticLayerView` → cardinalità **1≡1**
+  (non il fuorviante 1:N), via "same entity", nota esplicita.
+
+Suite **1261 passed**; `tsc` + build frontend puliti.
+
+---
+
+## 2026-07-02 (Merge interrogabile + verifica di copertura cross-source)
+
+Il merge SAME_AS diventa **interrogabile** e **verificato** (stadio 5):
+
+- **Template merged-entity** (`generate_templates_from_draft`): per ogni coppia
+  SAME_AS con PK riconoscibili, template `COUNT` su **UNION deduplicata** delle
+  due tabelle ("Unique <t> across sources"), con keyword sulle parole base
+  ("unique customers", "unique accounts", "across sources"). "How many unique
+  customers?" ora conta l'entità fusa, non una tabella sola.
+- **Check di copertura nello stadio 5** (`_check_same_as_coverage`): per ogni
+  coppia SAME_AS, `EXCEPT` bidirezionale sulle PK (bounded, max 10 coppie) →
+  nota **advisory** quando una fonte ha record che mancano all'altra, con
+  suggerimento ("aggregate on the union for complete numbers"). Non blocca mai.
+
+Verifica live (4 fonti): advisory "1 record of legacy_customers missing from
+crm_accounts" ✅; ask "how many unique customers?" → **9** (8 comuni + 1 solo
+in legacy — unione esatta). Test: +4. Suite **1260 passed**.
+
+---
+
+## 2026-07-02 (N fonti: merge same-entity nel Knowledge Graph)
+
+Con N fonti due tabelle possono descrivere la **stessa entità di business**
+(es. `crm_accounts` e `legacy_customers` = gli stessi clienti da due sistemi).
+Nuova **Fase 3 di `build_from_schema`**: merge same-entity via archi `SAME_AS`.
+
+- **Criteri conservativi (entrambi richiesti)**: le chiavi identificano gli
+  stessi record (Jaccard bidirezionale sui campioni PK ≥ `_MERGE_KEY_JACCARD`
+  =0.6, ≥4 distinti per lato) **e** la struttura combacia (colonne condivise ≥
+  `_MERGE_COL_OVERLAP`=0.4 del set minore). Bounded (`_MERGE_MAX_PAIRS`=100),
+  gated da `FRA_KG_ENTITY_MERGE`, degrade su errore.
+- **FK scan merge-aware** (ora Fase 4, dopo il merge): una colonna i cui valori
+  combaciano con **più gemelle SAME_AS** non è ambigua — è la stessa entità.
+  Viene instradata alla gemella **affine per nome** (`customer_id` →
+  `legacy_customers`, non alla prima alfabetica); senza affinità di nome
+  (`emp_id`) si scarta — chiude il falso positivo che il routing cieco
+  reintroduceva. Le "FK" id↔id tra gemelle sono soppresse (ridondanti col merge).
+- **GraphRAG**: gli archi SAME_AS entrano nel contesto come "same entity as X
+  (cross-source — same records)" e portano entrambe le tabelle nel prompt.
+- Il draft espone il merge come relazione `SAME_AS` (visibile in UI Relations).
+
+Smoke live con **4 fonti** (accounts, orders, legacy_customers sovrapposta,
+hr_people non correlata): SAME_AS rilevato, FK instradata alla gemella giusta,
+niente falsi positivi, 0 warnings, ask corretti. Test: +9 (merge/gate/routing
+affine/anti-generico/GraphRAG). Suite **1256 passed**.
+
+---
+
+## 2026-07-02 (Stadio 4 senza LLM + matching template mode-aware)
+
+Smoke live dello stadio 4 ("Refine by instruction") — mai esercitato prima:
+
+1. **Parser rule-based di fallback** (`_rule_based_ops` in integrate.py): senza
+   LLM lo stadio 4 era un vicolo cieco proprio per le due istruzioni che l'UI
+   suggerisce come placeholder. Ora `link <A> to <B> via <col>` e
+   `add a <name> metric = <formula>` funzionano deterministicamente (accettano
+   nomi entità, tabelle e snake_case con spazi).
+2. **Dedupe metriche solo contro le user-defined** (`insert_sl_metric`): la
+   collisione con una metrica builtin demo ("Revenue", invisibile ai live)
+   bloccava la creazione senza spiegazione. Ora i builtin non contano; in più
+   `apply_ops` riporta gli `skipped` con motivo e le note dell'endpoint dicono
+   la verità ("metric 'revenue' already exists — not re-added" invece del
+   fuorviante "AI unavailable").
+3. **Matching template mode-aware** (layer `_detect_intent`): "total revenue"
+   agganciava il template demo "Revenue" (id più basso, tabella nascosta) e il
+   guardrail SQL rispondeva "not available for your workspace". Ora i template
+   che toccano tabelle nascoste (sources o SQL) vengono **saltati al match** →
+   vince il template dell'utente. Il guardrail resta come rete di sicurezza.
+
+Verifica live end-to-end (senza LLM): add metric → applied; "total revenue" →
+**48.067,5** (esatto: Σ i·110,5, i=1..29). Idempotenza con nota chiara.
+Test: +3 (parser fallback). Suite **1247 passed**.
+
+---
+
+## 2026-07-02 (Smoke "sorgente utente → modello" live: 3 fix)
+
+Secondo smoke end-to-end, stavolta sul percorso del cliente: 2 sorgenti CSV
+registrate via `POST /api/sources` (inline) → Auto-Build da utente **live** →
+draft → domanda NL. Trovati e risolti tre difetti:
+
+1. **Le tabelle utente non entravano mai nel KG** quando l'ontologia demo è
+   presente (sempre): `build_from_ontology` mappa solo le entità AW → niente
+   nodi per le tabelle utente → niente FK inference né linking NL. Ora, dopo il
+   build da ontologia, `build_from_schema(mgr, include=<tabelle non coperte>)`
+   aggiunge i nodi schema per le sole tabelle utente
+   (`KnowledgeGraph.ontology_covered_tables`). Verificato: la FK
+   `erp_orders.account_id → crm_accounts.id` ora viene scoperta dal value-scan.
+2. **Template auto-generati in italiano** ("Quanti X", alias `totale_`/`anno`)
+   — violava la regola live no-italiano. Nomi/descrizioni/alias ora in inglese;
+   `upsert_auto_templates` **ritira i nomi vecchi** (solo auto-generati, solo
+   sulle tabelle rigenerate — i template demo restano intatti).
+3. **Matching NL snake_case nei template**: "how many erp orders" non matchava
+   il keyword "how many erp_orders". `_kws` ora emette anche la variante con
+   spazi. Verificato: "how many erp orders?" → risposta **29** (esatta).
+
+Hardening extra: filtro template del draft anche per **tabelle nel SQL** (non
+solo il campo `sources`) contro leak demo→live con `sources` vuoto.
+
+Run finale su ambiente pulito: 0 warnings, 1 relazione, template inglesi,
+domanda NL risposta. Test: +4. Suite **1244 passed**.
+
+---
+
+## 2026-07-02 (Smoke test HTTP end-to-end + 2 fix trovati dal vivo)
+
+Validazione end-to-end del flusso HTTP reale su backend locale pulito
+(FRA_DATA_DIR scratch): login live/demo → `POST /api/pipeline/run` (**risponde in
+63ms** con `running=true` — fix background verificato) → polling → draft → ask.
+Confermato anche: tutti gli store (incluso il nuovo `definitions.db`) creati
+sotto `FRA_DATA_DIR`; run live senza sorgenti = skip puliti; run demo (seed
+`FRA_SEED_DEMO_SOURCES`) = 14 tabelle · 233.995 righe, 25 template replayed.
+
+Il giro ha scovato **2 difetti reali** (demo sano segnava "13 warnings, 11 blocking"):
+
+- **Verifier — falsi bloccanti sulle relazioni**: il known-set era costruito solo
+  con le *tabelle* delle entità, ma i KG da ontologia emettono relazioni per
+  *nome* entità ("SalesOrder") → ogni relazione ontologica segnata "no entity".
+  Ora il set include nomi ∪ tabelle.
+- **Draft — entità duplicate per tabella**: il catalog tiene sia l'entità
+  schema-discovered (nome=tabella) sia quella business (ontologia/proposta) →
+  doppioni in UI e nel verifier. Nuovo `_dedupe_draft_entities()` (puro):
+  una entità per tabella, vince il nome business, eredita le colonne dalla
+  gemella scartata se ne è priva (risolve anche "Entity has no columns").
+
+Dopo i fix, stessa run demo: **0 warnings, 0 blocking**; entità 21→14;
+template 49→36 (spariti quelli dei doppioni). Test: +3. Suite **1241 passed**.
+
+---
+
+## 2026-06-26 (Persistenza definizioni: sl_* fuori dal DB demo effimero)
+
+**Bug di persistenza serio trovato aprendo il cantiere metriche**: `sl_metrics`,
+`sl_hierarchies` e `sl_segments` vivevano dentro `erp_mock.db` — la *fixture demo*
+al path del repo (correttamente esclusa da FRA_DATA_DIR perché read-only). Ma quelle
+tabelle contengono **dati utente** (metriche/gerarchie/segmenti custom + metriche
+applicate dall'Auto-Build) → anche col disco Render montato, sparivano a ogni deploy.
+
+- Nuovo `app/definitions_store.py`: le tre tabelle vivono in
+  `data_dir()/definitions.db` (WAL, stesso posture di concorrenza degli altri store).
+- **Migrazione one-shot** dal DB legacy al primo open (INSERT OR IGNORE per PK),
+  con flag in `_defs_meta` nel **nuovo** DB → le righe cancellate dall'utente non
+  "risorgono" ai boot successivi.
+- Seed dei builtin demo (`_seed_semantic_definitions`) ora scrive direttamente nel
+  nuovo store (idempotente per riga, come prima). API invariate: switchati i 10
+  endpoint CRUD in main.py + `insert_sl_metric` in apply.py; le altre letture
+  erp_mock (dati demo) restano dove sono.
+
+È di fatto il primo passo dell'unificazione store metriche: ora esiste **un solo
+store durabile** per le definizioni; il draft del catalog resta una vista derivata.
+
+Test: nuovo `test_definitions_store.py` (schema sotto FRA_DATA_DIR, migrazione
+one-shot, no-resurrezione, legacy assente); aggiornati i 3 seed-test di
+`test_database.py`. Suite **1238 passed**.
+
+---
+
+## 2026-06-26 (SF ingest: streaming write anti-OOM + stadio 2 con righe totali)
+
+- **Memoria durante il sync Salesforce** (`_ingest_salesforce`): i DataFrame dei
+  record venivano accumulati tutti in lista e scritti a fine fetch → picco RAM =
+  intera org. Ora ogni oggetto viene scritto in DuckDB **dentro il loop** e il
+  frame rilasciato subito → picco = un oggetto alla volta (2000 righe default).
+  Rilevante sull'istanza da 512 MB.
+- **Auto-Build stadio 2 più informativo**: il dettaglio ora mostra anche le righe
+  totali ("5 source tables · 7,420 rows") — colpo d'occhio immediato su quanto
+  è stato letto dalle sorgenti.
+
+Suite completa **1235 passed**.
+
+---
+
+## 2026-06-26 (KG: dedupe relazioni cross-call + draft senza tabelle interne)
+
+Due fix di coerenza del modello trovati continuando la review:
+
+- **Dedupe/upgrade relazioni** (`ingest_manual_relations`): il dedupe era locale
+  alla singola chiamata, ma la stessa join può arrivare da tre strade (value-overlap
+  in `build_from_schema`, relazioni del catalog, relazioni dichiarate Salesforce) →
+  archi paralleli duplicati nel MultiDiGraph. Caso tipico con SF: `FK_AccountId`
+  scoperta dal value-scan E dichiarata dal describe. Ora, se un arco con lo stesso
+  tipo esiste già tra i due nodi, viene **promosso a `manual=True` in place**
+  invece di essere duplicato.
+- **Draft senza cataloghi interni** (`_get_semantic_draft`): le entità del draft
+  venivano filtrate solo su `hidden` → `sf_*_objects`/`sf_*_fields` comparivano
+  come "entità" nella vista Data Model. Ora `internal_metadata_tables` è fusa in
+  `hidden` all'ingresso (copre entità, relazioni e template in un punto solo).
+
+Test: +1 (`test_declared_relation_upgrades_heuristic_edge`: heuristic→declared
+stesso arco, edge_count invariato, re-ingest idempotente). Suite **1235 passed**.
+
+---
+
+## 2026-06-26 (Salesforce: oggetti custom + selezione utente)
+
+In una org reale i dati che contano spesso stanno negli **oggetti custom (`__c`)**,
+che prima restavano fuori: l'ingestion record copriva solo i prioritari standard e
+nella describe i custom finivano in coda al budget (con ~23 prioritari presenti ne
+entrava ~1).
+
+- `get_schema`: ordine di selezione ora **priority → custom → standard** (i custom
+  sono business-specific per definizione, battono gli standard generici); budget
+  describe env-tunable `FRA_SF_MAX_OBJECTS` (default 40, prima 25 hardcoded).
+- Regola record ingestion (`select_record_objects`, pura): selezione **esplicita
+  dell'utente** via `params.objects` (lista o stringa comma-separated) vince su
+  tutto; default = prioritari standard + **tutti i custom**.
+- UI: campo opzionale "Objects to sync" nel form Salesforce (comma-separated,
+  vuoto = default).
+
+Test: +5 (regola selezione esplicita/default/blank, cap env). Suite **1234 passed**.
+
+---
+
+## 2026-06-26 (Tabelle metadati connettore fuori dalla superficie semantica)
+
+Seguito della review: ora che esistono le tabelle record vere, i cataloghi
+`sf_*_objects`/`sf_*_fields` erano rumore nel modello (l'analyzer li proponeva
+come entità; "fields"/"objects" in una domanda li agganciava nel graph context;
+il filtro regex esisteva **solo** nel path di refresh, non al primo boot).
+
+- Nuova property esatta `DuckDBSourceManager.internal_metadata_tables`
+  (derivata dal registry, niente regex).
+- `KnowledgeGraph.build_from_schema` la consulta e **salta** quelle tabelle
+  (copre nodi, FK per nome e value-scan in un punto solo → primo boot e refresh
+  ora coerenti); rimosso il wrapper `_FilteredMgr` regex ridondante in main.
+- Stadio 2 pipeline: `live_tables` esclude le tabelle interne → l'analyzer non
+  propone più entità per i cataloghi. Restano interrogabili in SQL (Data
+  Explorer) e nel prompt schema.
+
+Test: +2 (property, skip in build_from_schema). Suite **1229 passed**.
+
+---
+
+## 2026-06-26 (Review flusso sorgenti → KG → Semantic Layer: Salesforce dati veri + fix persistenza)
+
+Review end-to-end del flusso "connessione sorgenti → KG → semantic layer automatico"
+con Salesforce reale collegato. Tre problemi strutturali trovati e risolti:
+
+### 1. Salesforce ora ingerisce i **record veri**, non solo lo schema
+Prima l'ingest creava solo 2 tabelle di *metadati* (`sf_{id}_objects`, `sf_{id}_fields`)
+→ il modello auto-costruito descriveva "la forma di Salesforce", non i dati del cliente
+(impossibile chiedere "top opportunity per amount").
+- `SalesforceConnector.fetch_records()`: SOQL con paginazione (`nextRecordsUrl`),
+  envelope `attributes` rimosso, solo campi scalari (`ingestable_field_names`).
+- `_ingest_salesforce`: per gli oggetti prioritari (Account, Opportunity, Contact…)
+  crea una tabella record `sf_<oggetto>` con righe reali. Bounded: `FRA_SF_ROW_LIMIT`
+  (default 2000/oggetto, 0=illimitato), gate `FRA_SF_INGEST_RECORDS`. Naming con
+  fallback anti-collisione multi-sorgente (`sf_<id8>_<oggetto>`).
+- `cfg.target_tables` ora popolato (prima vuoto per SF) → la UI Sorgenti mostra le
+  tabelle e il re-sync incrementale droppa correttamente le tabelle vecchie.
+
+### 2. Join **dichiarati** da Salesforce → KG (niente più euristica per SF)
+Il describe metadata porta `referenceTo`: FK esatte. Nuova
+`salesforce_metadata_relations()` (pura, dal JSON schema cache) +
+`DuckDBSourceManager.metadata_relations` (lazy, funziona anche a snapshot caricato
+senza re-sync) → iniettate nel KG via `ingest_manual_relations` in entrambi i punti
+di build (`_ensure_semantic_loaded` e `_refresh_catalog_and_kg_after_rebuild`).
+Lookup polimorfici (WhoId → Contact/Lead) = un arco per target ingerito.
+
+### 3. Recall NL per tabelle snake_case (GraphRAG)
+`sf_account` era un token unico → "top accounts" non linkava. Ora i label sono
+indicizzati anche per **parole componenti** (split su underscore): "accounts" →
+`sf_account`, "order" → `sales_order_header`.
+
+### 4. Fix persistenza (buchi FRA_DATA_DIR sfuggiti al giro precedente)
+`metadata.db` (il modello semantic auto-applicato!), `context.db` (i documenti di
+contesto dello stadio 1!) e `tokens.db` erano ancora hardcoded su `backend/data` →
+**anche col disco Render il modello costruito e i documenti sparivano al restart**.
+Ora instradati via `data_dir()`.
+
+### Test
+Nuovo `test_salesforce_ingest.py` (14 test: relazioni da metadata, campi ingeribili,
+row limit, fetch_records con paginazione fake, naming collisioni, property lazy) +
+`test_graph_rag.py::test_snake_case_table_links_by_component_word`.
+Suite completa **1227 passed, 6 skipped**.
+
+---
+
+## 2026-06-26 (Restyle: identità header viste secondarie)
+
+Esteso il trattamento header con tile `brand-mark` alle viste secondarie, così
+tutte le schermate condividono la stessa identità:
+- Data Explorer, Setup (ProcessView), Compliance & Governance, Data Model
+  (MappingView), Builder AI (OntologyBuilder) → tile gradiente col simbolo sezione.
+- Use Cases: headline hero portata a `text-gradient` (teal→indigo) + scala maggiore.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK. Con questo il brand teal→indigo
+copre tutte le viste principali e secondarie.
+
+---
+
+## 2026-06-26 (Restyle: identità header + bottoni/tile brand)
+
+- **Header con identità brand**: aggiunta una "tile" `brand-mark` (gradiente) col
+  simbolo della sezione accanto al titolo su 6 viste principali — Query AI,
+  Dashboard, Data Sources/Workbench, Agent Orchestration, Configuration, Context.
+- **Bottoni mancati dallo sweep**: 54 bottoni teal pieni con classi non adiacenti
+  (`bg-teal-600 … hover:bg-teal-700`) convertiti al gradiente brand, in 13 viste.
+- **Tile focali → `brand-mark`**: banner "Welcome" della Dashboard e empty-state
+  "Build Your Data Model" del SemanticDraftView (icona bianca, animazione float).
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
+## 2026-06-26 (Restyle: coerenza palette + onboarding)
+
+- **Cohesion neutra**: swap `gray-*` → `slate-*` su tutte le viste (109 occorrenze).
+  `OnboardingWizard` e `ComplianceView` usavano `gray` invece del neutro `slate`
+  dell'app → ora uniformi (scale Tailwind identiche, swap sicuro). Il `blue` è
+  lasciato invariato: è un accento voluto tra i colori-categoria.
+- **OnboardingWizard** (prima esperienza): bottoni Next/Get-started → `.btn-primary`
+  (gradiente brand, prima erano solid teal sfuggiti allo sweep), cerchi di successo
+  → `brand-mark`, wordmark "DataIntelligence" a gradiente.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
+## 2026-06-26 (Restyle: rifinitura viste core + componenti globali)
+
+Rollout del restyle sulle superfici più viste (dopo fondazione + sweep):
+- `QueryInterface`: icona empty-state "AI Data Assistant" → `brand-mark` gradiente con `animate-float`; titolo più marcato.
+- `Dashboard`: KPI card allineate al linguaggio card (`rounded-2xl`) con hover-elevation.
+- `Toast` (globale): elevazione `shadow-lifted` + ring + entrata `animate-fade-up` (colori semantici invariati).
+- `CommandPalette` (⌘K, globale): backdrop blur più profondo, contenitore `shadow-lifted` + ring + `animate-fade-up`, item selezionato in `brand-soft` con barra indicatore a gradiente.
+
+Verifica: `tsc --noEmit` pulito, `vite build` OK.
+
+---
+
+## 2026-06-26 (Persistenza: data dir configurabile via FRA_DATA_DIR)
+
+**Causa del "perdo le connessioni a ogni refresh"**: tutto lo stato mutabile
+(registry sorgenti, token/schema Salesforce, DB SQLite users/workspace/audit/
+notifications/agent_state, DuckDB unificato) vive sotto `backend/data/`, un path
+**hardcoded**. Su Render free-tier il filesystem del container è effimero: viene
+azzerato a ogni deploy, spin-down per inattività (~15 min) e restart per OOM
+(come quello durante l'Auto-Build). Quindi le sorgenti registrate spariscono al
+restart — il refresh del browser lo rende solo visibile.
+
+- Nuovo `app/paths.py::data_dir()`: risolve la dir dati onorando l'env
+  **`FRA_DATA_DIR`** (default invariato: `backend/data`). Instradati tutti gli
+  store hardcoded (`source_registry`, `salesforce_connector`, `duckdb_source_manager`,
+  `users/audit/workspace/notifications` store, `agent_state` e `_DEFAULT_DATA_DIR`
+  in `main.py`). Lasciato fuori `database.py::erp_mock.db` (fixture demo read-only
+  bundled, deve restare al path del repo).
+- **Questa è la condizione necessaria, non la soluzione completa**: per persistere
+  davvero su Render serve montare un **persistent disk** (piano a pagamento) e
+  puntarci `FRA_DATA_DIR=/var/data`; in locale persiste già di default. Nessun
+  cambiamento di comportamento senza l'env impostato.
+
+### Verifica
+- Suite completa **1213 passed, 6 skipped**; smoke import OK (`data_dir()` → `backend/data`).
+
+---
+
+## 2026-06-26 (Auto-Build: polling resiliente ai 502 transitori)
+
+Con la build in background (fix precedente), il polling di `GET /api/pipeline/status`
+si interrompeva al **primo** errore (`PipelineView.poll` chiamava `stopPolling()`
+nel catch). Durante lo stadio 3 (build), su Render free-tier il singolo worker può
+restare brevemente occupato → un 502/timeout dal proxy arriva al browser come errore
+CORS/network → il polling moriva e la UI restava bloccata su "RUNNING" anche a build
+completata lato server.
+
+- `frontend/src/components/PipelineView.tsx`: il polling ora **tollera fino a
+  `MAX_POLL_FAILS=30` fallimenti consecutivi** (~45s di indisponibilità) prima di
+  arrendersi; ogni poll riuscito azzera il contatore. Al superamento della soglia,
+  toast esplicito ("refresh to check its status") invece di un blocco silenzioso.
+  Contatore resettato all'avvio di ogni loop di polling.
+- Lo stadio 3 in live (proposta LLM + build KG + reload + verifica) può richiedere
+  decine di secondi: non è bloccato, e ora la UI riflette il completamento appena
+  il worker torna disponibile.
+
+---
+
+## 2026-06-26 (Fix Auto-Build "network error" — run in background)
+
+`POST /api/pipeline/run` eseguiva l'intera build a 5 stadi **in modo sincrono**
+e rispondeva solo a fine corsa. Su una build reale (analisi documenti + KG +
+proposta semantic + verifica, tutti LLM-backed) il tempo supera il timeout HTTP
+del client (axios 60s) → la richiesta abortiva e l'UI mostrava "network error"
+pur con la build ancora in corso lato server.
+
+- `backend/app/main.py`: l'endpoint ora **ritorna subito** la run riservata
+  (`running=true`) e fa partire `run_build_pipeline` in un thread di background
+  (fire-and-forget); il client traccia l'avanzamento con il polling già esistente
+  su `GET /api/pipeline/status`. Guard di sicurezza: se la build lancia prima di
+  `run.complete()`, la run viene marcata `fail`+`complete` così non resta mai
+  bloccata su "running" (che bloccherebbe ogni run futura con un 409).
+- Allineato al design del frontend (`PipelineView.handleRun` si aspetta già
+  `running=true` → polling). Nessuna modifica ai test: gli e2e invocano
+  `run_build_pipeline` direttamente.
+
+---
+
+## 2026-06-26 (Restyle UI — identità brand teal→indigo, bold)
+
+Restyle visivo bold, a parità di layout e di copy (nessun termine demo/AW toccato).
+L'identità diventa un **gradiente teal→indigo**; la fondazione è ridefinita una
+volta sui token/classi condivise così tutte le 28 view ne beneficiano.
+
+### Fondazione (`tailwind.config.js`, `src/index.css`)
+- Font **Inter**; scala ombre a livelli (`soft`/`elevated`/`lifted`/`glow-brand`/`glow-teal`); gradienti (`bg-brand`, `bg-brand-vivid`, `bg-brand-soft`, `bg-sidebar`, `bg-mesh`, `bg-hero`); animazioni (`fade-up`, `float`, `shimmer`, `pulse-soft`).
+- Classi condivise ridisegnate (stessi nomi → zero breakage): `.card`/`.panel` rounded-2xl + ring hairline + profondità; `.btn-primary` gradiente + glow; input glass; chip a ring. Nuovi helper: `.text-gradient`, `.brand-mark`, `.glass`, `.card-interactive`, `.chip-brand`.
+
+### Shell + viste
+- `Layout.tsx`: sidebar `bg-sidebar` con glow brand, logo `brand-mark`, nav attiva a gradiente con barra indicatore, header glass, sfondo contenuti `bg-mesh`.
+- `OverviewScreen.tsx`: headline a gradiente, CTA brand, card journey/solution con hover-lift ed elevazione, finale `bg-hero`.
+- `AccessGate.tsx`: logo brand-mark, wordmark a gradiente, sfondo `bg-hero` (verificato via screenshot).
+- Sweep cross-view: bottoni primari inline `teal-600→700/500` → gradiente brand; card piatte `border slate-200` → ring + shadow-soft. Collisioni su menu flottanti risolte (rounded-2xl + shadow-lifted).
+
+### Verifica
+- `npx tsc --noEmit` pulito; `npm run build` OK; screenshot login renderizzato correttamente.
+
+---
+
+## 2026-06-25 (Hardening Fase 3 FK + glossario deterministico)
+
+Giro di review-for-improvement sui tre stadi appena rilasciati. Due fonti di
+**falsi positivi** chiuse, zero dipendenze nuove:
+
+- **FK value-overlap anti-falsi-positivi** (`kg/graph.py:_value_overlap_fk`):
+  - *Guardia ambiguità*: una FK reale punta a **una** tabella. Se i valori
+    campionati di una colonna combaciano con le PK di **più** tabelle, sono un
+    dominio generico condiviso (1,2,3…) e non una FK → si scarta invece di
+    indovinare un arco sbagliato (prima vinceva il primo match).
+  - *Guardia bassa cardinalità*: colonne con meno di `_FK_MIN_DISTINCT=4` valori
+    distinti (codici tipo `status_id`/`priority_id`) sono troppo poco selettive
+    per fidarsi dell'overlap → saltate.
+- **Glossario deterministico** (`ingest_glossary_aliases`): la scansione dei
+  label ora è ordinata (più lunghi/specifici prima, poi alfabetico) invece di
+  iterare un `set` → alias stabili tra run e match più specifico in caso di
+  definizione che cita più label.
+
+### Test
+- `test_pipeline` TestValueOverlapFK: +`test_low_cardinality_skipped`,
+  +`test_ambiguous_overlap_skipped`; fixture aggiornate a cardinalità realistica.
+  Suite completa **1213 passed, 6 skipped**.
+
+---
+
+## 2026-06-25 (Stadi 1-3 — alias glossario, FK più forte, proposta più ricca)
+
+Tre migliorie ai primi stadi (tutte KG-only, bounded, zero dipendenze):
+
+### 1. Alias da glossario + sinonimi → recall NL
+- `KnowledgeGraph.attach_aliases()` appende alias (sinonimi) ai nodi type-level; `graph_rag` li indicizza già → la terminologia di business aggancia il nodo giusto.
+- `ingest_glossary_aliases()`: un termine di glossario diventa alias di un nodo **solo se la sua definizione cita un label noto** (conservativo, niente alias spuri). Chiamato in `_ensure_semantic_loaded`/`_refresh` (`_glossary_terms()`).
+
+### 2. FK detection più forte (value-overlap)
+- `build_from_schema` Fase 3: per le colonne id/ref/key non risolte per nome, campiona i valori e li confronta con le colonne PK-candidate delle altre tabelle → crea FK anche con **nomi diversi e cross-source**. Bounded (`_FK_VALUE_SAMPLE=50`, `_FK_MAX_PROBES=200`), gated da `FRA_KG_FK_VALUE_SCAN`, degrade su errore.
+
+### 3. Proposta semantic più ricca
+- `analyze` propone anche **synonyms** per entità; `apply_proposal` li raccoglie (`entity_aliases`) → l'orchestratore li attacca al KG dopo il reload. Le metriche con formula che referenzia **colonne inesistenti vengono scartate** (`_formula_refs_ok`, schema-aware).
+
+### Test
+- `test_pipeline` (+9: alias/glossario/FK value-overlap/proposta), `test_graph_rag` (alias migliora il linking). Suite completa **1211 passed**.
+
+---
+
+## 2026-06-25 (GraphRAG — fallback fuzzy nel linking, zero dipendenze)
+
+Via di mezzo per il recall del table-linking senza appesantire Render: il match della domanda ai nodi del KG ora ha un **fallback fuzzy** (stdlib `difflib`, nessuna dipendenza/memoria) oltre a esatto + singolare/plurale + sinonimi. Cattura refusi/varianti (es. "custmers"→`customers`) senza falsi positivi (cutoff 0.86, solo per token altrimenti non matchati).
+
+### `backend/app/semantic/graph_rag.py`
+- `_FUZZY_CUTOFF=0.86` + `difflib.get_close_matches` come fallback nel linking.
+
+### Test
+- `test_graph_rag`: fuzzy match su refuso; nessun over-match su parola estranea. Suite completa **1203 passed**.
+
+Nota: per terminologie *molto* diverse dai nomi tecnici resta il canale vettoriale (rinviato; valutarlo se il recall su dati reali non basta).
+
+---
+
+## 2026-06-25 (Schema prompt — selezione tabelle guidata dal GraphRAG)
+
+Risolto il limite strutturale del cap fisso: con più fonti fuse il totale tabelle supera qualsiasi N, e includere "le prime N" lasciava fuori dal prompt la tabella che serve. Ora lo schema del prompt LLM-SQL è **scoped alla domanda**.
+
+### `backend/app/semantic/graph_rag.py`
+- `build_graph_context` ritorna anche `tables`: le tabelle rilevanti (matchate + vicini FK/DESCRIBES/MEASURES nel grafo).
+
+### `backend/app/metadata/catalog.py`
+- `get_schema_context(priority_tables=...)`: le priority tables (rilevanti) sono **sempre incluse e mai droppate** dal cap; le altre riempiono il budget fino a `max_tables`. Le chiamate con priority non usano la cache (variano per domanda).
+
+### `backend/app/semantic/layer.py`
+- `_execute_llm_sql`: il GraphRAG gira prima dello schema; le sue `tables` diventano le priority del prompt. Senza match → schema globale come prima (nessuna regressione).
+
+### Effetto
+La tabella che serve alla domanda è **sempre nel prompt**, a qualsiasi numero totale di tabelle e su più fonti (le priority attraversano le fonti via relazioni cross-source). Prompt comunque limitato.
+
+### Test
+- `test_graph_rag` (tables + vicini), `test_metadata_catalog` (priority mai droppata, skip cache). Suite completa **1201 passed**.
+
+---
+
+## 2026-06-25 (Schema prompt — più tabelle + tunable via env)
+
+Il cap di 30 tabelle nel prompt LLM-SQL era troppo basso per CRM/ERP reali (Salesforce ha decine di oggetti): le tabelle oltre la 30ª restavano fuori dal prompt e l'LLM non poteva interrogarle.
+
+### `backend/app/metadata/catalog.py`
+- default `max_tables` alzato **30 → 100**; sia tabelle che colonne ora **configurabili via env**: `FRA_SCHEMA_MAX_TABLES` (default 100) e `FRA_SCHEMA_MAX_COLS` (default 40). Il cap colonne tiene comunque limitata la dimensione del prompt.
+- Suite completa **1197 passed**.
+
+Nota: con schemi enormi (>100 oggetti) la selezione delle tabelle nel prompt resta da rendere guidata dal GraphRAG (follow-up).
+
+---
+
+## 2026-06-25 (Performance — cap colonne nel prompt schema LLM)
+
+Bound deterministico sulla dimensione del prompt di generazione SQL, per fonti larghe (es. oggetti Salesforce con centinaia di campi).
+
+### `backend/app/metadata/catalog.py`
+- `get_schema_context(..., max_cols=40)`: le colonne elencate per tabella sono cappate a 40 con suffisso `… (+N more columns)`. Prima erano illimitate → una tabella molto larga poteva far esplodere prompt/costo/latenza (e rischio token-limit). `max_tables` era già a 30. Cache key aggiornata a `(max_tables, exclude_tables, max_cols)`.
+
+### Test
+- `test_metadata_catalog.py`: `test_columns_capped_per_table` + cache key aggiornata. Suite completa **1197 passed**.
+
+Nota: lo stadio 5 con LLM fa ~5 `ask` + 1 critica per build (già azzerato senza LLM); resta un costo accettabile della verifica, tunable via `_MAX_FAITHFULNESS_QUESTIONS`.
+
+---
+
+## 2026-06-25 (UX — risposte "degradate" del path ask riconoscibili)
+
+Il path `ask` aveva già buona gestione errori (CTA inline per 409→Data Sources, 503/404→Setup, hint 422, niente retry sui prerequisiti). Mancava un caso: quando l'AI non è disponibile il backend risponde **200** con un testo esplicativo che però appariva come una risposta dati normale.
+
+### Frontend
+- `EngineResult.notes` + `adaptAskResult` lo propaga.
+- `QueryInterface`: per i `notes` "degradati" (`unknown_intent_no_llm`, `no_manager`, `llm_sql_*`) mostra un avviso ambra ("AI querying non disponibile / problema temporaneo") sopra la risposta, solo in live. Così non sembra un risultato reale.
+
+---
+
+## 2026-06-25 (Bug-hunt — faithfulness falso-positivo senza LLM)
+
+Bug trovato in review: nello stadio 5 la **faithfulness** e la critica LLM giravano anche senza provider LLM configurato. Senza LLM, `layer.ask()` ritorna messaggi "no LLM" → tutte le risposte campionate risultavano non-grounded → **warning `low_faithfulness` falso-positivo a ogni build**, più ~5 chiamate `ask` inutili.
+
+### `backend/app/pipeline/orchestrator.py`
+- faithfulness sampling (`answer_runner` + domande) e `use_llm` ora **gated** su `_llm_intent_provider() is not None`. Senza LLM: faithfulness saltata, nessun warning spurio, nessuna chiamata sprecata. Il replay query (deterministico) resta sempre attivo.
+
+### Test
+- `test_pipeline_e2e.py`: assert che senza LLM `faithfulness_sampled == 0` e nessun warning `low_faithfulness`. Suite completa **1196 passed**.
+
+---
+
+## 2026-06-25 (Hardening — integrazione conversazionale robusta)
+
+`POST /api/semantic/integrate` (stage 4) reso resiliente e più chiaro.
+
+### `backend/app/main.py`
+- apply ops + rigenerazione template ora in try/except → errore DB/transitorio restituisce un **503 pulito** invece di un 500 con internals.
+- nuovo campo `notes` nella risposta: spiega quando l'AI non è disponibile (no LLM) o quando nessuna modifica è applicabile.
+
+### Frontend
+- `IntegrateResult.notes` + `PipelineView` usa il `notes` del server per il toast (motivo chiaro all'utente, unica fonte di verità).
+
+### Test
+- `backend/tests/test_integrate_endpoint.py` (+3): auth richiesta, degrade pulito senza LLM (no crash + notes), istruzione vuota → 422. Suite completa **1196 passed**.
+
+---
+
+## 2026-06-25 (Hardening — run pipeline concorrenti & stuck-state)
+
+Indurito il path live della pipeline contro i casi limite di concorrenza.
+
+### `backend/app/pipeline/runs.py`
+- nuovo `PipelineRunStore.begin_run()`: prenotazione **atomica** del run sotto lock (guard + reserve in un'unica sezione critica).
+
+### `backend/app/pipeline/orchestrator.py`
+- `run_build_pipeline(..., run=None)`: accetta un run già prenotato; se un run è in corso ritorna quello in-flight invece di avviarne un secondo.
+
+### `backend/app/main.py` (`POST /api/pipeline/run`)
+- prenota il run con `begin_run()` **prima** di schedulare l'executor → elimina la race check-then-act tra due POST concorrenti (prima entrambi passavano `is_running()`).
+- se il build esplode nell'executor, il run viene marcato `error`+completato (niente più stato "running" bloccato che restituirebbe 409 per sempre); 500 pulito al client.
+
+### Test
+- `test_pipeline.py`: `test_begin_run_is_atomic_guard`. Suite completa **1193 passed**.
+
+---
+
+## 2026-06-25 (Consolidamento — test end-to-end della pipeline auto-build)
+
+Aggiunto il regression guard mancante per il flusso principale: un test d'integrazione **multi-fonte** che esegue davvero tutti i 5 stadi dell'orchestratore su dati reali e verifica il modello unificato. Finora c'erano solo unit test dei pezzi + smoke manuali.
+
+### `backend/tests/test_pipeline_e2e.py` (nuovo)
+- Seed di 2 fonti CSV con data model diversi (`customers` + `orders` legati da `customer_id`) in uno snapshot DuckDB reale, cablate come manager/registry di processo; poi `run_build_pipeline` end-to-end.
+- Asserzioni: stadi context(skip)/sources/build/integration/verification, `run.ok`; entità di entrambe le fonti; **relazione cross-source** inferita (`orders→customers`) nel KG/draft; nodi `Concept`/`Metric` dal contesto nel grafo; report di verifica presente.
+- Caso degradato (nessuna fonte): build saltato, run comunque ok. Nessun LLM richiesto (deterministico) → guard stabile.
+- Suite completa: **1192 passed**.
+
+---
+
+## 2026-06-25 (MCP — il Semantic Layer esposto agli agenti AI)
+
+Nuovo **server MCP** (Model Context Protocol) che espone il modello unificato del cliente ad agenti esterni (Claude, ecc.) via un endpoint JSON-RPC 2.0: `POST /api/mcp`. Read-only, JWT-autenticato, confine demo/live rispettato; ispirato a GraphDB 11 di Graphwise ("il grafo come cervello degli agenti"). Nessuna nuova dipendenza (subset MCP implementato a mano).
+
+### `backend/app/mcp_server.py` (nuovo)
+- Tool read-only: `ask` (NL→risposta del semantic layer con SQL/sources/graph_context), `list_metrics`, `get_data_model` (entità + relazioni).
+- `handle_jsonrpc`: `initialize`, `tools/list`, `tools/call`, `ping`, ack `notifications/initialized`; envelope JSON-RPC con `result`/`error`; supporto batch.
+- Dispatch riusa le funzioni esistenti (`semantic_ask`, `get_metrics`, `_get_semantic_draft`) col principal autenticato; errori dei tool ritornati come `isError` (no 500).
+- Sicurezza: solo read-only (niente write/azioni agentiche), JWT obbligatorio, hidden-tables per-caller, guardie SQL/ontologia del layer.
+
+### `backend/app/main.py`
+- `include_router(mcp_router)` (auth dentro la route).
+
+### Test
+- `tests/test_mcp_server.py` (+9): JSON-RPC (initialize/tools.list/errori), 401 senza Bearer, tools/list e get_data_model autenticati. Suite completa 1190 passed.
+
+### Fuori scope v1
+- Streaming SSE/notifiche server→client; tool di scrittura/azioni; OAuth MCP dedicato (si riusa il JWT).
+
+---
+
+## 2026-06-25 (Query UI — citazioni di provenienza dal Knowledge Graph)
+
+Le risposte NL ora mostrano **su cosa sono fondate**: un pannello "Grounded on N model elements" elenca gli elementi del modello usati (tabelle/concetti/metriche come chip colorati per tipo) e le relazioni rilevanti, consumando `provenance.graph_context` prodotto dal GraphRAG. Aumenta la fiducia/trasparienza (stile Graphwise). Compare solo quando presente (risposte LLM-SQL live), nessuna fuga di termini demo.
+
+### Frontend
+- `data/queryEngine.ts`: `EngineResult.provenance` aggiunto.
+- `api/semantic.ts`: `adaptAskResult` propaga `provenance`.
+- `components/QueryInterface.tsx`: nuovo componente `GraphCitations` (chip nodi per tipo + frasi relazione), reso sotto la tabella risultati.
+
+---
+
+## 2026-06-25 (Semantic Layer — GraphRAG: retrieval sul Knowledge Graph)
+
+Quando il semantic layer genera SQL via LLM, il prompt è ora **grounded sul grafo**: dato il quesito si fa entity-linking ai nodi del KG (tabelle, `Concept`, `Metric`), si estrae il sotto-grafo rilevante (relazioni FK/manual, `DESCRIBES`, `MEASURES`) e lo si inietta come contesto. I nodi/archi usati finiscono nella `provenance` (base per citazioni). Ispirato al GraphRAG di Graphwise/Ontotext, ma **KG-only e lessicale** (niente embeddings/vector DB), coerente coi vincoli memoria.
+
+### `backend/app/semantic/graph_rag.py` (nuovo)
+- `build_graph_context(kg, question, hidden_tables, max_nodes)` → `{context, nodes, edges}`. Entity-linking lessicale su nodi type-level (sinonimi inclusi), estrazione archi, filtro tabelle hidden, render compatto. Degrada a contesto vuoto se nessun match.
+
+### `backend/app/semantic/layer.py`
+- `_execute_llm_sql`: costruisce il blocco grafo e lo appende al prompt dopo schema + business context; aggiunge `provenance.graph_context` (nodi/archi). Guard/degrade totale.
+
+### Test
+- `tests/test_graph_rag.py` (+6): linking, sinonimi, filtro hidden, no-match, edge shape. Suite completa 1181 passed. Smoke su KG reale: contesto con relazioni + grounding concetto/metrica.
+
+---
+
+## 2026-06-25 (KG — metriche di business dai documenti come nodi)
+
+Le metriche estratte dai documenti di contesto (e quelle aggiunte a mano nella vista Context) entrano nel Knowledge Graph come **nodi `Metric`** (`source="document"`), ancorate via arco `MEASURES` al concetto/tabella che misurano. Completa la rappresentazione della conoscenza dal contesto nel grafo (concetti + metriche).
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_context_metrics(metrics)`: crea nodi `Metric:{name}` e, se una parola del nome combacia con tabella/entità/concetto, aggiunge un arco `MEASURES`. Idempotente.
+
+### `backend/app/main.py`
+- helper `_context_metrics()` (metriche non-seeded dal context store); ingerite nel KG dopo i concetti in `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`.
+- `_get_semantic_draft()`: gli archi `MEASURES` (oltre a `DESCRIBES`) sono esclusi dalle relazioni tabella-tabella.
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGContextMetrics`). Suite completa 1175 passed. Smoke: metrica doc → nodo `Metric` + arco `MEASURES`.
+
+---
+
+## 2026-06-25 (KG — concetti di business dai documenti come nodi)
+
+Le entità di business estratte dai documenti di contesto entrano nel Knowledge Graph come **nodi `Concept`** (`source="document"`), ancorati alle tabelle dati che descrivono tramite archi `DESCRIBES`. Così il vocabolario di business dal contesto vive nel grafo accanto alla struttura dei dati.
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_context_entities(entities)`: crea nodi `Concept:{name}` e, se nome/sinonimi combaciano con una tabella/entità, aggiunge un arco `DESCRIBES` (match singolare/plurale, preferisce i nodi schema). Idempotente.
+
+### `backend/app/main.py`
+- helper `_doc_context_entities()` (entità con `source="document"` dal context store); ingerite nel KG in `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`.
+- `_get_semantic_draft()` (entrambe le derivazioni relazioni da KG): gli archi `DESCRIBES` sono esclusi dalle relazioni tabella-tabella.
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGContextEntities`). Suite completa 1171 passed. Smoke: entità doc → nodo `Concept` + arco `DESCRIBES` → tabella, senza inquinare le relazioni.
+
+---
+
+## 2026-06-25 (Pipeline — anello Contesto → Knowledge Graph)
+
+Le relazioni *applicate* (proposta auto-build + integrazione conversazionale) ora diventano **archi reali del Knowledge Graph**, non solo voci del catalog. Così il grafo riflette il modello integrato e informato dal contesto, non solo la struttura FK inferita.
+
+### `backend/app/kg/graph.py`
+- nuovo `ingest_manual_relations(relations)`: crea/riusa i nodi tabella (`{table}:__schema__`) e aggiunge gli archi taggati `manual=True`; dedup intra-chiamata; ripristinata anche la property `edge_count`.
+
+### `backend/app/main.py`
+- `_ensure_semantic_loaded()` e `_refresh_catalog_and_kg_after_rebuild()`: dopo la build del KG, ingeriscono `catalog.list_manual_relations()` nel grafo.
+- `_get_semantic_draft()`: le relazioni KG con attributo `manual` vengono marcate `is_manual=true` (no doppioni col merge del catalog).
+
+### Test
+- `test_pipeline.py`: +4 (`TestKGManualRelations`). Suite completa 1167 passed. Smoke end-to-end: relazione manuale → arco KG `manual=True` → draft `is_manual`.
+
+---
+
+## 2026-06-25 (Pipeline — stadio 5: faithfulness scoring sulle risposte)
+
+Completato il "giro di agenti per affidabilità" dello stadio 5 con il **faithfulness scoring**: l'orchestratore campiona alcune domande derivate dai template generati, le fa girare via `layer.ask()` e misura quante risposte sono *grounded* (hanno SQL / sorgenti toccate). Sotto la soglia 0.6 emette il warning `low_faithfulness`. Punteggio esposto nel report e nel pannello di verifica.
+
+### `backend/app/agentic/verifier.py`
+- `verify_model()` accetta `answer_runner` + `questions`; nuovo `_check_faithfulness()`; `faithfulness_score`/`faithfulness_sampled` nel summary.
+
+### `backend/app/pipeline/orchestrator.py`
+- `_sample_questions()` deriva domande dai template; passa un `answer_runner` basato su `layer.ask()` alla verifica.
+
+### Frontend
+- `PipelineView.tsx`: riga "Faithfulness X% · N queries replayed" nel pannello di verifica.
+
+### Test
+- `test_pipeline.py`: +2 (faithfulness basso → warning; grounded → ok). Totale 27; suite completa 1163 passed.
+
+---
+
+## 2026-06-25 (Pipeline — stadio 5: replay query sul dato mappato)
+
+Rafforzata la verifica (stadio 5) con un *query smoke test* read-only: l'orchestratore riesegue i template di query generati contro il dato reale (`mgr.execute`, token `{year}`/`{limit}` sostituiti, `LIMIT 1`) e segnala come warning `template_query_failed` quelli che non girano — verifica concreta che il modello mappato produce query eseguibili.
+
+### `backend/app/agentic/verifier.py`
+- `verify_model()` accetta `query_runner`; nuovo `_check_templates()` (cap 25 template) + `templates_tested` nel summary.
+
+### `backend/app/pipeline/orchestrator.py`
+- passa un `query_runner` read-only basato sul source manager alla verifica.
+
+### Test
+- `test_pipeline.py`: +1 (replay rileva i template falliti). Totale 25; suite completa 1161 passed.
+
+---
+
+## 2026-06-25 (Pipeline — stadio 4 integrazione conversazionale + stadio 5 verifica)
+
+Completati i due stadi prima stub. La pipeline ora copre l'intero flusso a 5 stadi.
+
+### Stadio 4 — integrazione conversazionale (`backend/app/semantic/integrate.py`)
+- `interpret_instruction()` traduce un'istruzione in linguaggio naturale in operazioni *additive* (add_relation / set_entity_description / add_metric), sanificate contro tabelle/entità reali; degrada senza LLM.
+- `apply_ops()` applica le operazioni riusando gli store durevoli (`add_manual_relation`, `save_entity_draft`, `insert_sl_metric`).
+- `POST /api/semantic/integrate`: interpreta → applica → rigenera i template → ritorna le modifiche + draft aggiornato.
+
+### Stadio 5 — verifica affidabilità/consistenza (`backend/app/agentic/verifier.py`)
+- `verify_model()` ora fa controlli reali schema-aware: relazioni verso tabelle/colonne inesistenti, metriche con riferimenti `table.column` inesistenti, entità duplicate/senza colonne, metriche senza formula. Severità high/medium/low.
+- Critica LLM opzionale (advisory), graceful senza provider.
+- L'orchestratore esegue la verifica (stadio 5) e incorpora il report in `PipelineRun.report`; stadio 4 marcato come abilitato.
+
+### `backend/app/semantic/apply.py`
+- Estratti helper condivisi `insert_sl_metric()` e `merge_proposal_metrics_into_draft()` (riusati da build + integrazione).
+
+### Frontend
+- `api/semantic.ts`: `integrateModel()` + tipi `VerificationReport`/`PipelineReport`; `PipelineRun.report`.
+- `PipelineView.tsx`: pannello report di verifica (warning + advisory) e box "Refine by instruction".
+
+### Test
+- `backend/tests/test_pipeline.py`: +7 test (verifica schema-aware, sanitize/apply ops). Totale 24; suite completa 1160 passed.
+
+---
+
+## 2026-06-25 (Auto-build pipeline — Contesto → Fonti → KG/Semantic Layer)
+
+Scheletro della pipeline che costruisce automaticamente Knowledge Graph + Semantic Layer a partire da **documenti di contesto + fonti dati**. Orchestrazione server-side a 5 stadi con stato per-stadio; stadi 1–3 funzionanti (auto-applicati), 4–5 stub. Colmato il gap chiave: la proposta dell'LLM (`/api/semantic/analyze`) ora viene davvero **applicata** al modello, non più solo mostrata.
+
+### Nuovi moduli backend
+- `backend/app/pipeline/runs.py` — `StageStatus` / `PipelineRun` + `PipelineRunStore` (in-process, thread-safe).
+- `backend/app/pipeline/orchestrator.py` — `run_build_pipeline()`: contesto → fonti → analyze(priors) → apply → `reload_semantic()` → template; stadi 4–5 stub; degrade graceful per stadio.
+- `backend/app/context/doc_analyzer.py` — `analyze_documents()`: estrae glossario/entità/metriche/dominio dai documenti caricati, li persiste nel context store e li restituisce come *priors*. Degrada senza LLM.
+- `backend/app/semantic/apply.py` — `apply_proposal()`: persiste relazioni (`add_manual_relation`), metriche (`sl_metrics`) e descrizioni entità (`save_entity_draft`). Idempotente, filtro per confidence.
+- `backend/app/agentic/verifier.py` — `verify_model()`: stub controlli consistenza (relazioni verso tabelle inesistenti, entità senza colonne).
+
+### `backend/app/semantic/analyzer.py`
+- `analyze()` accetta `priors` opzionali; nuovo `_priors_block()` inietta il vocabolario di business nel prompt.
+
+### `backend/app/main.py`
+- `POST /api/pipeline/run` (auto-applica, executor, 409 se già in corso) e `GET /api/pipeline/status`.
+
+### Frontend
+- `frontend/src/api/semantic.ts` — `runPipeline()` / `getPipelineStatus()` + tipi `PipelineRun`/`PipelineStage`.
+- `frontend/src/components/PipelineView.tsx` — vista "Auto-Build" con avanzamento per-stadio (polling) + link alla preview del modello. Wording neutro (no jargon) per utenti live.
+- `Layout.tsx` / `App.tsx` / `types/index.ts` — nuovo tab `pipeline` ("Auto-Build") nel gruppo Model.
+
+### Test
+- `backend/tests/test_pipeline.py` — 17 test: state machine, apply (relazioni/entità, idempotenza, confidence), doc analyzer graceful, priors block, verifier.
+
+---
+
 ## 2026-06-24 (Salesforce — OAuth 2.0 Authorization Code + PKCE, MFA-compatible)
 
 Sostituito il flusso username-password (deprecato da Salesforce, incompatibile con MFA) con Authorization Code + PKCE. Nessuna password viene più memorizzata.

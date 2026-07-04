@@ -29,13 +29,14 @@ const ComplianceView = lazy(() => import('./components/ComplianceView'))
 const UseCasesView = lazy(() => import('./components/UseCasesView'))
 const SemanticLayerView = lazy(() => import('./components/SemanticLayerView'))
 const ContextTab = lazy(() => import('./components/ContextTab'))
+const PipelineView = lazy(() => import('./components/PipelineView'))
 
 const ONBOARDING_KEY = 'si-onboarding-done'
 
 // Tabs that can be deep-linked via the URL hash (#/query, #/sources, …).
 const VALID_TABS: NavTab[] = [
   'overview', 'usecases', 'sembuilder', 'dashboard', 'ontology', 'builder',
-  'agents', 'sources', 'data', 'query', 'process', 'config', 'compliance', 'context',
+  'agents', 'sources', 'data', 'query', 'process', 'config', 'compliance', 'context', 'pipeline',
 ]
 
 function tabFromHash(): NavTab | null {
@@ -260,6 +261,7 @@ export default function App() {
           {activeTab === 'usecases' && (IS_DEMO_MODE ? <UseCasesView onNavigate={setActiveTab} /> : <OverviewScreen onNavigate={setActiveTab} />)}
           {activeTab === 'sembuilder' && <SemanticLayerView />}
           {activeTab === 'context' && <ContextTab />}
+          {activeTab === 'pipeline' && <PipelineView onNavigate={setActiveTab} />}
           {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
           {activeTab === 'ontology' && <OntologyGraph onNavigate={setActiveTab} />}
           {activeTab === 'builder' && <OntologyBuilder />}

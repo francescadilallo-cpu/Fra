@@ -72,7 +72,7 @@ function ToastChip({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
   const { bg, icon } = CHIP_CFG[item.type]
   return (
     <div
-      className={`${bg} text-white text-sm rounded-xl shadow-xl px-4 py-3 flex items-center gap-2.5 pointer-events-auto max-w-sm`}
+      className={`${bg} text-white text-sm rounded-2xl shadow-lifted ring-1 ring-white/10 px-4 py-3 flex items-center gap-2.5 pointer-events-auto max-w-sm animate-fade-up`}
     >
       {icon}
       <span className="flex-1 leading-snug">{item.message}</span>

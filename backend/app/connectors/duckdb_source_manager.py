@@ -37,6 +37,8 @@ import threading
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
+
+from ..paths import data_dir
 from typing import Any
 
 import duckdb
@@ -184,9 +186,7 @@ def get_source_manager(
         return _MANAGER
     with _MANAGER_LOCK:
         if _MANAGER is None:
-            effective_db = db_path or (
-                Path(__file__).parent.parent.parent / "data" / "fra_unified.duckdb"
-            )
+            effective_db = db_path or (data_dir() / "fra_unified.duckdb")
             effective_db.parent.mkdir(parents=True, exist_ok=True)
             registry = get_source_registry()
             _MANAGER = DuckDBSourceManager(scenario_path, effective_db, registry)
@@ -1424,16 +1424,28 @@ class DuckDBSourceManager:
         time), not from cfg.params. cfg.params only carries non-sensitive metadata
         (instance_url, client_id) stored at registration time.
 
-        Creates two tables per source:
+        Creates two metadata tables per source:
           sf_{id}_objects  — one row per SObject (name, label, is_custom, field_count)
           sf_{id}_fields   — one row per field (object_name, field_name, type, ...)
+
+        …and, for the priority business objects (Account, Opportunity, …), one
+        *record table* per object (``sf_account``, ``sf_opportunity``, …) holding
+        real rows fetched via SOQL — bounded by FRA_SF_ROW_LIMIT — so the
+        auto-built KG/semantic layer can actually answer questions about the
+        customer's data, not just describe Salesforce's shape.
         """
+        import pandas as pd
+
         from .salesforce_connector import (
             SalesforceConnector,
             SalesforceAuthError,
             SalesforceAPIError,
+            ingestable_field_names,
             load_salesforce_config,
             save_salesforce_schema,
+            select_record_objects,
+            sf_max_objects,
+            sf_record_row_limit,
             build_salesforce_dataframes,
         )
 
@@ -1444,6 +1456,14 @@ class DuckDBSourceManager:
                 "Re-authorise via the Data Sources connector panel."
             )
 
+        ingest_records = os.getenv("FRA_SF_INGEST_RECORDS", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        n_records = 0
+        n_record_tables = 0
+
         try:
             with SalesforceConnector(
                 instance_url=stored["instance_url"],
@@ -1452,9 +1472,46 @@ class DuckDBSourceManager:
                 client_id=stored.get("client_id"),
                 client_secret=stored.get("client_secret"),
             ) as sf:
-                # Limit to priority objects only on free-tier deployments to
-                # avoid OOM on 512 MB instances during KG rebuild.
-                schema = sf.get_schema(max_objects=25)
+                # Bounded describe budget (one API call per object); priority
+                # business objects first, then custom (__c), then standard.
+                schema = sf.get_schema(max_objects=sf_max_objects())
+
+                if ingest_records:
+                    row_limit = sf_record_row_limit()
+                    # Records: user's explicit selection (params.objects) wins;
+                    # default = priority standard objects + all custom objects.
+                    wanted = select_record_objects(
+                        schema.objects, cfg.params.get("objects")
+                    )
+                    for obj in wanted:
+                        fields = ingestable_field_names(obj.fields)
+                        if not fields:
+                            continue
+                        try:
+                            records = sf.fetch_records(
+                                obj.name, fields, limit=row_limit
+                            )
+                        except Exception as exc:  # noqa: BLE001 — per-object degrade
+                            logger.warning(
+                                "SF record fetch skipped for %s: %s", obj.name, exc
+                            )
+                            continue
+                        if not records:
+                            continue
+                        table = self._sf_record_table_name(cfg, obj.name)
+                        # Write each object straight into DuckDB and release the
+                        # frame — peak memory stays at one object's rows instead
+                        # of the whole org (matters on 512 MB instances).
+                        records_df = pd.DataFrame(records)
+                        conn.execute(
+                            f'CREATE OR REPLACE TABLE "{table}" '
+                            "AS SELECT * FROM records_df"
+                        )
+                        self._row_counts[f"{cfg.id}.{table}"] = len(records_df)
+                        cfg.target_tables.append(table)
+                        n_records += len(records_df)
+                        n_record_tables += 1
+                        del records_df, records
         except (SalesforceAuthError, SalesforceAPIError) as exc:
             raise ValueError(str(exc)) from exc
 
@@ -1478,10 +1535,80 @@ class DuckDBSourceManager:
         n_fields = len(fields_df)
         self._row_counts[f"{cfg.id}.{objects_table}"] = n_objects
         self._row_counts[f"{cfg.id}.{fields_table}"] = n_fields
+        cfg.target_tables.extend([objects_table, fields_table])
 
         logger.info(
-            "SF   %-25s %3d objects  %5d fields", cfg.label, n_objects, n_fields
+            "SF   %-25s %3d objects  %5d fields  %6d records in %d tables",
+            cfg.label,
+            n_objects,
+            n_fields,
+            n_records,
+            n_record_tables,
         )
+
+    def _sf_record_table_name(self, cfg: SourceConfig, obj_name: str) -> str:
+        """Record-table name for a Salesforce object: ``sf_<object>`` when free,
+        falling back to an id-prefixed variant if another source already claims
+        it (row-count keys carry ``source_id.table`` ownership)."""
+        base = f"sf_{obj_name.lower()}"
+        for key in self._row_counts:
+            sid, _, tbl = key.partition(".")
+            if tbl == base and sid != cfg.id:
+                prefix = cfg.id.replace("-", "_")[:8].rstrip("_")
+                return f"sf_{prefix}_{obj_name.lower()}"
+        return base
+
+    @property
+    def internal_metadata_tables(self) -> frozenset[str]:
+        """Connector bookkeeping tables (Salesforce ``sf_<id>_objects`` /
+        ``sf_<id>_fields`` describe catalogs). They stay queryable in SQL but
+        are excluded from the semantic surface (KG nodes, entity proposal) —
+        they describe the *source system*, not the customer's business data."""
+        names: set[str] = set()
+        for cfg in self._registry.list():
+            if cfg.connector_type != "salesforce":
+                continue
+            safe_id = cfg.id.replace("-", "_")
+            names.add(f"sf_{safe_id}_objects")
+            names.add(f"sf_{safe_id}_fields")
+        return frozenset(names)
+
+    @property
+    def metadata_relations(self) -> list[dict]:
+        """FK relations declared by source-system metadata (currently the
+        Salesforce ``referenceTo`` describe data), limited to objects whose
+        record tables exist in the snapshot.
+
+        Derived lazily from the cached schema JSONs so it also works when a
+        prebuilt snapshot is loaded without re-ingesting. Fed into
+        ``KnowledgeGraph.ingest_manual_relations`` after ``build_from_schema``.
+        """
+        from .salesforce_connector import (
+            load_salesforce_schema,
+            salesforce_metadata_relations,
+        )
+
+        try:
+            existing = set(self.get_schema_info().keys())
+        except Exception:  # noqa: BLE001 — advisory metadata, never break callers
+            return []
+        out: list[dict] = []
+        for cfg in self._registry.list():
+            if cfg.connector_type != "salesforce":
+                continue
+            schema = load_salesforce_schema(cfg.id)
+            if not schema:
+                continue
+            safe = cfg.id.replace("-", "_")[:8].rstrip("_")
+            table_by_object: dict[str, str] = {}
+            for obj in schema.get("objects", []):
+                name = str(obj.get("name") or "")
+                for cand in (f"sf_{name.lower()}", f"sf_{safe}_{name.lower()}"):
+                    if cand in existing:
+                        table_by_object[name] = cand
+                        break
+            out.extend(salesforce_metadata_relations(schema, table_by_object))
+        return out
 
     # ── Auto-discovery ─────────────────────────────────────────────────────────
 

@@ -19,8 +19,9 @@ from app.database import get_table_counts
 
 @pytest.fixture()
 def tmp_db(tmp_path, monkeypatch):
-    """Redirect DB_PATH to a tmp file so tests are isolated."""
+    """Redirect DB_PATH (and the definitions store dir) to tmp — isolated."""
     monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "test_erp.db")
+    monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path / "data"))
 
 
 # ── get_connection ─────────────────────────────────────────────────────────────
@@ -116,7 +117,11 @@ class TestInitDb:
 
     def test_seeds_builtin_metrics(self, tmp_db):
         db_module.init_db()
-        conn = db_module.get_connection()
+        # Builtins are seeded into the persistent definitions store, not the
+        # demo fixture DB (user rows must survive deploys).
+        from app.definitions_store import get_definitions_connection
+
+        conn = get_definitions_connection()
         count = conn.execute(
             "SELECT COUNT(*) FROM sl_metrics WHERE is_builtin = 1"
         ).fetchone()[0]
@@ -125,7 +130,11 @@ class TestInitDb:
 
     def test_seeds_builtin_hierarchies(self, tmp_db):
         db_module.init_db()
-        conn = db_module.get_connection()
+        # Builtins are seeded into the persistent definitions store, not the
+        # demo fixture DB (user rows must survive deploys).
+        from app.definitions_store import get_definitions_connection
+
+        conn = get_definitions_connection()
         count = conn.execute(
             "SELECT COUNT(*) FROM sl_hierarchies WHERE is_builtin = 1"
         ).fetchone()[0]
@@ -134,7 +143,11 @@ class TestInitDb:
 
     def test_seeds_builtin_segments(self, tmp_db):
         db_module.init_db()
-        conn = db_module.get_connection()
+        # Builtins are seeded into the persistent definitions store, not the
+        # demo fixture DB (user rows must survive deploys).
+        from app.definitions_store import get_definitions_connection
+
+        conn = get_definitions_connection()
         count = conn.execute(
             "SELECT COUNT(*) FROM sl_segments WHERE is_builtin = 1"
         ).fetchone()[0]

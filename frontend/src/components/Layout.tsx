@@ -43,6 +43,7 @@ const NAV_STAGES: NavStage[] = [
     id: 'model',
     label: 'Model',
     items: [
+      { id: 'pipeline',   label: 'Auto-Build',   icon: Sparkles },
       { id: 'ontology',   label: 'Entity Graph', icon: GitBranch },
       { id: 'builder',    label: 'Builder AI',   icon: Wand2 },
       { id: 'sembuilder', label: 'Data Model',   icon: Network },
@@ -85,13 +86,16 @@ function NavItem({ item, activeTab, onClick }: { item: NavItemDef; activeTab: Na
   return (
     <button
       onClick={() => onClick(item.id)}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+      className={`group/nav relative w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-200 ${
         isActive
-          ? 'bg-teal-500/10 text-teal-300 font-medium ring-1 ring-teal-500/20'
+          ? 'bg-gradient-to-r from-teal-500/20 to-indigo-500/15 text-white font-semibold ring-1 ring-indigo-400/30'
           : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
       }`}
     >
-      <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-teal-400' : ''}`} />
+      {isActive && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-gradient-to-b from-teal-400 to-indigo-400" />
+      )}
+      <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive ? 'text-teal-300' : 'group-hover/nav:text-teal-300'}`} />
       {item.label}
     </button>
   )
@@ -109,7 +113,7 @@ function ProgressSpine({ journey, onNavigate }: { journey: JourneyProgress; onNa
         <span className="text-[10px] font-bold text-teal-300">{doneCount}/{total}</span>
       </div>
       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden mb-2.5">
-        <div className="h-full bg-teal-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-gradient-to-r from-teal-400 to-indigo-400 transition-all duration-500" style={{ width: `${pct}%` }} />
       </div>
       {allDone ? (
         <div className="flex items-center gap-1.5 text-[11px] text-teal-300 font-medium">
@@ -155,7 +159,7 @@ function SectorSwitcher() {
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-lifted z-50 overflow-hidden ring-1 ring-black/5">
           <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/80">
             <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Switch sector</p>
           </div>
@@ -255,7 +259,7 @@ function CompanyMenu({ companyName }: { companyName: string }) {
         <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden ring-1 ring-black/5">
+        <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-lifted z-50 overflow-hidden ring-1 ring-black/5">
           {/* Current company header */}
           <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
             <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Active company</p>
@@ -355,7 +359,7 @@ function HeaderBar({ onTabChange }: { activeTab: NavTab; onTabChange: (t: NavTab
   }, [])
 
   return (
-    <div className="h-14 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm flex items-center justify-between px-6 flex-shrink-0 shadow-sm">
+    <div className="h-14 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl flex items-center justify-between px-6 flex-shrink-0 shadow-soft">
       <div className="flex items-center gap-3">
         {counts.critical > 0 && (
           <button
@@ -478,16 +482,18 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
     <div className="flex h-screen overflow-hidden bg-slate-100">
       <CommandPalette onNavigate={handleTabChange} />
 
-      {/* Sidebar — dark */}
-      <aside className="w-56 flex-shrink-0 bg-slate-900 flex flex-col">
+      {/* Sidebar — dark, brand-gradient base */}
+      <aside className="w-56 flex-shrink-0 bg-sidebar flex flex-col ring-1 ring-white/5 relative">
+        {/* subtle brand glow bleeding from the top */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-indigo-500/10 to-transparent" />
         {/* Logo */}
-        <div className="px-4 py-5 border-b border-white/5">
+        <div className="relative px-4 py-5 border-b border-white/5">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-teal-500/15 flex items-center justify-center ring-1 ring-teal-500/25">
-              <Brain className="w-4 h-4 text-teal-400" />
+            <div className="w-8 h-8 rounded-xl brand-mark flex items-center justify-center">
+              <Brain className="w-4 h-4 text-white" />
             </div>
             <span className="text-sm font-bold text-white tracking-tight">
-              Data<span className="text-teal-400">Intelligence</span>
+              Data<span className="text-gradient">Intelligence</span>
             </span>
           </div>
           <p className="mt-2.5 text-[11px] text-slate-500 leading-tight">Data Intelligence Platform</p>
@@ -562,7 +568,7 @@ export default function Layout({ activeTab, onTabChange, children }: Props) {
 
       <main className="flex-1 flex flex-col overflow-hidden">
         <HeaderBar activeTab={activeTab} onTabChange={onTabChange} />
-        <div key={activeTab} className="flex-1 overflow-auto bg-slate-50 animate-fade-in">
+        <div key={activeTab} className="flex-1 overflow-auto bg-slate-50 bg-mesh animate-fade-in">
           {children}
         </div>
       </main>

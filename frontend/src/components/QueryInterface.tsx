@@ -106,7 +106,7 @@ function InlineBarChart({ chart }: { chart: ChartData }) {
   const barW = Math.max(12, Math.floor(innerW / chart.labels.length) - 8)
 
   return (
-    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto">
+    <div className="mt-3 bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-3 overflow-x-auto">
       <div className="flex items-center gap-1.5 mb-2">
         <BarChart2 className="w-3.5 h-3.5 text-teal-500" />
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
@@ -170,7 +170,7 @@ function InlineLineChart({ chart }: { chart: ChartData }) {
   const area = `${path} L${pts[pts.length - 1].x},${pad.top + innerH} L${pts[0].x},${pad.top + innerH} Z`
 
   return (
-    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto">
+    <div className="mt-3 bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-3 overflow-x-auto">
       <div className="flex items-center gap-1.5 mb-2">
         <TrendingUp className="w-3.5 h-3.5 text-teal-500" />
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
@@ -232,7 +232,7 @@ function InlinePieChart({ chart }: { chart: ChartData }) {
   })
 
   return (
-    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3">
+    <div className="mt-3 bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-3">
       <div className="flex items-center gap-1.5 mb-2">
         <PieChart className="w-3.5 h-3.5 text-teal-500" />
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">{chart.title}</span>
@@ -530,6 +530,73 @@ function StepsTrace({ steps }: { steps: string[] }) {
   )
 }
 
+// ── Knowledge-graph grounding (citations) ───────────────────────────────────────
+
+interface GraphCtxNode { id: string; label: string; kind: string }
+interface GraphCtxEdge { from: string; to: string; type: string }
+
+const KIND_STYLE: Record<string, string> = {
+  table: 'bg-blue-50 text-blue-700 border-blue-200',
+  concept: 'bg-violet-50 text-violet-700 border-violet-200',
+  metric: 'bg-amber-50 text-amber-700 border-amber-200',
+}
+
+function relPhrase(e: GraphCtxEdge): string {
+  if (e.type.startsWith('FK')) {
+    const via = e.type.startsWith('FK_') ? e.type.slice(3) : ''
+    return `${e.from} → ${e.to}${via ? ` (via ${via})` : ''}`
+  }
+  if (e.type === 'DESCRIBES') return `${e.from} describes ${e.to}`
+  if (e.type === 'MEASURES') return `${e.from} measures ${e.to}`
+  return `${e.from} → ${e.to}`
+}
+
+function GraphCitations({ provenance }: { provenance?: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false)
+  const gc = provenance?.graph_context as
+    | { nodes?: GraphCtxNode[]; edges?: GraphCtxEdge[] }
+    | undefined
+  const nodes = gc?.nodes ?? []
+  const edges = gc?.edges ?? []
+  if (nodes.length === 0) return null
+  // De-duplicate relation phrases for a compact display.
+  const rels = Array.from(new Set(edges.map(relPhrase))).slice(0, 8)
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+      >
+        {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <GitBranch className="w-3 h-3" />
+        <span>Grounded on {nodes.length} model element{nodes.length !== 1 ? 's' : ''}</span>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 pl-1">
+          <div className="flex flex-wrap gap-1">
+            {nodes.map(n => (
+              <span
+                key={n.id}
+                title={n.kind}
+                className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${KIND_STYLE[n.kind] ?? 'bg-slate-50 text-slate-600 border-slate-200'}`}
+              >
+                {n.label}
+              </span>
+            ))}
+          </div>
+          {rels.length > 0 && (
+            <ul className="space-y-0.5">
+              {rels.map((r, i) => (
+                <li key={i} className="text-[11px] text-slate-500 font-mono leading-snug">{r}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
 function SqlBlock({ sql }: { sql: string }) {
@@ -571,6 +638,16 @@ function SqlBlock({ sql }: { sql: string }) {
 }
 
 // ── Message bubble ─────────────────────────────────────────────────────────────
+
+// Backend `notes` codes that mean "this answer is a capability/degradation
+// message, not real data" — surfaced with an info notice in live mode.
+const DEGRADED_NOTES = new Set<string>([
+  'unknown_intent_no_llm',
+  'no_manager',
+  'llm_sql_generation_failed',
+  'llm_sql_no_query',
+  'llm_sql_exec_error',
+])
 
 function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavorite }: {
   message: Message
@@ -669,6 +746,20 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           )}
         </div>
 
+        {/* Degraded-answer notice: the answer is a capability message, not data
+            (e.g. AI querying not available, generation failed). Flag it so it
+            doesn't look like a real result. */}
+        {!IS_DEMO_MODE && r.notes && DEGRADED_NOTES.has(r.notes) && (
+          <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>
+              {r.notes === 'unknown_intent_no_llm'
+                ? 'AI querying is not available in this workspace — try a suggested question or a metric you have defined.'
+                : 'The query service had trouble answering this — try rephrasing, or retry in a moment.'}
+            </span>
+          </div>
+        )}
+
         {/* Summary — only rendered when non-empty */}
         {r.summary && (
           <div className="bg-teal-50 border border-teal-100 rounded-lg px-3 py-2">
@@ -706,9 +797,10 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           </div>
         )}
 
-        {/* Steps trace + SQL in a compact row */}
+        {/* Steps trace + graph grounding + SQL in a compact row */}
         <div className="flex flex-col gap-1.5">
           {r.steps && <StepsTrace steps={r.steps} />}
+          <GraphCitations provenance={r.provenance} />
           <SqlBlock sql={r.sql} />
         </div>
 
@@ -831,7 +923,7 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
         <button
           onClick={handleSave}
           disabled={!draft.trim()}
-          className="px-3 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 flex-shrink-0"
+          className="px-3 py-2 bg-brand hover:brightness-110 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 flex-shrink-0"
         >
           {saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : 'Save'}
         </button>
@@ -1037,11 +1129,16 @@ export default function QueryInterface() {
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 bg-white">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Query AI</h1>
-            <p className="text-slate-400 mt-1 text-sm">
-              {workspaceLabel(sector.name)} · Ask questions in natural language — powered by your data model
-            </p>
+          <div className="flex items-center gap-2.5">
+            <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+              <Sparkles className="h-4 w-4 text-white" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Query AI</h1>
+              <p className="text-slate-400 mt-1 text-sm">
+                {workspaceLabel(sector.name)} · Ask questions in natural language — powered by your data model
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* Conversation context indicator */}
@@ -1103,11 +1200,11 @@ export default function QueryInterface() {
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-6 pb-20">
-            <div className="w-16 h-16 bg-teal-500/10 rounded-2xl flex items-center justify-center border border-teal-500/20">
-              <Bot className="w-8 h-8 text-teal-400" />
+            <div className="w-16 h-16 brand-mark rounded-2xl flex items-center justify-center animate-float">
+              <Bot className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">AI Data Assistant</h3>
+              <h3 className="text-xl font-bold text-slate-900 tracking-tight">AI Data Assistant</h3>
               <p className="text-slate-400 mt-1 text-sm max-w-md">
                 Ask questions about your data in natural language and get real results with charts.
               </p>
@@ -1233,7 +1330,7 @@ export default function QueryInterface() {
 
             {/* No example questions CTA for fresh live workspace */}
             {!IS_DEMO_MODE && questionsLoaded && exampleQuestions.length === 0 && backendOnline === true && (
-              <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 text-left w-full max-w-lg">
+              <div className="flex items-start gap-3 bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-4 text-left w-full max-w-lg">
                 <Database className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-slate-700">No example questions available yet</p>

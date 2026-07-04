@@ -74,6 +74,8 @@ Responsabilita:
 - validazione hard-fail contro contratto intent + ontology + metadata catalog
 - generazione query deterministica (template tipizzati, nessun SQL arbitrario generato da LLM)
 - composizione risultato con lineage completo (connectors/tabelle/entita/proprieta)
+- GraphRAG (`semantic/graph_rag.py`): nel path LLM-SQL (`_execute_llm_sql`) il prompt è grounded sul KG — entity-linking del quesito ai nodi (tabelle/`Concept`/`Metric`), estrazione sotto-grafo (relazioni, `DESCRIBES`, `MEASURES`) iniettata nel prompt; nodi/archi usati in `provenance.graph_context`. KG-only, lessicale, degrade se nessun match
+- selezione tabelle del prompt guidata dal GraphRAG: `build_graph_context` ritorna le `tables` rilevanti → passate come `priority_tables` a `catalog.get_schema_context` (sempre incluse, mai droppate dal cap `max_tables`). Risolve il caso schemi grandi/multi-fonte: la tabella che serve è sempre nel prompt
 
 Controlli security specifici nel semantic layer:
 
@@ -116,7 +118,9 @@ Ruoli:
 - PostgresConnector: carica dump SQL ERP in SQLite in-memory (demo legacy)
 - SQLiteConnector: accesso a clienthub.db CRM (demo legacy)
 - FileConnector: carica HR CSV e PIM JSON; normalizza date; query via DuckDB in-memory
-- **SalesforceConnector**: OAuth2 username-password flow; recupera schema SObject completo (fino a 150 oggetti) via Metadata REST API v59.0; crea tabelle DuckDB sf_{id}_objects e sf_{id}_fields; persiste credentials in backend/data/salesforce_config.json e schema in salesforce_schema_{id}.json
+- **SalesforceConnector**: OAuth2 PKCE flow; recupera schema SObject via REST API v59.0; crea tabelle metadati DuckDB sf_{id}_objects/sf_{id}_fields; persiste credentials in `data_dir()/salesforce_config.json` e schema in `salesforce_schema_{id}.json`
+  - **Record ingestion**: per gli oggetti prioritari (Account, Opportunity, …) `fetch_records()` (SOQL + paginazione nextRecordsUrl, solo campi scalari via `ingestable_field_names`) → tabelle record `sf_<oggetto>` (collisione multi-sorgente → `sf_<id8>_<oggetto>`); bounded `FRA_SF_ROW_LIMIT` (default 2000, 0=unlimited), gate `FRA_SF_INGEST_RECORDS`; `cfg.target_tables` popolato (UI + drop su re-sync)
+  - **Relazioni dichiarate**: `salesforce_metadata_relations()` deriva FK esatte dal describe (`referenceTo`, anche lookup polimorfici) dal JSON cache; esposte da `DuckDBSourceManager.metadata_relations` (lazy, snapshot-safe) e iniettate nel KG via `ingest_manual_relations` dopo `build_from_schema` (entrambi i build sites in main.py)
 
 
 ### 3.4 Knowledge Graph
@@ -225,6 +229,40 @@ Nota compatibilita HTTP:
 
 - endpoint /api/agent/execute usa HTTP 422 con costante aggiornata `HTTP_422_UNPROCESSABLE_CONTENT` per compatibilita con stack FastAPI/Starlette recenti
 
+
+### 3.8-ter Auto-build pipeline (Contesto → Fonti → KG/Semantic Layer)
+
+File:
+
+- backend/app/pipeline/runs.py — `PipelineRun`/`StageStatus` + `PipelineRunStore` (in-process, thread-safe)
+- backend/app/pipeline/orchestrator.py — `run_build_pipeline()` orchestra i 5 stadi
+- backend/app/context/doc_analyzer.py — `analyze_documents()` estrae priors dai documenti
+- backend/app/semantic/apply.py — `apply_proposal()` persiste la proposta; helper condivisi `insert_sl_metric()`/`merge_proposal_metrics_into_draft()`
+- backend/app/semantic/integrate.py — stadio 4: `interpret_instruction()`/`apply_ops()` (integrazione conversazionale, ops additive)
+- backend/app/agentic/verifier.py — stadio 5: `verify_model()` controlli reali schema-aware + critica LLM opzionale
+
+Responsabilita:
+
+- 5 stadi: (1) contesto/documenti → priors, (2) fonti dati, (3) build auto-applicato (analyze priors-biased → apply → `reload_semantic()` → template), (4) integrazione conversazionale/manuale, (5) verifica = consistenza schema + replay query (`query_runner`) + faithfulness risposte (`answer_runner`), report in `PipelineRun.report`
+- colma il gap proposta→apply: `/api/semantic/analyze` proponeva soltanto; ora la pipeline scrive relazioni/metriche/descrizioni nel modello e ricostruisce KG+SL
+- le relazioni applicate (proposta + integrazione conversazionale) sono ingerite nel KG come archi `manual=True` (`KnowledgeGraph.ingest_manual_relations`, chiamato in `_ensure_semantic_loaded`/`_refresh_catalog_and_kg_after_rebuild`): il grafo riflette il modello informato dal contesto, non solo gli FK inferiti
+- le entità di business estratte dai documenti entrano nel KG come nodi `Concept` ancorati alle tabelle via archi `DESCRIBES` (`KnowledgeGraph.ingest_context_entities`, da `_doc_context_entities()`); le metriche dai documenti come nodi `Metric` ancorati via `MEASURES` (`ingest_context_metrics`, da `_context_metrics()`). Gli archi `DESCRIBES`/`MEASURES` sono esclusi dalle relazioni tabella-tabella del draft
+- alias di business sui nodi (`attach_aliases`): glossario (`ingest_glossary_aliases`, term→nodo se la definizione cita un label noto **o una parola-componente unica** di un label multi-parola, es. "account" → `crm_accounts`; componenti ambigue ignorate) + sinonimi proposti da `analyze` → migliorano il recall del linking GraphRAG
+- FK detection: oltre ai suffissi nome, fase value-overlap in `build_from_schema` (campiona valori, confronta con PK-candidate) → join con nomi diversi e cross-source; bounded + gated da `FRA_KG_FK_VALUE_SCAN`. Anti-falsi-positivi: arco solo su match **univoco** (overlap con più tabelle → dominio generico, scartato) e con ≥`_FK_MIN_DISTINCT` valori distinti
+- **merge same-entity (N fonti)**: fase `_same_entity_bridges` in `build_from_schema` — due tabelle di fonti diverse che descrivono la stessa entità (chiavi con Jaccard ≥`_MERGE_KEY_JACCARD` **e** colonne condivise ≥`_MERGE_COL_OVERLAP`) → arco `SAME_AS`; bounded (`_MERGE_MAX_PAIRS`), gated `FRA_KG_ENTITY_MERGE`. Gira **prima** del FK scan, che diventa merge-aware (FK verso gemelle → instradata alla gemella affine per nome via `_column_names_table`; niente FK id↔id tra gemelle). GraphRAG narra "same entity as X"; template `Unique <t> across sources` (UNION di **tutte** le tabelle del gruppo via union-find sugli archi `SAME_AS` — con N≥3 fonti un solo template unisce l'intero gruppo, non a coppie); stadio 5 `_check_same_as_coverage` (EXCEPT bidirezionale → advisory sui gap di copertura). UI: riga `SAME_AS` come chip "merged entity" (1≡1)
+- multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
+- endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)
+- frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio, report di verifica e box "Refine by instruction"
+
+### 3.8-quater MCP server (Semantic Layer per agenti AI)
+
+File: backend/app/mcp_server.py
+
+- endpoint JSON-RPC 2.0 `POST /api/mcp` (Model Context Protocol), read-only, JWT-autenticato
+- tool: `ask` (NL→risposta layer con SQL/sources/graph_context), `list_metrics`, `get_data_model`
+- `handle_jsonrpc`: initialize/tools.list/tools.call/ping + ack notifiche; dispatch riusa `semantic_ask`/`get_metrics`/`_get_semantic_draft` col principal; errori tool come `isError`
+- subset MCP implementato a mano (nessuna dipendenza); SSE/notifiche e tool di scrittura fuori scope v1
+- confine demo/live via `_hidden_demo_tables(principal)`; guardie SQL/ontologia ereditate dal layer
 
 ### 3.9 Query engine legacy LLM-to-SQL
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime
 
@@ -32,6 +33,22 @@ from sqlalchemy.pool import StaticPool
 logger = logging.getLogger(__name__)
 
 NULL_RATE_WARN_THRESHOLD = 0.10  # warn if >10 % nulls
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive int env override, falling back to *default*."""
+    try:
+        val = int(os.getenv(name, str(default)).strip())
+        return val if val > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+# How much of the schema goes into the LLM SQL-generation prompt. Generous
+# defaults (a real CRM/ERP has dozens of objects) but bounded so a huge schema
+# can't blow up the prompt; both are env-tunable per deployment.
+SCHEMA_MAX_TABLES = _env_int("FRA_SCHEMA_MAX_TABLES", 100)
+SCHEMA_MAX_COLS = _env_int("FRA_SCHEMA_MAX_COLS", 40)
 
 
 # ── SQLAlchemy models ─────────────────────────────────────────────────────────
@@ -455,30 +472,46 @@ class MetadataCatalog:
         )
 
     def get_schema_context(
-        self, max_tables: int = 30, exclude_tables: frozenset[str] = frozenset()
+        self,
+        max_tables: int = SCHEMA_MAX_TABLES,
+        exclude_tables: frozenset[str] = frozenset(),
+        max_cols: int = SCHEMA_MAX_COLS,
+        priority_tables: frozenset[str] = frozenset(),
     ) -> str:
-        """Return a compact LLM-ready description of all catalogued tables.
+        """Return a compact LLM-ready description of catalogued tables.
 
         Used in the LLM SQL-generation prompt so the model knows exactly which
         tables and columns are available in the DuckDB snapshot.
-        ``exclude_tables`` removes tables from the description (live-mode
-        users must not see demo tables).
+        ``exclude_tables`` removes tables (live-mode users must not see demo
+        tables). ``max_cols`` bounds columns per table so a very wide source
+        cannot blow up the prompt. ``priority_tables`` (the GraphRAG-relevant
+        tables for the question) are listed first and **never dropped** by the
+        ``max_tables`` cap — so the tables a question needs are always present,
+        no matter how many tables the unified model has.
 
-        The result is memoised per ``(max_tables, exclude_tables)`` and
-        invalidated whenever the schema changes, so the hot query path does
-        not rescan every entity and attribute row on each request.
+        The global (no-priority) result is memoised per
+        ``(max_tables, exclude_tables, max_cols)``. Calls with *priority_tables*
+        vary per question and are computed without caching to avoid cache bloat.
         """
-        cache_key = (max_tables, exclude_tables)
+        if priority_tables:
+            return self._compute_schema_context(
+                max_tables, exclude_tables, max_cols, priority_tables
+            )
+        cache_key = (max_tables, exclude_tables, max_cols)
         with self._schema_ctx_lock:
             cached = self._schema_ctx_cache.get(cache_key)
             if cached is not None:
                 return cached
-            result = self._compute_schema_context(max_tables, exclude_tables)
+            result = self._compute_schema_context(max_tables, exclude_tables, max_cols)
             self._schema_ctx_cache[cache_key] = result
         return result
 
     def _compute_schema_context(
-        self, max_tables: int, exclude_tables: frozenset[str] = frozenset()
+        self,
+        max_tables: int,
+        exclude_tables: frozenset[str] = frozenset(),
+        max_cols: int = 40,
+        priority_tables: frozenset[str] = frozenset(),
     ) -> str:
         with self._Session() as session:
             entity_rows = session.execute(select(EntityMetaRow)).scalars().all()
@@ -492,14 +525,11 @@ class MetadataCatalog:
         for ar in attr_rows:
             attrs_by_entity.setdefault(ar.entity, []).append(ar)
 
-        # Deduplicate by actual DuckDB table name — prefer first occurrence
+        # Resolve each entity's DuckDB table, dedup by table (first wins), and
+        # drop excluded tables.
+        resolved: list[tuple] = []  # (table, row)
         seen_tables: set[str] = set()
-        lines: list[str] = ["Available tables in DuckDB:\n"]
-        count = 0
-
         for row in sorted(entity_rows, key=lambda r: r.name):
-            if count >= max_tables:
-                break
             sources = json.loads(row.sources_json or "[]")
             table = next(
                 (s.get("table", row.name) for s in sources if isinstance(s, dict)),
@@ -508,13 +538,26 @@ class MetadataCatalog:
             if table in seen_tables or table in exclude_tables:
                 continue
             seen_tables.add(table)
-            count += 1
+            resolved.append((table, row))
 
+        # Priority (GraphRAG-relevant) tables first and always included; the rest
+        # fill the remaining budget up to max_tables.
+        priority = [(t, r) for t, r in resolved if t in priority_tables]
+        others = [(t, r) for t, r in resolved if t not in priority_tables]
+        budget = max(0, max_tables - len(priority))
+        ordered = priority + others[:budget]
+
+        lines: list[str] = ["Available tables in DuckDB:\n"]
+        for table, row in ordered:
             record_count = row.record_count or 0
             lines.append(f"Table: {table} ({record_count:,} rows)")
             attrs = attrs_by_entity.get(row.name, [])
             if attrs:
-                col_str = ", ".join(f"{a.attribute} {a.data_type}" for a in attrs)
+                shown = attrs[:max_cols]
+                col_str = ", ".join(f"{a.attribute} {a.data_type}" for a in shown)
+                extra = len(attrs) - len(shown)
+                if extra > 0:
+                    col_str += f", … (+{extra} more columns)"
                 lines.append(f"  Columns: {col_str}")
             lines.append("")
 
@@ -964,6 +1007,27 @@ class MetadataCatalog:
                     )
                     s.add(row)
                     count += 1
+
+            # Retire stale auto-templates for the tables just regenerated: a
+            # rename (e.g. Italian → English template names) would otherwise
+            # leave the old name active forever alongside the new one.
+            # Conservative: only rows whose sources are entirely within the
+            # regenerated tables — templates on other tables (e.g. the demo
+            # dataset, absent from a live user's draft) are never touched.
+            new_names = {t["name"] for t in templates}
+            touched = {src for t in templates for src in (t.get("sources") or [])}
+            if touched:
+                for row in (
+                    s.query(QueryTemplateRow)
+                    .filter_by(auto_generated=1, is_active=1)
+                    .all()
+                ):
+                    if row.name in new_names:
+                        continue
+                    row_sources = set(json.loads(row.sources_json or "[]"))
+                    if row_sources and row_sources <= touched:
+                        row.is_active = 0
+                        row.updated_at = now
             s.commit()
         return count
 

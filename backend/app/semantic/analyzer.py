@@ -86,8 +86,46 @@ def _truncate(v: Any) -> str:
     return s[:_VALUE_TRUNCATE] + "…" if len(s) > _VALUE_TRUNCATE else s
 
 
+def _priors_block(priors: dict | None) -> str:
+    """Render document-derived business context as a hint block for the prompt.
+
+    Lets the model align entity/metric names with the user's own vocabulary
+    (extracted from uploaded documents) instead of raw column names.
+    """
+    if not priors:
+        return ""
+    lines: list[str] = []
+    domain = (priors.get("domain") or "").strip()
+    if domain:
+        lines.append(f"Business domain: {domain}")
+    glossary = priors.get("glossary") or []
+    if glossary:
+        terms = "; ".join(
+            f"{g.get('term')}={g.get('definition')}" for g in glossary[:20]
+        )
+        lines.append(f"Glossary: {terms}")
+    ents = priors.get("entities") or []
+    if ents:
+        lines.append(
+            "Known business entities: "
+            + ", ".join(str(e.get("name")) for e in ents[:20])
+        )
+    mets = priors.get("metrics") or []
+    if mets:
+        lines.append(
+            "Known business metrics: "
+            + ", ".join(str(m.get("name")) for m in mets[:20])
+        )
+    if not lines:
+        return ""
+    return (
+        "\n\nBusiness context (hints from the user's documents — prefer this "
+        "vocabulary when naming entities and metrics):\n  " + "\n  ".join(lines)
+    )
+
+
 def _build_prompt(
-    tables: dict[str, dict], profiles: dict[str, dict]
+    tables: dict[str, dict], profiles: dict[str, dict], priors: dict | None = None
 ) -> tuple[str, str]:
     """Compose the (system, user) prompts for the proposal LLM call."""
     system = (
@@ -98,8 +136,9 @@ def _build_prompt(
         "Produce:\n"
         "1. entities — one per table. Give a clear business name (singular, "
         "Title Case, e.g. 'Customer' not 'cust_tbl'), a one-sentence plain-"
-        "language description of what it represents, and the most likely "
-        "primary key column.\n"
+        "language description of what it represents, the most likely primary "
+        "key column, and synonyms (other business terms users might use for it, "
+        "e.g. ['client','account'] for Customer).\n"
         "2. metrics — 3 to 6 genuinely useful business metrics across the "
         "tables. Each needs a business name, a one-sentence description, and a "
         "SQL formula referencing real columns as table.column (e.g. "
@@ -109,7 +148,7 @@ def _build_prompt(
         "Every item carries a confidence number from 0 to 1. Use EXACTLY this "
         "JSON shape:\n"
         '{"entities":[{"table":"","name":"","description":"",'
-        '"primary_key":"","confidence":0.0}],'
+        '"primary_key":"","synonyms":[],"confidence":0.0}],'
         '"metrics":[{"name":"","description":"","formula":"","unit":"",'
         '"confidence":0.0}],'
         '"relations":[{"from_table":"","to_table":"","via_column":"",'
@@ -128,7 +167,7 @@ def _build_prompt(
         for i, row in enumerate(sample, 1):
             cells = ", ".join(f"{k}={_truncate(v)}" for k, v in row.items())
             lines.append(f"  sample{i}: {cells}")
-    user = "Tables to model:\n\n" + "\n".join(lines)
+    user = "Tables to model:\n\n" + "\n".join(lines) + _priors_block(priors)
     return system, user
 
 
@@ -148,12 +187,16 @@ def _sanitize_proposal(raw: dict, valid_tables: set[str]) -> dict[str, Any]:
         table = str(e.get("table", "")).strip()
         if table not in valid_tables:
             continue
+        syns = [str(s).strip() for s in (e.get("synonyms") or []) if str(s).strip()][
+            :20
+        ]
         entities.append(
             {
                 "table": table,
                 "name": str(e.get("name", "") or table).strip(),
                 "description": str(e.get("description", "")).strip(),
                 "primary_key": str(e.get("primary_key", "")).strip(),
+                "synonyms": syns,
                 "confidence": _conf(e.get("confidence")),
             }
         )
@@ -220,11 +263,18 @@ def _fallback_proposal(tables: dict[str, dict], profiles: dict[str, dict]) -> di
     return {"entities": entities, "metrics": [], "relations": []}
 
 
-def analyze(schema_info: dict[str, dict], table_names: list[str]) -> dict[str, Any]:
+def analyze(
+    schema_info: dict[str, dict],
+    table_names: list[str],
+    priors: dict | None = None,
+) -> dict[str, Any]:
     """Profile the given tables and propose a business data model.
 
     Returns ``{tables, proposal, llm_used}`` where ``tables`` maps table name →
     profile and ``proposal`` holds ``entities``/``metrics``/``relations``.
+
+    *priors* are optional document-derived business hints (glossary, entity and
+    metric names, domain) that bias the proposal toward the user's vocabulary.
     """
     tables = {t: schema_info[t] for t in table_names if t in schema_info}
     profiles = {t: profile_table(info) for t, info in tables.items()}
@@ -241,7 +291,7 @@ def analyze(schema_info: dict[str, dict], table_names: list[str]) -> dict[str, A
     try:
         from .layer import complete_json_llm
 
-        system, user = _build_prompt(tables, profiles)
+        system, user = _build_prompt(tables, profiles, priors)
         raw = complete_json_llm(system, user, max_tokens=1800)
         if raw is not None:
             proposal = _sanitize_proposal(raw, set(tables.keys()))

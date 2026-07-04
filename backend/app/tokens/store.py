@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from ..paths import data_dir
+
 _TOKEN_PREFIX = "si_"
 _TOKEN_BYTES = 32  # 256 bits of entropy → 43 base64url chars after prefix
 _DEFAULT_TTL_DAYS = 90
-_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "tokens.db"
+_DEFAULT_DB = data_dir() / "tokens.db"
 
 
 @dataclass

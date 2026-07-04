@@ -364,7 +364,7 @@ function EntitiesTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Saving…' : 'Save entity'}
                 </button>
@@ -570,7 +570,7 @@ function MetricsTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Saving…' : 'Save metric'}
                 </button>
@@ -732,7 +732,7 @@ function GlossaryTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Saving…' : 'Save term'}
                 </button>
@@ -790,11 +790,16 @@ export default function ContextTab() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {/* Page header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-slate-900">Context</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Add business context to guide AI query responses. Documents and definitions you upload take priority over auto-detected information.
-        </p>
+      <div className="mb-6 flex items-center gap-2.5">
+        <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+          <BookOpen className="h-4 w-4 text-white" />
+        </span>
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">Context</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Add business context to guide AI query responses. Documents and definitions you upload take priority over auto-detected information.
+          </p>
+        </div>
       </div>
 
       {/* Sub-tab nav */}

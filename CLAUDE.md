@@ -92,6 +92,15 @@ These ENV vars are already set in `backend/Dockerfile`:
 
 Raise to `0` (unlimited) on plans with ≥ 2 GB RAM.
 
+## LLM SQL prompt size (env-tunable)
+
+`MetadataCatalog.get_schema_context()` builds the schema block for LLM SQL generation. Bounded so a large CRM/ERP schema can't blow up the prompt:
+
+| Var | Default | Effect |
+|---|---|---|
+| `FRA_SCHEMA_MAX_TABLES` | `100` | Max tables described in the prompt |
+| `FRA_SCHEMA_MAX_COLS` | `40` | Max columns per table (then `… (+N more)`) |
+
 ## Key frontend patterns
 
 **Storage split**: Bridges (cross-source entity connections) use localStorage via `ontologyExtensions.ts`; Relations (intra-source FK joins) and Metrics/Hierarchies/Segments use backend API calls.

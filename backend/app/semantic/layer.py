@@ -423,10 +423,35 @@ class _RuleParser:
         if templates:
             q_lower = q.lower()
             raw_lower = question.lower()
+            # Live workspaces must not match demo templates: without this the
+            # lowest-id demo template ("Revenue" on a hidden table) shadows the
+            # user's own metric template, and the SQL guardrail then rejects
+            # the query with an unhelpful "not available" instead of answering.
+            _hidden_tbls = {
+                str(h).lower()
+                for h in getattr(
+                    SemanticLayer._thread_local, "hidden_tables", frozenset()
+                )
+            }
+
+            def _touches_hidden(tpl: dict) -> bool:
+                if not _hidden_tbls:
+                    return False
+                if {str(s).lower() for s in tpl.get("sources") or []} & _hidden_tbls:
+                    return True
+                sql_tokens = set(
+                    re.findall(
+                        r"[a-z_][a-z0-9_]*", (tpl.get("sql_query") or "").lower()
+                    )
+                )
+                return bool(sql_tokens & _hidden_tbls)
+
             best_len = -1
             best_tpl: dict | None = None
             for tpl in templates:
                 if not tpl.get("is_active", True):
+                    continue
+                if _touches_hidden(tpl):
                     continue
                 for kw in tpl.get("keywords", []):
                     k = kw.lower()
@@ -1458,8 +1483,30 @@ class SemanticLayer:
         _hidden: frozenset[str] = getattr(
             SemanticLayer._thread_local, "hidden_tables", frozenset()
         )
+        # GraphRAG: retrieve the relevant sub-graph (relations, concepts,
+        # metrics) for this question first. Its tables seed the schema prompt as
+        # *priority tables* (always included, never dropped by the table cap), so
+        # the tables a question needs are present no matter how many tables the
+        # unified multi-source model has. Degrades to empty when nothing matches.
+        _graph_block = ""
+        _graph_prov: dict[str, Any] = {}
+        _priority_tables: frozenset[str] = frozenset()
+        if self._kg is not None:
+            try:
+                from .graph_rag import build_graph_context
+
+                _gr = build_graph_context(self._kg, intent.raw_question, _hidden)
+                _priority_tables = frozenset(_gr.get("tables") or [])
+                if _gr.get("context"):
+                    _graph_block = "\n\n" + _gr["context"]
+                    _graph_prov = {"nodes": _gr["nodes"], "edges": _gr["edges"]}
+            except Exception as _gr_exc:  # noqa: BLE001 — never break the query
+                logger.debug("graph context retrieval skipped: %s", _gr_exc)
+
         schema_ctx = (
-            self._catalog.get_schema_context(exclude_tables=_hidden)
+            self._catalog.get_schema_context(
+                exclude_tables=_hidden, priority_tables=_priority_tables
+            )
             if self._catalog
             else "No schema available."
         )
@@ -1494,7 +1541,7 @@ class SemanticLayer:
             "Use double-quoted identifiers when column or table names contain spaces. "
             "If the question cannot be answered from the available schema, return "
             '{"sql": "", "reason": "<explanation>"}.\n\n'
-            f"{schema_ctx}{_ctx_block}"
+            f"{schema_ctx}{_ctx_block}{_graph_block}"
         )
         user_content = json.dumps(
             {
@@ -1571,6 +1618,7 @@ class SemanticLayer:
                 "generated_by": "llm_sql",
                 "provider": provider,
                 "intent_hint": intent.intent_type,
+                **({"graph_context": _graph_prov} if _graph_prov else {}),
             },
             notes="Dynamic SQL generated from schema context.",
         )
