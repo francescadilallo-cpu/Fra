@@ -552,7 +552,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 const AW_RELATIONS: {
   source: string; sourceKey: string
   colorBorder: string; colorBg: string; colorText: string; colorDot: string; icon: string
-  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean }[]
+  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1' | '1:1'; fromRows: number; toRows: number; note: string; soft?: boolean }[]
 }[] = []
 
 // Color palette for dynamically derived relation groups
@@ -581,14 +581,16 @@ function buildRelationGroups(
       groups.set(sourceKey, { source: sourceName, sourceKey, ...colors, relations: [] })
     }
     const group = groups.get(sourceKey)!
+    const isMerge = rel.edge_type === 'SAME_AS'
     group.relations.push({
       from: fromEntity?.name || rel.from_table,
       to:   toEntity?.name   || rel.to_table,
-      via:  rel.via_column,
-      cardinality: '1:N',
+      via:  isMerge ? 'same entity' : rel.via_column,
+      // A cross-source entity merge is a 1:1 identity link, not a 1:N join.
+      cardinality: isMerge ? '1:1' : '1:N',
       fromRows: fromEntity?.record_count ?? 0,
       toRows:   toEntity?.record_count   ?? 0,
-      note: rel.edge_type ?? '',
+      note: isMerge ? 'merged entity (same records across sources)' : (rel.edge_type ?? ''),
     })
   }
   return Array.from(groups.values())
@@ -1959,7 +1961,13 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded ${group.colorBg} ${group.colorText}`}>{r.from}</span>
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
-                              {r.cardinality === '1:N' ? (
+                              {r.cardinality === '1:1' ? (
+                                <>
+                                  <span className="text-indigo-500">1</span>
+                                  <span className="text-indigo-500 font-bold">≡</span>
+                                  <span className="text-indigo-500">1</span>
+                                </>
+                              ) : r.cardinality === '1:N' ? (
                                 <>
                                   <span className="text-blue-500">1</span>
                                   <ArrowRight className="w-3 h-3" />

@@ -161,3 +161,105 @@ def test_pipeline_no_sources_degrades(monkeypatch, tmp_path):
     assert states["build"] == "skipped"
     assert run.ok is True
     m._semantic_state["loaded"] = False
+
+
+# ── N-source knowledge merge (SAME_AS) through the real pipeline ──────────────
+
+
+@pytest.fixture()
+def merge_env(tmp_path, monkeypatch):
+    """Three sources: customers + legacy_customers (same entity, one extra
+    record in legacy) + orders (FK to customers). Real DuckDB, no LLM."""
+    monkeypatch.setenv("FRA_STORAGE_MODE", "snapshot")
+    monkeypatch.setenv("SEMANTIC_REQUIRE_LLM_INTENT", "0")
+    monkeypatch.setenv("METADATA_DB_URL", f"sqlite:///{tmp_path / 'metadata.db'}")
+
+    customers = tmp_path / "customers.csv"
+    _write_csv(
+        customers,
+        ["id,name,segment"] + [f"{i},Company {i},SMB" for i in range(1, 9)],
+    )
+    legacy = tmp_path / "legacy_customers.csv"
+    _write_csv(
+        legacy,
+        ["id,name,phone"] + [f"{i},Company {i},+39-{i}" for i in range(1, 10)],
+    )
+    orders = tmp_path / "orders.csv"
+    _write_csv(
+        orders,
+        ["order_id,customer_id,total"]
+        + [f"{100 + i},{1 + i % 6},{i * 10.5}" for i in range(1, 20)],
+    )
+
+    import app.connectors.duckdb_source_manager as mgr_mod
+    import app.connectors.source_registry as reg_mod
+    from app.connectors.duckdb_source_manager import DuckDBSourceManager
+    from app.connectors.source_registry import SourceConfig
+
+    registry = reg_mod.SourceRegistry(tmp_path / "registry.db")
+
+    def _csv(sid: str, path: Path, table: str) -> SourceConfig:
+        return SourceConfig(
+            id=sid,
+            connector_type="csv",
+            label=sid,
+            params={"path": str(path), "table_name": table, "delimiter": ","},
+            target_tables=[table],
+        )
+
+    registry.upsert(_csv("src_cust", customers, "customers"))
+    registry.upsert(_csv("src_leg", legacy, "legacy_customers"))
+    registry.upsert(_csv("src_ord", orders, "orders"))
+
+    scenario = tmp_path / "scenario"
+    scenario.mkdir()
+    mgr = DuckDBSourceManager(scenario, tmp_path / "snap.duckdb", registry)
+    counts = mgr.rebuild()
+    assert counts.get("src_leg.legacy_customers") == 9
+
+    monkeypatch.setattr(reg_mod, "_REGISTRY", registry, raising=False)
+    monkeypatch.setattr(mgr_mod, "_MANAGER", mgr, raising=False)
+
+    import app.main as m
+
+    monkeypatch.setattr(m, "_SCENARIO_PATH", scenario, raising=False)
+    m._semantic_state["loaded"] = False
+    try:
+        yield m
+    finally:
+        m._semantic_state["loaded"] = False
+
+
+def test_pipeline_merges_same_entity_across_sources(merge_env):
+    from app.pipeline.orchestrator import run_build_pipeline
+    from app.pipeline.runs import PipelineRunStore
+
+    run = run_build_pipeline(mode="live", hidden=frozenset(), store=PipelineRunStore())
+    assert run.ok is True
+
+    m = merge_env
+    draft = m._get_semantic_draft(frozenset())
+    rels = {
+        (r["from_table"], r["to_table"], r["edge_type"])
+        for r in draft.get("relations", [])
+    }
+    # The knowledge merge: both tables recognized as the same entity.
+    assert ("customers", "legacy_customers", "SAME_AS") in rels
+    # The FK is still discovered and NOT duplicated toward the twin.
+    assert ("orders", "customers", "FK_customer_id") in rels
+    assert not any(t.startswith("FK_id") for _f, _t2, t in rels)
+
+    # Stage 5 flags the coverage gap (legacy has 1 record customers lacks).
+    verification = run.report.get("verification", {})
+    gaps = [
+        a
+        for a in verification.get("advisory", [])
+        if a.get("type") == "same_as_coverage_gap"
+    ]
+    assert len(gaps) == 1
+    assert "legacy_customers" in gaps[0]["detail"]
+
+    # The merge is queryable: a deduplicated-union template exists.
+    assert any(
+        "across sources" in (t.get("name") or "") for t in draft.get("templates", [])
+    )

@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-02 (Merge N-fonti: regression e2e + visibilità UI)
+
+Blindatura del merge cross-source su due fronti:
+
+- **Test e2e reale** (`test_pipeline_e2e.py::test_pipeline_merges_same_entity_
+  across_sources`): 3 CSV (customers + legacy_customers sovrapposta con 1 record
+  extra + orders) → snapshot DuckDB reale → orchestratore completo (no LLM).
+  Asserisce: arco `SAME_AS` nel draft, FK `orders→customers` presente e **non**
+  duplicata verso la gemella, advisory di copertura sullo stadio 5, template
+  "across sources" generato. Prima la garanzia viveva solo negli smoke manuali.
+- **Visibilità UI**: la relazione `SAME_AS` non appare più come una FK qualsiasi.
+  In `SemanticDraftView` (Data Model) → chip "merged entity" + glifo `≡` nella
+  colonna via + riga tinta brand. In `SemanticLayerView` → cardinalità **1≡1**
+  (non il fuorviante 1:N), via "same entity", nota esplicita.
+
+Suite **1261 passed**; `tsc` + build frontend puliti.
+
+---
+
 ## 2026-07-02 (Merge interrogabile + verifica di copertura cross-source)
 
 Il merge SAME_AS diventa **interrogabile** e **verificato** (stadio 5):

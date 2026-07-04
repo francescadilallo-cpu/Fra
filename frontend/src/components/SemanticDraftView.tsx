@@ -466,13 +466,21 @@ function RelationsTab({
                 </tr>
               </thead>
               <tbody>
-                {relations.map((r, i) => (
-                  <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                {relations.map((r, i) => {
+                  const isMerge = r.edge_type === 'SAME_AS'
+                  return (
+                  <tr key={i} className={`border-b border-slate-50 hover:bg-slate-50 ${isMerge ? 'bg-brand-soft/40' : ''}`}>
                     <td className="py-1.5 px-2 font-mono text-slate-700">{r.from_table}</td>
-                    <td className="py-1.5 px-2 font-mono text-teal-600">{r.via_column || '—'}</td>
+                    <td className="py-1.5 px-2 font-mono text-teal-600">
+                      {isMerge ? <span className="text-indigo-500" title="Same entity — no join column">≡</span> : (r.via_column || '—')}
+                    </td>
                     <td className="py-1.5 px-2 font-mono text-slate-700">{r.to_table}</td>
                     <td className="py-1.5 px-2 text-[11px]">
-                      {r.is_manual ? (
+                      {isMerge ? (
+                        <span className="chip chip-brand" title="These two tables describe the same business entity across sources">
+                          merged entity
+                        </span>
+                      ) : r.is_manual ? (
                         <span className="bg-blue-50 text-blue-600 rounded px-1.5 py-0.5">manual</span>
                       ) : (
                         <span className="text-slate-400">{r.edge_type}</span>
@@ -493,7 +501,8 @@ function RelationsTab({
                       )}
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
