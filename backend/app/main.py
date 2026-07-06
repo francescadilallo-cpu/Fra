@@ -834,8 +834,14 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
     keeps showing nodes/edges/relations from the snapshot that existed when it
     was first built, even though the underlying tables have since changed.
 
-    No-op for either half if the semantic layer hasn't been loaded yet.
+    Blocks until the semantic layer is loaded if a sync races the startup warmup.
     """
+    # If a sync runs before warmup completes (e.g. user syncs immediately after
+    # restart), catalog/kg are None and the refresh would silently no-op. Wait
+    # for warmup to finish so we always have a real catalog to populate.
+    if _semantic_state.get("catalog") is None:
+        _ensure_semantic_loaded()
+
     catalog = _semantic_state.get("catalog")
     if catalog is not None:
         try:

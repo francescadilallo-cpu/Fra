@@ -43,6 +43,9 @@ ENV FRA_KG_EDGE_LIMIT=5000
 # start. On a warmer plan set to "false" to pre-build on boot.
 ENV FRA_SKIP_WARMUP=true
 
+# Salesforce: describe all queryable SObjects (no cap). 0 = unlimited.
+ENV FRA_SF_MAX_OBJECTS=0
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

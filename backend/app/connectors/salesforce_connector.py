@@ -726,15 +726,15 @@ class SalesforceConnector:
 
 
 def sf_max_objects() -> int:
-    """Max SObjects described per sync (one API call each). Defaults to 40 so
-    real orgs get their custom objects described, not just the standard
-    priority set. Set FRA_SF_MAX_OBJECTS to tune; invalid values fall back."""
+    """Max SObjects described per sync. 0 = unlimited (describe all queryable
+    objects). Set FRA_SF_MAX_OBJECTS to tune; invalid/negative values fall back
+    to 40."""
     raw = os.getenv("FRA_SF_MAX_OBJECTS", "40").strip()
     try:
         val = int(raw)
     except ValueError:
         return 40
-    return val if val > 0 else 40
+    return val if val >= 0 else 40
 
 
 def select_record_objects(objects: list, explicit) -> list:
