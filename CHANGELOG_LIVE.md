@@ -10,6 +10,27 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Merge di main: eredità sviluppi paralleli, feature branch preservate)
+
+Merge di `origin/main` (49 commit: merge cross-source SAME_AS, pipeline
+orchestrator, ingestion record Salesforce via SOQL, template mode-aware,
+persistenza definizioni) nel branch mantenendo le funzionalità uniche:
+logging piattaforma (`/api/admin/logs`), `/api/admin/debug`, schema graph
+Salesforce (Composite batch), delete entità/relazioni, sync non-bloccante.
+
+**Risoluzioni chiave:**
+- `_ingest_salesforce`: describe via Composite batch (`get_schema_bulk`,
+  bound `FRA_SF_MAX_OBJECTS`) + ingestion record SOQL di main; tabelle
+  schema-only 0-row come fallback quando `FRA_SF_INGEST_RECORDS=false`.
+- Proxy `_FilteredMgr` rimosso a favore di `internal_metadata_tables` di main.
+- `salesforce_config.json` (credenziali live) e cache schema 11 MB tolte dal
+  tracking git (restano su disco, ora in .gitignore).
+
+**Files:** `backend/app/connectors/{salesforce_connector,duckdb_source_manager}.py`,
+`backend/app/main.py`, `frontend/src/components/SemanticLayerView.tsx`, `.gitignore`
+
+---
+
 ## 2026-07-02 (Metriche su entità fuse: advisory numeri parziali)
 
 Ultimo anello "prova a romperlo": una metrica la cui formula aggrega una tabella
