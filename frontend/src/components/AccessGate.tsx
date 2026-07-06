@@ -50,15 +50,15 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-hero flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-teal-500/10 ring-1 ring-teal-500/25 flex items-center justify-center mb-4">
-            <Brain className="w-7 h-7 text-teal-400" />
+          <div className="w-14 h-14 rounded-2xl brand-mark flex items-center justify-center mb-4">
+            <Brain className="w-7 h-7 text-white" />
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
-            Data<span className="text-teal-400">Intelligence</span>
+            Data<span className="text-gradient">Intelligence</span>
           </h1>
           <p className="text-slate-500 text-sm mt-1">Data Intelligence Platform</p>
         </div>
@@ -114,7 +114,7 @@ export default function AccessGate({ onGrant }: { onGrant: () => void }) {
             <button
               onClick={goToMode}
               disabled={!username.trim() || !password.trim()}
-              className="w-full mt-4 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
+              className="w-full mt-4 bg-brand hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-lg transition-colors"
             >
               Continue →
             </button>

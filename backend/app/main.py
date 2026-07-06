@@ -45,6 +45,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from .database import get_connection, get_table_counts, init_db
+from .definitions_store import get_definitions_connection
+from .paths import data_dir
 from .models import (
     DashboardData,
     HierarchyCreate,
@@ -62,6 +64,7 @@ from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
 from .semantic.template_generator import generate_templates_from_draft
 from .context.router import router as context_router
+from .mcp_server import router as mcp_router
 from .audit.router import router as audit_router
 from .audit.store import get_audit_store
 from .users.router import router as users_router
@@ -631,6 +634,42 @@ _semantic_init_lock = threading.RLock()
 _SCENARIO_PATH = Path(__file__).parent.parent.parent / "test_scenario"
 
 
+def _doc_context_entities() -> list[dict]:
+    """Document-derived business concepts (source='document') from the context
+    store, shaped for KnowledgeGraph.ingest_context_entities()."""
+    try:
+        return [
+            {"name": e.name, "synonyms": e.synonyms}
+            for e in _context_store.list_entities()
+            if getattr(e, "source", "") == "document"
+        ]
+    except Exception:  # noqa: BLE001 — context entities are optional enrichment
+        return []
+
+
+def _context_metrics() -> list[dict]:
+    """Non-seeded context metrics (document-derived or hand-added in the Context
+    view), shaped for KnowledgeGraph.ingest_context_metrics()."""
+    try:
+        return [
+            {"name": m.name, "unit": m.unit}
+            for m in _context_store.list_metrics(exclude_seeded=True)
+        ]
+    except Exception:  # noqa: BLE001 — context metrics are optional enrichment
+        return []
+
+
+def _glossary_terms() -> list[dict]:
+    """Glossary terms from the context store, for KG alias attachment."""
+    try:
+        return [
+            {"term": g.term, "definition": g.definition}
+            for g in _context_store.list_glossary()
+        ]
+    except Exception:  # noqa: BLE001 — glossary aliases are optional enrichment
+        return []
+
+
 def _ensure_semantic_loaded() -> None:
     """Lazily build semantic stack exactly once (thread-safe).
 
@@ -677,6 +716,16 @@ def _ensure_semantic_loaded() -> None:
             # Schema-driven: reads entity→table mappings from the YAML, works with
             # any registered source including custom domains beyond ERP/CRM/HR/PIM.
             kg.build_from_ontology(_mgr, ontology)
+            # User-registered tables the ontology doesn't map would otherwise
+            # never enter the graph — no FK inference, no NL linking. Augment
+            # with schema nodes for exactly those tables.
+            try:
+                covered = KnowledgeGraph.ontology_covered_tables(ontology)
+                extra = set(_mgr.get_schema_info()) - covered
+                if extra:
+                    kg.build_from_schema(_mgr, include=extra)
+            except Exception as _aug_exc:  # noqa: BLE001
+                logger.warning("KG schema augmentation skipped: %s", _aug_exc)
         else:
             # Fallback: schema-driven, works with any registered source.
             kg.build_from_schema(_mgr)
@@ -687,7 +736,7 @@ def _ensure_semantic_loaded() -> None:
         # and populate_*() are idempotent upserts, so reopening an existing
         # file is safe.
         metadata_db_url = os.getenv("METADATA_DB_URL", "").strip() or (
-            f"sqlite:///{Path(__file__).parent.parent / 'data' / 'metadata.db'}"
+            f"sqlite:///{data_dir() / 'metadata.db'}"
         )
         catalog = MetadataCatalog(metadata_db_url)
         # Schema-driven discovery first — source of truth for table/column
@@ -704,6 +753,27 @@ def _ensure_semantic_loaded() -> None:
             catalog.prune_phantom_entities(_known)
         except Exception as _prune_exc:
             logger.warning("catalog prune skipped: %s", _prune_exc)
+
+        # Fold user-defined / auto-applied relations into the KG so the graph
+        # reflects the integrated model, not just FK-inferred structure.
+        try:
+            kg.ingest_manual_relations(catalog.list_manual_relations())
+        except Exception as _rel_exc:
+            logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+        # Joins *declared* by the source system (Salesforce referenceTo) — exact
+        # relations from describe metadata, better than name/value heuristics.
+        try:
+            kg.ingest_manual_relations(getattr(_mgr, "metadata_relations", []) or [])
+        except Exception as _md_exc:
+            logger.warning("KG source-metadata relation ingest skipped: %s", _md_exc)
+        # Fold document-derived business concepts into the KG (grounded to the
+        # data tables they describe), so context knowledge enters the graph.
+        try:
+            kg.ingest_context_entities(_doc_context_entities())
+            kg.ingest_context_metrics(_context_metrics())
+            kg.ingest_glossary_aliases(_glossary_terms())
+        except Exception as _ctx_exc:
+            logger.warning("KG context ingest skipped: %s", _ctx_exc)
 
         ctx_mgr = ContextManager()
         _DOCS_PATH = (
@@ -800,29 +870,43 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
             # the Salesforce connector to hold object/field metadata) are
             # invisible to the KG builder — they are not business entities
             # and would inflate the graph with thousands of spurious nodes.
-            class _FilteredMgr:
-                """Thin proxy that hides sf_*_objects / sf_*_fields tables."""
-
-                def __init__(self, inner):
-                    self._inner = inner
-
-                def get_schema_info(self):
-                    return {
-                        k: v
-                        for k, v in self._inner.get_schema_info().items()
-                        if not _SF_META_TABLE_RE.match(k)
-                    }
-
-                def __getattr__(self, name):
-                    return getattr(self._inner, name)
-
             new_kg = KnowledgeGraph()
             ontology = _semantic_state.get("ontology")
-            filtered_mgr = _FilteredMgr(mgr)
+            # Connector bookkeeping tables (sf_*_objects / sf_*_fields) are
+            # excluded inside build_from_schema via mgr.internal_metadata_tables.
             if ontology is not None:
-                new_kg.build_from_ontology(filtered_mgr, ontology)
+                new_kg.build_from_ontology(mgr, ontology)
+                # Cover user tables the ontology doesn't map (see the twin
+                # block in _ensure_semantic_loaded).
+                try:
+                    covered = KnowledgeGraph.ontology_covered_tables(ontology)
+                    extra = set(mgr.get_schema_info()) - covered
+                    if extra:
+                        new_kg.build_from_schema(mgr, include=extra)
+                except Exception as _aug_exc:  # noqa: BLE001
+                    logger.warning("KG schema augmentation skipped: %s", _aug_exc)
             else:
-                new_kg.build_from_schema(filtered_mgr)
+                new_kg.build_from_schema(mgr)
+            # Re-fold manual/applied relations + context concepts into the KG.
+            if catalog is not None:
+                try:
+                    new_kg.ingest_manual_relations(catalog.list_manual_relations())
+                except Exception as _rel_exc:
+                    logger.warning("KG manual-relation ingest skipped: %s", _rel_exc)
+            try:
+                new_kg.ingest_manual_relations(
+                    getattr(mgr, "metadata_relations", []) or []
+                )
+            except Exception as _md_exc:
+                logger.warning(
+                    "KG source-metadata relation ingest skipped: %s", _md_exc
+                )
+            try:
+                new_kg.ingest_context_entities(_doc_context_entities())
+                new_kg.ingest_context_metrics(_context_metrics())
+                new_kg.ingest_glossary_aliases(_glossary_terms())
+            except Exception as _ctx_exc:
+                logger.warning("KG context ingest skipped: %s", _ctx_exc)
             _semantic_state["kg"] = new_kg
         except Exception as exc:
             logger.warning("KG refresh after rebuild failed: %s", exc)
@@ -982,21 +1066,65 @@ def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
     return len(visible), edge_count
 
 
+def _dedupe_draft_entities(entities: list[dict]) -> list[dict]:
+    """Collapse duplicate entities that map to the same table.
+
+    The catalog can hold two entities for one table: the schema-discovered one
+    (named after the table) and the business one (ontology/proposal name).
+    Showing both duplicates the model in the UI and trips the verifier — keep
+    one per table, preferring the business name and inheriting columns from
+    the discarded twin when the kept one has none.
+    """
+    by_table: dict[str, dict] = {}
+    deduped: list[dict] = []
+    for e in entities:
+        tbl = e.get("table") or ""
+        prev = by_table.get(tbl)
+        if not tbl or prev is None:
+            if tbl:
+                by_table[tbl] = e
+            deduped.append(e)
+            continue
+        prev_biz = (prev.get("name") or "") != tbl
+        e_biz = (e.get("name") or "") != tbl
+        keep, drop = (e, prev) if (e_biz and not prev_biz) else (prev, e)
+        if not keep.get("columns") and drop.get("columns"):
+            keep["columns"] = drop["columns"]
+            if drop.get("column_types"):
+                keep["column_types"] = drop["column_types"]
+        if keep is not prev:
+            deduped[deduped.index(prev)] = keep
+            by_table[tbl] = keep
+    return deduped
+
+
 def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     """Return the current semantic layer state as an editable draft dict.
 
     *hidden* is a set of table names whose derived entities, relations and
     templates must be excluded (live-mode users hiding the demo dataset).
     """
+    # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are not
+    # part of the business model — keep them out of the draft like hidden ones.
+    try:
+        from .connectors.duckdb_source_manager import get_source_manager
+
+        _mgr = get_source_manager(_SCENARIO_PATH)
+        hidden = hidden | frozenset(getattr(_mgr, "internal_metadata_tables", ()) or ())
+    except Exception:  # noqa: BLE001 — draft must render even without sources
+        pass
+
     catalog = _semantic_state.get("catalog")
     kg = _semantic_state.get("kg")
 
     all_entities = catalog.get_draft_entities() if catalog else []
-    entities = [
-        e
-        for e in all_entities
-        if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
-    ]
+    entities = _dedupe_draft_entities(
+        [
+            e
+            for e in all_entities
+            if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+        ]
+    )
     metrics = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
     # table names depending on the build path — hide both forms.
@@ -1020,6 +1148,9 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     if kg:
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
+            # Concept/Metric grounding edges are not table-to-table relations.
+            if edge_type in ("DESCRIBES", "MEASURES"):
+                continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
             if src_table in hidden_keys or dst_table in hidden_keys:
@@ -1035,7 +1166,7 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
                         if edge_type.startswith("FK_")
                         else "",
                         "edge_type": edge_type,
-                        "is_manual": False,
+                        "is_manual": bool(data.get("manual", False)),
                     }
                 )
     if catalog:
@@ -1061,9 +1192,23 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
 
     templates = catalog.list_templates() if catalog else []
     if hidden:
-        templates = [
-            t for t in templates if not (set(t.get("sources") or []) & hidden_keys)
-        ]
+        # A template belongs to the demo dataset if its declared sources OR the
+        # tables referenced in its SQL touch a hidden table. Checking sources
+        # alone let demo templates with an empty sources list leak into live
+        # drafts (and their Italian names into the live verification report).
+        _hidden_lower = {str(h).lower() for h in hidden_keys}
+
+        def _refs_hidden(t: dict) -> bool:
+            if set(t.get("sources") or []) & hidden_keys:
+                return True
+            sql_tokens = set(
+                re.findall(
+                    r"[A-Za-z_][A-Za-z0-9_]*", (t.get("sql_query") or "").lower()
+                )
+            )
+            return bool(sql_tokens & _hidden_lower)
+
+        templates = [t for t in templates if not _refs_hidden(t)]
         if not entities:
             templates = []
 
@@ -1381,12 +1526,14 @@ async def _reject_oversized_requests(request: Request, call_next):
 
 _http_logger = logging.getLogger("fra.http")
 # Paths too noisy to log at INFO (polled frequently by the frontend)
-_SILENT_PATHS = frozenset({
-    "/api/semantic/status",
-    "/api/sources",
-    "/health",
-    "/healthz",
-})
+_SILENT_PATHS = frozenset(
+    {
+        "/api/semantic/status",
+        "/api/sources",
+        "/health",
+        "/healthz",
+    }
+)
 
 
 @app.middleware("http")
@@ -1466,7 +1613,7 @@ _agentic_layer = ExecutiveAgenticLayer(
     cache_invalidator=_agentic_cache_invalidator,
     # File-backed state so the pending-approval queue and audit trail survive
     # restarts and are shared across worker processes.
-    state_db_path=Path(__file__).parent.parent / "data" / "agent_state.db",
+    state_db_path=data_dir() / "agent_state.db",
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 app.include_router(
@@ -1493,6 +1640,8 @@ app.include_router(
     workspace_router,
     dependencies=[Depends(require_roles("user", "admin"))],
 )
+# MCP server: auth is enforced inside the route (JWT, user/admin) — see mcp_server.py
+app.include_router(mcp_router)
 
 
 def _audit(
@@ -1615,7 +1764,11 @@ def get_debug_state(
     try:
         all_entities = catalog.get_draft_entities() if catalog else []
         entity_summary = [
-            {"name": e["name"], "table": e["table"], "record_count": e.get("record_count", 0)}
+            {
+                "name": e["name"],
+                "table": e["table"],
+                "record_count": e.get("record_count", 0),
+            }
             for e in all_entities
         ]
     except Exception as exc:
@@ -1631,6 +1784,7 @@ def get_debug_state(
 
     # Source registry
     from .connectors.source_registry import get_source_registry
+
     sources_info = [
         {"id": c.id, "label": c.label, "status": c.status, "tables": c.target_tables}
         for c in get_source_registry().list()
@@ -1642,7 +1796,9 @@ def get_debug_state(
         "semantic_loaded": _semantic_state.get("loaded", False),
         "user_mode": current_user.mode,
         "hidden_table_count": len(hidden),
-        "duckdb_table_count": len(duckdb_tables) if isinstance(duckdb_tables, dict) and "error" not in duckdb_tables else "error",
+        "duckdb_table_count": len(duckdb_tables)
+        if isinstance(duckdb_tables, dict) and "error" not in duckdb_tables
+        else "error",
         "duckdb_tables": duckdb_tables,
         "entity_meta_count": len(entity_summary),
         "entity_meta": entity_summary,
@@ -1654,8 +1810,12 @@ def get_debug_state(
 @app.get("/api/admin/logs", tags=["admin"])
 def get_admin_logs(
     n: int = Query(200, ge=1, le=1000, description="Max entries to return"),
-    level: str = Query("INFO", description="Minimum log level (DEBUG/INFO/WARNING/ERROR)"),
-    search: str = Query("", description="Filter entries whose message contains this string"),
+    level: str = Query(
+        "INFO", description="Minimum log level (DEBUG/INFO/WARNING/ERROR)"
+    ),
+    search: str = Query(
+        "", description="Filter entries whose message contains this string"
+    ),
     current_user: UserPrincipal = Depends(require_roles("admin")),
 ) -> list[dict]:
     """Return recent log entries from the in-memory ring buffer (last 1000 events)."""
@@ -2006,7 +2166,8 @@ def _semantic_status_payload(hidden: frozenset[str] = frozenset()) -> dict[str, 
     if hidden:
         draft_entities = catalog.get_draft_entities()
         visible = [
-            e for e in draft_entities
+            e
+            for e in draft_entities
             if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
         ]
         entities = [e["name"] for e in visible]
@@ -3235,7 +3396,13 @@ def sync_source(
     background_tasks.add_task(_run_sync)
 
     cfg = mgr.registry.get(source_id) or cfg
-    _audit(request, current_user, "Synced data source (background)", source_id, category="data")
+    _audit(
+        request,
+        current_user,
+        "Synced data source (background)",
+        source_id,
+        category="data",
+    )
     return _source_cfg_to_response(cfg)
 
 
@@ -3834,7 +4001,7 @@ def get_metrics(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_metrics WHERE sector_id = ?{builtin_filter} "
@@ -3860,7 +4027,7 @@ def create_metric(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     mid = f"m-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_metrics
@@ -3898,7 +4065,7 @@ def delete_metric(
     metric_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_metrics WHERE id = ?", (metric_id,)
@@ -3922,7 +4089,7 @@ def get_hierarchies(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_hierarchies WHERE sector_id = ?{builtin_filter} "
@@ -3946,7 +4113,7 @@ def create_hierarchy(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     hid = f"h-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_hierarchies
@@ -3973,7 +4140,7 @@ def delete_hierarchy(
     hierarchy_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_hierarchies WHERE id = ?", (hierarchy_id,)
@@ -3997,7 +4164,7 @@ def get_segments(
 ) -> list[dict[str, Any]]:
     # Live-mode users start from scratch: hide the demo-seeded builtin rows.
     builtin_filter = " AND is_builtin = 0" if current_user.mode == "live" else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         rows = conn.execute(
             f"SELECT * FROM sl_segments WHERE sector_id = ?{builtin_filter} "
@@ -4023,7 +4190,7 @@ def create_segment(
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> dict[str, Any]:
     sid = f"seg-{uuid.uuid4().hex[:12]}"
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         conn.execute(
             """INSERT INTO sl_segments
@@ -4051,7 +4218,7 @@ def delete_segment(
     segment_id: Annotated[str, _ApiPath(max_length=128)],
     _: UserPrincipal = Depends(require_roles("admin")),
 ) -> None:
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         row = conn.execute(
             "SELECT is_builtin FROM sl_segments WHERE id = ?", (segment_id,)
@@ -4078,7 +4245,7 @@ def semantic_coverage(
     _ensure_semantic_loaded()
     hidden = _hidden_demo_tables(current_user)
     builtin_filter = " AND is_builtin = 0" if hidden else ""
-    conn = get_connection()
+    conn = get_definitions_connection()
     try:
         n_metrics = conn.execute(
             f"SELECT COUNT(*) FROM sl_metrics WHERE sector_id=?{builtin_filter}",
@@ -4157,6 +4324,169 @@ async def build_semantic_layer(
             logger.info("Auto-generated %d query templates from semantic layer", n)
             layer.set_templates(catalog.list_templates())
     return _get_semantic_draft(_hidden_demo_tables(current_user))
+
+
+# ── Auto-build pipeline endpoints (Context → Sources → KG/Semantic Layer) ─────
+
+
+@app.post(
+    "/api/pipeline/run",
+    tags=["pipeline"],
+    summary="Run the auto-build pipeline: documents + sources → KG + Semantic Layer",
+)
+async def run_pipeline_endpoint(
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Orchestrate the 5-stage auto-build flow and return the completed run.
+
+    Stages 1–3 (context → sources → build) run and AUTO-APPLY the inferred model
+    to the live KG + Semantic Layer; stages 4–5 are stubs for now. Runs in a
+    worker thread so the event loop stays responsive (like build_semantic_layer).
+
+    Returns *immediately* with the reserved run (``running=true``); the build
+    proceeds in a background thread and the client tracks progress by polling
+    ``GET /api/pipeline/status``. Awaiting the full build here would routinely
+    exceed the client's HTTP timeout on a real (LLM-backed) build and surface as
+    a spurious "network error", even though the build was still running.
+    """
+    import asyncio
+
+    from .pipeline.orchestrator import run_build_pipeline
+    from .pipeline.runs import default_run_store
+
+    # Atomically reserve the run — closes the check-then-act race between two
+    # concurrent POSTs (both passing an is_running() check before either starts).
+    reserved = default_run_store.begin_run()
+    if reserved is None:
+        raise HTTPException(
+            status_code=409, detail="A pipeline run is already in progress"
+        )
+
+    hidden = _hidden_demo_tables(current_user)
+    mode = current_user.mode
+
+    def _run_in_background() -> None:
+        # The orchestrator marks per-stage failures and always calls
+        # run.complete(); this guard covers an unexpected throw before that so a
+        # crashed build can never leave the run stuck "running" (which would
+        # block every future run with a 409).
+        try:
+            run_build_pipeline(
+                mode=mode,
+                hidden=hidden,
+                store=default_run_store,
+                run=reserved,
+            )
+        except Exception as exc:  # noqa: BLE001 — background task, log & recover
+            logger.error("pipeline run failed: %s", exc, exc_info=True)
+            reserved.fail("build", str(exc))
+            reserved.complete()
+            default_run_store.set_current(reserved)
+
+    # Fire-and-forget on the default executor; do not await — the client polls.
+    asyncio.get_event_loop().run_in_executor(None, _run_in_background)
+    return reserved.to_dict()
+
+
+@app.get(
+    "/api/pipeline/status",
+    tags=["pipeline"],
+    summary="Status of the current/most-recent auto-build pipeline run",
+)
+def pipeline_status_endpoint(
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    from .pipeline.runs import default_run_store
+
+    run = default_run_store.current_or_last()
+    if run is None:
+        return {"id": None, "stages": [], "running": False, "ok": False}
+    return run.to_dict()
+
+
+class IntegrateRequest(BaseModel):
+    instruction: str = Field(min_length=1, max_length=2000)
+
+
+@app.post(
+    "/api/semantic/integrate",
+    tags=["pipeline"],
+    summary="Refine the data model from a plain-language instruction (stage 4)",
+)
+def integrate_model(
+    body: IntegrateRequest,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Conversational integration: interpret an NL instruction into additive
+    model edits (relations, entity descriptions, metrics), apply them, refresh
+    templates, and return what changed plus the updated draft."""
+    from .semantic.integrate import apply_ops, interpret_instruction
+
+    _ensure_semantic_loaded()
+    catalog = _semantic_state.get("catalog")
+    if catalog is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Data model not ready — connect a data source and run setup first",
+        )
+
+    hidden = _hidden_demo_tables(current_user)
+    draft = _get_semantic_draft(hidden)
+    interpreted = interpret_instruction(body.instruction, draft)
+    ops = interpreted["ops"]
+    try:
+        result = apply_ops(ops, catalog=catalog, sector_id="manufacturing")
+
+        # Refresh query templates so freshly-added metrics become answerable.
+        if result["added_metrics"]:
+            from .semantic.apply import merge_proposal_metrics_into_draft
+
+            layer = _semantic_state.get("layer")
+            fresh = _get_semantic_draft(hidden)
+            augmented = dict(fresh)
+            augmented["metrics"] = merge_proposal_metrics_into_draft(
+                fresh.get("metrics", []), result["added_metrics"]
+            )
+            auto_tpls = generate_templates_from_draft(augmented)
+            catalog.upsert_auto_templates(auto_tpls)
+            if layer is not None:
+                layer.set_templates(catalog.list_templates())
+    except Exception as exc:
+        logger.error("integrate apply failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Could not apply the change — please retry in a moment.",
+        ) from exc
+    _bump_semantic_cache_namespace()
+    layer = _semantic_state.get("layer")
+    if layer is not None:
+        try:
+            layer.clear_semantic_cache()
+        except Exception:
+            pass
+
+    skipped = result.get("skipped") or []
+    if not interpreted["llm_used"] and not ops:
+        notes = (
+            "Could not interpret that instruction (no AI configured). Try e.g. "
+            "“link <table A> to <table B> via <column>” or "
+            "“add a <name> metric = SUM(<table>.<column>)”."
+        )
+    elif not result["applied"] and not skipped:
+        notes = "No applicable changes were found for that instruction."
+    else:
+        notes = "; ".join(skipped)
+    if notes and not interpreted["llm_used"] and ops:
+        notes = f"{notes} (interpreted without AI)".strip()
+
+    return {
+        "ops": ops,
+        "applied": result["applied"],
+        "counts": result["counts"],
+        "llm_used": interpreted["llm_used"],
+        "notes": notes,
+        "draft": _get_semantic_draft(hidden),
+    }
 
 
 @app.get(
@@ -5183,7 +5513,8 @@ def get_live_config(
     # ── Entities & relations from catalog/kg ──────────────────────────────────
     all_entities: list[dict] = catalog.get_draft_entities() if catalog else []
     entities = [
-        e for e in all_entities
+        e
+        for e in all_entities
         if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
     ]
     logger.info(
@@ -5218,6 +5549,9 @@ def get_live_config(
         seen: set[tuple] = set()
         for src, dst, data in kg.iter_edges():
             edge_type = data.get("type", "")
+            # Concept/Metric grounding edges are not table-to-table relations.
+            if edge_type in ("DESCRIBES", "MEASURES"):
+                continue
             src_table = src.split(":")[0]
             dst_table = dst.split(":")[0]
             if src_table in hidden_keys or dst_table in hidden_keys:
@@ -5341,7 +5675,7 @@ def get_live_config(
 # persists user-defined agent definitions so they survive browser cache clears
 # and work across devices.
 
-_DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data"
+_DEFAULT_DATA_DIR = data_dir()
 
 
 def _user_db_path(filename: str) -> Path:

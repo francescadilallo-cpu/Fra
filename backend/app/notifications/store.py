@@ -9,9 +9,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..paths import data_dir
+
 _VALID_TYPES: frozenset[str] = frozenset({"slack", "email", "teams", "webhook"})
 _VALID_SEVERITIES: tuple[str, ...] = ("critical", "warning", "info")
-_DEFAULT_DB = Path(__file__).parent.parent.parent / "data" / "notifications.db"
+_DEFAULT_DB = data_dir() / "notifications.db"
 
 
 @dataclass

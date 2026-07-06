@@ -1,10 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ──────────────────────────────────────────────────────────────────────────
    Design tokens (light theme). Semantic names so component classes and future
-   theming reference intent, not raw palette values.
+   theming reference intent, not raw palette values. The brand identity is a
+   teal→indigo gradient; brand-* tokens carry its stops for reuse.
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   --surface:          theme('colors.white');
@@ -18,64 +21,106 @@
   --accent:           theme('colors.teal.600');
   --accent-hover:     theme('colors.teal.700');
   --accent-soft:      theme('colors.teal.50');
+
+  /* Brand gradient stops */
+  --brand-from:       #14b8a6;  /* teal-500  */
+  --brand-mid:        #6366f1;  /* indigo-500 */
+  --brand-to:         #4f46e5;  /* indigo-600 */
+  --brand-gradient:   linear-gradient(135deg, var(--brand-from) 0%, var(--brand-to) 100%);
 }
 
 @layer base {
+  html { -webkit-text-size-adjust: 100%; }
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-slate-100; }
-  ::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-300/70 rounded-full; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-400/80; }
+
+  /* Cohesive brand-tinted selection */
+  ::selection { background: rgba(99,102,241,0.18); }
 }
 
 @layer components {
   /* ── Surfaces & panels ──────────────────────────────────────────────── */
+  /* Cards now ride a layered shadow scale with a hairline ring for crisp
+     edges on tinted backgrounds. Bold restyle: softer corners, more depth. */
   .card {
-    @apply bg-white border border-slate-200 rounded-xl shadow-sm p-5;
+    @apply bg-white rounded-2xl shadow-soft ring-1 ring-slate-900/[0.06] p-5;
+  }
+  /* Opt-in lift on hover for clickable cards. */
+  .card-interactive {
+    @apply transition-all duration-200 hover:shadow-lifted hover:-translate-y-0.5
+           hover:ring-slate-900/[0.10] cursor-pointer;
   }
 
   /* A panel is a bordered surface that hosts a header + body (children manage
      their own padding). The workbench is built from these. */
   .panel {
-    @apply bg-white border border-slate-200 rounded-xl overflow-hidden;
+    @apply bg-white rounded-2xl ring-1 ring-slate-900/[0.06] shadow-soft overflow-hidden;
   }
   .panel-accent {
-    @apply border-teal-200;
+    @apply ring-teal-300/50;
   }
   .panel-header {
-    @apply flex items-center gap-2.5 px-4 py-3 bg-slate-50 border-b border-slate-100;
+    @apply flex items-center gap-2.5 px-4 py-3 bg-gradient-to-b from-slate-50 to-white
+           border-b border-slate-100;
+  }
+
+  /* Glass surface for floating UI (menus, palettes, sticky bars). */
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl ring-1 ring-slate-900/[0.06] shadow-elevated;
+  }
+  .glass-dark {
+    @apply bg-slate-900/80 backdrop-blur-xl ring-1 ring-white/10;
+  }
+
+  /* ── Brand helpers ──────────────────────────────────────────────────── */
+  .brand-gradient { @apply bg-brand; }
+  /* Gradient text for headlines and accents. */
+  .text-gradient {
+    @apply bg-brand-vivid bg-clip-text text-transparent;
+  }
+  /* Small square brand mark (logo tile, feature icons). */
+  .brand-mark {
+    @apply bg-brand text-white shadow-glow-brand;
   }
 
   /* ── Buttons ────────────────────────────────────────────────────────── */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 text-sm font-semibold
-           px-4 py-2 rounded-lg transition-colors disabled:opacity-50
-           disabled:cursor-not-allowed;
+           px-4 py-2 rounded-xl transition-all duration-200 disabled:opacity-50
+           disabled:cursor-not-allowed active:scale-[0.98];
   }
-  .btn-sm { @apply text-xs px-2.5 py-1.5 gap-1; }
+  .btn-sm { @apply text-xs px-2.5 py-1.5 gap-1 rounded-lg; }
+  /* Primary = the brand gradient with a soft glow that intensifies on hover. */
   .btn-primary {
-    @apply bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2
-           rounded-lg transition-colors;
+    @apply inline-flex items-center justify-center gap-1.5 bg-brand text-white font-semibold
+           px-4 py-2 rounded-xl transition-all duration-200 shadow-glow-brand
+           hover:shadow-glow-teal hover:brightness-[1.05] active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply bg-white border border-slate-200 text-slate-700 hover:border-slate-300
-           hover:bg-slate-50;
+    @apply bg-white ring-1 ring-slate-200 text-slate-700 hover:ring-slate-300
+           hover:bg-slate-50 shadow-soft;
   }
   .btn-ghost {
-    @apply text-slate-500 hover:text-slate-800 hover:bg-slate-50 px-3 py-2
-           rounded-lg transition-colors;
+    @apply text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-3 py-2
+           rounded-xl transition-colors;
   }
   .btn-danger {
-    @apply bg-red-600 hover:bg-red-700 text-white;
+    @apply bg-red-600 hover:bg-red-700 text-white shadow-soft;
   }
 
   /* ── Form controls ──────────────────────────────────────────────────── */
   .input, .select, .textarea {
-    @apply w-full text-sm px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg
-           text-slate-800 placeholder:text-slate-400 outline-none transition-colors
-           focus:border-teal-400 focus:ring-2 focus:ring-teal-400/30;
+    @apply w-full text-sm px-3 py-2 bg-white ring-1 ring-slate-200 rounded-xl
+           text-slate-800 placeholder:text-slate-400 outline-none transition-all
+           focus:ring-2 focus:ring-indigo-400/60 focus:border-transparent;
   }
   .textarea { @apply resize-none; }
 
@@ -85,18 +130,19 @@
   }
   .chip {
     @apply inline-flex items-center gap-1 text-[11px] font-semibold rounded-full
-           px-1.5 py-0.5 border;
+           px-2 py-0.5 ring-1 ring-inset;
   }
-  .chip-teal   { @apply bg-teal-50   text-teal-700   border-teal-200; }
-  .chip-amber  { @apply bg-amber-50  text-amber-700  border-amber-200; }
-  .chip-red    { @apply bg-red-50    text-red-600    border-red-200; }
-  .chip-slate  { @apply bg-slate-100 text-slate-500  border-slate-200; }
-  .chip-violet { @apply bg-violet-50 text-violet-700 border-violet-200; }
+  .chip-teal   { @apply bg-teal-50   text-teal-700   ring-teal-200; }
+  .chip-amber  { @apply bg-amber-50  text-amber-700  ring-amber-200; }
+  .chip-red    { @apply bg-red-50    text-red-600    ring-red-200; }
+  .chip-slate  { @apply bg-slate-100 text-slate-500  ring-slate-200; }
+  .chip-violet { @apply bg-violet-50 text-violet-700 ring-violet-200; }
+  .chip-brand  { @apply bg-brand-soft text-indigo-700 ring-indigo-200; }
 
   /* ── Typography helpers (replaces repeated one-off micro sizes) ─────── */
   /* Eyebrow: the uppercase tracked section label used across the app. */
   .eyebrow {
-    @apply text-[10px] font-bold text-slate-500 uppercase tracking-wide;
+    @apply text-[10px] font-bold text-slate-500 uppercase tracking-[0.12em];
   }
   .t-micro { @apply text-[10px] leading-tight; }
   .t-mini  { @apply text-[11px] leading-tight; }
@@ -105,8 +151,8 @@
 /* Dark sidebar scrollbar */
 .sidebar-scrollbar::-webkit-scrollbar { width: 4px; }
 .sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.sidebar-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
-.sidebar-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+.sidebar-scrollbar::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.30); border-radius: 9999px; }
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.55); }
 
 .react-flow__background { background-color: #F8FAFC !important; }
 .react-flow__controls { background: #fff; border-color: #e2e8f0; border-radius: 8px; }

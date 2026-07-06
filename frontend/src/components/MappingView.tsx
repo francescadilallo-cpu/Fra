@@ -106,7 +106,7 @@ function SemanticDefinitionsPanel() {
       <BookOpen className="w-10 h-10 text-slate-200" />
       <p className="text-sm font-medium text-slate-500">No field definitions yet</p>
       <p className="text-xs text-slate-400 max-w-xs">Run setup to auto-generate field definitions, or add one manually below.</p>
-      <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+      <button onClick={() => setShowAdd(true)} className="mt-2 flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
         <Plus className="w-3.5 h-3.5" />Add first definition
       </button>
     </div>
@@ -116,14 +116,14 @@ function SemanticDefinitionsPanel() {
     <div className="flex-1 px-8 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{defs.length} field definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
-        <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+        <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />
           Add definition
         </button>
       </div>
 
       {showAdd && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
           <p className="text-xs font-semibold text-slate-700">New field definition</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -139,12 +139,12 @@ function SemanticDefinitionsPanel() {
               <input value={newForm.definition} onChange={e => setNewForm(f => ({ ...f, definition: e.target.value }))} placeholder="What does this field mean?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" />
             </div>
           </div>
-          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors">Add</button>
+          <button onClick={addDef} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors">Add</button>
         </div>
       )}
 
       {Object.entries(grouped).map(([entity, entityDefs]) => (
-        <div key={entity} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div key={entity} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
           <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Tag className="w-3.5 h-3.5 text-teal-600" />
             <span className="text-sm font-semibold text-slate-800">{entity}</span>
@@ -366,7 +366,7 @@ function TableGroup({ table, rows, savedEdits, onSave }: {
   const [open, setOpen] = useState(true)
 
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
+    <div className="ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200"
@@ -477,9 +477,11 @@ export default function MappingView() {
       <div className="px-8 py-5 border-b border-slate-200 bg-white flex-shrink-0">
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <BookOpen className="w-5 h-5 text-teal-600" />
-              <h1 className="text-2xl font-bold text-slate-900">Data Model</h1>
+            <div className="flex items-center gap-2.5 mb-1">
+              <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+                <BookOpen className="w-4 h-4 text-white" />
+              </span>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Data Model</h1>
             </div>
             <p className="text-slate-400 mt-1 text-sm">
               {workspaceLabel(sector.name)} · {totalTables} tables · {totalFields} field mappings · field definitions and ambiguities

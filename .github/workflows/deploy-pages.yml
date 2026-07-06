@@ -51,3 +51,9 @@ jobs:
 
       - uses: actions/deploy-pages@v4
         id: deployment
+        with:
+          # GitHub Pages' deployment queue occasionally stalls for >10 minutes
+          # (two consecutive runs timed out at the default 600000 ms while
+          # stuck in "deployment_queued"). A longer timeout rides out the
+          # congestion instead of failing the whole deploy.
+          timeout: 1200000

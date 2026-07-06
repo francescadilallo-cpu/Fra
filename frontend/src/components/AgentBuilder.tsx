@@ -649,7 +649,7 @@ export default function AgentBuilder({ onClose, onSave, availableEntities, prefi
             <button
               onClick={handleSave}
               disabled={!canSave}
-              className="text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl px-5 py-2 font-medium transition-colors flex items-center gap-2"
+              className="text-sm bg-brand hover:brightness-110 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl px-5 py-2 font-medium transition-colors flex items-center gap-2"
             >
               <Bot className="w-4 h-4" />
               Create Agent

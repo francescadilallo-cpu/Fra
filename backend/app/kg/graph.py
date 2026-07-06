@@ -61,6 +61,19 @@ def _node_limit() -> int:
     return val if val >= 0 else 200000
 
 
+# Value-overlap FK detection bounds (Phase 3 of build_from_schema).
+_FK_VALUE_SAMPLE = 50  # distinct values sampled per column
+_FK_VALUE_OVERLAP = 0.5  # min share of FK values found in a PK column
+_FK_MAX_PROBES = 200  # cap on candidate columns sampled (whole build)
+_FK_MIN_DISTINCT = 4  # min distinct FK values before overlap is trustworthy
+
+# Same-entity merge bounds (Phase 4 of build_from_schema): two tables from
+# different sources describing the SAME business entity (e.g. crm_accounts and
+# legacy_customers) get a SAME_AS edge when their keys AND structure agree.
+_MERGE_KEY_JACCARD = 0.6  # bidirectional key-sample overlap (|∩| / |∪|)
+_MERGE_COL_OVERLAP = 0.4  # shared column names / smaller column set
+_MERGE_MAX_PAIRS = 100  # cap on table pairs probed per build
+
 _SENTINEL = object()
 
 
@@ -88,6 +101,26 @@ def _normalize_table_name(name: str) -> str:
 
 
 _VIA_RE = re.compile(r"(\w+)\s*(?:→|->)\s*(\w+)\.(\w+)")
+
+
+def _column_names_table(column: str, table: str) -> bool:
+    """True when a FK-ish column name points at *table* semantically.
+
+    Strips the id/ref/key suffix from the column ("account_id" → "account")
+    and checks the base against the table's name tokens with singular/plural
+    tolerance ("account" ↔ crm_accounts). Used to keep merged-twin FK routing
+    honest: a generic id column (emp_id) must not be routed to an unrelated
+    entity just because the sampled values happen to overlap.
+    """
+    base = re.sub(r"[_-]?(id|ref|key)$", "", column.strip().lower())
+    if len(base) < 3:
+        return False
+    tokens = [t for t in re.split(r"[^a-z0-9]+", table.lower()) if t]
+    variants = {base, base + "s", base + "es"}
+    for tok in tokens:
+        if tok in variants or base in {tok, tok + "s", tok + "es"}:
+            return True
+    return False
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -412,7 +445,21 @@ class KnowledgeGraph:
             self._g.number_of_edges(),
         )
 
-    def build_from_schema(self, mgr) -> None:
+    @staticmethod
+    def ontology_covered_tables(ontology) -> set[str]:
+        """DuckDB table names mapped by the ontology's entities (normalised)."""
+        covered: set[str] = set()
+        entities_cfg = getattr(ontology, "_entities_cfg", {}) or {}
+        for cfg in entities_cfg.values():
+            if not isinstance(cfg, dict):
+                continue
+            for src in cfg.get("sources") or []:
+                raw = src.get("table", "") if isinstance(src, dict) else ""
+                if raw:
+                    covered.add(_normalize_table_name(raw))
+        return covered
+
+    def build_from_schema(self, mgr, include: set[str] | None = None) -> None:
         """Build a lightweight schema graph from the DuckDB unified snapshot.
 
         Creates one representative node per table and detects potential FK
@@ -421,6 +468,9 @@ class KnowledgeGraph:
         making it safe and fast for any schema size.
 
         Suitable as a zero-config fallback when no ontology YAML is present.
+        With *include*, only those tables are added — used to augment an
+        ontology-built graph with user-registered tables the ontology doesn't
+        cover, so their FK inference and NL linking still work.
         """
         logger.info("Building knowledge graph from schema…")
 
@@ -429,6 +479,16 @@ class KnowledgeGraph:
         except Exception as exc:
             logger.warning("build_from_schema: schema discovery failed: %s", exc)
             return
+
+        if include is not None:
+            schema = {t: info for t, info in schema.items() if t in include}
+
+        # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are
+        # not business data — keep them out of the graph so they never surface
+        # in NL linking, FK inference, or the model draft.
+        internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+        if internal:
+            schema = {t: info for t, info in schema.items() if t not in internal}
 
         table_names = set(schema.keys())
 
@@ -448,8 +508,9 @@ class KnowledgeGraph:
                 provenance=[{"source": "schema", "original_id": table, "table": table}],
             )
 
-        # Phase 2 — FK-heuristic edges
+        # Phase 2 — FK-heuristic edges (by column-name suffix → table-name match)
         _FK_SUFFIXES = ("_id", "_ref", "_fk", "Id", "Ref", "FK")
+        resolved: set[tuple[str, str]] = set()  # (table, col) already linked by name
 
         for table, info in schema.items():
             from_node = f"{table}:__schema__"
@@ -472,6 +533,7 @@ class KnowledgeGraph:
                         if candidate in table_names and candidate != table:
                             to_node = f"{candidate}:__schema__"
                             self._add_edge(from_node, to_node, f"FK_{col_name}")
+                            resolved.add((table, col_name))
                             logger.debug(
                                 "build_from_schema: %s.%s → %s",
                                 table,
@@ -481,11 +543,522 @@ class KnowledgeGraph:
                             break
                     break  # first matching suffix wins per column
 
+        # Phase 3 — same-entity merge: with N sources, two tables can describe
+        # the SAME business entity (e.g. crm_accounts + legacy_customers).
+        # When keys AND structure agree, a SAME_AS edge merges that knowledge
+        # in the graph. Runs BEFORE the FK scan so the scan can treat merged
+        # twins as one target. Gated + bounded; degrades on error.
+        if os.getenv("FRA_KG_ENTITY_MERGE", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            try:
+                self._same_entity_bridges(mgr, schema)
+            except Exception as exc:  # noqa: BLE001 — never break the build
+                logger.warning("build_from_schema same-entity merge skipped: %s", exc)
+
+        # Phase 4 — value-overlap FK detection (names that don't match table
+        # names, and cross-source joins). Gated + bounded; degrades on error.
+        if os.getenv("FRA_KG_FK_VALUE_SCAN", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            try:
+                self._value_overlap_fk(mgr, schema, resolved)
+            except Exception as exc:  # noqa: BLE001 — never break the build
+                logger.warning(
+                    "build_from_schema value-overlap FK scan skipped: %s", exc
+                )
+
         logger.info(
             "KG built from schema: %d nodes, %d edges",
             self._g.number_of_nodes(),
             self._g.number_of_edges(),
         )
+
+    def _value_overlap_fk(self, mgr, schema: dict, resolved: set) -> None:
+        """Detect FKs by sampled value overlap: a candidate column whose values
+        substantially fall within another table's primary-key values is a FK,
+        even when its name doesn't match the table (incl. cross-source). Bounded
+        by sample size and a probe cap; all queries are read-only with LIMIT."""
+
+        def _norm(v) -> str | None:
+            return None if v is None else str(v)
+
+        # Primary-key candidate columns per table.
+        pk_candidates: dict[str, list[str]] = {}
+        for t, info in schema.items():
+            names = [c.get("name", "") for c in info.get("columns", [])]
+            tl = t.lower()
+            pk_candidates[t] = [
+                n for n in names if n.lower() in ("id", "pk", f"{tl}_id", f"{tl}id")
+            ]
+
+        val_cache: dict[tuple[str, str], set] = {}
+
+        def _sample(table: str, col: str) -> set:
+            key = (table, col)
+            if key in val_cache:
+                return val_cache[key]
+            vals: set = set()
+            try:
+                rows = mgr.execute(
+                    f'SELECT DISTINCT "{col}" AS v FROM "{table}" '
+                    f'WHERE "{col}" IS NOT NULL LIMIT {_FK_VALUE_SAMPLE}'
+                )
+                vals = {_norm(r.get("v")) for r in rows}
+                vals.discard(None)
+            except Exception:  # noqa: BLE001
+                vals = set()
+            val_cache[key] = vals
+            return vals
+
+        # SAME_AS groups from the merge phase (which runs first): a FK whose
+        # values match several merged twins is NOT ambiguous — the twins are
+        # one entity — and a "FK" between two twins is just the merge itself.
+        same_group: dict[str, set[str]] = {}
+        for s_node, d_node, edata in self._g.edges(data=True):
+            if edata.get("type") != "SAME_AS":
+                continue
+            a, b = s_node.split(":")[0], d_node.split(":")[0]
+            grp = same_group.get(a) or same_group.get(b) or set()
+            grp |= {a, b}
+            for member in grp:
+                same_group[member] = grp
+
+        probes = 0
+        for table, info in schema.items():
+            from_node = f"{table}:__schema__"
+            for col in info.get("columns", []):
+                name = col.get("name", "")
+                ln = name.lower()
+                if (table, name) in resolved:
+                    continue
+                if not any(k in ln for k in ("id", "ref", "key")):
+                    continue
+                if probes >= _FK_MAX_PROBES:
+                    return
+                fk_vals = _sample(table, name)
+                probes += 1
+                # Too few distinct values to tell a real FK from a generic
+                # small-domain code (status_id, priority_id…) that trivially
+                # overlaps unrelated primary keys.
+                if len(fk_vals) < _FK_MIN_DISTINCT:
+                    continue
+                targets: list[str] = []
+                for other, _oinfo in schema.items():
+                    if other == table:
+                        continue
+                    for pkcol in pk_candidates.get(other, []):
+                        pk_vals = _sample(other, pkcol)
+                        if not pk_vals:
+                            continue
+                        inter = len(fk_vals & pk_vals)
+                        if inter and inter / len(fk_vals) >= _FK_VALUE_OVERLAP:
+                            targets.append(other)
+                            break  # this table matched; move to the next table
+                # A match on the table's own SAME_AS twin is the merge itself,
+                # not a foreign key — drop it.
+                targets = [t for t in targets if t not in same_group.get(table, set())]
+                # Several targets that are all merged twins of each other are
+                # ONE entity, so the ambiguity is only apparent — but since the
+                # multi-match no longer proves a generic id domain, require the
+                # column name to actually point at that entity (account_id →
+                # crm_accounts yes, emp_id no) and route to the affine twin.
+                if len(targets) > 1:
+                    grp = same_group.get(targets[0])
+                    if grp and all(t in grp for t in targets):
+                        affine = [
+                            t for t in sorted(targets) if _column_names_table(name, t)
+                        ]
+                        targets = affine[:1]
+                # Link only on an unambiguous single match. Overlap with several
+                # unrelated tables means the values are a shared generic domain
+                # (1,2,3…), not a foreign key — skip rather than guess.
+                if len(targets) == 1:
+                    self._add_edge(from_node, f"{targets[0]}:__schema__", f"FK_{name}")
+                    logger.debug(
+                        "value-overlap FK: %s.%s → %s", table, name, targets[0]
+                    )
+
+    def _same_entity_bridges(self, mgr, schema: dict) -> None:
+        """Detect tables from different sources describing the same entity.
+
+        Conservative, two conditions BOTH required per pair:
+        1. **Keys agree** — the primary-key candidate columns share most of
+           their sampled values in *both* directions (Jaccard ≥
+           ``_MERGE_KEY_JACCARD``, each side with ≥ ``_FK_MIN_DISTINCT``
+           distinct values), i.e. the two tables identify the same records.
+        2. **Structure agrees** — the tables share a meaningful fraction of
+           their *non-key* column names (≥ ``_MERGE_COL_OVERLAP`` of the
+           smaller non-key column set, and at least one shared business
+           column). The key column is excluded so two unrelated id-keyed
+           tables can't merge just because both have an ``id``.
+
+        A ``SAME_AS`` edge is added between the two table nodes so GraphRAG
+        links a question about either to both, the model draft shows the
+        bridge, and the LLM prompt learns the two tables are one entity.
+        Bounded by ``_MERGE_MAX_PAIRS`` pair probes; read-only LIMIT queries.
+        """
+
+        def _norm(v) -> str | None:
+            return None if v is None else str(v)
+
+        cols_by_table: dict[str, set[str]] = {}
+        pk_by_table: dict[str, str] = {}
+        for t, info in schema.items():
+            names = [c.get("name", "") for c in info.get("columns", [])]
+            cols_by_table[t] = {n.lower() for n in names if n}
+            tl = t.lower()
+            for n in names:
+                if n.lower() in ("id", "pk", f"{tl}_id", f"{tl}id"):
+                    pk_by_table[t] = n
+                    break
+
+        candidates = sorted(
+            t for t in schema if t in pk_by_table and len(cols_by_table[t]) >= 2
+        )
+
+        val_cache: dict[tuple[str, str], set] = {}
+
+        def _sample(table: str, col: str) -> set:
+            key = (table, col)
+            if key in val_cache:
+                return val_cache[key]
+            vals: set = set()
+            try:
+                rows = mgr.execute(
+                    f'SELECT DISTINCT "{col}" AS v FROM "{table}" '
+                    f'WHERE "{col}" IS NOT NULL LIMIT {_FK_VALUE_SAMPLE}'
+                )
+                vals = {_norm(r.get("v")) for r in rows}
+                vals.discard(None)
+            except Exception:  # noqa: BLE001
+                vals = set()
+            val_cache[key] = vals
+            return vals
+
+        pairs = 0
+        for i, ta in enumerate(candidates):
+            for tb in candidates[i + 1 :]:
+                if pairs >= _MERGE_MAX_PAIRS:
+                    return
+                # Structure first — it's free (no query). Measure on NON-KEY
+                # columns: two unrelated tables trivially share the "id" column,
+                # so counting it would merge any two id-keyed tables whose ids
+                # happen to overlap. Require a real shared *business* column.
+                cols_a = cols_by_table[ta] - {pk_by_table[ta].lower()}
+                cols_b = cols_by_table[tb] - {pk_by_table[tb].lower()}
+                shared = cols_a & cols_b
+                smaller = min(len(cols_a), len(cols_b))
+                if not shared or smaller == 0:
+                    continue
+                if len(shared) / smaller < _MERGE_COL_OVERLAP:
+                    continue
+                pairs += 1
+                va = _sample(ta, pk_by_table[ta])
+                vb = _sample(tb, pk_by_table[tb])
+                if len(va) < _FK_MIN_DISTINCT or len(vb) < _FK_MIN_DISTINCT:
+                    continue
+                union = va | vb
+                if not union or len(va & vb) / len(union) < _MERGE_KEY_JACCARD:
+                    continue
+                self._add_edge(
+                    f"{ta}:__schema__",
+                    f"{tb}:__schema__",
+                    "SAME_AS",
+                    merge=True,
+                )
+                logger.info("same-entity merge: %s SAME_AS %s", ta, tb)
+
+    def _table_node(self, table: str) -> str:
+        """Return a table-level node id for *table*, creating a minimal schema
+        node if none exists. Reuses the ``{table}:__schema__`` node from
+        build_from_schema when present so manual edges attach to the same node."""
+        schema_id = f"{table}:__schema__"
+        if schema_id not in self._g:
+            self._add_node(
+                schema_id,
+                entity_type=table,
+                canonical_id="__schema__",
+                data={"table": table, "columns": [], "row_count": 0},
+                provenance=[
+                    {"source": "manual_relation", "original_id": table, "table": table}
+                ],
+            )
+        return schema_id
+
+    def ingest_manual_relations(self, relations: list[dict]) -> int:
+        """Add user-defined / auto-applied relations as graph edges.
+
+        Relations created by the auto-build proposal or by conversational
+        integration live in the MetadataCatalog; ingesting them here makes the
+        Knowledge Graph reflect the integrated, context-informed model rather
+        than only FK-inferred structure. Edges are tagged ``manual=True``.
+        Returns the number of edges added.
+        """
+        if not relations:
+            return 0
+        added = 0
+        seen: set[tuple[str, str, str]] = set()
+        for rel in relations:
+            ft = str(rel.get("from_table", "")).strip()
+            tt = str(rel.get("to_table", "")).strip()
+            edge_type = str(rel.get("edge_type") or "FK").strip() or "FK"
+            if not ft or not tt or ft == tt:
+                continue
+            src = self._table_node(ft)
+            dst = self._table_node(tt)
+            key = (src, dst, edge_type)
+            if key in seen:
+                continue
+            seen.add(key)
+            # Cross-call dedupe: the same join may already be in the graph from
+            # FK inference (build_from_schema) or an earlier ingest — upgrade it
+            # to manual in place instead of adding a parallel edge (the
+            # MultiDiGraph would happily duplicate it, and the model draft
+            # would then list the relation twice).
+            existing = self._g.get_edge_data(src, dst) or {}
+            upgraded = False
+            for data in existing.values():
+                if data.get("type") == edge_type:
+                    data["manual"] = True
+                    upgraded = True
+                    break
+            if upgraded:
+                continue
+            self._add_edge(src, dst, edge_type, manual=True)
+            added += 1
+        if added:
+            logger.info("KG ingested %d manual relation(s)", added)
+        return added
+
+    def ingest_context_entities(self, entities: list[dict]) -> int:
+        """Add document-derived business concepts as graph nodes.
+
+        Entities extracted from uploaded context documents (see
+        ``context/doc_analyzer``) become ``Concept:{name}`` nodes tagged
+        ``source="document"`` and, when their name/synonyms match a data-backed
+        table or entity, a ``DESCRIBES`` edge grounds the concept to that node.
+        This folds business vocabulary from the context into the graph alongside
+        the data structure. Returns the number of concept nodes added.
+        """
+        if not entities:
+            return 0
+
+        # Index data-backed nodes by table name and entity type, preferring
+        # schema-level (table) nodes over per-row nodes.
+        label_to_node: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_schema = attrs.get("canonical_id") == "__schema__"
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                str(attrs.get("entity_type") or "").lower(),
+            ):
+                if key and (key not in label_to_node or is_schema):
+                    label_to_node[key] = nid
+
+        def _match(label: str) -> str | None:
+            lbl = label.lower()
+            return (
+                label_to_node.get(lbl)
+                or label_to_node.get(lbl.rstrip("s"))
+                or label_to_node.get(lbl + "s")
+            )
+
+        added = 0
+        for e in entities:
+            name = str(e.get("name", "")).strip()
+            if not name:
+                continue
+            synonyms = [
+                str(s).strip() for s in (e.get("synonyms") or []) if str(s).strip()
+            ]
+            cnode = f"Concept:{name}"
+            if cnode not in self._g:
+                self._add_node(
+                    cnode,
+                    entity_type="Concept",
+                    canonical_id=name,
+                    data={
+                        "label": name,
+                        "source": "document",
+                        "synonyms": synonyms,
+                    },
+                    provenance=[{"source": "document", "original_id": name}],
+                )
+                added += 1
+            # Ground the concept to the data node it describes, if any.
+            for label in [name, *synonyms]:
+                target = _match(label)
+                if target and target != cnode:
+                    self._add_edge(cnode, target, "DESCRIBES", source="document")
+                    break
+        if added:
+            logger.info("KG ingested %d context concept(s)", added)
+        return added
+
+    def ingest_context_metrics(self, metrics: list[dict]) -> int:
+        """Add document-derived business metrics as graph nodes.
+
+        Metrics extracted from context documents become ``Metric:{name}`` nodes
+        tagged ``source="document"``. When a word of the metric name matches a
+        data table, entity or already-ingested concept, a ``MEASURES`` edge
+        grounds the metric to what it quantifies. Returns the number of metric
+        nodes added.
+        """
+        if not metrics:
+            return 0
+
+        # Index data/concept nodes by table, entity type, and canonical label.
+        label_to_node: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_schema = attrs.get("canonical_id") == "__schema__"
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                str(attrs.get("entity_type") or "").lower(),
+                str(attrs.get("canonical_id") or "").lower(),
+                str(attrs.get("label") or "").lower(),
+            ):
+                if key and key not in {"__schema__", "concept", "metric"}:
+                    if key not in label_to_node or is_schema:
+                        label_to_node[key] = nid
+
+        def _match(word: str) -> str | None:
+            w = word.lower()
+            return (
+                label_to_node.get(w)
+                or label_to_node.get(w.rstrip("s"))
+                or label_to_node.get(w + "s")
+            )
+
+        added = 0
+        for m in metrics:
+            name = str(m.get("name", "")).strip()
+            if not name:
+                continue
+            mnode = f"Metric:{name}"
+            if mnode not in self._g:
+                self._add_node(
+                    mnode,
+                    entity_type="Metric",
+                    canonical_id=name,
+                    data={
+                        "label": name,
+                        "source": "document",
+                        "unit": str(m.get("unit", "")),
+                    },
+                    provenance=[{"source": "document", "original_id": name}],
+                )
+                added += 1
+            # Ground the metric to what it measures (first word match wins).
+            for word in name.replace("_", " ").split():
+                target = _match(word)
+                if target and target != mnode:
+                    self._add_edge(mnode, target, "MEASURES", source="document")
+                    break
+        if added:
+            logger.info("KG ingested %d context metric(s)", added)
+        return added
+
+    def _type_level_label_index(self) -> dict[str, str]:
+        """Map label/entity_type/canonical_id (lowercased) → node id for the
+        type-level nodes (tables, Concept, Metric). Schema/table nodes win ties."""
+        index: dict[str, str] = {}
+        for nid, attrs in self._g.nodes(data=True):
+            is_table = attrs.get("canonical_id") == "__schema__"
+            et = str(attrs.get("entity_type") or "")
+            if not (is_table or et in ("Concept", "Metric")):
+                continue
+            for key in (
+                str(attrs.get("table") or "").lower(),
+                et.lower(),
+                str(attrs.get("canonical_id") or "").lower(),
+                str(attrs.get("label") or "").lower(),
+            ):
+                if key and key not in {"__schema__", "concept", "metric"}:
+                    if key not in index or is_table:
+                        index[key] = nid
+        return index
+
+    def attach_aliases(self, aliases: dict[str, list[str]]) -> int:
+        """Append business aliases (synonyms) onto matching type-level nodes.
+
+        *aliases* maps a label (table/entity/concept/metric name) → alias terms.
+        graph_rag already indexes node ``synonyms`` for linking, so attaching
+        aliases here makes business terminology (glossary, proposed synonyms)
+        link to the right node. Unknown labels are ignored. Returns the number
+        of alias terms added.
+        """
+        if not aliases:
+            return 0
+        index = self._type_level_label_index()
+
+        def _resolve(label: str) -> str | None:
+            key = label.strip().lower()
+            return index.get(key) or index.get(key.rstrip("s")) or index.get(key + "s")
+
+        added = 0
+        for label, terms in aliases.items():
+            nid = _resolve(str(label))
+            if nid is None:
+                continue
+            current = list(self._g.nodes[nid].get("synonyms") or [])
+            seen = {s.lower() for s in current}
+            for term in terms:
+                t = str(term).strip()
+                if t and t.lower() not in seen:
+                    current.append(t)
+                    seen.add(t.lower())
+                    added += 1
+            self._g.nodes[nid]["synonyms"] = current
+        if added:
+            logger.info("KG attached %d alias term(s)", added)
+        return added
+
+    def ingest_glossary_aliases(self, glossary: list[dict]) -> int:
+        """Attach glossary terms as aliases of the node their definition refers to.
+
+        Conservative: a term becomes an alias of a node only when that node's
+        label appears in the term's *definition* (so "ARR" defined as "annual
+        recurring revenue" aliases the Revenue node). Terms that already name a
+        node, or whose definition references nothing known, are skipped — no
+        spurious aliases. Returns the number of alias terms attached.
+        """
+        if not glossary:
+            return 0
+        index = self._type_level_label_index()
+        label_set = set(index.keys())
+        # Deterministic, specificity-first scan order: longer labels first so a
+        # term whose definition cites both "annual revenue" and "revenue" aliases
+        # the more specific node; ties broken alphabetically for stable results.
+        ordered_labels = sorted(label_set, key=lambda s: (-len(s), s))
+        aliases: dict[str, list[str]] = {}
+        for g in glossary:
+            term = str(g.get("term", "")).strip()
+            definition = str(g.get("definition", "")).strip().lower()
+            if not term or not definition:
+                continue
+            tl = term.lower()
+            # Term already names a node → it links directly, no alias needed.
+            if tl in label_set or tl.rstrip("s") in label_set or tl + "s" in label_set:
+                continue
+            def_words = set(re.findall(r"[a-z0-9_]+", definition))
+            matched: str | None = None
+            for lbl in ordered_labels:
+                hit = (
+                    (lbl in def_words or lbl.rstrip("s") in def_words)
+                    if " " not in lbl
+                    else lbl in definition
+                )
+                if hit:
+                    matched = lbl
+                    break
+            if matched:
+                aliases.setdefault(matched, []).append(term)
+        return self.attach_aliases(aliases)
 
     @property
     def node_count(self) -> int:

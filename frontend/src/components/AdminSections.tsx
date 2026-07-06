@@ -137,7 +137,7 @@ function InviteUserModal({ onClose, onInvite }: { onClose: () => void; onInvite:
           <button
             onClick={handleSend}
             disabled={!email.trim() || !email.includes('@') || sending}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             {sending ? 'Sending…' : 'Send invite'}
@@ -233,7 +233,7 @@ export function UsersSection() {
   const pending = users.filter(u => u.status === 'pending').length
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showInvite && <InviteUserModal onClose={() => setShowInvite(false)} onInvite={invite} />}
 
       <div className="flex items-start justify-between mb-1">
@@ -250,7 +250,7 @@ export function UsersSection() {
           {pending > 0 && <span className="text-xs bg-amber-50 text-amber-700 font-medium px-2 py-1 rounded-full">{pending} pending</span>}
           <button
             onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5" />
             Invite
@@ -470,7 +470,7 @@ function GenerateTokenModal({ onClose, onCreate }: { onClose: () => void; onCrea
           <button
             onClick={handleGenerate}
             disabled={!name.trim() || scopes.length === 0 || generating}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             {generating ? 'Generating…' : 'Generate token'}
@@ -549,7 +549,7 @@ export function ApiTokensSection() {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showModal && <GenerateTokenModal onClose={() => setShowModal(false)} onCreate={createToken} />}
 
       <div className="flex items-start justify-between mb-1">
@@ -567,7 +567,7 @@ export function ApiTokensSection() {
           )}
           <button
             onClick={() => { setNewToken(null); setShowModal(true) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Generate token
@@ -772,7 +772,7 @@ function AddChannelModal({ onClose, onAdd }: {
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50">
           <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
           <button onClick={handleAdd} disabled={!name.trim() || !dest.trim() || saving}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             {saving ? 'Adding…' : 'Add channel'}
           </button>
@@ -882,7 +882,7 @@ export function NotificationsSection() {
   }
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       {showAdd && <AddChannelModal onClose={() => setShowAdd(false)} onAdd={addChannel} />}
       <div className="flex items-start justify-between mb-1">
         <div>
@@ -898,7 +898,7 @@ export function NotificationsSection() {
           </span>
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add channel
@@ -989,7 +989,7 @@ export function NotificationsSection() {
       </div>
 
       {/* Routing matrix */}
-      <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
+      <div className="mt-6 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
         <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200">
           <p className="text-xs font-semibold text-slate-700">Severity routing</p>
           <p className="text-[11px] text-slate-500 mt-0.5">Choose which channels receive each severity level.</p>
@@ -1135,7 +1135,7 @@ export function AuditLogSection() {
   })
 
   return (
-    <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       <div className="flex items-start justify-between mb-1">
         <div>
           <h2 className="font-semibold text-slate-900 flex items-center gap-2">
@@ -1265,7 +1265,7 @@ export function WorkspaceSection() {
   }
 
   return (
-    <section id="workspace-section" className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+    <section id="workspace-section" className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-sm p-6">
       <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
         <Building2 className="w-4 h-4 text-teal-600" />
         Workspace
@@ -1282,7 +1282,7 @@ export function WorkspaceSection() {
         <button
           onClick={() => void handleSave()}
           disabled={loading || !name.trim()}
-          className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 text-sm font-medium bg-brand hover:brightness-110 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <CheckCircle2 className="w-3.5 h-3.5" /> : null}
           {saved ? 'Saved' : 'Save'}

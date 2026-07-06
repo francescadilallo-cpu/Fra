@@ -472,10 +472,55 @@ class TestSchemaContextCache:
         b = cat.get_schema_context(max_tables=10)
         # Different max_tables → independent cache entries (keyed together
         # with the exclude_tables frozenset).
-        assert (5, frozenset()) in cat._schema_ctx_cache
-        assert (10, frozenset()) in cat._schema_ctx_cache
-        assert a is cat._schema_ctx_cache[(5, frozenset())]
-        assert b is cat._schema_ctx_cache[(10, frozenset())]
+        assert (5, frozenset(), 40) in cat._schema_ctx_cache
+        assert (10, frozenset(), 40) in cat._schema_ctx_cache
+        assert a is cat._schema_ctx_cache[(5, frozenset(), 40)]
+        assert b is cat._schema_ctx_cache[(10, frozenset(), 40)]
+
+    def test_columns_capped_per_table(self, cat):
+        with cat._Session() as s:
+            cat._upsert_entity(
+                s,
+                name="Wide",
+                description="",
+                primary_key="id",
+                sources=[{"source": "duckdb_unified", "table": "wide"}],
+                record_count=1,
+                freshness="",
+                quality_flags={},
+                kg_node_count=0,
+            )
+            for i in range(60):
+                cat._upsert_attribute(
+                    s,
+                    entity="Wide",
+                    attribute=f"c{i}",
+                    data_type="varchar",
+                    nullability_rate=0.0,
+                    business_definition="",
+                    source_path="",
+                    sample_values=[],
+                    lineage_edges=[],
+                )
+            s.commit()
+        ctx = cat.get_schema_context(max_cols=40)
+        assert "(+20 more columns)" in ctx
+
+    def test_priority_tables_never_dropped(self, cat):
+        _seed_entity(cat, "A", "a")
+        _seed_entity(cat, "B", "b")
+        _seed_entity(cat, "C", "c")
+        # Top-1 alphabetically would be 'a', but 'b' is a priority table.
+        ctx = cat.get_schema_context(max_tables=1, priority_tables=frozenset({"b"}))
+        assert "Table: b" in ctx
+        assert "Table: a" not in ctx  # budget consumed by the priority table
+
+    def test_priority_calls_skip_cache(self, cat):
+        _seed_entity(cat, "Orders", "orders")
+        before = len(cat._schema_ctx_cache)
+        cat.get_schema_context(priority_tables=frozenset({"orders"}))
+        # Priority calls vary per question → not memoised (avoids cache bloat).
+        assert len(cat._schema_ctx_cache) == before
 
     def test_exclude_tables_removes_table_from_context(self, cat):
         _seed_entity(cat, "Orders", "orders")

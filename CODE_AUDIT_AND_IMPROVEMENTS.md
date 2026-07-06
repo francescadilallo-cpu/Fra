@@ -618,3 +618,78 @@ Impatto:
 - creato file di recap evolutivo richiesto: `RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md`
 - include funzionalita introdotte, hardening, agentic layer, coverage test e stato operativo corrente
 
+
+## 12) Auto-build pipeline (2026-06-25) — stato e follow-up
+
+Introdotto lo scheletro della pipeline auto-build (`backend/app/pipeline/`, `context/doc_analyzer.py`, `semantic/apply.py`, `agentic/verifier.py`). Stadi 1–3 funzionanti e auto-applicati, 4–5 stub.
+
+Miglioramento risolto:
+- la proposta Smart-Connect ora viene **applicata** (relazioni/metriche/descrizioni) e non più solo mostrata: `/api/semantic/analyze` produceva una proposta mai scritta nel KG/SL.
+
+Aggiornamento 2026-06-25 (stadi 4–5 completati):
+- stadio 4: integrazione conversazionale reale (`semantic/integrate.py` + `POST /api/semantic/integrate`), ops additive sanificate.
+- stadio 5: `verify_model()` con controlli reali schema-aware + critica LLM opzionale; report in `PipelineRun.report`.
+
+Aggiornamento (stadio 5 — replay query):
+- aggiunto query smoke test: i template generati vengono rieseguiti read-only sul dato (`query_runner`); i fallimenti diventano warning `template_query_failed`.
+
+Aggiornamento (stadio 5 — faithfulness):
+- aggiunto faithfulness scoring: campiona domande dai template, le fa girare via `layer.ask()` e misura il grounded ratio; sotto soglia → warning `low_faithfulness`.
+
+Aggiornamento (anello contesto→KG):
+- le relazioni applicate ora diventano archi del KG (`KnowledgeGraph.ingest_manual_relations`), chiudendo il gap per cui vivevano solo nel catalog accanto al grafo.
+
+Aggiornamento (concetti dai documenti nel KG):
+- le entità di business dei documenti diventano nodi `Concept` ancorati alle tabelle via `DESCRIBES` (`ingest_context_entities`). La conoscenza dal contesto è ora rappresentata anche nel grafo.
+
+Aggiornamento (metriche dai documenti nel KG):
+- le metriche di contesto diventano nodi `Metric` ancorati via `MEASURES` (`ingest_context_metrics`). Conoscenza dal contesto ora completa nel grafo: concetti + metriche.
+
+Aggiornamento (GraphRAG):
+- nel path LLM-SQL il prompt è ora grounded sul KG (`semantic/graph_rag.build_graph_context`): relazioni/concetti/metriche rilevanti iniettati + `provenance.graph_context`. Ispirato a Graphwise/Ontotext ma KG-only (no embeddings).
+
+Aggiornamento (idee Graphwise completate):
+- citazioni di provenienza in UI: fatte (`GraphCitations` consuma `provenance.graph_context`).
+- server MCP: fatto (`mcp_server.py`, `POST /api/mcp`, read-only, JWT).
+
+Hardening del flusso principale (2026-06-25):
+- run pipeline concorrenti: prenotazione atomica (`begin_run`) + no stuck-state.
+- `/api/semantic/integrate`: apply protetto + `notes` esplicito.
+- bug-fix: faithfulness/critica LLM gated su provider (no warning falso-positivo senza LLM).
+- UX path `ask`: risposte degradate (no-LLM/fail) segnalate, non scambiate per dati.
+- performance: cap colonne (`max_cols=40`) nel prompt schema; `max_tables=30` già presente.
+- test e2e multi-fonte della pipeline come regression guard.
+
+Aggiornamento (selezione tabelle prompt guidata dal GraphRAG):
+- risolto il limite del cap fisso: le tabelle rilevanti alla domanda (GraphRAG) sono `priority_tables` sempre incluse nel prompt, mai droppate. Copre schemi grandi e multi-fonte (le priority attraversano le fonti).
+
+Aggiornamento (migliorie stadi 1-3):
+- alias da glossario + sinonimi proposta sui nodi KG (`attach_aliases`/`ingest_glossary_aliases`) → recall NL migliore.
+- FK value-overlap in `build_from_schema` (nomi diversi + cross-source), bounded e gated da `FRA_KG_FK_VALUE_SCAN`.
+- proposta `analyze` con synonyms; metriche con colonne inesistenti scartate in apply.
+
+Aggiornamento (hardening Fase 3 FK + glossario deterministico):
+- value-overlap FK ora resiste agli **id generici condivisi**: si crea l'arco solo su match **univoco** (overlap con più tabelle → dominio condiviso, si scarta) e solo se la colonna ha ≥`_FK_MIN_DISTINCT=4` valori distinti (codici a bassa cardinalità saltati).
+- `ingest_glossary_aliases` deterministico (scansione label ordinata per lunghezza/alfabetico) → alias stabili tra run e match più specifico.
+
+Aggiornamento (review sorgenti → KG → SL con Salesforce reale):
+- **Salesforce record ingestion**: prima solo metadati (sf_*_objects/fields) → modello non interrogabile sui dati veri. Ora record reali per gli oggetti prioritari in tabelle `sf_<oggetto>` (bounded `FRA_SF_ROW_LIMIT`, gate `FRA_SF_INGEST_RECORDS`); `target_tables` popolato (UI + drop su re-sync).
+- **FK dichiarate dal describe** (`referenceTo`) → KG via `metadata_relations` (lazy, snapshot-safe): join esatti per SF, le euristiche nome/valore restano per le altre fonti.
+- **GraphRAG**: indice per parole-componenti dei label (split su underscore) → "accounts" linka `sf_account`, "order" linka `sales_order_header`.
+- **Persistenza**: chiusi 3 buchi FRA_DATA_DIR sfuggiti (metadata.db, context.db, tokens.db) — erano hardcoded, il modello auto-costruito e i documenti di contesto sparivano al restart anche col disco.
+
+Follow-up residui:
+- ~~Salesforce: oggetti custom non ingeriti / nessuna selezione utente~~ → RISOLTO: default = prioritari + tutti i custom; selezione esplicita via `params.objects` (UI: campo "Objects to sync"); describe budget `FRA_SF_MAX_OBJECTS` (40) con ordine priority→custom→standard. Resta il cap 150 campi/oggetto (limite URL SOQL) — eventuale chunking multi-query se servisse.
+- SF record tables: `CREATE OR REPLACE` a ogni sync (full refresh); niente delta/incremental sync — accettabile ai volumi attuali (≤2000 righe/oggetto default).
+- ~~Le tabelle metadati sf_*_objects/sf_*_fields restano nel modello~~ → RISOLTO: `internal_metadata_tables` (property esatta dal registry) esclusa da `build_from_schema` e dallo stadio 2 pipeline; restano interrogabili in SQL. Rimosso il filtro regex `_FilteredMgr` (era solo nel path refresh → primo boot incoerente).
+- recall del linking resta lessicale+fuzzy+alias: il canale vettoriale rimane l'upgrade per terminologie molto diverse (da valutare su dati reali). Costo verifica con LLM (~5 ask) tunable.
+- value-overlap FK: i due guard (univocità + cardinalità minima) riducono i falsi positivi; resta da validare le soglie su dati reali (es. FK legittime a bassa cardinalità su dataset piccoli verrebbero saltate — accettabile perché la Fase 2 per nome le copre).
+- MCP v1: solo read-only e JSON-RPC non-streaming; valutare SSE/streaming, tool write con HITL, e OAuth MCP dedicato se serve esposizione a terze parti non fidate.
+- GraphRAG: entity-linking lessicale; valutare in futuro un canale vettoriale se serve recall maggiore.
+- stadio 5 ora copre: consistenza schema, eseguibilità query (replay) e faithfulness risposte. Possibile estensione futura: confronto con ground-truth su golden questions versionate.
+- **unificazione dei due store metriche** — PASSO 1 FATTO: `sl_metrics`/`sl_hierarchies`/`sl_segments` estratte da `erp_mock.db` (effimero!) nel nuovo `definitions_store.py` (`data_dir()/definitions.db`, migrazione one-shot con flag anti-resurrezione, seed builtin nel nuovo store). Ora c'è un solo store durabile per le definizioni; resta il passo 2 (fondere la *vista* draft del catalog con questo store — solo se emerge attrito reale).
+- integrazione conversazionale: solo ops additive (no rename/delete) per sicurezza; valutare conferma esplicita (HITL) se in futuro si aggiungono ops distruttive.
+- due store metriche coesistono (`sl_metrics` vs draft metrics del catalog): valutare unificazione.
+- `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).
+- match proposta→entità per descrizione fatto via `table`: verificare allineamento nomi su build multi-fonte.
+

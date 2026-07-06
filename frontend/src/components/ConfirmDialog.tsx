@@ -91,7 +91,7 @@ export function ConfirmProvider() {
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors text-white ${
               dialog.dangerous
                 ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-teal-600 hover:bg-teal-700'
+                : 'bg-brand hover:brightness-110'
             }`}
           >
             {dialog.confirmLabel ?? (dialog.dangerous ? 'Delete' : 'Confirm')}

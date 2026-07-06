@@ -372,6 +372,8 @@ export function adaptAskResult(result: AskResult): EngineResult {
     sources,
     isDisambiguation: result.disambiguation_required || result.ambiguity_error,
     candidates: result.candidates ?? [],
+    provenance: result.provenance,
+    notes: result.notes ?? undefined,
     followUps: [],
     steps: touched.length > 0
       ? [`Queried: ${touched.join(', ')} — ${totalRows} rows in ${result.latency_ms?.toFixed(0) ?? '?'}ms`]
@@ -453,6 +455,71 @@ export const buildSemanticLayer = (signal?: AbortSignal, force = false): Promise
 
 export const getDraft = (): Promise<SemanticDraft> =>
   http.get<SemanticDraft>('/api/semantic/draft').then(r => r.data)
+
+// ── Auto-build pipeline (Context → Sources → KG/Semantic Layer) ───────────────
+
+export type PipelineStageState = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+
+export interface PipelineStage {
+  name: string
+  state: PipelineStageState
+  detail: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface VerificationWarning {
+  type: string
+  severity: 'high' | 'medium' | 'low' | 'info'
+  detail: string
+}
+
+export interface VerificationReport {
+  ok: boolean
+  warnings: VerificationWarning[]
+  advisory: VerificationWarning[]
+  summary: Record<string, number | null>
+}
+
+export interface FailedSource {
+  id: string
+  label: string
+  error: string
+}
+
+export interface PipelineReport {
+  applied?: { relations: number; entities: number; metrics: number }
+  verification?: VerificationReport
+  failed_sources?: FailedSource[]
+}
+
+export interface PipelineRun {
+  id: string | null
+  stages: PipelineStage[]
+  started_at?: string
+  finished_at?: string | null
+  ok: boolean
+  running: boolean
+  report?: PipelineReport
+}
+
+export const runPipeline = (signal?: AbortSignal): Promise<PipelineRun> =>
+  http.post<PipelineRun>('/api/pipeline/run', undefined, { signal }).then(r => r.data)
+
+export const getPipelineStatus = (): Promise<PipelineRun> =>
+  http.get<PipelineRun>('/api/pipeline/status').then(r => r.data)
+
+export interface IntegrateResult {
+  ops: Array<Record<string, unknown>>
+  applied: string[]
+  counts: { relations: number; entities: number; metrics: number }
+  llm_used: boolean
+  notes?: string
+  draft: SemanticDraft
+}
+
+export const integrateModel = (instruction: string): Promise<IntegrateResult> =>
+  http.post<IntegrateResult>('/api/semantic/integrate', { instruction }).then(r => r.data)
 
 export const patchDraftEntity = (
   name: string,

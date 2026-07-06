@@ -40,3 +40,9 @@ backend/logs/
 
 # OS
 .DS_Store
+
+# Salesforce runtime artifacts — credentials + regenerable schema caches
+backend/data/salesforce_config.json
+backend/data/salesforce_schema_*.json
+backend/data/salesforce_schema_graph_*.json
+backend/data/salesforce_profile_*.json

@@ -311,7 +311,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
             <FieldEditor field={newField} entityOptions={entityOptions} onChange={setNewField} isNew />
             <div className="flex gap-2 px-2">
               <button onClick={commitNewField} disabled={!newField.name.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                 Add field
               </button>
               <button onClick={() => { setAddingField(false); setNewField(EMPTY_FIELD) }}
@@ -323,7 +323,7 @@ function EntityEditor({ nodeId, ontologyNode, sectorId, isBase, entityOptions, o
 
       <div className="flex gap-2 pt-2 border-t border-slate-100">
         <button onClick={saveEntity}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Save className="w-3.5 h-3.5" /> Save entity
         </button>
         <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
@@ -355,7 +355,7 @@ function EntityCard({ nodeId, ontologyNode, sectorId, isBase, entityOptions, onD
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors">
         {open ? <ChevronDown className="w-4 h-4 text-teal-500 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 flex-shrink-0" />}
@@ -469,7 +469,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-5 space-y-4">
       <div>
         <p className="text-sm font-semibold text-slate-900 mb-0.5">New entity</p>
         <p className="text-xs text-slate-400">Define an entity with field names that map to your physical database schema.</p>
@@ -524,7 +524,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
             <FieldEditor field={newField} entityOptions={entityOptions} onChange={setNewField} isNew />
             <div className="flex gap-2 px-2">
               <button onClick={commitField} disabled={!newField.name.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                 Add field
               </button>
               <button onClick={() => { setAddingField(false); setNewField(EMPTY_FIELD) }}
@@ -545,7 +545,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 
       <div className="flex gap-2 pt-1 border-t border-slate-100">
         <button onClick={create} disabled={!name.trim()}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" /> Create entity
         </button>
         <button onClick={onDone} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">
@@ -562,7 +562,7 @@ function AddEntityForm({ sectorId, entityOptions, onDone }: {
 const AW_RELATIONS: {
   source: string; sourceKey: string
   colorBorder: string; colorBg: string; colorText: string; colorDot: string; icon: string
-  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1'; fromRows: number; toRows: number; note: string; soft?: boolean; id?: number; is_manual?: boolean }[]
+  relations: { from: string; to: string; via: string; cardinality: '1:N' | 'N:1' | '1:1'; fromRows: number; toRows: number; note: string; soft?: boolean; id?: number; is_manual?: boolean }[]
 }[] = []
 
 // Color palette for dynamically derived relation groups
@@ -591,14 +591,16 @@ function buildRelationGroups(
       groups.set(sourceKey, { source: sourceName, sourceKey, ...colors, relations: [] })
     }
     const group = groups.get(sourceKey)!
+    const isMerge = rel.edge_type === 'SAME_AS'
     group.relations.push({
       from: fromEntity?.name || rel.from_table,
       to:   toEntity?.name   || rel.to_table,
-      via:  rel.via_column,
-      cardinality: '1:N',
+      via:  isMerge ? 'same entity' : rel.via_column,
+      // A cross-source entity merge is a 1:1 identity link, not a 1:N join.
+      cardinality: isMerge ? '1:1' : '1:N',
       fromRows: fromEntity?.record_count ?? 0,
       toRows:   toEntity?.record_count   ?? 0,
-      note: rel.edge_type ?? '',
+      note: isMerge ? 'merged entity (same records across sources)' : (rel.edge_type ?? ''),
       id: rel.id,
       is_manual: rel.is_manual,
     })
@@ -651,7 +653,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
       </p>
 
       {/* Form */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
         <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">New bridge</p>
         {/* Row 1: from entity + field */}
         <div className="grid grid-cols-2 gap-2">
@@ -695,7 +697,7 @@ function BridgesBuilder({ sectorId, entityOptions }: { sectorId: string; entityO
           </div>
         </div>
         <button onClick={add} disabled={!canAdd}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />Add bridge
         </button>
       </div>
@@ -860,7 +862,7 @@ function UserSourceCard({ source, onDelete }: { source: SourceDef; onDelete: () 
   const chips: Record<string, string> = { PostgreSQL: 'bg-blue-50 text-blue-700', MySQL: 'bg-orange-50 text-orange-700', SQLite: 'bg-sky-50 text-sky-700', MongoDB: 'bg-green-50 text-green-700', Snowflake: 'bg-cyan-50 text-cyan-700', BigQuery: 'bg-yellow-50 text-yellow-700', CSV: 'bg-violet-50 text-violet-700', JSON: 'bg-amber-50 text-amber-700', 'REST API': 'bg-teal-50 text-teal-700' }
   const chip = chips[source.type] ?? 'bg-slate-100 text-slate-600'
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-start gap-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 flex items-start gap-3">
       <Server className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -961,7 +963,7 @@ function saveMetrics(sid: string, m: Metric[]) {
 function MetricCard({ metric, onDelete }: { metric: Metric; onDelete?: () => void }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button className="w-full text-left" onClick={() => setOpen(v => !v)}>
         <div className="px-4 py-3 flex items-start gap-3">
           <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -1053,7 +1055,7 @@ function saveHierarchies(sid: string, h: DimHierarchy[]) {
 
 function HierarchyCard({ h, onDelete }: { h: DimHierarchy; onDelete?: () => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
       <div className="flex items-start gap-3">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${h.type === 'time' ? 'bg-blue-50 border border-blue-200' : 'bg-violet-50 border border-violet-200'}`}>
           {h.type === 'time'
@@ -1113,7 +1115,7 @@ function saveSegments(sid: string, s: Segment[]) {
 
 function SegmentCard({ seg, onDelete }: { seg: Segment; onDelete?: () => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center flex-shrink-0 mt-0.5">
           <Filter className="w-4 h-4 text-orange-600" />
@@ -1254,7 +1256,7 @@ function DemoBridgeCard({ bridge }: { bridge: DemoBridge }) {
   const color = pct === 100 ? 'bg-teal-500' : pct >= 95 ? 'bg-blue-500' : 'bg-amber-500'
   const textColor = pct === 100 ? 'text-teal-700 bg-teal-100' : pct >= 95 ? 'text-blue-700 bg-blue-100' : 'text-amber-700 bg-amber-100'
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">From</p>
@@ -1323,7 +1325,7 @@ function DemoDisambiguationCard({ rule }: { rule: DemoDisambiguationRule }) {
 function DemoQueryExampleCard({ ex }: { ex: DemoQueryExample }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4">
       <div className="flex items-start gap-3">
         <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -1349,7 +1351,7 @@ function DemoQueryExampleCard({ ex }: { ex: DemoQueryExample }) {
             <p className="text-xs font-semibold text-teal-700 max-w-[160px] leading-snug">{ex.result}</p>
           </div>
           <button onClick={() => tryInQueryAI(ex.question)}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors">
+            className="flex items-center gap-1 px-2.5 py-1.5 bg-brand hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-colors">
             <Play className="w-3 h-3" />Try
           </button>
         </div>
@@ -1533,7 +1535,7 @@ function MappingTableGroup({ table, rows, savedEdits, onSave }: {
 }) {
   const [open, setOpen] = useState(true)
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
+    <div className="ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-50 hover:bg-slate-100 transition-colors border-b border-slate-200">
         <div className="flex items-center gap-2.5">
@@ -1617,12 +1619,12 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">{defs.length} definitions · {defs.filter(d => d.status === 'ambiguous').length} ambiguous · click a row to edit</p>
         <button onClick={() => setShowAdd(v => !v)}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
           <Plus className="w-3.5 h-3.5" />Add definition
         </button>
       </div>
       {showAdd && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
           <p className="text-xs font-semibold text-slate-700">New field definition</p>
           <div className="grid grid-cols-3 gap-3">
             {(['entity', 'field', 'definition'] as const).map(f => (
@@ -1634,11 +1636,11 @@ function SemanticDefsPanel({ initialDefs }: { initialDefs: SemanticDef[] }) {
               </div>
             ))}
           </div>
-          <button onClick={addDef} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+          <button onClick={addDef} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
         </div>
       )}
       {Object.entries(grouped).map(([entity, entityDefs]) => (
-        <div key={entity} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div key={entity} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
           <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
             <Tag className="w-3.5 h-3.5 text-teal-600" />
             <span className="text-sm font-semibold text-slate-800">{entity}</span>
@@ -1826,7 +1828,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           desc="Foreign-key relationships within each data source" />
         <button
           onClick={() => setShowForm(v => !v)}
-          className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium flex-shrink-0"
+          className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium flex-shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />{showForm ? 'Cancel' : 'New relation'}
         </button>
@@ -1834,7 +1836,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
 
       {/* Inline add form */}
       {showForm && (
-        <form onSubmit={handleAddRelation} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <form onSubmit={handleAddRelation} className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
           <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Define a join between two tables</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1883,7 +1885,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           </div>
           <div className="flex items-center gap-2">
             <button type="submit" disabled={saving || !form.from_table || !form.to_table}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors font-medium">
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 disabled:opacity-50 transition-colors font-medium">
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               {saving ? 'Saving…' : 'Add relation'}
             </button>
@@ -1902,7 +1904,7 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
           { label: 'N:1 (many-to-one)', value: nToOne, color: 'text-teal-600' },
           { label: 'Soft / denormalized', value: softCount, color: 'text-amber-600' },
         ].map(s => (
-          <div key={s.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-center">
+          <div key={s.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">{s.label}</p>
           </div>
@@ -1998,7 +2000,13 @@ function RelationsSection({ relationsData, onNavigate, entityTables, onRelationA
                               </button>
                             )}
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium">
-                              {r.cardinality === '1:N' ? (
+                              {r.cardinality === '1:1' ? (
+                                <>
+                                  <span className="text-indigo-500">1</span>
+                                  <span className="text-indigo-500 font-bold">≡</span>
+                                  <span className="text-indigo-500">1</span>
+                                </>
+                              ) : r.cardinality === '1:N' ? (
                                 <>
                                   <span className="text-blue-500">1</span>
                                   <ArrowRight className="w-3 h-3" />
@@ -2450,7 +2458,7 @@ export default function SemanticLayerView() {
           </div>
           {/* Search results dropdown */}
           {searchFocused && sidebarSearch && searchResults.length > 0 && (
-            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-lg z-50 overflow-hidden">
               {searchResults.map((r, i) => (
                 <button key={i} onMouseDown={() => { setSection(r.section); setSidebarSearch('') }}
                   className="w-full text-left px-3 py-2 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors">
@@ -2468,7 +2476,7 @@ export default function SemanticLayerView() {
             </div>
           )}
           {searchFocused && sidebarSearch && searchResults.length === 0 && (
-            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white border border-slate-200 rounded-xl shadow-lg z-50 px-3 py-2 text-[11px] text-slate-400">
+            <div className="absolute left-2 right-2 top-[calc(100%-4px)] bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl shadow-lg z-50 px-3 py-2 text-[11px] text-slate-400">
               No results for "{sidebarSearch}"
             </div>
           )}
@@ -2604,7 +2612,7 @@ export default function SemanticLayerView() {
             {isDemoWorkspace && (
               <div className="grid grid-cols-4 gap-3">
                 {Object.values(DEMO_SOURCE_FRESHNESS).map(f => (
-                  <div key={f.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                  <div key={f.label} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-xs font-bold text-slate-800">{f.label}</p>
                       <FreshnessBadge status={f.status} lastSync={f.lastSync} sla={f.sla} />
@@ -2624,7 +2632,7 @@ export default function SemanticLayerView() {
             {!isDemoWorkspace && backendSources.length > 0 && (
               <div className="grid grid-cols-4 gap-3">
                 {backendSources.map(src => (
-                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
+                  <div key={src.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3">
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-xs font-bold text-slate-800">{src.name}</p>
                       <FreshnessBadge status={src.freshness_status} lastSync={src.loaded_at ?? '—'} sla="Live" />
@@ -2699,7 +2707,7 @@ export default function SemanticLayerView() {
                   {backendSources.length > 0 && (
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'process' } }))}
-                      className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                      className="flex-shrink-0 text-xs font-semibold px-3 py-1.5 bg-brand text-white rounded-lg hover:brightness-110 transition-colors"
                     >
                       Run Setup →
                     </button>
@@ -2752,7 +2760,7 @@ export default function SemanticLayerView() {
                 <p className="text-xs text-slate-400 mb-3">Saved query templates from your data model. Use these as starting points.</p>
                 <div className="space-y-2">
                   {queryTemplates.slice(0, 6).map(t => (
-                    <div key={t.id} className="bg-white border border-slate-200 rounded-xl p-4">
+                    <div key={t.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-900">{t.name}</p>
@@ -2766,7 +2774,7 @@ export default function SemanticLayerView() {
                           )}
                         </div>
                         <button onClick={() => tryInQueryAI(t.name)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-semibold transition-colors flex-shrink-0">
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-brand hover:brightness-110 text-white rounded-lg text-[11px] font-semibold transition-colors flex-shrink-0">
                           <Play className="w-3 h-3" />Try
                         </button>
                       </div>
@@ -2809,11 +2817,11 @@ export default function SemanticLayerView() {
                   : useBackendData
                     ? 'Ask a question about your data…'
                     : 'Connect the backend to use the live playground'}
-                className="flex-1 text-sm border border-slate-200 rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
+                className="flex-1 text-sm ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 bg-white outline-none focus:border-teal-400 shadow-sm"
                 disabled={!useBackendData}
               />
               <button onClick={runPlayground} disabled={pgRunning || !useBackendData}
-                className="px-5 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
+                className="px-5 py-3 bg-brand text-white rounded-xl hover:brightness-110 disabled:opacity-40 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm">
                 {pgRunning
                   ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   : <Play className="w-4 h-4" />}
@@ -2904,7 +2912,7 @@ export default function SemanticLayerView() {
                 {/* Sample results table */}
                 <div>
                   <p className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">Sample Results</p>
-                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>{pgResult.columns.map(c => (
@@ -2971,7 +2979,7 @@ export default function SemanticLayerView() {
               action={
                 <button onClick={() => setShowAddSource(v => !v)}
                     className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
-                      showAddSource ? 'bg-slate-200 text-slate-700' : 'bg-teal-600 text-white hover:bg-teal-700'
+                      showAddSource ? 'bg-slate-200 text-slate-700' : 'bg-brand text-white hover:brightness-110'
                     }`}>
                     <Plus className="w-3.5 h-3.5" /> Add source
                   </button>
@@ -2989,7 +2997,7 @@ export default function SemanticLayerView() {
             {!isDemoWorkspace && useBackendData && backendSources.length > 0 && (
               <div className="grid grid-cols-3 gap-3 pb-1">
                 {backendSources.map(src => (
-                  <div key={src.id} className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div key={src.id} className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl px-4 py-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-bold text-slate-800">{src.name.toUpperCase()}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">{src.total_rows.toLocaleString()} rows · {src.source_type}</p>
@@ -3042,7 +3050,7 @@ export default function SemanticLayerView() {
                     </div>
                     <div className="flex gap-2">
                       <button onClick={addSource} disabled={!sourceForm.name.trim()}
-                        className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 disabled:opacity-40 transition-colors font-medium">
+                        className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 disabled:opacity-40 transition-colors font-medium">
                         Save source
                       </button>
                       <button onClick={() => setShowAddSource(false)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-2 transition-colors">Cancel</button>
@@ -3062,7 +3070,7 @@ export default function SemanticLayerView() {
                         <div className="flex items-center justify-center gap-3 flex-wrap">
                           <button
                             onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-                            className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                            className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium"
                           >
                             Go to Connect →
                           </button>
@@ -3076,7 +3084,7 @@ export default function SemanticLayerView() {
                         <p className="text-xs text-slate-400 mt-1 mb-4 max-w-xs mx-auto">
                           Document each database, CSV, API, or warehouse you want to query.
                         </p>
-                        <button onClick={() => setShowAddSource(true)} className="text-xs bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                        <button onClick={() => setShowAddSource(true)} className="text-xs bg-brand text-white px-4 py-2 rounded-lg hover:brightness-110 transition-colors font-medium">
                           + Add first source
                         </button>
                       </>
@@ -3101,7 +3109,7 @@ export default function SemanticLayerView() {
               action={
                 <button onClick={() => setShowAddEntity(v => !v)}
                   className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors ${
-                    showAddEntity ? 'bg-slate-200 text-slate-700' : 'bg-teal-600 text-white hover:bg-teal-700'
+                    showAddEntity ? 'bg-slate-200 text-slate-700' : 'bg-brand text-white hover:brightness-110'
                   }`}>
                   <Plus className="w-3.5 h-3.5" /> Add entity
                 </button>
@@ -3121,7 +3129,7 @@ export default function SemanticLayerView() {
                 </div>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent('navigate-to-tab', { detail: { tab: 'sources' } }))}
-                  className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                  className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium"
                 >
                   Connect a data source →
                 </button>
@@ -3214,7 +3222,7 @@ export default function SemanticLayerView() {
               desc="Reusable business measures — certified, versioned, and referenced by Query AI"
               action={
                 <button onClick={() => setShowAddMetric(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Define metric
                 </button>
               }
@@ -3225,7 +3233,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddMetric && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New metric</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
@@ -3255,7 +3263,7 @@ export default function SemanticLayerView() {
                       placeholder="What does this measure?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addMetric} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addMetric} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddMetric(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>
@@ -3292,7 +3300,7 @@ export default function SemanticLayerView() {
               desc="Structured drill-down paths — Year → Quarter → Month → Day, Category → Product"
               action={
                 <button onClick={() => setShowAddHierarchy(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Add hierarchy
                 </button>
               }
@@ -3303,7 +3311,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddHierarchy && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New hierarchy</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
@@ -3328,7 +3336,7 @@ export default function SemanticLayerView() {
                       placeholder="What does this hierarchy represent?" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addHierarchy} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addHierarchy} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddHierarchy(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>
@@ -3361,7 +3369,7 @@ export default function SemanticLayerView() {
               desc="Named filter conditions — reused by metrics and referenced by Query AI"
               action={
                 <button onClick={() => setShowAddSegment(v => !v)}
-                  className="flex items-center gap-1.5 text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
                   <Plus className="w-3.5 h-3.5" />Add segment
                 </button>
               }
@@ -3372,7 +3380,7 @@ export default function SemanticLayerView() {
             </p>
 
             {showAddSegment && (
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+              <div className="bg-slate-50 ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-slate-700">New segment</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-[11px] text-slate-500 mb-1 block">Name</label>
@@ -3400,7 +3408,7 @@ export default function SemanticLayerView() {
                       placeholder="e.g. 'Company'" className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white font-mono outline-none focus:border-teal-400" /></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={addSegment} className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700">Add</button>
+                  <button onClick={addSegment} className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110">Add</button>
                   <button onClick={() => setShowAddSegment(false)} className="text-xs text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-100">Cancel</button>
                 </div>
               </div>

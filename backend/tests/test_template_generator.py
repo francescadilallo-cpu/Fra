@@ -332,3 +332,131 @@ class TestGenerateTemplates:
         result = generate_templates_from_draft(MINIMAL_DRAFT)
         for t in result:
             assert isinstance(t["keywords"], list)
+
+
+class TestKeywordSpaceVariants:
+    def test_snake_case_gets_space_variant(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        draft = {
+            "entities": [
+                {
+                    "name": "erp_orders",
+                    "table": "erp_orders",
+                    "columns": ["order_id", "total"],
+                }
+            ],
+            "metrics": [],
+            "relations": [],
+        }
+        tpls = generate_templates_from_draft(draft)
+        count_tpl = next(t for t in tpls if t["name"].startswith("How many"))
+        # Users type spaces, not underscores.
+        assert "how many erp orders" in count_tpl["keywords"]
+        assert "how many erp_orders" in count_tpl["keywords"]
+
+
+class TestUpsertPrunesStaleAutoTemplates:
+    def test_renamed_auto_template_retires_old_name(self, tmp_path):
+        from app.metadata.catalog import MetadataCatalog
+
+        cat = MetadataCatalog(f"sqlite:///{tmp_path / 'cat.db'}")
+        v1 = [
+            {
+                "name": "Quanti x",
+                "sql_query": "SELECT 1",
+                "keywords": [],
+                "sources": ["x"],
+            }
+        ]
+        cat.upsert_auto_templates(v1)
+        v2 = [
+            {
+                "name": "How many x",
+                "sql_query": "SELECT 1",
+                "keywords": [],
+                "sources": ["x"],
+            }
+        ]
+        cat.upsert_auto_templates(v2)
+        names = {t["name"] for t in cat.list_templates()}
+        assert "How many x" in names
+        assert "Quanti x" not in names  # stale name retired
+
+    def test_templates_on_other_tables_untouched(self, tmp_path):
+        from app.metadata.catalog import MetadataCatalog
+
+        cat = MetadataCatalog(f"sqlite:///{tmp_path / 'cat.db'}")
+        cat.upsert_auto_templates(
+            [
+                {
+                    "name": "Demo tpl",
+                    "sql_query": "SELECT 1",
+                    "keywords": [],
+                    "sources": ["dipendenti_hr"],
+                }
+            ]
+        )
+        # Regenerating templates for a different table must not retire it.
+        cat.upsert_auto_templates(
+            [
+                {
+                    "name": "How many x",
+                    "sql_query": "SELECT 1",
+                    "keywords": [],
+                    "sources": ["x"],
+                }
+            ]
+        )
+        names = {t["name"] for t in cat.list_templates()}
+        assert {"Demo tpl", "How many x"} <= names
+
+
+class TestMergedEntityTemplates:
+    _draft = {
+        "entities": [
+            {
+                "name": "crm_accounts",
+                "table": "crm_accounts",
+                "columns": ["id", "company"],
+            },
+            {
+                "name": "legacy_customers",
+                "table": "legacy_customers",
+                "columns": ["id", "company", "phone"],
+            },
+        ],
+        "metrics": [],
+        "relations": [
+            {
+                "from_table": "crm_accounts",
+                "to_table": "legacy_customers",
+                "edge_type": "SAME_AS",
+            },
+        ],
+    }
+
+    def test_union_count_template_generated(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        tpls = generate_templates_from_draft(self._draft)
+        merged = next(t for t in tpls if "across sources" in t["name"])
+        assert "UNION" in merged["sql_query"]
+        assert set(merged["sources"]) == {"crm_accounts", "legacy_customers"}
+        # "how many unique customers" must be matchable.
+        assert "unique customers" in merged["keywords"]
+        assert "unique accounts" in merged["keywords"]
+
+    def test_no_template_without_pk(self):
+        from app.semantic.template_generator import generate_templates_from_draft
+
+        draft = {
+            "entities": [
+                {"name": "a", "table": "a", "columns": ["x"]},
+                {"name": "b", "table": "b", "columns": ["y"]},
+            ],
+            "metrics": [],
+            "relations": [{"from_table": "a", "to_table": "b", "edge_type": "SAME_AS"}],
+        }
+        tpls = generate_templates_from_draft(draft)
+        assert not any("across sources" in t["name"] for t in tpls)

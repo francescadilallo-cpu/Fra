@@ -42,6 +42,7 @@ class BufferHandler(logging.Handler):
             }
             if record.exc_info:
                 import traceback
+
                 entry["traceback"] = "".join(
                     traceback.format_exception(*record.exc_info)
                 )

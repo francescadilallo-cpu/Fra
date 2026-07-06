@@ -652,7 +652,7 @@ function OntologyGenerationPanel({
             <p className="text-xs text-teal-600 mt-0.5">{appliedCount} item{appliedCount !== 1 ? 's' : ''} added to your semantic layer.</p>
           </div>
           <button onClick={onNavigateToOntology}
-            className="text-xs bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+            className="text-xs bg-brand text-white px-3 py-1.5 rounded-lg hover:brightness-110 transition-colors font-medium">
             Open Ontology Builder →
           </button>
         </div>
@@ -830,7 +830,7 @@ function ReviewPanel({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
         <ClipboardCheck className="w-4 h-4 text-slate-500" />
@@ -849,7 +849,7 @@ function ReviewPanel({
         {pendingCount > 0 && (
           <button
             onClick={onCertifyAll}
-            className="ml-auto flex items-center gap-1 text-[10px] bg-teal-600 text-white px-2.5 py-1 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+            className="ml-auto flex items-center gap-1 text-[10px] bg-brand text-white px-2.5 py-1 rounded-lg hover:brightness-110 transition-colors font-medium"
           >
             <CheckCircle2 className="w-3 h-3" />Certify all
           </button>
@@ -925,7 +925,7 @@ function ReviewPanel({
                 />
                 <button
                   onClick={() => { onUpdate(item.id, item.status, noteText); setEditingId(null) }}
-                  className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700"
+                  className="text-[10px] bg-brand text-white px-2 py-0.5 rounded hover:brightness-110"
                 >Save</button>
                 <button onClick={() => setEditingId(null)} className="text-[10px] text-slate-400">Cancel</button>
               </div>
@@ -998,7 +998,7 @@ function ContinuousEvolutionPanel({
     s === 'fresh' ? 'Fresh' : s === 'warning' ? 'Aging' : 'Stale'
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
         <TrendingUp className="w-4 h-4 text-slate-500" />
@@ -1064,7 +1064,7 @@ function ContinuousEvolutionPanel({
               <button
                 onClick={submitForm}
                 disabled={!formTitle.trim()}
-                className="text-xs bg-teal-600 text-white px-3 py-1 rounded hover:bg-teal-700 transition-colors disabled:opacity-40 font-medium"
+                className="text-xs bg-brand text-white px-3 py-1 rounded hover:brightness-110 transition-colors disabled:opacity-40 font-medium"
               >Submit</button>
               <button onClick={() => setShowForm(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
             </div>
@@ -1363,7 +1363,7 @@ function ProfilingPanel({
                                           Cancel
                                         </button>
                                         <button onClick={saveRule}
-                                          className="text-[10px] bg-teal-600 text-white px-2 py-0.5 rounded hover:bg-teal-700 transition-colors">
+                                          className="text-[10px] bg-brand text-white px-2 py-0.5 rounded hover:brightness-110 transition-colors">
                                           Save
                                         </button>
                                       </div>
@@ -1571,7 +1571,7 @@ function ConnectedSourcesPanel({
     )
   }
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       {userSources.map((s, i) => {
         const c = connectorById(s.id.split('-')[0]) ?? connectorById(s.connector_type)
         const tables = s.target_tables ?? []
@@ -1766,7 +1766,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
 
   const acceptedCount = Object.values(upload.accepted).filter(Boolean).length
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+    <div className="bg-white ring-1 ring-slate-900/[0.06] shadow-soft rounded-xl overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50/50">
         <FileText className="w-4 h-4 text-teal-600 flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -1824,7 +1824,7 @@ function UploadPanel({ upload, onUpload, onToggle, onClear, onIngest, onLoadSamp
           <AlertCircle className="w-3.5 h-3.5 text-slate-400" />Toggle to include/exclude columns — unmatched columns (dashed) can still be included
         </div>
         <button onClick={onIngest} disabled={acceptedCount === 0}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${acceptedCount > 0 ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${acceptedCount > 0 ? 'bg-brand hover:brightness-110 text-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
           <Zap className="w-3.5 h-3.5" />Ingest {upload.rows.length.toLocaleString('en-US')} rows
         </button>
       </div>
@@ -2421,13 +2421,18 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-8 py-5 border-b border-slate-200 flex-shrink-0 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{IS_DEMO_MODE ? 'Data Sources' : 'Data Workbench'}</h1>
-          <p className="text-slate-500 mt-1 text-sm">
-            {IS_DEMO_MODE
-              ? `${workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly`
-              : `${workspaceLabel(sector.name)} · From raw sources to a governed, queryable data model — one guided pipeline`}
-          </p>
+        <div className="flex items-center gap-2.5">
+          <span className="brand-mark flex h-9 w-9 items-center justify-center rounded-xl flex-shrink-0">
+            <Plug className="h-4 w-4 text-white" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">{IS_DEMO_MODE ? 'Data Sources' : 'Data Workbench'}</h1>
+            <p className="text-slate-500 mt-1 text-sm">
+              {IS_DEMO_MODE
+                ? `${workspaceLabel(sector.name)} · Connect business systems or upload files — data loads automatically and becomes queryable instantly`
+                : `${workspaceLabel(sector.name)} · From raw sources to a governed, queryable data model — one guided pipeline`}
+            </p>
+          </div>
         </div>
         {!IS_DEMO_MODE && (
           <div className="hidden md:flex items-center gap-2 flex-shrink-0">
@@ -2484,7 +2489,7 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                       <p className="text-sm font-semibold text-teal-900">Ready to build your data model?</p>
                       <p className="text-xs text-teal-700 mt-0.5">{sources.length} source{sources.length !== 1 ? 's' : ''} connected · entities, relationships, and metrics auto-discovered</p>
                     </div>
-                    <button onClick={handleBuildSemanticLayer} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm">
+                    <button onClick={handleBuildSemanticLayer} className="flex items-center gap-2 px-4 py-2 bg-brand hover:brightness-110 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0 shadow-sm">
                       <Zap className="w-4 h-4" /> Build Data Model
                     </button>
                   </div>

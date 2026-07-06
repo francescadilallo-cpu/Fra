@@ -26,19 +26,24 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
 
+if TYPE_CHECKING:
+    import pandas as pd
+
+from ..paths import data_dir
+
 logger = logging.getLogger(__name__)
 
 _SF_API_VERSION = "v59.0"
-_DATA_DIR = Path(__file__).parent.parent.parent / "data"
+_DATA_DIR = data_dir()
 
 # Standard SObjects most relevant for business analysis (prioritised in schema fetch)
 _PRIORITY_OBJECTS = {
@@ -348,9 +353,7 @@ class SalesforceConnector:
             try:
                 results = self._post_composite_batch(chunk_paths)
             except SalesforceAPIError as exc:
-                logger.warning(
-                    "Composite batch %d–%d failed: %s", i, i + _BATCH, exc
-                )
+                logger.warning("Composite batch %d–%d failed: %s", i, i + _BATCH, exc)
                 continue
 
             for obj_meta, result in zip(chunk_objects, results):
@@ -426,11 +429,16 @@ class SalesforceConnector:
         import pandas as pd  # type: ignore[import]
 
         _SKIP = frozenset(
-            {"address", "location", "anytype", "base64", "encryptedstring", "complexvalue"}
+            {
+                "address",
+                "location",
+                "anytype",
+                "base64",
+                "encryptedstring",
+                "complexvalue",
+            }
         )
-        queryable = [
-            f.name for f in sf_obj.fields if f.type.lower() not in _SKIP
-        ]
+        queryable = [f.name for f in sf_obj.fields if f.type.lower() not in _SKIP]
         # Id first; cap at 150 to stay under SOQL length limits
         if "Id" in queryable:
             queryable.remove("Id")
@@ -442,7 +450,8 @@ class SalesforceConnector:
         except SalesforceAPIError as exc:
             logger.warning(
                 "SOQL query for %s failed (%s), retrying with minimal fields",
-                sf_obj.name, exc,
+                sf_obj.name,
+                exc,
             )
             has_name = any(f.name == "Name" for f in sf_obj.fields)
             minimal = "Id, Name" if has_name else "Id"
@@ -483,8 +492,9 @@ class SalesforceConnector:
 
         Priority order:
           1. Standard priority objects (Account, Contact, Opportunity, …)
-          2. Other standard objects
-          3. Custom objects (__c suffix)
+          2. Custom objects (__c) — business-specific by definition, so they
+             beat generic standard objects when the describe budget is tight
+          3. Other standard objects
         """
         raw_objects = self.list_sobjects()
 
@@ -503,9 +513,7 @@ class SalesforceConnector:
         ]
         custom = [o for o in queryable if o.get("custom")]
 
-        remaining = max_objects - len(priority)
-        selected = priority + standard[: remaining // 2] + custom[: remaining // 2]
-        selected = selected[:max_objects]
+        selected = (priority + custom + standard)[:max_objects]
 
         objects: list[SalesforceObject] = []
         for obj_meta in selected:
@@ -589,9 +597,7 @@ class SalesforceConnector:
         """
         raw = self.list_sobjects()
         queryable = [
-            o
-            for o in raw
-            if o.get("queryable") and not o.get("deprecatedAndHidden")
+            o for o in raw if o.get("queryable") and not o.get("deprecatedAndHidden")
         ]
         if max_objects > 0:
             queryable = queryable[:max_objects]
@@ -668,6 +674,41 @@ class SalesforceConnector:
             built_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def fetch_records(
+        self, obj_name: str, field_names: list[str], limit: int = 2000
+    ) -> list[dict]:
+        """Fetch up to *limit* records of *obj_name* via SOQL (0 = unlimited).
+
+        Follows ``nextRecordsUrl`` pagination and strips the SOQL ``attributes``
+        envelope from each record so the result is a flat list of scalar dicts,
+        ready for tabular ingestion.
+        """
+        from urllib.parse import quote  # noqa: PLC0415
+
+        # SOQL field list must not exceed ~200 fields due to URL length limits
+        # (same bound the profiler uses).
+        fields = field_names[:150]
+        if not fields:
+            return []
+        soql = f"SELECT {', '.join(fields)} FROM {obj_name}"
+        if limit > 0:
+            soql += f" LIMIT {limit}"
+
+        records: list[dict] = []
+        path: str | None = f"/query?q={quote(soql)}"
+        while path:
+            raw = self._get(path)
+            for r in raw.get("records", []):
+                r.pop("attributes", None)
+                records.append(r)
+            if limit > 0 and len(records) >= limit:
+                return records[:limit]
+            # nextRecordsUrl is root-relative: /services/data/vXX.X/query/01g…
+            nxt = raw.get("nextRecordsUrl")
+            marker = f"/services/data/{_SF_API_VERSION}"
+            path = nxt[len(marker) :] if nxt and nxt.startswith(marker) else None
+        return records
+
     def close(self) -> None:
         self._http.close()
 
@@ -676,6 +717,105 @@ class SalesforceConnector:
 
     def __exit__(self, *_: Any) -> None:
         self.close()
+
+
+def sf_max_objects() -> int:
+    """Max SObjects described per sync (one API call each). Defaults to 40 so
+    real orgs get their custom objects described, not just the standard
+    priority set. Set FRA_SF_MAX_OBJECTS to tune; invalid values fall back."""
+    raw = os.getenv("FRA_SF_MAX_OBJECTS", "40").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 40
+    return val if val > 0 else 40
+
+
+def select_record_objects(objects: list, explicit) -> list:
+    """Which SObjects get their *records* ingested as DuckDB tables.
+
+    *explicit* is the user's selection from the source params — a list or a
+    comma-separated string of object API names. When given, it wins entirely
+    (full user control). Otherwise the default rule: standard priority objects
+    plus every custom object (``__c`` — business-specific by definition).
+    Accepts SalesforceObject instances or schema-JSON dicts.
+    """
+    names: set[str] = set()
+    if isinstance(explicit, str):
+        names = {s.strip() for s in explicit.split(",") if s.strip()}
+    elif isinstance(explicit, (list, tuple, set)):
+        names = {str(s).strip() for s in explicit if str(s).strip()}
+
+    def _name(o) -> str:
+        return o.get("name") if isinstance(o, dict) else o.name
+
+    def _is_custom(o) -> bool:
+        return bool(o.get("is_custom") if isinstance(o, dict) else o.is_custom)
+
+    if names:
+        return [o for o in objects if _name(o) in names]
+    return [o for o in objects if _name(o) in _PRIORITY_OBJECTS or _is_custom(o)]
+
+
+def sf_record_row_limit() -> int:
+    """Per-object row cap when ingesting real Salesforce records into DuckDB.
+
+    Bounds memory/disk on small instances. Defaults to 2000; set
+    FRA_SF_ROW_LIMIT=0 for unlimited. Invalid/negative values fall back.
+    """
+    raw = os.getenv("FRA_SF_ROW_LIMIT", "2000").strip()
+    try:
+        val = int(raw)
+    except ValueError:
+        return 2000
+    return val if val >= 0 else 2000
+
+
+def ingestable_field_names(fields: list) -> list[str]:
+    """Names of scalar fields safe for tabular ingestion (skips compound types
+    like address/location and binary blobs). Accepts SalesforceField objects or
+    the equivalent dicts from a cached schema JSON."""
+    names: list[str] = []
+    for f in fields:
+        ftype = f.get("type") if isinstance(f, dict) else f.type
+        name = f.get("name") if isinstance(f, dict) else f.name
+        if name and ftype in _PROFILABLE_TYPES:
+            names.append(name)
+    return names
+
+
+def salesforce_metadata_relations(
+    schema: dict, table_by_object: dict[str, str]
+) -> list[dict]:
+    """FK relations *declared* by Salesforce describe metadata (``referenceTo``),
+    restricted to objects actually ingested as record tables.
+
+    Pure and schema-JSON-driven so it works from the on-disk cache without a
+    network call. Polymorphic lookups (e.g. WhoId → Contact, Lead) yield one
+    relation per ingested target. The result feeds
+    ``KnowledgeGraph.ingest_manual_relations`` — declared joins beat name/value
+    heuristics.
+    """
+    relations: list[dict] = []
+    for obj in schema.get("objects", []):
+        from_table = table_by_object.get(obj.get("name") or "")
+        if not from_table:
+            continue
+        for fld in obj.get("fields", []):
+            if not fld.get("is_relation") or not fld.get("name"):
+                continue
+            for target in (fld.get("relation_to") or "").split(","):
+                to_table = table_by_object.get(target.strip())
+                if to_table and to_table != from_table:
+                    relations.append(
+                        {
+                            "from_table": from_table,
+                            "to_table": to_table,
+                            "via_column": fld["name"],
+                            "edge_type": f"FK_{fld['name']}",
+                        }
+                    )
+    return relations
 
 
 # ── Config + schema persistence ───────────────────────────────────────────────
@@ -776,7 +916,9 @@ def delete_salesforce_config(source_id: str) -> None:
             pass
 
 
-def save_salesforce_schema_graph(source_id: str, graph: "SalesforceSchemaGraph") -> None:
+def save_salesforce_schema_graph(
+    source_id: str, graph: "SalesforceSchemaGraph"
+) -> None:
     """Persist the schema graph to disk for *source_id*."""
     path = _DATA_DIR / f"salesforce_schema_graph_{source_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)

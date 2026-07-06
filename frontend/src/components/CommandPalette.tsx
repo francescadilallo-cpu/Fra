@@ -202,11 +202,11 @@ export default function CommandPalette({ onNavigate }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[18vh] bg-slate-900/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[18vh] bg-slate-900/50 backdrop-blur-md"
       onClick={() => setOpen(false)}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl mx-4 overflow-hidden"
+        className="bg-white rounded-2xl shadow-lifted ring-1 ring-slate-900/10 w-full max-w-xl mx-4 overflow-hidden animate-fade-up"
         onClick={e => e.stopPropagation()}
       >
         {/* Search */}
@@ -243,12 +243,15 @@ export default function CommandPalette({ onNavigate }: Props) {
                       data-cmd-item
                       onClick={c.action}
                       onMouseEnter={() => setSelectedIdx(idx)}
-                      className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors ${
-                        isSelected ? 'bg-teal-50' : 'hover:bg-slate-50'
+                      className={`relative w-full flex items-center gap-3 px-4 py-2 text-left transition-colors ${
+                        isSelected ? 'bg-brand-soft' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-teal-600' : 'text-slate-400'}`} />
-                      <span className={`text-sm flex-1 ${isSelected ? 'text-teal-900 font-medium' : 'text-slate-700'}`}>
+                      {isSelected && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-brand" />
+                      )}
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-indigo-600' : 'text-slate-400'}`} />
+                      <span className={`text-sm flex-1 ${isSelected ? 'text-indigo-900 font-medium' : 'text-slate-700'}`}>
                         {c.label}
                       </span>
                       {isSelected && (
