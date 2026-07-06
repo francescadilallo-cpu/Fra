@@ -217,6 +217,35 @@ class TestManagerMetadataRelations:
             for r in rels
         )
 
+    def test_maps_schema_only_tables_metadata_only_mode(self, monkeypatch):
+        """Metadata-only mode names tables sf_{full_source_id}_{object}: the
+        declared FKs must attach there too, or the graph shows entities
+        without relations."""
+        mgr = DuckDBSourceManager.__new__(DuckDBSourceManager)
+        cfg = SourceConfig(
+            id="salesforce-6650fdb1", connector_type="salesforce", label="SF"
+        )
+
+        class _Reg:
+            def list(self):
+                return [cfg]
+
+        mgr._registry = _Reg()
+        mgr.get_schema_info = lambda: {  # type: ignore[method-assign]
+            "sf_salesforce_6650fdb1_account": {},
+            "sf_salesforce_6650fdb1_opportunity": {},
+        }
+        monkeypatch.setattr(
+            "app.connectors.salesforce_connector.load_salesforce_schema",
+            lambda sid: _schema_dict(),
+        )
+        rels = mgr.metadata_relations
+        assert any(
+            r["from_table"] == "sf_salesforce_6650fdb1_opportunity"
+            and r["to_table"] == "sf_salesforce_6650fdb1_account"
+            for r in rels
+        )
+
     def test_non_salesforce_sources_ignored(self, monkeypatch):
         mgr = DuckDBSourceManager.__new__(DuckDBSourceManager)
         cfg = SourceConfig(id="src-1", connector_type="csv", label="CSV")

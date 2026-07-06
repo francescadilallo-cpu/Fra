@@ -1629,7 +1629,8 @@ class DuckDBSourceManager:
     def metadata_relations(self) -> list[dict]:
         """FK relations declared by source-system metadata (currently the
         Salesforce ``referenceTo`` describe data), limited to objects whose
-        record tables exist in the snapshot.
+        tables — record tables or the schema-only per-object tables of
+        metadata-only mode — exist in the snapshot.
 
         Derived lazily from the cached schema JSONs so it also works when a
         prebuilt snapshot is loaded without re-ingesting. Fed into
@@ -1651,11 +1652,18 @@ class DuckDBSourceManager:
             schema = load_salesforce_schema(cfg.id)
             if not schema:
                 continue
-            safe = cfg.id.replace("-", "_")[:8].rstrip("_")
+            safe8 = cfg.id.replace("-", "_")[:8].rstrip("_")
+            safe_full = cfg.id.replace("-", "_")
             table_by_object: dict[str, str] = {}
             for obj in schema.get("objects", []):
                 name = str(obj.get("name") or "")
-                for cand in (f"sf_{name.lower()}", f"sf_{safe}_{name.lower()}"):
+                # Record tables (sf_account / collision-suffixed) or the
+                # schema-only per-object tables of metadata-only mode.
+                for cand in (
+                    f"sf_{name.lower()}",
+                    f"sf_{safe8}_{name.lower()}",
+                    f"sf_{safe_full}_{name.lower()}",
+                ):
                     if cand in existing:
                         table_by_object[name] = cand
                         break

@@ -10,6 +10,25 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Fix: entità Salesforce senza relazioni nel grafo)
+
+**Sintomo:** nel Entity Graph le entità Salesforce comparivano ma senza archi.
+
+**Root cause:** le tabelle schema-only della modalità metadata-only si chiamano
+`sf_{source_id_completo}_{oggetto}` (es. `sf_salesforce_6650fdb1_account`), ma
+`DuckDBSourceManager.metadata_relations` cercava solo i nomi delle tabelle
+record (`sf_account` o `sf_{id8}_account`). Nessun candidato combaciava → le FK
+dichiarate dal describe (`referenceTo`) non venivano mai iniettate nel KG.
+
+**Fix:** aggiunto il candidato `sf_{full_id}_{oggetto}` alla mappatura
+oggetto→tabella. Le relazioni dichiarate ora si agganciano anche alle tabelle
+schema-only; test di regressione dedicato.
+
+**Files:** `backend/app/connectors/duckdb_source_manager.py`,
+`backend/tests/test_salesforce_ingest.py`
+
+---
+
 ## 2026-07-06 (Salesforce: solo business objects nel grafo e nelle entità)
 
 Custom Settings (`customSetting: true` nel Global Describe) e Custom Metadata
