@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Salesforce metadata-only: nessun record ingerito di default)
+
+Scelta di prodotto: da Salesforce si estraggono **solo metadati** (describe
+objects/fields, schema graph) — mai record dei clienti. `_ingest_salesforce`
+crea le tabelle metadati `sf_{id}_objects`/`sf_{id}_fields` e una tabella
+schema-only 0-row per SObject (per la discovery entità/FK nel KG).
+
+L'ingestione di record reali via SOQL resta disponibile ma **opt-in**:
+`FRA_SF_INGEST_RECORDS=true` (prima era attiva di default). Il profiler
+(`/api/salesforce/profile`) non è toccato: campiona via SOQL su richiesta
+esplicita ma persiste solo statistiche aggregate, mai righe.
+
+**Files:** `backend/app/connectors/duckdb_source_manager.py`
+
+---
+
 ## 2026-07-06 (Merge di main: eredità sviluppi paralleli, feature branch preservate)
 
 Merge di `origin/main` (49 commit: merge cross-source SAME_AS, pipeline

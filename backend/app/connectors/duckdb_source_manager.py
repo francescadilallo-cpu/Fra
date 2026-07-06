@@ -1427,20 +1427,18 @@ class DuckDBSourceManager:
         Uses the Composite batch API (25 describes per HTTP request) so describing
         the object set costs ~1/25th of the sequential per-object calls.
 
-        Creates two metadata tables per source:
-          sf_{id}_objects  — one row per SObject (name, label, is_custom, field_count)
-          sf_{id}_fields   — one row per field (object_name, field_name, type, ...)
+        Metadata-only by default — no customer records are copied out of
+        Salesforce. Creates per source:
+          sf_{id}_objects         — one row per SObject (name, label, is_custom, …)
+          sf_{id}_fields          — one row per field (object_name, field_name, type, …)
+          sf_{id}_{object_lower}  — schema-only (0-row) table per SObject, columns
+                                    matching the object's fields, so the KG builder
+                                    discovers entities and FK relationships.
 
-        …and, for the priority business objects (Account, Opportunity, …), one
-        *record table* per object (``sf_account``, ``sf_opportunity``, …) holding
-        real rows fetched via SOQL — bounded by FRA_SF_ROW_LIMIT — so the
-        auto-built KG/semantic layer can actually answer questions about the
-        customer's data, not just describe Salesforce's shape.
-
-        When record ingestion is disabled (FRA_SF_INGEST_RECORDS=false) it falls
-        back to one schema-only (0-row) table per SObject, columns matching the
-        object's fields, so the KG builder can still discover entities and FK
-        relationships. e.g. sf_{id}_account, sf_{id}_contact, …
+        Record ingestion is opt-in: set FRA_SF_INGEST_RECORDS=true to also fetch
+        real rows via SOQL for the priority business objects (Account,
+        Opportunity, …) into per-object record tables (``sf_account``, …),
+        bounded by FRA_SF_ROW_LIMIT.
         """
         import pandas as pd
 
@@ -1464,7 +1462,10 @@ class DuckDBSourceManager:
                 "Re-authorise via the Data Sources connector panel."
             )
 
-        ingest_records = os.getenv("FRA_SF_INGEST_RECORDS", "true").strip().lower() in {
+        # Opt-in: by default only schema metadata leaves Salesforce, never records.
+        ingest_records = os.getenv(
+            "FRA_SF_INGEST_RECORDS", "false"
+        ).strip().lower() in {
             "1",
             "true",
             "yes",
