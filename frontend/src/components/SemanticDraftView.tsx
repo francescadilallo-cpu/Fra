@@ -293,7 +293,10 @@ function EntityCard({ entity, onSaved, onDeleted }: { entity: DraftEntity; onSav
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-mono text-[11px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-500 flex-shrink-0">{entity.table}</span>
-          <span className="text-sm font-semibold text-slate-800 truncate">{entity.name}</span>
+          <span className="text-sm font-semibold text-slate-800 truncate">{entity.display_name || entity.name}</span>
+          {entity.canonical && (
+            <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full flex-shrink-0" title="Unified business concept — entities from different sources with this badge represent the same thing">{entity.canonical}</span>
+          )}
           {entity.record_count > 0 && (
             <span className="text-xs text-slate-400 flex-shrink-0">{entity.record_count.toLocaleString()} rows</span>
           )}

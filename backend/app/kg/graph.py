@@ -558,6 +558,23 @@ class KnowledgeGraph:
             except Exception as exc:  # noqa: BLE001 — never break the build
                 logger.warning("build_from_schema same-entity merge skipped: %s", exc)
 
+            # Phase 3b — canonical-name merge: tables from different sources
+            # that resolve to the same business concept ("Customer":
+            # sf_…_account + crm_accounts + legacy_customers) are the same
+            # entity even when no rows are available for the value probe
+            # (e.g. Salesforce metadata-only mode). Deterministic alias
+            # dictionary, no LLM. FRA_KG_ENTITY_MERGE is the master switch;
+            # FRA_KG_NAME_MERGE disables just this phase.
+            if os.getenv("FRA_KG_NAME_MERGE", "true").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            }:
+                try:
+                    self._canonical_name_bridges(mgr, schema)
+                except Exception as exc:  # noqa: BLE001 — never break the build
+                    logger.warning("build_from_schema name merge skipped: %s", exc)
+
         # Phase 4 — value-overlap FK detection (names that don't match table
         # names, and cross-source joins). Gated + bounded; degrades on error.
         if os.getenv("FRA_KG_FK_VALUE_SCAN", "true").strip().lower() in {
@@ -772,6 +789,58 @@ class KnowledgeGraph:
                     merge=True,
                 )
                 logger.info("same-entity merge: %s SAME_AS %s", ta, tb)
+
+    def _canonical_name_bridges(self, mgr, schema: dict) -> None:
+        """SAME_AS bridges between tables that name the same business concept.
+
+        Complements the value-based ``_same_entity_bridges``: that one needs
+        rows to probe, this one only needs names. Each table is resolved to a
+        canonical concept via the alias dictionary in
+        ``app.semantic.canonical`` (connector labels win over name heuristics);
+        tables sharing a concept get pairwise SAME_AS edges.
+
+        Conservative by construction: unlisted names get no concept (→ never
+        merged), groups larger than ``_NAME_MERGE_MAX_GROUP`` are skipped as a
+        naming accident, and pairs already merged by the value probe are left
+        alone.
+        """
+        from app.semantic.canonical import canonical_concept
+
+        _NAME_MERGE_MAX_GROUP = 5
+
+        try:
+            labels = getattr(mgr, "table_labels", None)
+        except Exception:  # noqa: BLE001 — labels are advisory
+            labels = None
+        if not isinstance(labels, dict):
+            labels = {}
+
+        groups: dict[str, list[str]] = {}
+        for table in schema:
+            concept = canonical_concept(table, labels.get(table))
+            if concept:
+                groups.setdefault(concept, []).append(table)
+
+        def _already_same_as(na: str, nb: str) -> bool:
+            for u, v in ((na, nb), (nb, na)):
+                data = self._g.get_edge_data(u, v) or {}
+                if any(d.get("type") == "SAME_AS" for d in data.values()):
+                    return True
+            return False
+
+        for concept, tables in sorted(groups.items()):
+            if len(tables) < 2 or len(tables) > _NAME_MERGE_MAX_GROUP:
+                continue
+            tables = sorted(tables)
+            for i, ta in enumerate(tables):
+                for tb in tables[i + 1 :]:
+                    na, nb = f"{ta}:__schema__", f"{tb}:__schema__"
+                    if _already_same_as(na, nb):
+                        continue
+                    self._add_edge(na, nb, "SAME_AS", merge=True, concept=concept)
+                    logger.info(
+                        "canonical-name merge [%s]: %s SAME_AS %s", concept, ta, tb
+                    )
 
     def _table_node(self, table: str) -> str:
         """Return a table-level node id for *table*, creating a minimal schema

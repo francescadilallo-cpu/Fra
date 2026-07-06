@@ -322,6 +322,64 @@ class TestBuildFromSchema:
         assert kg.node_count == 0
 
 
+class TestCanonicalNameMerge:
+    """Cross-source grouping by business concept (no rows needed)."""
+
+    def _make_mgr(self, schema: dict, labels: dict | None = None) -> MagicMock:
+        mgr = MagicMock()
+        mgr.get_schema_info.return_value = schema
+        mgr.table_labels = labels or {}
+        return mgr
+
+    def test_same_concept_tables_bridged_across_sources(self):
+        schema = {
+            "sf_salesforce_6650fdb1_account": {
+                "columns": [{"name": "Id"}, {"name": "Name"}],
+                "row_count": 0,  # metadata-only: value probe impossible
+            },
+            "crm_accounts": {
+                "columns": [{"name": "id"}, {"name": "email"}],
+                "row_count": 10,
+            },
+            "warehouse_zones": {"columns": [{"name": "id"}], "row_count": 3},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._make_mgr(schema))
+        same_as = {
+            frozenset((s.split(":")[0], d.split(":")[0]))
+            for s, d, data in kg.iter_edges()
+            if data.get("type") == "SAME_AS"
+        }
+        assert frozenset(("sf_salesforce_6650fdb1_account", "crm_accounts")) in same_as
+        assert all("warehouse_zones" not in pair for pair in same_as)
+
+    def test_connector_label_drives_the_concept(self):
+        schema = {
+            "tbl_a1": {"columns": [{"name": "id"}], "row_count": 0},
+            "legacy_customers": {"columns": [{"name": "id"}], "row_count": 0},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._make_mgr(schema, labels={"tbl_a1": "Account"}))
+        same_as = {
+            frozenset((s.split(":")[0], d.split(":")[0]))
+            for s, d, data in kg.iter_edges()
+            if data.get("type") == "SAME_AS"
+        }
+        assert frozenset(("tbl_a1", "legacy_customers")) in same_as
+
+    def test_gate_disables_name_merge(self, monkeypatch):
+        monkeypatch.setenv("FRA_KG_NAME_MERGE", "false")
+        schema = {
+            "crm_accounts": {"columns": [{"name": "id"}], "row_count": 0},
+            "legacy_customers": {"columns": [{"name": "id"}], "row_count": 0},
+        }
+        kg = KnowledgeGraph()
+        kg.build_from_schema(self._make_mgr(schema))
+        assert not [
+            1 for _s, _d, data in kg.iter_edges() if data.get("type") == "SAME_AS"
+        ]
+
+
 # ── _edge_limit ────────────────────────────────────────────────────────────────
 
 

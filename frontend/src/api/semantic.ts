@@ -392,6 +392,10 @@ export interface DraftEntity {
   context_notes: string
   record_count: number
   sources: string[]
+  /** Human-friendly name (connector label or prettified table name). */
+  display_name?: string
+  /** Cross-source business concept ("Customer", "Product", …) grouping equivalent entities. */
+  canonical?: string
 }
 
 export interface DraftRelation {

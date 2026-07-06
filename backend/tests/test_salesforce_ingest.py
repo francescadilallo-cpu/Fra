@@ -470,9 +470,12 @@ class TestSameEntityMerge:
         kg.build_from_schema(self._mgr(self._schema, data))
         assert ("crm_accounts", "legacy_customers", "SAME_AS") in self._edges(kg)
 
-    def test_no_merge_when_keys_disjoint(self):
+    def test_no_merge_when_keys_disjoint(self, monkeypatch):
         from app.kg.graph import KnowledgeGraph
 
+        # Isolate the value probe: the canonical-name phase would merge these
+        # two tables by concept ("Customer") regardless of key overlap.
+        monkeypatch.setenv("FRA_KG_NAME_MERGE", "false")
         data = {
             ("crm_accounts", "id"): {"1", "2", "3", "4", "5"},
             ("legacy_customers", "id"): {"91", "92", "93", "94", "95"},

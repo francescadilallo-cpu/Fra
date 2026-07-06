@@ -1670,6 +1670,45 @@ class DuckDBSourceManager:
             out.extend(salesforce_metadata_relations(schema, table_by_object))
         return out
 
+    @property
+    def table_labels(self) -> dict[str, str]:
+        """Human labels declared by source-system metadata, keyed by table name.
+
+        Currently the Salesforce SObject labels ("Account", "Opportunità", …)
+        from the cached describe JSON, mapped onto whichever table actually
+        exists for each object (record table or schema-only table). Advisory:
+        callers fall back to name heuristics for tables not listed here.
+        """
+        from .salesforce_connector import load_salesforce_schema
+
+        try:
+            existing = set(self.get_schema_info().keys())
+        except Exception:  # noqa: BLE001 — advisory metadata, never break callers
+            return {}
+        labels: dict[str, str] = {}
+        for cfg in self._registry.list():
+            if cfg.connector_type != "salesforce":
+                continue
+            schema = load_salesforce_schema(cfg.id)
+            if not schema:
+                continue
+            safe8 = cfg.id.replace("-", "_")[:8].rstrip("_")
+            safe_full = cfg.id.replace("-", "_")
+            for obj in schema.get("objects", []):
+                name = str(obj.get("name") or "")
+                label = str(obj.get("label") or "") or name
+                if not name:
+                    continue
+                for cand in (
+                    f"sf_{name.lower()}",
+                    f"sf_{safe8}_{name.lower()}",
+                    f"sf_{safe_full}_{name.lower()}",
+                ):
+                    if cand in existing:
+                        labels[cand] = label
+                        break
+        return labels
+
     # ── Auto-discovery ─────────────────────────────────────────────────────────
 
     def _auto_discover_files(self, directory: Path) -> int:

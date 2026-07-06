@@ -1066,6 +1066,33 @@ def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
     return len(visible), edge_count
 
 
+def _enrich_entity_display(entities: list[dict]) -> list[dict]:
+    """Attach ``display_name`` and ``canonical`` to entity dicts (in place).
+
+    ``display_name`` is what the UI shows (SObject label or a prettified table
+    name); ``canonical`` is the cross-source business concept ("Customer",
+    "Product", …) used to group equivalent entities from different sources.
+    ``name`` stays untouched — it is the stable identifier relations point at.
+    """
+    from .semantic.canonical import canonical_concept, display_name
+
+    labels: dict[str, str] = {}
+    try:
+        from .connectors.duckdb_source_manager import get_source_manager
+
+        labels = get_source_manager(_SCENARIO_PATH).table_labels
+    except Exception:  # noqa: BLE001 — advisory: heuristics still apply
+        pass
+    for e in entities:
+        table = e.get("table") or e.get("name") or ""
+        label = labels.get(table)
+        e["display_name"] = display_name(table, label)
+        concept = canonical_concept(table, label)
+        if concept:
+            e["canonical"] = concept
+    return entities
+
+
 def _dedupe_draft_entities(entities: list[dict]) -> list[dict]:
     """Collapse duplicate entities that map to the same table.
 
@@ -1118,12 +1145,14 @@ def _get_semantic_draft(hidden: frozenset[str] = frozenset()) -> dict:
     kg = _semantic_state.get("kg")
 
     all_entities = catalog.get_draft_entities() if catalog else []
-    entities = _dedupe_draft_entities(
-        [
-            e
-            for e in all_entities
-            if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
-        ]
+    entities = _enrich_entity_display(
+        _dedupe_draft_entities(
+            [
+                e
+                for e in all_entities
+                if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+            ]
+        )
     )
     metrics = catalog.get_draft_metrics() if catalog else []
     # Relations reference KG node-id prefixes, which can be entity names or
@@ -5512,11 +5541,13 @@ def get_live_config(
 
     # ── Entities & relations from catalog/kg ──────────────────────────────────
     all_entities: list[dict] = catalog.get_draft_entities() if catalog else []
-    entities = [
-        e
-        for e in all_entities
-        if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
-    ]
+    entities = _enrich_entity_display(
+        [
+            e
+            for e in all_entities
+            if e["table"] not in hidden and not _SF_META_TABLE_RE.match(e["table"])
+        ]
+    )
     logger.info(
         "live-config: catalog=%s all_entities=%d visible=%d hidden=%d user_mode=%s",
         "ok" if catalog else "NONE",
@@ -5608,7 +5639,8 @@ def get_live_config(
                 "type": "ontologyNode",
                 "position": positions.get(e["name"], {"x": 80, "y": 100}),
                 "data": {
-                    "label": e["name"],
+                    "label": e.get("display_name") or e["name"],
+                    "canonical": e.get("canonical"),
                     "uri": f"entity:{e['name']}",
                     "db_table": e["table"],
                     "row_count": e.get("record_count", 0),

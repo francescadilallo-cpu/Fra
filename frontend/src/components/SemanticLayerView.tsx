@@ -593,8 +593,8 @@ function buildRelationGroups(
     const group = groups.get(sourceKey)!
     const isMerge = rel.edge_type === 'SAME_AS'
     group.relations.push({
-      from: fromEntity?.name || rel.from_table,
-      to:   toEntity?.name   || rel.to_table,
+      from: fromEntity?.display_name || fromEntity?.name || rel.from_table,
+      to:   toEntity?.display_name   || toEntity?.name   || rel.to_table,
       via:  isMerge ? 'same entity' : rel.via_column,
       // A cross-source entity merge is a 1:1 identity link, not a 1:N join.
       cardinality: isMerge ? '1:1' : '1:N',

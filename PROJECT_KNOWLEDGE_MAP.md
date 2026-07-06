@@ -128,6 +128,15 @@ Ruoli:
   - **SalesforceConnector.get_schema_graph()**: discovery completa senza max cap — Phase 1 lista tutti gli SObject queryable via Global Describe; Phase 2 describe in batch da 25 via POST /composite/batch; estrae nodi (SObjects) e archi (campi reference); salva in salesforce_schema_graph_{id}.json. Dataclasses: SchemaGraphNode, SchemaGraphEdge, SalesforceSchemaGraph.
 
 
+### 3.3b Canonical naming (backend/app/semantic/canonical.py)
+
+Due layer deterministici (no LLM) per nomi chiari e schema unificato cross-source:
+
+- **`display_name(table, label)`**: nome leggibile per l'utente — label del connettore (SObject label) vince; altrimenti euristica (strip prefissi sorgente/id, singolarizzazione EN, Title Case): `sf_salesforce_6650fdb1_account` → "Account", `sales_order_header` → "Sales Order Header"
+- **`canonical_concept(table, label)`**: concetto di business canonico via dizionario alias multilingue EN+IT (Customer, Contact, Lead, Opportunity, Product, Order, Invoice, Employee, Case, Campaign, Quote, Contract, Asset, Supplier, Territory, Payment) — `sf_…_account`, `crm_accounts`, `legacy_customers` → tutti **Customer**; accenti normalizzati ("Opportunità" → opportunita); conservativo: nome non in dizionario → nessun concetto (mai un merge sbagliato)
+- **Consumatori**: `main.py:_enrich_entity_display` (draft + live-config: campi `display_name`/`canonical`, label nodi Entity Graph), `kg/graph.py:_canonical_name_bridges` (merge), `semantic/graph_rag.py` (alias NL)
+- **`DuckDBSourceManager.table_labels`**: label SObject dal describe JSON cache, mappate sulla tabella esistente per oggetto
+
 ### 3.4 Knowledge Graph
 
 File: backend/app/kg/graph.py
@@ -255,6 +264,7 @@ Responsabilita:
 - alias di business sui nodi (`attach_aliases`): glossario (`ingest_glossary_aliases`, term→nodo se la definizione cita un label noto) + sinonimi proposti da `analyze` → migliorano il recall del linking GraphRAG
 - FK detection: oltre ai suffissi nome, fase value-overlap in `build_from_schema` (campiona valori, confronta con PK-candidate) → join con nomi diversi e cross-source; bounded + gated da `FRA_KG_FK_VALUE_SCAN`. Anti-falsi-positivi: arco solo su match **univoco** (overlap con più tabelle → dominio generico, scartato) e con ≥`_FK_MIN_DISTINCT` valori distinti
 - **merge same-entity (N fonti)**: fase `_same_entity_bridges` in `build_from_schema` — due tabelle di fonti diverse che descrivono la stessa entità (chiavi con Jaccard ≥`_MERGE_KEY_JACCARD` **e** colonne condivise ≥`_MERGE_COL_OVERLAP`) → arco `SAME_AS`; bounded (`_MERGE_MAX_PAIRS`), gated `FRA_KG_ENTITY_MERGE`. Gira **prima** del FK scan, che diventa merge-aware (FK verso gemelle → instradata alla gemella affine per nome via `_column_names_table`; niente FK id↔id tra gemelle). GraphRAG narra "same entity as X"; template `Unique <t> across sources` (UNION dedup); stadio 5 `_check_same_as_coverage` (EXCEPT bidirezionale → advisory sui gap di copertura). UI: riga `SAME_AS` come chip "merged entity" (1≡1)
+- **merge canonico per nome**: fase `_canonical_name_bridges` (3b, dentro il gate `FRA_KG_ENTITY_MERGE`, sub-gate `FRA_KG_NAME_MERGE`) — tabelle che risolvono allo stesso concetto di business via `semantic/canonical.py` (label connettore > euristica nome) → `SAME_AS` pairwise, anche a 0 righe (Salesforce metadata-only); dedup contro il merge value-based, gruppi >5 tabelle saltati come incidente di naming
 - multi-fonte gestito riusando `get_schema_info()` su tutte le live tables (data model diversi unificati in DuckDB)
 - endpoint: `POST /api/pipeline/run` (auto-applica, 409 se già in corso), `GET /api/pipeline/status`, `POST /api/semantic/integrate` (stadio 4)
 - frontend: vista `PipelineView` (tab `pipeline` "Auto-Build") con polling stato per-stadio, report di verifica e box "Refine by instruction"

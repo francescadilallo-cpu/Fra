@@ -10,6 +10,42 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Naming semantico: nomi chiari + entità unificate cross-source)
+
+Le entità mostrano ora nomi di business, non nomi fisici di tabella, e fonti
+diverse che rappresentano la stessa cosa vengono raggruppate sotto un unico
+concetto canonico. Tutto deterministico (dizionario alias EN+IT), nessun LLM.
+
+**Nuovo modulo `semantic/canonical.py`:**
+- `display_name()`: `sf_salesforce_6650fdb1_account` → "Account" (label SObject
+  dal describe quando disponibile, altrimenti euristica strip-prefissi+singolare)
+- `canonical_concept()`: `sf_…_account` + `crm_accounts` + `legacy_customers`
+  → tutti **Customer**; 16 concetti (Customer, Contact, Product, Order, …),
+  accenti normalizzati, conservativo (nome ignoto → nessun gruppo)
+
+**Integrazioni:**
+- `main.py:_enrich_entity_display`: draft e live-config espongono
+  `display_name` + `canonical`; i nodi dell'Entity Graph usano il display name
+- `kg/graph.py:_canonical_name_bridges` (fase 3b): SAME_AS tra tabelle con lo
+  stesso concetto — funziona anche a 0 righe (metadata-only), dove il probe
+  value-based non può; master gate `FRA_KG_ENTITY_MERGE`, sub-gate
+  `FRA_KG_NAME_MERGE`
+- `graph_rag.py`: gli alias del concetto ("clienti", "customers", "account")
+  linkano la domanda NL all'entità unificata — indice separato, solo match
+  esatti, mai nel pool fuzzy
+- `DuckDBSourceManager.table_labels`: label SObject → tabella
+- UI: Schema Config mostra display name + badge concetto; relazioni con nomi
+  leggibili
+
+**Files:** `backend/app/semantic/{canonical,graph_rag}.py`,
+`backend/app/kg/graph.py`, `backend/app/main.py`,
+`backend/app/connectors/duckdb_source_manager.py`,
+`frontend/src/api/semantic.ts`,
+`frontend/src/components/{SemanticDraftView,SemanticLayerView}.tsx`,
+`backend/tests/{test_canonical,test_kg_graph,test_salesforce_ingest}.py`
+
+---
+
 ## 2026-07-06 (Fix: entità Salesforce senza relazioni nel grafo)
 
 **Sintomo:** nel Entity Graph le entità Salesforce comparivano ma senza archi.

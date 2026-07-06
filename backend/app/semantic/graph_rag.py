@@ -16,6 +16,8 @@ import difflib
 import re
 from typing import Any
 
+from app.semantic.canonical import canonical_concept, concept_aliases
+
 _MIN_TOKEN = 3
 _MAX_NODES = 8
 _MAX_EDGES_PER_NODE = 6
@@ -154,11 +156,30 @@ def build_graph_context(
             if len(word) >= _MIN_TOKEN and word not in _STOPWORDS:
                 _index(word, node_id, prefer=False)
 
+    # ── Canonical-concept aliases (weakest tier, exact-match only) ────────────
+    # A table whose name resolves to a business concept is reachable by every
+    # alias of that concept, in any listed language — "clienti"/"customers"/
+    # "account" all land on the same unified entity regardless of the physical
+    # table name. Kept in a separate index so aliases never shadow real
+    # labels/synonyms and never enter the fuzzy-match pool.
+    alias_to_node: dict[str, str] = {}
+    for node_id, attrs in attrs_by_id.items():
+        if attrs.get("canonical_id") != "__schema__":
+            continue
+        table = _node_table(node_id, attrs) or ""
+        concept = canonical_concept(table) if table else None
+        if concept:
+            for key in {concept.lower(), *concept_aliases(concept)}:
+                alias_to_node.setdefault(key, node_id)
+
     def _match(word: str) -> str | None:
         return (
             label_to_node.get(word)
             or label_to_node.get(word.rstrip("s"))
             or label_to_node.get(word + "s")
+            or alias_to_node.get(word)
+            or alias_to_node.get(word.rstrip("s"))
+            or alias_to_node.get(word + "s")
         )
 
     # ── Entity-linking: collect matched nodes (stable order, capped) ──────────
