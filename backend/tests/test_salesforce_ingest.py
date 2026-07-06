@@ -304,6 +304,25 @@ class TestSelectRecordObjects:
         assert names == ["Account", "Progetto__c"]
 
 
+class TestIsBusinessSobject:
+    def test_excludes_custom_settings_and_metadata_types(self):
+        from app.connectors.salesforce_connector import is_business_sobject
+
+        assert is_business_sobject({"name": "Account", "queryable": True})
+        assert is_business_sobject({"name": "Progetto__c", "queryable": True})
+        # Custom Setting: configuration container, not a business entity
+        assert not is_business_sobject(
+            {"name": "AppConfig__c", "queryable": True, "customSetting": True}
+        )
+        # Custom Metadata Type
+        assert not is_business_sobject({"name": "Mapping__mdt", "queryable": True})
+        # Existing exclusions still hold
+        assert not is_business_sobject({"name": "Account", "queryable": False})
+        assert not is_business_sobject(
+            {"name": "Account", "queryable": True, "deprecatedAndHidden": True}
+        )
+
+
 class TestMaxObjects:
     def test_default_and_env(self, monkeypatch):
         from app.connectors.salesforce_connector import sf_max_objects

@@ -10,6 +10,20 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Salesforce: solo business objects nel grafo e nelle entità)
+
+Custom Settings (`customSetting: true` nel Global Describe) e Custom Metadata
+Types (`__mdt`) sono contenitori di configurazione, non entità di business:
+esclusi da schema, entità KG e schema graph. Nuovo helper
+`is_business_sobject()` applicato in tutti e tre i punti di costruzione
+(`get_schema`, `get_schema_bulk`, `get_schema_graph`), che già filtravano
+non-queryable e deprecati. Test dedicato in `test_salesforce_ingest.py`.
+
+**Files:** `backend/app/connectors/salesforce_connector.py`,
+`backend/tests/test_salesforce_ingest.py`
+
+---
+
 ## 2026-07-06 (Salesforce metadata-only: nessun record ingerito di default)
 
 Scelta di prodotto: da Salesforce si estraggono **solo metadati** (describe

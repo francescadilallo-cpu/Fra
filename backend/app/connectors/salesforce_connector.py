@@ -73,6 +73,22 @@ _PRIORITY_OBJECTS = {
 }
 
 
+def is_business_sobject(o: dict) -> bool:
+    """True when a Global Describe entry is a real business object.
+
+    Excludes non-queryable and deprecated objects, plus configuration
+    containers that must never become KG entities or graph nodes:
+      - Custom Settings   (``customSetting: true`` in the describe)
+      - Custom Metadata Types (API name ending ``__mdt``)
+    """
+    if not o.get("queryable") or o.get("deprecatedAndHidden"):
+        return False
+    if o.get("customSetting"):
+        return False
+    name = o.get("name", "")
+    return not name.endswith("__mdt")
+
+
 # ── PKCE helpers ──────────────────────────────────────────────────────────────
 
 
@@ -325,11 +341,7 @@ class SalesforceConnector:
         max_objects=0 (default) means no limit — all queryable objects.
         """
         raw_objects = self.list_sobjects()
-        queryable = [
-            o
-            for o in raw_objects
-            if o.get("queryable") and not o.get("deprecatedAndHidden")
-        ]
+        queryable = [o for o in raw_objects if is_business_sobject(o)]
 
         priority = [o for o in queryable if o["name"] in _PRIORITY_OBJECTS]
         standard = [
@@ -498,12 +510,8 @@ class SalesforceConnector:
         """
         raw_objects = self.list_sobjects()
 
-        # Filter to queryable, non-deprecated objects
-        queryable = [
-            o
-            for o in raw_objects
-            if o.get("queryable") and not o.get("deprecatedAndHidden")
-        ]
+        # Business objects only — no custom settings / custom metadata types
+        queryable = [o for o in raw_objects if is_business_sobject(o)]
 
         priority = [o for o in queryable if o["name"] in _PRIORITY_OBJECTS]
         standard = [
@@ -596,9 +604,7 @@ class SalesforceConnector:
         When max_objects=0 (default) all queryable objects are described.
         """
         raw = self.list_sobjects()
-        queryable = [
-            o for o in raw if o.get("queryable") and not o.get("deprecatedAndHidden")
-        ]
+        queryable = [o for o in raw if is_business_sobject(o)]
         if max_objects > 0:
             queryable = queryable[:max_objects]
 
