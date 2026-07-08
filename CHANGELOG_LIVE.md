@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Salesforce: oggetti tecnici fuori da grafo e data model)
+
+Gli oggetti di sistema Salesforce che gli utenti non usano mai direttamente
+non diventano più entità: esclusi da schema, KG, Entity Graph e data model.
+
+**Cosa viene escluso** (in `is_business_sobject`, unico choke point dei tre
+percorsi di costruzione):
+- figli di sistema per-record: `*Share`, `*History`, `*Feed`, `*ChangeEvent`,
+  `*Tag` — riconosciuti via flag `associateEntityType` del describe, con
+  fallback sul suffisso per i describe in cache
+- famiglie tecniche per prefisso: `Apex*`, `Permission*`, `Setup*`, `Flow*`,
+  `Process*`, `Login*`, `Content*`, `Entity*`, `Field*`, `Workflow*`, …
+- oggetti noti: `RecordType`, `Report`, `Dashboard`, `EmailTemplate`,
+  `Profile`, `ListView`, `RecentlyViewed`, …
+- suffissi piattaforma: `__e` (Platform Events), `__b` (Big Objects),
+  `__x` (External Objects), `__hd`
+
+**Protezioni:** gli oggetti business prioritari (Account, Case, Task, Event,
+User, CampaignMember, …) passano sempre; i custom object (`__c`) sono
+business per definizione e non vengono mai esclusi dalle famiglie per
+prefisso (i loro figli `__Share`/`__History` sì).
+
+**Files:** `backend/app/connectors/salesforce_connector.py`,
+`backend/tests/test_salesforce_ingest.py`
+
+---
+
 ## 2026-07-06 (Naming semantico: nomi chiari + entità unificate cross-source)
 
 Le entità mostrano ora nomi di business, non nomi fisici di tabella, e fonti

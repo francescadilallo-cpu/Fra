@@ -351,6 +351,59 @@ class TestIsBusinessSobject:
             {"name": "Account", "queryable": True, "deprecatedAndHidden": True}
         )
 
+    def test_excludes_system_child_objects(self):
+        from app.connectors.salesforce_connector import is_business_sobject
+
+        # Detected via the describe flag…
+        assert not is_business_sobject(
+            {"name": "AccountShare", "queryable": True, "associateEntityType": "Share"}
+        )
+        # …and via the name suffix when the flag is missing (cached describes).
+        for name in (
+            "AccountShare",
+            "AccountHistory",
+            "AccountFeed",
+            "AccountChangeEvent",
+            "AccountTag",
+            "Progetto__Share",
+            "Progetto__History",
+        ):
+            assert not is_business_sobject({"name": name, "queryable": True}), name
+
+    def test_excludes_technical_families_and_objects(self):
+        from app.connectors.salesforce_connector import is_business_sobject
+
+        for name in (
+            "ApexClass",
+            "ApexTrigger",
+            "PermissionSetAssignment",
+            "ProcessInstance",
+            "FlowInterview",
+            "SetupAuditTrail",
+            "LoginHistory",
+            "EntityDefinition",
+            "FieldPermissions",
+            "ContentDocumentLink",
+            "RecordType",
+            "Report",
+            "Dashboard",
+            "EmailTemplate",
+            "PlatformCachePartition",
+            "Ordine_Evento__e",
+        ):
+            assert not is_business_sobject({"name": name, "queryable": True}), name
+
+    def test_business_objects_protected(self):
+        from app.connectors.salesforce_connector import is_business_sobject
+
+        # Priority objects always pass — even those matching technical
+        # patterns (User* prefix family, CampaignMember).
+        for name in ("User", "UserRole", "CampaignMember", "Event", "Task", "Case"):
+            assert is_business_sobject({"name": name, "queryable": True}), name
+        # Custom objects are business-specific: never swept by prefix families.
+        assert is_business_sobject({"name": "Flow_Tracker__c", "queryable": True})
+        assert is_business_sobject({"name": "Processo_Vendita__c", "queryable": True})
+
 
 class TestMaxObjects:
     def test_default_and_env(self, monkeypatch):

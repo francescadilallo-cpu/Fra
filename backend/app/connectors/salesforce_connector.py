@@ -73,20 +73,158 @@ _PRIORITY_OBJECTS = {
 }
 
 
-def is_business_sobject(o: dict) -> bool:
-    """True when a Global Describe entry is a real business object.
+# Salesforce plumbing that users never work with directly. Three tiers:
+# system child objects (per-record bookkeeping SF attaches to every entity),
+# whole technical families by prefix, and individual well-known objects.
+_SF_TECHNICAL_SUFFIXES = (
+    "Share",  # record-sharing entries (AccountShare, MyObj__Share)
+    "History",  # field-audit trails (AccountHistory, LoginHistory)
+    "Feed",  # Chatter feeds (AccountFeed)
+    "ChangeEvent",  # Change Data Capture streams
+    "Tag",  # tag join objects (AccountTag)
+    "ViewStat",
+    "VoteStat",
+    "DataCategorySelection",
+    "__mdt",  # Custom Metadata Types
+    "__e",  # Platform Events
+    "__b",  # Big Objects
+    "__x",  # External Objects
+    "__hd",  # Historical trending data
+)
+_SF_TECHNICAL_PREFIXES = (
+    "Apex",  # ApexClass, ApexTrigger, ApexLog, …
+    "Auth",
+    "Aura",
+    "Async",
+    "BackgroundOperation",
+    "Collaboration",
+    "Content",  # ContentDocument/Version/DocumentLink plumbing
+    "Cron",
+    "Datacloud",
+    "Duplicate",  # DuplicateRule, DuplicateRecordSet
+    "EmailServices",
+    "Entity",  # EntityDefinition, EntitySubscription
+    "Field",  # FieldDefinition, FieldPermissions
+    "Flow",
+    "Lightning",
+    "Login",  # LoginHistory, LoginIp, LoginGeo
+    "Macro",
+    "Matching",
+    "Oauth",
+    "Permission",  # PermissionSet, PermissionSetAssignment, …
+    "Platform",
+    "Process",  # ProcessInstance, ProcessDefinition (approvals plumbing)
+    "Prompt",
+    "RecordAction",
+    "Saml",
+    "Scontrol",
+    "Session",
+    "Setup",  # SetupAuditTrail, SetupEntityAccess
+    "StaticResource",
+    "TwoFactor",
+    "Topic",
+    "UserApp",
+    "UserEmail",
+    "UserLogin",
+    "UserPerm",
+    "UserPreference",
+    "UserProv",
+    "Wave",
+    "WebLink",
+    "Workflow",
+)
+_SF_TECHNICAL_OBJECTS = frozenset(
+    {
+        "RecordType",
+        "Group",
+        "GroupMember",
+        "QueueSobject",
+        "Report",
+        "Dashboard",
+        "DashboardComponent",
+        "Document",
+        "Folder",
+        "Idea",
+        "IdeaComment",
+        "Vote",
+        "Period",
+        "FiscalYearSettings",
+        "BusinessProcess",
+        "BusinessHours",
+        "Holiday",
+        "MailmergeTemplate",
+        "EmailTemplate",
+        "BrandTemplate",
+        "Organization",
+        "Profile",
+        "Announcement",
+        "AppDefinition",
+        "AppMenuItem",
+        "ClientBrowser",
+        "CorsWhitelistEntry",
+        "CspTrustedSite",
+        "CustomBrand",
+        "CustomBrandAsset",
+        "CustomNotificationType",
+        "DandBCompany",
+        "Domain",
+        "DomainSite",
+        "ExternalDataSource",
+        "ListView",
+        "ListViewChart",
+        "NamedCredential",
+        "Publisher",
+        "PushTopic",
+        "RecentlyViewed",
+        "Scorecard",
+        "ScorecardAssociation",
+        "ScorecardMetric",
+        "SecurityCustomBaseline",
+        "Site",
+        "Stamp",
+        "StampAssignment",
+        "TenantUsageEntitlement",
+        "TestSuiteMembership",
+        "TodayGoal",
+        "UiFormulaCriterion",
+        "UiFormulaRule",
+        "VerificationHistory",
+        "VisualforceAccessMetrics",
+    }
+)
 
-    Excludes non-queryable and deprecated objects, plus configuration
-    containers that must never become KG entities or graph nodes:
-      - Custom Settings   (``customSetting: true`` in the describe)
-      - Custom Metadata Types (API name ending ``__mdt``)
+
+def is_business_sobject(o: dict) -> bool:
+    """True when a Global Describe entry is a business object end users
+    actually work with — the only kind that may become a KG entity, a data
+    model entry or a schema-graph node.
+
+    Excluded: non-queryable/deprecated objects, Custom Settings, Custom
+    Metadata Types, system child objects (Share/History/Feed/ChangeEvent —
+    detected via ``associateEntityType`` with a name-suffix fallback for
+    cached describes), and known technical families (Apex*, Permission*,
+    Setup*, Flow*, …). Priority business objects always pass; custom objects
+    (``__c``) are business-specific by definition and are never excluded by
+    the prefix families.
     """
     if not o.get("queryable") or o.get("deprecatedAndHidden"):
         return False
+    name = o.get("name", "")
+    if name in _PRIORITY_OBJECTS:
+        return True
     if o.get("customSetting"):
         return False
-    name = o.get("name", "")
-    return not name.endswith("__mdt")
+    # Share/History/Feed/ChangeEvent children carry associateEntityType in the
+    # Global Describe; the suffix check covers cached entries missing it.
+    if o.get("associateEntityType"):
+        return False
+    if name.endswith(_SF_TECHNICAL_SUFFIXES):
+        return False
+    if name.endswith("__c"):
+        return True
+    if name in _SF_TECHNICAL_OBJECTS:
+        return False
+    return not name.startswith(_SF_TECHNICAL_PREFIXES)
 
 
 # ── PKCE helpers ──────────────────────────────────────────────────────────────
