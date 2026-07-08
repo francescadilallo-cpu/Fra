@@ -414,6 +414,10 @@ class TestMaxObjects:
         monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "10")
         assert sf_max_objects() == 10
         monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "0")
+        assert sf_max_objects() == 0  # 0 = unlimited (describe all objects)
+        monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "-3")
+        assert sf_max_objects() == 40  # negative → fallback
+        monkeypatch.setenv("FRA_SF_MAX_OBJECTS", "garbage")
         assert sf_max_objects() == 40  # invalid → fallback
 
 
