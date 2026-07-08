@@ -137,6 +137,16 @@ Due layer deterministici (no LLM) per nomi chiari e schema unificato cross-sourc
 - **Consumatori**: `main.py:_enrich_entity_display` (draft + live-config: campi `display_name`/`canonical`, label nodi Entity Graph), `kg/graph.py:_canonical_name_bridges` (merge), `semantic/graph_rag.py` (alias NL)
 - **`DuckDBSourceManager.table_labels`**: label SObject dal describe JSON cache, mappate sulla tabella esistente per oggetto
 
+### 3.3c Curation layer (backend/app/curation/)
+
+Scrematura source-agnostica DOPO i filtri hard dei connettori e PRIMA di KG/data model. Deterministica e spiegabile: ogni decisione porta la regola o il segnale che l'ha prodotta.
+
+- **engine.py**: classifica ogni tabella `kept | excluded | uncertain`. Precedenza: decisione utente pinnata > tabelle protette (relazioni manuali, override naming) > regole workspace > regole pack sorgente > pack generic > segnali strutturali (concetto canonico, righe, connettività FK dichiarata, numero colonne). Policy `uncertain_policy: keep|exclude` (default keep, visibile e flaggato).
+- **skills/*.yaml**: pacchetti regole per tipo sorgente (`generic.yaml`, `salesforce.yaml`) — pattern regex keep/exclude con id. **Workspace pack** (`data_dir()/curation_workspace.yaml`, editabile via API senza deploy): regole + `aliases` che estendono il dizionario canonico (es. `Customer: [paziente, pazienti]` via `canonical.extend_aliases`).
+- **store.py**: decisioni durevoli in `curation_decisions.json` (gitignored), reversibili — l'esclusione è solo presentazione (tabella resta in DuckDB); decisioni `user` pinnate, mai sovrascritte dal motore.
+- **Integrazione**: `main._run_curation(mgr)` gira in `_ensure_semantic_loaded` (pre-build KG) e `_refresh_catalog_and_kg_after_rebuild` (post-sync); esclusioni unite in `_hidden_demo_tables` (tutte le modalità) e in `kg.build_from_schema` via `mgr.curation_excluded_tables`.
+- **API** (`/api/curation/*`): `GET report` (kept/excluded/uncertain con motivi), `POST decision` (pin utente reversibile + refresh KG), `POST run` (ri-esecuzione), `GET/PUT skills` (workspace pack, admin, validazione YAML).
+
 ### 3.4 Knowledge Graph
 
 File: backend/app/kg/graph.py

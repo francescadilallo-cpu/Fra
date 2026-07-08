@@ -165,10 +165,35 @@ _CONCEPT_ALIASES: dict[str, frozenset[str]] = {
     "Payment": frozenset({"payment", "payments", "pagamento", "pagamenti"}),
 }
 
-# Reverse index alias → concept, built once.
+# Reverse index alias → concept, built once. extend_aliases() adds
+# workspace-specific entries on top (e.g. a clinic mapping "paziente" →
+# Customer) — they never overwrite the built-in dictionary.
 _ALIAS_TO_CONCEPT: dict[str, str] = {
     alias: concept for concept, aliases in _CONCEPT_ALIASES.items() for alias in aliases
 }
+
+
+def extend_aliases(concept: str, aliases: list[str] | tuple[str, ...]) -> int:
+    """Register workspace aliases for *concept* (created if unknown).
+
+    Loaded from the workspace curation skill pack at build time. Built-in
+    aliases always win on conflict. Returns how many aliases were added.
+    """
+    added = 0
+    concept = concept.strip()
+    if not concept:
+        return 0
+    existing = set(_CONCEPT_ALIASES.get(concept, frozenset()))
+    for alias in aliases:
+        key = _fold(str(alias).strip())
+        if not key or key in _ALIAS_TO_CONCEPT:
+            continue
+        _ALIAS_TO_CONCEPT[key] = concept
+        existing.add(key)
+        added += 1
+    if added:
+        _CONCEPT_ALIASES[concept] = frozenset(existing)
+    return added
 
 
 def canonical_concept(table: str, label: str | None = None) -> str | None:

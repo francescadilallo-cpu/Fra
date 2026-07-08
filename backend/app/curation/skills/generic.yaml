@@ -1,0 +1,34 @@
+# Generic curation skill pack — applies to every source type.
+#
+# Rules run top-down inside each list; the first match wins for that tier.
+# Patterns are case-insensitive regexes matched against the FULL table name.
+# Every rule needs an id (it shows up verbatim in the curation report as
+# the reason a table was kept or excluded).
+
+pack: generic
+version: 1
+
+# Tables that are never business entities, whatever the source.
+exclude:
+  - id: backup-copies
+    pattern: ".*_(backup|bak|old|copy|copia)\\d*$"
+  - id: temp-staging
+    pattern: "^(tmp|temp|stg|staging)_.*|.*_(tmp|temp)$"
+  - id: audit-logs
+    pattern: ".*_(log|logs|audit)$"
+  - id: build-bookkeeping
+    pattern: "^_.*|.*_build_meta$"
+  - id: test-fixtures
+    pattern: "^(test|sample|demo)_.*|.*_(test|sample)$"
+
+# Tables to always keep, even when the signals below would flag them.
+keep: []
+
+# Signal thresholds for tables no rule matched.
+signals:
+  # A table with fewer business columns than this is unlikely to be an entity.
+  min_columns: 2
+  # What to do with tables that end up "uncertain": keep (visible, flagged in
+  # the report) or exclude (hidden, reversible). Keep is the safe default —
+  # silently dropping data a user expects is worse than one extra node.
+  uncertain_policy: keep

@@ -10,6 +10,39 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Curation layer: scrematura intelligente e reversibile dello schema)
+
+Nuovo layer di curation (`backend/app/curation/`) — l'"agente" deterministico
+che, dopo i filtri hard dei connettori, decide quali tabelle diventano entità
+in KG e data model. Fase 1: motore a regole+segnali, skill editabili, tutto
+reversibile e spiegabile.
+
+**Motore** (`engine.py`): classifica ogni tabella `kept/excluded/uncertain`.
+Precedenza: pin utente > tabelle protette (relazioni manuali, override naming)
+> regole workspace > pack sorgente > pack generic > segnali (concetto
+canonico, righe, connettività FK dichiarata, colonne). Gli "uncertain" restano
+visibili e flaggati (policy configurabile).
+
+**Skill come dati** (`skills/*.yaml` + workspace pack in
+`data_dir()/curation_workspace.yaml`): regole keep/exclude per tipo di
+sorgente, modificabili senza deploy. La sezione `aliases` del workspace pack
+estende il dizionario canonico (es. `Customer: [paziente, pazienti]`) — il
+matching cross-source si adatta al dominio del cliente.
+
+**Reversibilità**: l'esclusione è solo di superficie (KG, draft, Entity Graph,
+live-config) — la tabella resta in DuckDB; un pin utente la ripristina e il
+motore non lo sovrascrive mai.
+
+**API** `/api/curation/`: `GET report` (perché ogni tabella è dentro/fuori),
+`POST decision`, `POST run`, `GET/PUT skills` (admin, YAML validato).
+Auto-run a ogni load/sync prima del build del KG.
+
+**Files:** `backend/app/curation/*`, `backend/app/main.py`,
+`backend/app/kg/graph.py`, `backend/app/connectors/duckdb_source_manager.py`,
+`backend/app/semantic/canonical.py`, `backend/tests/test_curation.py`
+
+---
+
 ## 2026-07-06 (Executive Layer: azioni di cura del data model, con approvazione)
 
 Tre nuove azioni agentiche che curano il modello dati — nessuna scrittura sui

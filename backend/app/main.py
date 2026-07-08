@@ -670,6 +670,55 @@ def _glossary_terms() -> list[dict]:
         return []
 
 
+def _run_curation(mgr) -> None:
+    """Run the deterministic curation pass over the current schema.
+
+    Classifies every table (keep / excluded / uncertain) via the skill packs
+    and structural signals; excluded tables disappear from the semantic
+    surface but stay in DuckDB. Advisory: any failure is logged and skipped —
+    curation must never block a build.
+    """
+    try:
+        from .connectors.source_registry import get_source_registry
+        from .curation.engine import run_curation
+
+        schema = mgr.get_schema_info()
+        # Connector bookkeeping tables are already handled upstream.
+        internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+        schema = {t: i for t, i in schema.items() if t not in internal}
+
+        source_types = {c.connector_type for c in get_source_registry().list()}
+
+        # Tables carrying user work are never auto-excluded.
+        protected: set[str] = set()
+        catalog = _semantic_state.get("catalog")
+        if catalog is not None:
+            try:
+                for rel in catalog.list_manual_relations():
+                    protected.add(str(rel.get("from_table", "")))
+                    protected.add(str(rel.get("to_table", "")))
+                for e in catalog.get_draft_entities():
+                    if e.get("display_name") or e.get("canonical"):
+                        protected.add(str(e.get("table", "")))
+            except Exception:  # noqa: BLE001 — protection is best-effort
+                pass
+
+        try:
+            labels = dict(getattr(mgr, "table_labels", {}) or {})
+        except Exception:  # noqa: BLE001
+            labels = {}
+
+        run_curation(
+            schema,
+            source_types=source_types,
+            relations=list(getattr(mgr, "metadata_relations", []) or []),
+            labels=labels,
+            protected=protected,
+        )
+    except Exception as exc:  # noqa: BLE001 — never block the semantic build
+        logger.warning("curation run skipped: %s", exc)
+
+
 def _ensure_semantic_loaded() -> None:
     """Lazily build semantic stack exactly once (thread-safe).
 
@@ -710,6 +759,10 @@ def _ensure_semantic_loaded() -> None:
                 exc,
             )
             ontology = None
+
+        # Curation pass BEFORE the KG build so excluded tables never become
+        # nodes (decisions are reversible; a re-run follows every rebuild).
+        _run_curation(_mgr)
 
         kg = KnowledgeGraph()
         if ontology is not None:
@@ -841,6 +894,10 @@ def _refresh_catalog_and_kg_after_rebuild(mgr) -> None:
     # for warmup to finish so we always have a real catalog to populate.
     if _semantic_state.get("catalog") is None:
         _ensure_semantic_loaded()
+
+    # Re-curate before rebuilding the KG: new tables from the sync get
+    # classified, previously excluded ones stay excluded (user pins win).
+    _run_curation(mgr)
 
     catalog = _semantic_state.get("catalog")
     if catalog is not None:
@@ -1029,8 +1086,13 @@ def _hidden_demo_tables(user: UserPrincipal) -> frozenset[str]:
     "offer" are perfectly normal business table names, and hiding them would
     make the user's own uploaded data vanish.
     """
+    # Curation-excluded tables are hidden for every user mode: the curation
+    # layer's whole point is a lighter semantic surface, and it is reversible
+    # (see /api/curation) — unlike demo hiding, which is per-user-mode.
+    curation_hidden = _curation_excluded_tables()
+
     if user.mode != "live":
-        return frozenset()
+        return curation_hidden
     from .connectors.source_registry import get_source_registry
 
     tables: set[str] = set(_DEMO_SCENARIO_TABLES)
@@ -1048,7 +1110,17 @@ def _hidden_demo_tables(user: UserPrincipal) -> frozenset[str]:
             user_tables.update(f"{cfg.id}.{t}" for t in owned)
     for prefix in _DEMO_SCHEMA_PREFIXES:
         tables.update(f"{prefix}.{t}" for t in _DEMO_SCENARIO_TABLES)
-    return frozenset(tables - user_tables)
+    return frozenset(tables - user_tables) | curation_hidden
+
+
+def _curation_excluded_tables() -> frozenset[str]:
+    """Tables excluded by the curation layer (reversible, mode-independent)."""
+    try:
+        from .curation.store import get_curation_store
+
+        return get_curation_store().excluded_tables()
+    except Exception:  # noqa: BLE001 — curation is advisory, never blocks reads
+        return frozenset()
 
 
 def _kg_counts_excluding(kg, hidden: frozenset[str]) -> tuple[int, int]:
@@ -2798,6 +2870,143 @@ def get_agent_tools(
             "input_schema": {"type": "object", "properties": {}},
         },
     ]
+
+
+# ── Curation API — reversible schema pruning ─────────────────────────────────
+
+
+class CurationDecisionRequest(BaseModel):
+    table: str = Field(min_length=1, max_length=256)
+    status: Literal["kept", "excluded"]
+    reason: str = Field(default="", max_length=500)
+
+
+class CurationSkillsRequest(BaseModel):
+    content: str = Field(max_length=100_000)
+
+
+def _curation_refresh() -> None:
+    """Re-run curation and rebuild the KG so decisions take effect now."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    _refresh_catalog_and_kg_after_rebuild(get_source_manager(_SCENARIO_PATH))
+
+
+@app.get("/api/curation/report", tags=["curation"])
+def get_curation_report(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Why each table is (not) in the model: kept / excluded / uncertain,
+    each with the rule or signal that decided it. Decisions are reversible
+    via POST /api/curation/decision."""
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .curation.engine import curation_report
+
+    _ensure_semantic_loaded()
+    try:
+        mgr = get_source_manager(_SCENARIO_PATH)
+        tables = set(mgr.get_schema_info().keys()) - set(
+            getattr(mgr, "internal_metadata_tables", ()) or ()
+        )
+    except Exception:  # noqa: BLE001 — report must render without sources
+        tables = None
+    return curation_report(schema_tables=tables)
+
+
+@app.post("/api/curation/decision", tags=["curation"])
+def set_curation_decision(
+    request: Request,
+    body: CurationDecisionRequest,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Pin a human decision on a table (engine runs never overwrite it).
+    Excluding hides the table from the semantic surface; re-keeping restores
+    it — nothing is ever deleted."""
+    from .curation.store import get_curation_store
+
+    record = get_curation_store().set_decision(
+        body.table,
+        body.status,
+        body.reason or f"user:{current_user.username}",
+        decided_by="user",
+    )
+    _curation_refresh()
+    _audit(
+        request,
+        current_user,
+        "Curation decision",
+        f"{body.table} → {body.status}",
+        category="config",
+    )
+    return {"table": body.table, **record}
+
+
+@app.post("/api/curation/run", tags=["curation"])
+def run_curation_now(
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Force a curation re-run (e.g. after editing the workspace skill pack)."""
+    from .curation.engine import curation_report
+
+    _ensure_semantic_loaded()
+    _curation_refresh()
+    _audit(request, current_user, "Curation run", "manual re-run", category="config")
+    return curation_report()
+
+
+@app.get("/api/curation/skills", tags=["curation"])
+def get_curation_skills(
+    _user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """The workspace skill pack (editable YAML): keep/exclude rules and
+    concept aliases applied on top of the built-in packs."""
+    from .curation.engine import workspace_pack_path
+
+    path = workspace_pack_path()
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        content = (
+            "# Workspace curation skill pack — rules and aliases for THIS "
+            "workspace.\n"
+            "pack: workspace\nversion: 1\n\n"
+            '# exclude:\n#   - id: my-rule\n#     pattern: ".*_scratch$"\n\n'
+            "# keep: []\n\n"
+            "# aliases:\n#   Customer: [paziente, pazienti]\n"
+        )
+    return {"path": path.name, "content": content}
+
+
+@app.put("/api/curation/skills", tags=["curation"])
+def put_curation_skills(
+    request: Request,
+    body: CurationSkillsRequest,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """Save the workspace skill pack, then re-run curation with it."""
+    import yaml as _yaml
+
+    from .curation.engine import workspace_pack_path
+
+    try:
+        parsed = _yaml.safe_load(body.content) or {}
+        if not isinstance(parsed, dict):
+            raise ValueError("pack must be a YAML mapping")
+    except Exception as exc:  # noqa: BLE001 — reject broken YAML with a 400
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {exc}")
+
+    workspace_pack_path().write_text(body.content, encoding="utf-8")
+    _ensure_semantic_loaded()
+    _curation_refresh()
+    _audit(
+        request,
+        current_user,
+        "Curation skills updated",
+        "workspace pack saved",
+        category="config",
+    )
+    return {"saved": True}
 
 
 class WebhookQueryRequest(BaseModel):

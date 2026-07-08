@@ -46,3 +46,7 @@ backend/data/salesforce_config.json
 backend/data/salesforce_schema_*.json
 backend/data/salesforce_schema_graph_*.json
 backend/data/salesforce_profile_*.json
+
+# Curation runtime data — per-workspace decisions and skill pack
+backend/data/curation_decisions.json
+backend/data/curation_workspace.yaml

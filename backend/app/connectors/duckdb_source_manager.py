@@ -1671,6 +1671,19 @@ class DuckDBSourceManager:
         return out
 
     @property
+    def curation_excluded_tables(self) -> frozenset[str]:
+        """Tables the curation layer excluded from the semantic surface.
+
+        They stay queryable in DuckDB and re-appear the moment the decision is
+        reverted — exclusion is presentation-level, never destructive."""
+        try:
+            from ..curation.store import get_curation_store
+
+            return get_curation_store().excluded_tables()
+        except Exception:  # noqa: BLE001 — curation is advisory, never blocks
+            return frozenset()
+
+    @property
     def table_labels(self) -> dict[str, str]:
         """Human labels declared by source-system metadata, keyed by table name.
 

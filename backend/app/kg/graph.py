@@ -485,8 +485,12 @@ class KnowledgeGraph:
 
         # Connector bookkeeping tables (e.g. Salesforce describe catalogs) are
         # not business data — keep them out of the graph so they never surface
-        # in NL linking, FK inference, or the model draft.
+        # in NL linking, FK inference, or the model draft. Curation-excluded
+        # tables are hidden the same way (reversible, presentation-level).
         internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+        curated = getattr(mgr, "curation_excluded_tables", None)
+        if isinstance(curated, (set, frozenset)):
+            internal = internal | curated
         if internal:
             schema = {t: info for t, info in schema.items() if t not in internal}
 

@@ -1,0 +1,28 @@
+# Salesforce curation skill pack — refines what the connector-level filters
+# (is_business_sobject: technical objects, custom settings, custom metadata,
+# system children) already let through. Table names here are the DuckDB names
+# (sf_<id>_<object> or sf_<object>).
+
+pack: salesforce
+version: 1
+
+exclude:
+  # Pricebook plumbing is catalog configuration, not entities users query.
+  - id: pricebook-config
+    pattern: ".*_pricebook2$|.*_pricebookentry$"
+  # Per-user calendar/preference leftovers that survive the global filters.
+  - id: user-calendar
+    pattern: ".*_(calendarview|userlistview|userteammember)$"
+  # Solution/knowledge plumbing rarely used as business entities.
+  - id: knowledge-plumbing
+    pattern: ".*_(solution|solutionstatus|knowledgearticle\\w*)$"
+
+keep:
+  # Core CRM objects are always business-relevant, even with 0 rows in
+  # metadata-only mode.
+  - id: core-crm
+    pattern: ".*_(account|contact|lead|opportunity|opportunitylineitem|case|order|orderitem|quote|quotelineitem|contract|campaign|campaignmember|asset|product2|task|event)$|^sf_(account|contact|lead|opportunity|case|order|quote|contract|campaign|asset|product2|task|event)$"
+
+signals:
+  min_columns: 3
+  uncertain_policy: keep
