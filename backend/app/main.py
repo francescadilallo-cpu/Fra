@@ -1092,10 +1092,15 @@ def _enrich_entity_display(entities: list[dict]) -> list[dict]:
     for e in entities:
         table = e.get("table") or e.get("name") or ""
         label = labels.get(table)
-        e["display_name"] = display_name(table, label)
-        concept = canonical_concept(table, label)
-        if concept:
-            e["canonical"] = concept
+        # User-curated overrides (catalog display_name/canonical_concept,
+        # set via the agentic data-model actions) always win — only compute
+        # what's missing.
+        if not e.get("display_name"):
+            e["display_name"] = display_name(table, label)
+        if not e.get("canonical"):
+            concept = canonical_concept(table, label)
+            if concept:
+                e["canonical"] = concept
     return entities
 
 
@@ -1620,7 +1625,26 @@ def _agentic_kg_patcher(effect: ActionEffect) -> int:
     import networkx as nx
 
     kg = _semantic_state.get("kg")
-    if kg is None or not effect.affected_node_ids or not effect.changed_fields:
+    if kg is None:
+        return 0
+    # Approved entity merge: fold the SAME_AS edge into the live KG right
+    # away — the catalog manual relation guarantees it also survives rebuilds.
+    if effect.action_type == "MERGE_ENTITIES" and len(effect.affected_tables) == 2:
+        a, b = effect.affected_tables
+        try:
+            return kg.ingest_manual_relations(
+                [
+                    {
+                        "from_table": a,
+                        "to_table": b,
+                        "via_column": "",
+                        "edge_type": "SAME_AS",
+                    }
+                ]
+            )
+        except Exception:  # noqa: BLE001 — rebuild will pick the relation up
+            return 0
+    if not effect.affected_node_ids or not effect.changed_fields:
         return 0
     patched = 0
     for node_id in effect.affected_node_ids:
@@ -1646,6 +1670,7 @@ _agentic_layer = ExecutiveAgenticLayer(
     get_db_connection=get_connection,
     kg_patcher=_agentic_kg_patcher,
     cache_invalidator=_agentic_cache_invalidator,
+    get_catalog=lambda: _semantic_state.get("catalog"),
     # File-backed state so the pending-approval queue and audit trail survive
     # restarts and are shared across worker processes.
     state_db_path=data_dir() / "agent_state.db",

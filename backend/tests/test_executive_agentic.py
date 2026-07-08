@@ -647,3 +647,184 @@ class TestStatePersistence:
             f"the same action but {len(audit_entries)} EXECUTED audit "
             "entries were appended"
         )
+
+
+# ── Data-model curation actions (MERGE / RENAME / SET_CONCEPT) ────────────────
+
+
+class _FakeCatalog:
+    """Minimal stand-in for MetadataCatalog covering the layer's needs."""
+
+    def __init__(self):
+        self.entities = [
+            {
+                "name": "sf_x_account",
+                "table": "sf_x_account",
+                "display_name": "Account",
+            },
+            {"name": "crm_accounts", "table": "crm_accounts"},
+        ]
+        self.manual_relations: list[dict] = []
+        self.display_calls: list[tuple] = []
+
+    def get_draft_entities(self):
+        return self.entities
+
+    def list_manual_relations(self):
+        return self.manual_relations
+
+    def add_manual_relation(self, from_table, to_table, via_column="", edge_type="FK"):
+        self.manual_relations.append(
+            {
+                "from_table": from_table,
+                "to_table": to_table,
+                "via_column": via_column,
+                "edge_type": edge_type,
+            }
+        )
+        return len(self.manual_relations)
+
+    def set_entity_display(self, name, display_name=None, canonical=None):
+        self.display_calls.append((name, display_name, canonical))
+        return True
+
+
+def _make_dm_layer(catalog=None):
+    return ExecutiveAgenticLayer(
+        get_ontology=lambda: None,
+        get_db_connection=lambda: None,
+        get_catalog=(lambda: catalog) if catalog is not None else None,
+    )
+
+
+class TestParseDataModelCommands:
+    def setup_method(self):
+        self.layer = _make_dm_layer()
+
+    def test_merge_italian(self):
+        a = self.layer._parse_command("Unisci le entità sf_x_account e crm_accounts")
+        assert a.action_type == "MERGE_ENTITIES"
+        assert (a.entity, a.entity_b) == ("sf_x_account", "crm_accounts")
+
+    def test_merge_english(self):
+        a = self.layer._parse_command("merge entities sf_x_account and crm_accounts")
+        assert a.action_type == "MERGE_ENTITIES"
+
+    def test_rename_italian_multiword(self):
+        a = self.layer._parse_command(
+            "Rinomina l'entità crm_accounts in Clienti Chiave"
+        )
+        assert a.action_type == "RENAME_ENTITY"
+        assert a.new_name == "Clienti Chiave"
+
+    def test_rename_english(self):
+        a = self.layer._parse_command("rename entity crm_accounts to Key Customers")
+        assert (a.action_type, a.new_name) == ("RENAME_ENTITY", "Key Customers")
+
+    def test_concept_italian(self):
+        a = self.layer._parse_command(
+            "Assegna l'entità crm_accounts al concetto Customer"
+        )
+        assert (a.action_type, a.entity, a.concept) == (
+            "SET_ENTITY_CONCEPT",
+            "crm_accounts",
+            "Customer",
+        )
+
+    def test_concept_english(self):
+        a = self.layer._parse_command("assign entity crm_accounts to concept Customer")
+        assert a.action_type == "SET_ENTITY_CONCEPT"
+
+
+class TestDataModelLifecycle:
+    def setup_method(self):
+        self.catalog = _FakeCatalog()
+        self.layer = _make_dm_layer(self.catalog)
+
+    def test_merge_queues_then_executes_on_approval(self):
+        action = self.layer.submit_command(
+            "unisci le entità Account e crm_accounts", "alice", "admin"
+        )
+        # HITL invariant: nothing written at submission time.
+        assert action.status == "PENDING_HUMAN_APPROVAL"
+        assert self.catalog.manual_relations == []
+
+        done = self.layer.approve_action(
+            action.action_id, "boss", "admin", approve=True, manager_note=None
+        )
+        assert done.status in ("SYNCED", "SYNC_FAILED")
+        assert self.catalog.manual_relations == [
+            {
+                "from_table": "sf_x_account",  # resolved via display name
+                "to_table": "crm_accounts",
+                "via_column": "",
+                "edge_type": "SAME_AS",
+            }
+        ]
+
+    def test_merge_already_merged_fails_at_submit(self):
+        self.catalog.manual_relations.append(
+            {
+                "from_table": "crm_accounts",
+                "to_table": "sf_x_account",
+                "via_column": "",
+                "edge_type": "SAME_AS",
+            }
+        )
+        with pytest.raises(AgentSemanticValidationError, match="already merged"):
+            self.layer.submit_command(
+                "merge entities sf_x_account and crm_accounts", "alice", "admin"
+            )
+
+    def test_merge_with_itself_rejected(self):
+        with pytest.raises(AgentSemanticValidationError, match="itself"):
+            self.layer.submit_command(
+                "merge entities Account and sf_x_account", "alice", "admin"
+            )
+
+    def test_unknown_entity_rejected(self):
+        with pytest.raises(AgentSemanticValidationError, match="not found"):
+            self.layer.submit_command(
+                "rename entity ghost_table to Nice Name", "alice", "admin"
+            )
+
+    def test_rename_executes_display_override(self):
+        action = self.layer.submit_command(
+            "rinomina l'entità crm_accounts in Clienti Chiave", "alice", "admin"
+        )
+        assert self.catalog.display_calls == []
+        self.layer.approve_action(
+            action.action_id, "boss", "admin", approve=True, manager_note=None
+        )
+        assert self.catalog.display_calls == [("crm_accounts", "Clienti Chiave", None)]
+
+    def test_concept_alias_resolves_to_canonical(self):
+        action = self.layer.submit_command(
+            "assegna l'entità crm_accounts al concetto clienti", "alice", "admin"
+        )
+        self.layer.approve_action(
+            action.action_id, "boss", "admin", approve=True, manager_note=None
+        )
+        assert self.catalog.display_calls == [("crm_accounts", None, "Customer")]
+
+    def test_unknown_concept_rejected_with_valid_list(self):
+        with pytest.raises(AgentSemanticValidationError, match="Valid concepts"):
+            self.layer.submit_command(
+                "assign entity crm_accounts to concept Widget", "alice", "admin"
+            )
+
+    def test_rejection_writes_nothing(self):
+        action = self.layer.submit_command(
+            "merge entities Account and crm_accounts", "alice", "admin"
+        )
+        done = self.layer.approve_action(
+            action.action_id, "boss", "admin", approve=False, manager_note="no"
+        )
+        assert done.status == "REJECTED"
+        assert self.catalog.manual_relations == []
+        assert self.catalog.display_calls == []
+
+    def test_no_catalog_fails_closed(self):
+        layer = _make_dm_layer()
+        with pytest.raises(AgentSemanticValidationError, match="catalog unavailable"):
+            layer.submit_command("merge entities a and b", "alice", "admin")

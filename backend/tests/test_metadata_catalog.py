@@ -865,3 +865,44 @@ class TestSeedTemplateMigration:
             t for t in cat.list_templates() if t["name"] == "Margine per categoria"
         )
         assert tpl["sql_query"].strip() == self._NEW_SQL
+
+
+# ── Entity display overrides (agentic data-model actions) ─────────────────────
+
+
+class TestEntityDisplayOverrides:
+    def _seed(self, cat):
+        with cat._Session() as s:
+            cat._upsert_entity(
+                s,
+                name="crm_accounts",
+                description="",
+                primary_key="id",
+                sources=[{"source": "crm", "table": "crm_accounts"}],
+                record_count=10,
+                freshness="",
+                quality_flags={},
+                kg_node_count=0,
+            )
+            s.commit()
+
+    def test_set_display_name_by_entity_name(self, cat):
+        self._seed(cat)
+        assert cat.set_entity_display("crm_accounts", display_name="Clienti Chiave")
+        e = next(x for x in cat.get_draft_entities() if x["name"] == "crm_accounts")
+        assert e["display_name"] == "Clienti Chiave"
+
+    def test_set_canonical_by_table_case_insensitive(self, cat):
+        self._seed(cat)
+        assert cat.set_entity_display("CRM_ACCOUNTS", canonical="Customer")
+        e = next(x for x in cat.get_draft_entities() if x["name"] == "crm_accounts")
+        assert e["canonical"] == "Customer"
+
+    def test_unknown_entity_returns_false(self, cat):
+        self._seed(cat)
+        assert not cat.set_entity_display("nonexistent", display_name="X")
+
+    def test_no_override_no_keys(self, cat):
+        self._seed(cat)
+        e = next(x for x in cat.get_draft_entities() if x["name"] == "crm_accounts")
+        assert "display_name" not in e and "canonical" not in e

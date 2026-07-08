@@ -10,6 +10,35 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Executive Layer: azioni di cura del data model, con approvazione)
+
+Tre nuove azioni agentiche che curano il modello dati — nessuna scrittura sui
+sistemi sorgente — attraverso lo stesso ciclo HITL esistente (proposta →
+validazione → coda PENDING_HUMAN_APPROVAL → approvazione admin → esecuzione →
+audit, con ri-validazione al momento dell'approvazione):
+
+- **MERGE_ENTITIES** — "unisci le entità X e Y" / "merge entities X and Y":
+  crea una relazione manuale SAME_AS nel catalogo (visibile subito nel draft,
+  iniettata nel KG live dal patcher e persistente ai rebuild). Guardie: entità
+  esistenti, distinte, non già fuse.
+- **RENAME_ENTITY** — "rinomina l'entità X in Y" / "rename entity X to Y":
+  override utente del display name (nuove colonne `display_name` /
+  `canonical_concept` su entity_meta, migrazione automatica); gli override
+  vincono su label connettore ed euristiche in `_enrich_entity_display`.
+- **SET_ENTITY_CONCEPT** — "assegna l'entità X al concetto clienti": risolve
+  alias multilingue al concetto canonico (`resolve_concept_name`), errore con
+  lista dei concetti validi se sconosciuto.
+
+Le entità si referenziano per nome, tabella o display name (case-insensitive).
+Nuovi helper: `MetadataCatalog.set_entity_display`, `canonical.known_concepts`
+/ `resolve_concept_name`; `ExecutiveAgenticLayer(get_catalog=…)`.
+
+**Files:** `backend/app/agentic/executive.py`, `backend/app/metadata/catalog.py`,
+`backend/app/semantic/canonical.py`, `backend/app/main.py`,
+`backend/tests/{test_executive_agentic,test_metadata_catalog}.py`
+
+---
+
 ## 2026-07-06 (Agenti/MCP: entità canoniche esposte agli agenti esterni)
 
 Gli strumenti per agenti ragionano ora sulle entità di business unificate,

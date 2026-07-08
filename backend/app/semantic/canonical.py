@@ -196,3 +196,18 @@ def canonical_concept(table: str, label: str | None = None) -> str | None:
 def concept_aliases(concept: str) -> frozenset[str]:
     """All NL aliases for *concept* (empty set when the concept is unknown)."""
     return _CONCEPT_ALIASES.get(concept, frozenset())
+
+
+def known_concepts() -> list[str]:
+    """All canonical concept names, sorted (for validation and UI pickers)."""
+    return sorted(_CONCEPT_ALIASES)
+
+
+def resolve_concept_name(raw: str) -> str | None:
+    """Resolve a user-typed concept ("customer", "Clienti") to its canonical
+    concept name ("Customer"). Accepts the concept name itself or any alias."""
+    folded = _fold(raw.strip())
+    for concept in _CONCEPT_ALIASES:
+        if folded == concept.lower():
+            return concept
+    return _ALIAS_TO_CONCEPT.get(folded) or _ALIAS_TO_CONCEPT.get(_singular(folded))

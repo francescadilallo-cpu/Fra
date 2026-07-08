@@ -71,6 +71,10 @@ class EntityMetaRow(Base):
     kg_node_count: Mapped[int | None] = mapped_column(Integer, default=0)
     user_description: Mapped[str | None] = mapped_column(Text, default="")
     context_notes: Mapped[str | None] = mapped_column(Text, default="")
+    # User-curated naming overrides (set via the agentic data-model actions or
+    # future UI): they win over connector labels and name heuristics.
+    display_name: Mapped[str | None] = mapped_column(String, default="")
+    canonical_concept: Mapped[str | None] = mapped_column(String, default="")
 
 
 class AttributeMetaRow(Base):
@@ -350,6 +354,8 @@ class MetadataCatalog:
             for col, ddl in [
                 ("user_description", "TEXT DEFAULT ''"),
                 ("context_notes", "TEXT DEFAULT ''"),
+                ("display_name", "TEXT DEFAULT ''"),
+                ("canonical_concept", "TEXT DEFAULT ''"),
             ]:
                 try:
                     conn.execute(f"ALTER TABLE entity_meta ADD COLUMN {col} {ddl}")
@@ -775,8 +781,16 @@ class MetadataCatalog:
             for row in entity_rows:
                 sources = json.loads(row.sources_json or "[]")
                 attrs = attrs_by_entity.get(row.name, [])
+                # User-curated overrides beat computed names downstream:
+                # _enrich_entity_display only fills these when absent.
+                overrides: dict = {}
+                if getattr(row, "display_name", "") or "":
+                    overrides["display_name"] = row.display_name
+                if getattr(row, "canonical_concept", "") or "":
+                    overrides["canonical"] = row.canonical_concept
                 result.append(
                     {
+                        **overrides,
                         "name": row.name,
                         "table": next(
                             (
@@ -819,6 +833,40 @@ class MetadataCatalog:
             ]
 
     # ── Manual relations CRUD ──────────────────────────────────────────────
+
+    def set_entity_display(
+        self,
+        name: str,
+        display_name: str | None = None,
+        canonical: str | None = None,
+    ) -> bool:
+        """Set user-curated naming overrides on an entity (case-insensitive
+        match on entity name or its table). Only the provided fields change;
+        pass an empty string to clear one. Returns False when no entity
+        matches."""
+        with self._Session() as session:
+            rows = session.execute(select(EntityMetaRow)).scalars().all()
+            target = None
+            wanted = name.strip().lower()
+            for row in rows:
+                sources = json.loads(row.sources_json or "[]")
+                tables = {
+                    str(s.get("table", "")).lower()
+                    for s in sources
+                    if isinstance(s, dict)
+                }
+                if row.name.lower() == wanted or wanted in tables:
+                    target = row
+                    break
+            if target is None:
+                return False
+            if display_name is not None:
+                target.display_name = display_name.strip()
+            if canonical is not None:
+                target.canonical_concept = canonical.strip()
+            session.commit()
+        self._invalidate_schema_context_cache()
+        return True
 
     def add_manual_relation(
         self,

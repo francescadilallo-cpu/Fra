@@ -86,11 +86,29 @@ _VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+# Actions that write to business data (demo ERP orders).
+_ORDER_ACTIONS = {"UPDATE_ORDER_DELIVERY_DATE", "UPDATE_ORDER_STATUS"}
+# Actions that curate the data model itself — no source-system writes.
+_DATA_MODEL_ACTIONS = {"MERGE_ENTITIES", "RENAME_ENTITY", "SET_ENTITY_CONCEPT"}
+
+
 class ProposedWriteAction(BaseModel):
-    action_type: Literal["UPDATE_ORDER_DELIVERY_DATE", "UPDATE_ORDER_STATUS"]
-    order_id: int
+    action_type: Literal[
+        "UPDATE_ORDER_DELIVERY_DATE",
+        "UPDATE_ORDER_STATUS",
+        "MERGE_ENTITIES",
+        "RENAME_ENTITY",
+        "SET_ENTITY_CONCEPT",
+    ]
+    # Order write-back fields
+    order_id: int | None = None
     new_delivery_date: date | None = None
     new_status: str | None = None
+    # Data-model curation fields
+    entity: str | None = None
+    entity_b: str | None = None
+    new_name: str | None = None
+    concept: str | None = None
     rationale: str
 
 
@@ -143,6 +161,7 @@ class ExecutiveAgenticLayer:
         kg_patcher: Callable[["ActionEffect"], int] | None = None,
         cache_invalidator: Callable[[], int] | None = None,
         state_db_path: "Path | None" = None,
+        get_catalog: Callable[[], Any] | None = None,
     ) -> None:
         # Local import avoids a module-level circular import (store imports the
         # action/audit models from this module).
@@ -152,6 +171,7 @@ class ExecutiveAgenticLayer:
         self._get_db_connection = get_db_connection
         self._kg_patcher = kg_patcher
         self._cache_invalidator = cache_invalidator
+        self._get_catalog = get_catalog
         # Guards the approve/reject critical section within a single process.
         # Cross-process atomicity is best-effort via a status re-check against
         # the shared store.
@@ -389,6 +409,52 @@ class ExecutiveAgenticLayer:
             re.IGNORECASE,
         )
 
+        # ── Data-model curation commands (no source-system writes) ────────────
+        # Merge: "unisci le entità X e Y" / "merge entities X and Y"
+        merge_re = re.compile(
+            r"(?:unisci\s+le\s+entit[àa]|merge\s+entit(?:ies|y))\s+([\w.]+)\s+(?:e|and|with|con)\s+([\w.]+)",
+            re.IGNORECASE,
+        )
+        # Rename: "rinomina l'entità X in Y" / "rename entity X to Y"
+        rename_re = re.compile(
+            r"(?:rinomina\s+l[' ]entit[àa]|rename\s+entity)\s+([\w.]+)\s+(?:in|to|as)\s+(.+?)\s*$",
+            re.IGNORECASE,
+        )
+        # Concept: "assegna l'entità X al concetto Y" /
+        #          "assign entity X to concept Y" / "set entity X concept to Y"
+        concept_re = re.compile(
+            r"(?:assegna\s+l[' ]entit[àa]\s+([\w.]+)\s+al\s+concetto\s+([\w]+)"
+            r"|(?:assign|set)\s+entity\s+([\w.]+)\s+(?:to\s+concept|concept\s+to)\s+([\w]+))",
+            re.IGNORECASE,
+        )
+
+        m = merge_re.search(command)
+        if m:
+            return ProposedWriteAction(
+                action_type="MERGE_ENTITIES",
+                entity=m.group(1),
+                entity_b=m.group(2),
+                rationale="Data-model curation via Executive Agentic Layer",
+            )
+        m = rename_re.search(command)
+        if m:
+            return ProposedWriteAction(
+                action_type="RENAME_ENTITY",
+                entity=m.group(1),
+                new_name=m.group(2).strip().strip("\"'"),
+                rationale="Data-model curation via Executive Agentic Layer",
+            )
+        m = concept_re.search(command)
+        if m:
+            entity = m.group(1) or m.group(3)
+            concept = m.group(2) or m.group(4)
+            return ProposedWriteAction(
+                action_type="SET_ENTITY_CONCEPT",
+                entity=entity,
+                concept=concept,
+                rationale="Data-model curation via Executive Agentic Layer",
+            )
+
         for regex in (delivery_re, delivery_en_re):
             m = regex.search(command)
             if m:
@@ -439,7 +505,17 @@ class ExecutiveAgenticLayer:
         )
 
     def _validate_semantics(self, action: ProposedWriteAction) -> ValidationOutcome:
+        if action.action_type in _DATA_MODEL_ACTIONS:
+            return self._validate_data_model(action)
+
         checks: list[str] = []
+
+        if action.order_id is None:
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason="order_id is required for order write-back actions",
+            )
 
         ontology = self._get_ontology()
         if ontology is None:
@@ -515,6 +591,155 @@ class ExecutiveAgenticLayer:
 
         return ValidationOutcome(passed=True, checks=checks)
 
+    def _resolve_entity(self, catalog: Any, ref: str) -> dict | None:
+        """Resolve a user-typed entity reference (name, table or display name,
+        case-insensitive) to a draft entity dict."""
+        wanted = ref.strip().lower()
+        for e in catalog.get_draft_entities():
+            candidates = {
+                str(e.get("name", "")).lower(),
+                str(e.get("table", "")).lower(),
+                str(e.get("display_name", "")).lower(),
+            }
+            if wanted in candidates:
+                return e
+        return None
+
+    def _validate_data_model(self, action: ProposedWriteAction) -> ValidationOutcome:
+        """Validate data-model curation actions against the metadata catalog.
+
+        Same contract as the order path: called at submission AND re-run at
+        approval time, so a stale proposal (entity deleted meanwhile, pair
+        merged by someone else) fails closed instead of executing blindly.
+        """
+        checks: list[str] = []
+
+        catalog = self._get_catalog() if self._get_catalog is not None else None
+        if catalog is None:
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason="Metadata catalog unavailable for data-model validation",
+            )
+
+        if not action.entity:
+            return ValidationOutcome(
+                passed=False, checks=checks, reason="Entity reference is required"
+            )
+        entity = self._resolve_entity(catalog, action.entity)
+        if entity is None:
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason=f"Entity '{action.entity}' not found in the data model",
+            )
+        checks.append(f"entity_exists:{entity['name']}")
+
+        if action.action_type == "MERGE_ENTITIES":
+            if not action.entity_b:
+                return ValidationOutcome(
+                    passed=False, checks=checks, reason="Second entity is required"
+                )
+            entity_b = self._resolve_entity(catalog, action.entity_b)
+            if entity_b is None:
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason=f"Entity '{action.entity_b}' not found in the data model",
+                )
+            checks.append(f"entity_exists:{entity_b['name']}")
+            if entity["table"] == entity_b["table"]:
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason="Cannot merge an entity with itself",
+                )
+            pair = {entity["table"], entity_b["table"]}
+            for rel in catalog.list_manual_relations():
+                if (
+                    rel.get("edge_type") == "SAME_AS"
+                    and {rel.get("from_table"), rel.get("to_table")} == pair
+                ):
+                    return ValidationOutcome(
+                        passed=False,
+                        checks=checks,
+                        reason=(
+                            f"Entities '{entity['name']}' and '{entity_b['name']}' "
+                            "are already merged"
+                        ),
+                    )
+            checks.append("business_rule_not_already_merged")
+
+        elif action.action_type == "RENAME_ENTITY":
+            new_name = (action.new_name or "").strip()
+            if not (1 <= len(new_name) <= 80):
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason="New name must be between 1 and 80 characters",
+                )
+            checks.append("business_rule_valid_display_name")
+
+        elif action.action_type == "SET_ENTITY_CONCEPT":
+            from app.semantic.canonical import known_concepts, resolve_concept_name
+
+            resolved = resolve_concept_name(action.concept or "")
+            if resolved is None:
+                return ValidationOutcome(
+                    passed=False,
+                    checks=checks,
+                    reason=(
+                        f"Unknown concept '{action.concept}'. "
+                        f"Valid concepts: {', '.join(known_concepts())}"
+                    ),
+                )
+            checks.append(f"business_rule_known_concept:{resolved}")
+
+        return ValidationOutcome(passed=True, checks=checks)
+
+    def _execute_data_model(self, action: ProposedWriteAction) -> None:
+        """Apply an approved data-model action via the metadata catalog.
+
+        All writes go through the catalog's ORM (parameterised by
+        construction) and touch only Fra's own metadata store — never a
+        customer source system.
+        """
+        catalog = self._get_catalog() if self._get_catalog is not None else None
+        if catalog is None:
+            raise AgentExecutionError("Metadata catalog unavailable")
+
+        entity = self._resolve_entity(catalog, action.entity or "")
+        if entity is None:
+            raise AgentExecutionError(f"Entity '{action.entity}' not found")
+
+        if action.action_type == "MERGE_ENTITIES":
+            entity_b = self._resolve_entity(catalog, action.entity_b or "")
+            if entity_b is None:
+                raise AgentExecutionError(f"Entity '{action.entity_b}' not found")
+            catalog.add_manual_relation(
+                from_table=entity["table"],
+                to_table=entity_b["table"],
+                via_column="",
+                edge_type="SAME_AS",
+            )
+        elif action.action_type == "RENAME_ENTITY":
+            if not catalog.set_entity_display(
+                entity["name"], display_name=(action.new_name or "").strip()
+            ):
+                raise AgentExecutionError(f"Could not rename entity '{entity['name']}'")
+        elif action.action_type == "SET_ENTITY_CONCEPT":
+            from app.semantic.canonical import resolve_concept_name
+
+            resolved = resolve_concept_name(action.concept or "")
+            if resolved is None:
+                raise AgentExecutionError(f"Unknown concept '{action.concept}'")
+            if not catalog.set_entity_display(entity["name"], canonical=resolved):
+                raise AgentExecutionError(
+                    f"Could not set concept on entity '{entity['name']}'"
+                )
+        else:  # pragma: no cover — guarded by the caller's dispatch
+            raise AgentExecutionError(f"Unsupported action_type: {action.action_type}")
+
     def _compute_action_effect(self, action: ProposedWriteAction) -> "ActionEffect":
         if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
             return ActionEffect(
@@ -535,6 +760,38 @@ class ExecutiveAgenticLayer:
                 affected_node_ids=[f"order:{action.order_id}"],
                 changed_fields={"status": action.new_status or ""},
                 entity_types=["SalesOrder"],
+            )
+        if action.action_type == "MERGE_ENTITIES":
+            # Resolve to physical tables so the KG patcher can add the
+            # SAME_AS edge immediately (raw user refs may be display names).
+            tables = [t for t in (action.entity, action.entity_b) if t]
+            try:
+                catalog = self._get_catalog() if self._get_catalog else None
+                if catalog is not None:
+                    resolved = [
+                        (self._resolve_entity(catalog, ref) or {}).get("table")
+                        for ref in tables
+                    ]
+                    if all(resolved):
+                        tables = resolved  # type: ignore[assignment]
+            except Exception:  # noqa: BLE001 — effect metadata must not fail
+                pass
+            return ActionEffect(
+                action_type=action.action_type,
+                affected_tables=tables,
+                changed_fields={"edge_type": "SAME_AS"},
+                entity_types=tables,
+            )
+        if action.action_type in ("RENAME_ENTITY", "SET_ENTITY_CONCEPT"):
+            return ActionEffect(
+                action_type=action.action_type,
+                affected_tables=[action.entity] if action.entity else [],
+                changed_fields=(
+                    {"display_name": action.new_name or ""}
+                    if action.action_type == "RENAME_ENTITY"
+                    else {"canonical": action.concept or ""}
+                ),
+                entity_types=[action.entity] if action.entity else [],
             )
         return ActionEffect(action_type=action.action_type)
 
@@ -567,6 +824,10 @@ class ExecutiveAgenticLayer:
         )
 
     def _execute_writeback(self, action: ProposedWriteAction) -> None:
+        if action.action_type in _DATA_MODEL_ACTIONS:
+            self._execute_data_model(action)
+            return
+
         conn = self._get_db_connection()
         try:
             if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
