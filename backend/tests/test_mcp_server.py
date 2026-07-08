@@ -151,4 +151,9 @@ class TestEndpoint:
         assert resp.status_code == 200, resp.text
         result = resp.json()["result"]
         assert result["isError"] is False
-        assert "entities" in result["structuredContent"]
+        model = result["structuredContent"]
+        assert "entities" in model
+        # Agents reason about business names and cross-source concepts.
+        assert "unified_entities" in model
+        for e in model["entities"]:
+            assert e["display_name"], e

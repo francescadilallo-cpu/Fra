@@ -46,8 +46,10 @@ _TOOLS: list[dict[str, Any]] = [
         "name": "ask",
         "description": (
             "Ask a natural-language question about the connected business data. "
-            "Returns an answer grounded in the unified data model, with the SQL "
-            "used, the sources touched and the knowledge-graph context."
+            "Business terms work in English or Italian ('customers', 'clienti', "
+            "'account' all reach the same unified entity). Returns an answer "
+            "grounded in the unified data model, with the SQL used, the sources "
+            "touched and the knowledge-graph context."
         ),
         "inputSchema": {
             "type": "object",
@@ -73,8 +75,11 @@ _TOOLS: list[dict[str, Any]] = [
     {
         "name": "get_data_model",
         "description": (
-            "Return the data model: business entities (with their source tables) "
-            "and the relations between them."
+            "Return the data model: business entities (human-friendly "
+            "display_name, canonical business concept, source table), the "
+            "unified_entities map grouping equivalent entities from different "
+            "sources under one concept (e.g. Customer), and the relations "
+            "between entities (type SAME_AS = same real-world entity)."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -141,16 +146,34 @@ def _tool_get_data_model(
 
     _ensure_semantic_loaded()
     draft = _get_semantic_draft(_hidden_demo_tables(principal))
+    entities = [
+        {
+            "name": e.get("name"),
+            "display_name": e.get("display_name") or e.get("name"),
+            "canonical": e.get("canonical"),
+            "table": e.get("table"),
+        }
+        for e in draft.get("entities", [])
+    ]
+    # Canonical concepts spanning ≥2 entities: the unified business view an
+    # agent should reason about ("Customer" instead of per-source tables).
+    by_concept: dict[str, list[str]] = {}
+    for e in entities:
+        if e["canonical"]:
+            by_concept.setdefault(e["canonical"], []).append(e["name"])
     model = {
-        "entities": [
-            {"name": e.get("name"), "table": e.get("table")}
-            for e in draft.get("entities", [])
-        ],
+        "entities": entities,
+        "unified_entities": {
+            concept: members
+            for concept, members in sorted(by_concept.items())
+            if len(members) > 1
+        },
         "relations": [
             {
                 "from": r.get("from_table"),
                 "to": r.get("to_table"),
                 "via": r.get("via_column"),
+                "type": r.get("edge_type"),
             }
             for r in draft.get("relations", [])
         ],

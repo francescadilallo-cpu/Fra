@@ -10,6 +10,28 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Agenti/MCP: entità canoniche esposte agli agenti esterni)
+
+Gli strumenti per agenti ragionano ora sulle entità di business unificate,
+non sulle tabelle fisiche:
+
+- **MCP `get_data_model`**: ogni entità porta `display_name` e `canonical`;
+  nuova mappa `unified_entities` (concetto → entità equivalenti da fonti
+  diverse, solo gruppi ≥2); le relazioni espongono `type` (`SAME_AS` = stessa
+  entità reale). Descrizione del tool aggiornata di conseguenza.
+- **MCP `ask`**: la descrizione dichiara che i termini di business funzionano
+  in EN/IT ("customers"/"clienti"/"account" → stessa entità unificata).
+- **Manifest `/api/agents/tools`**: `list_entities` documenta display name e
+  concetto canonico.
+- **AgentBuilder**: nessuna modifica necessaria — in live le entità
+  selezionabili vengono dalle label della live-config, che sono già i
+  display name.
+
+**Files:** `backend/app/mcp_server.py`, `backend/app/main.py`,
+`backend/tests/test_mcp_server.py`
+
+---
+
 ## 2026-07-06 (Salesforce: oggetti tecnici fuori da grafo e data model)
 
 Gli oggetti di sistema Salesforce che gli utenti non usano mai direttamente

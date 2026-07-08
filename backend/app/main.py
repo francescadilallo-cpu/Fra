@@ -2759,7 +2759,12 @@ def get_agent_tools(
         },
         {
             "name": "list_entities",
-            "description": "List all data entities (tables) available in the workspace with row counts and column names.",
+            "description": (
+                "List all data entities available in the workspace with their "
+                "business display name, canonical concept (equivalent entities "
+                "from different sources share one concept, e.g. Customer), "
+                "row counts and column names."
+            ),
             "input_schema": {"type": "object", "properties": {}},
         },
         {
