@@ -63,6 +63,7 @@ from .agentic.executive import (
     ExecutiveAgenticLayer,
 )
 from .agentic.router import build_agent_router
+from .curation.router import build_curation_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
 from .semantic.doc_loader import DocLoader
@@ -2876,17 +2877,7 @@ def get_agent_tools(
     ]
 
 
-# ── Curation API — reversible schema pruning ─────────────────────────────────
-
-
-class CurationDecisionRequest(BaseModel):
-    table: str = Field(min_length=1, max_length=256)
-    status: Literal["kept", "excluded"]
-    reason: str = Field(default="", max_length=500)
-
-
-class CurationSkillsRequest(BaseModel):
-    content: str = Field(max_length=100_000)
+# ── Curation API — reversible schema pruning (routes: app/curation/router.py) ──
 
 
 def _curation_refresh() -> None:
@@ -2896,101 +2887,27 @@ def _curation_refresh() -> None:
     _refresh_catalog_and_kg_after_rebuild(get_source_manager(_SCENARIO_PATH))
 
 
-@app.get("/api/curation/report", tags=["curation"])
-def get_curation_report(
-    _user: UserPrincipal = Depends(require_roles("user", "admin")),
-) -> dict[str, Any]:
-    """Why each table is (not) in the model: kept / excluded / uncertain,
-    each with the rule or signal that decided it. Decisions are reversible
-    via POST /api/curation/decision."""
+def _curation_schema_tables() -> set[str] | None:
+    """Current source tables (internal metadata excluded) for report scoping."""
     from .connectors.duckdb_source_manager import get_source_manager
-    from .curation.engine import curation_report
 
-    _ensure_semantic_loaded()
     try:
         mgr = get_source_manager(_SCENARIO_PATH)
-        tables = set(mgr.get_schema_info().keys()) - set(
+        return set(mgr.get_schema_info().keys()) - set(
             getattr(mgr, "internal_metadata_tables", ()) or ()
         )
-    except Exception:  # noqa: BLE001 — report must render without sources
-        tables = None
-    return curation_report(schema_tables=tables)
+    except Exception:  # noqa: BLE001 — the report must render without sources
+        return None
 
 
-@app.post("/api/curation/decision", tags=["curation"])
-def set_curation_decision(
-    request: Request,
-    body: CurationDecisionRequest,
-    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
-) -> dict[str, Any]:
-    """Pin a human decision on a table (engine runs never overwrite it).
-    Excluding hides the table from the semantic surface; re-keeping restores
-    it — nothing is ever deleted."""
-    from .curation.store import get_curation_store
-
-    record = get_curation_store().set_decision(
-        body.table,
-        body.status,
-        body.reason or f"user:{current_user.username}",
-        decided_by="user",
-    )
-    _curation_refresh()
-    _audit(
-        request,
-        current_user,
-        "Curation decision",
-        f"{body.table} → {body.status}",
-        category="config",
-    )
-    return {"table": body.table, **record}
-
-
-@app.post("/api/curation/run", tags=["curation"])
-def run_curation_now(
-    request: Request,
-    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
-) -> dict[str, Any]:
-    """Force a curation re-run (e.g. after editing the workspace skill pack)."""
-    from .curation.engine import curation_report
-
-    _ensure_semantic_loaded()
-    _curation_refresh()
-    _audit(request, current_user, "Curation run", "manual re-run", category="config")
-    return curation_report()
-
-
-@app.post("/api/curation/advise", tags=["curation"])
-def run_curation_advisor(
-    request: Request,
-    current_user: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
-    """LLM advisory pass over the *uncertain* tables.
-
-    keep/exclude verdicts are applied as reversible curation decisions
-    (provenance ``llm`` — a user pin always beats them); merge proposals are
-    queued as MERGE_ENTITIES actions in the human-approval queue, never
-    executed directly. Requires an LLM provider key; 503 otherwise.
-    """
+def _curation_advise_inputs() -> tuple[dict, list[dict], list[str]]:
+    """(schema, enriched entities, context docs) for the LLM advisory job."""
     from .connectors.duckdb_source_manager import get_source_manager
     from .connectors.source_registry import get_source_registry
-    from .curation.llm_advisor import advise, llm_available
-    from .curation.store import get_curation_store
 
-    if not llm_available():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "No LLM provider configured (set GROQ_API_KEY or "
-                "ANTHROPIC_API_KEY) — the deterministic curation tiers "
-                "remain active"
-            ),
-        )
-
-    _ensure_semantic_loaded()
     mgr = get_source_manager(_SCENARIO_PATH)
     internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
     schema = {t: i for t, i in mgr.get_schema_info().items() if t not in internal}
-
     catalog = _semantic_state.get("catalog")
     entities = _enrich_entity_display(
         [
@@ -3004,90 +2921,39 @@ def run_curation_advisor(
         for c in get_source_registry().list()
         if c.connector_type == "context_doc" and c.params.get("content")
     ]
+    return schema, entities, context_docs
 
-    def _submit_merge(table: str, entity_name: str) -> str:
+
+def _curation_submit_merge(username: str) -> Callable[[str, str], str]:
+    """Merge proposals from the advisor enter the SAME human-approval queue
+    as any other agent write action — they never execute directly."""
+
+    def _submit(table: str, entity_name: str) -> str:
         try:
             action = _agentic_layer.submit_command(
                 f"merge entities {table} and {entity_name}",
-                actor=f"curation-advisor({current_user.username})",
+                actor=f"curation-advisor({username})",
                 actor_role="user",
             )
             return f"pending_approval:{action.action_id}"
         except AgentSemanticValidationError as exc:
             return f"not_queued:{exc}"
 
-    try:
-        result = advise(
-            schema, entities, context_docs, get_curation_store(), _submit_merge
-        )
-    except Exception as exc:  # noqa: BLE001 — surface as a clean API error
-        raise HTTPException(status_code=502, detail=f"LLM advisory failed: {exc}")
+    return _submit
 
-    if result.get("applied"):
-        _curation_refresh()
-    _audit(
-        request,
-        current_user,
-        "Curation LLM advisory",
-        f"{len(result.get('applied', []))} decisions, "
-        f"{len(result.get('merge_proposals', []))} merge proposals",
-        category="config",
+
+app.include_router(
+    build_curation_router(
+        user_dependency=require_roles("user", "admin"),
+        admin_dependency=require_roles("admin"),
+        ensure_semantic_loaded=_ensure_semantic_loaded,
+        curation_refresh=_curation_refresh,
+        get_schema_tables=_curation_schema_tables,
+        get_advise_inputs=_curation_advise_inputs,
+        make_submit_merge=_curation_submit_merge,
+        audit=_audit,
     )
-    return result
-
-
-@app.get("/api/curation/skills", tags=["curation"])
-def get_curation_skills(
-    _user: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
-    """The workspace skill pack (editable YAML): keep/exclude rules and
-    concept aliases applied on top of the built-in packs."""
-    from .curation.engine import workspace_pack_path
-
-    path = workspace_pack_path()
-    try:
-        content = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        content = (
-            "# Workspace curation skill pack — rules and aliases for THIS "
-            "workspace.\n"
-            "pack: workspace\nversion: 1\n\n"
-            '# exclude:\n#   - id: my-rule\n#     pattern: ".*_scratch$"\n\n'
-            "# keep: []\n\n"
-            "# aliases:\n#   Customer: [paziente, pazienti]\n"
-        )
-    return {"path": path.name, "content": content}
-
-
-@app.put("/api/curation/skills", tags=["curation"])
-def put_curation_skills(
-    request: Request,
-    body: CurationSkillsRequest,
-    current_user: UserPrincipal = Depends(require_roles("admin")),
-) -> dict[str, Any]:
-    """Save the workspace skill pack, then re-run curation with it."""
-    import yaml as _yaml
-
-    from .curation.engine import workspace_pack_path
-
-    try:
-        parsed = _yaml.safe_load(body.content) or {}
-        if not isinstance(parsed, dict):
-            raise ValueError("pack must be a YAML mapping")
-    except Exception as exc:  # noqa: BLE001 — reject broken YAML with a 400
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {exc}")
-
-    workspace_pack_path().write_text(body.content, encoding="utf-8")
-    _ensure_semantic_loaded()
-    _curation_refresh()
-    _audit(
-        request,
-        current_user,
-        "Curation skills updated",
-        "workspace pack saved",
-        category="config",
-    )
-    return {"saved": True}
+)
 
 
 class WebhookQueryRequest(BaseModel):

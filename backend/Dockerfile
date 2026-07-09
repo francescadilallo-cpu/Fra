@@ -15,7 +15,7 @@ RUN mkdir -p data
 # (surfaced as "Network Error" in the browser).
 ENV FRA_STORAGE_MODE=snapshot
 
-# LLM intent mapping: when GROQ_API_KEY (free, preferred) or ANTHROPIC_API_KEY
+# LLM intent mapping: when ANTHROPIC_API_KEY (default) or GROQ_API_KEY (fallback)
 # is set in Render's env, the semantic layer uses an LLM to understand any
 # phrasing of a question. With this flag at 0 the behaviour is "use the LLM when
 # available, otherwise fall back to the deterministic rule parser" — so a

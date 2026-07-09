@@ -260,15 +260,29 @@ def _groq_model() -> str:
 
 
 def _llm_intent_provider() -> str | None:
-    """Pick the LLM provider for intent mapping based on configured keys.
+    """Pick the LLM provider based on configured keys.
 
-    Groq is preferred when present because it is free; Anthropic is used as a
-    fallback. Returns None when no provider key is configured.
+    Anthropic (Claude) is the default when its key is present — it powers the
+    judgement-heavy paths (curation advisor) and supports structured outputs
+    and prompt caching; Groq is the fallback. ``FRA_LLM_PROVIDER`` forces a
+    specific provider (its key must still be configured). Returns None when
+    no provider key is configured.
     """
-    if os.getenv("GROQ_API_KEY", "").strip():
-        return "groq"
-    if os.getenv("ANTHROPIC_API_KEY", "").strip():
+    has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY", "").strip())
+    has_groq = bool(os.getenv("GROQ_API_KEY", "").strip())
+    forced = os.getenv("FRA_LLM_PROVIDER", "").strip().lower()
+    if forced == "anthropic" and has_anthropic:
         return "anthropic"
+    if forced == "groq" and has_groq:
+        return "groq"
+    if forced:
+        logger.warning(
+            "FRA_LLM_PROVIDER=%r has no matching API key — falling back", forced
+        )
+    if has_anthropic:
+        return "anthropic"
+    if has_groq:
+        return "groq"
     return None
 
 
@@ -395,7 +409,7 @@ def complete_json_llm(
 ) -> dict[str, Any] | None:
     """Provider-agnostic JSON completion used by Smart Connect analysis.
 
-    Picks the configured provider (Groq preferred, Anthropic fallback), runs a
+    Picks the configured provider (Anthropic default, Groq fallback), runs a
     JSON-mode completion, and returns the parsed object. Returns ``None`` when
     no LLM provider is configured so callers can degrade gracefully. Raises on
     provider/transport errors or unparseable output.

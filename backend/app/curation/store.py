@@ -93,9 +93,29 @@ class CurationStore:
                 "decided_by": decided_by,
                 "decided_at": datetime.now(timezone.utc).isoformat(),
             }
+            # Engine re-runs rewrite "uncertain" records on every build; keep
+            # the advisor cooldown marker alive across them.
+            if (
+                status == "uncertain"
+                and existing is not None
+                and existing.get("llm_skipped_at")
+            ):
+                record["llm_skipped_at"] = existing["llm_skipped_at"]
             decisions[table] = record
             self._save(decisions)
             return record
+
+    def mark_llm_skipped(self, table: str) -> None:
+        """Stamp ``llm_skipped_at`` on an existing decision without touching
+        its status/provenance. Used as a cooldown marker: a table the LLM
+        already judged with low confidence is not re-asked on every run."""
+        with _LOCK:
+            decisions = self._load()
+            record = decisions.get(table)
+            if record is None:
+                return
+            record["llm_skipped_at"] = datetime.now(timezone.utc).isoformat()
+            self._save(decisions)
 
     # ── Denied merges (learning from rejections) ─────────────────────────────
 

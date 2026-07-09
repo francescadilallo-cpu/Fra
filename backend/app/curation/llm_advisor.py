@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 _MAX_UNCERTAIN = 40  # prompt guardrail: one advisory call stays bounded
 _MAX_CONTEXT_DOC_CHARS = 2000
 _DEFAULT_MIN_CONFIDENCE = 0.7
+_DEFAULT_RETRY_DAYS = 7.0
 
 _SYSTEM_PROMPT = """You curate the data model of a business-intelligence workspace.
 You receive tables whose business relevance is uncertain, the business entities
@@ -110,6 +111,30 @@ def _min_confidence() -> float:
     return min(max(value, 0.0), 1.0)
 
 
+def _retry_days() -> float:
+    raw = os.getenv("FRA_CURATION_LLM_RETRY_DAYS", "").strip()
+    try:
+        return max(float(raw), 0.0) if raw else _DEFAULT_RETRY_DAYS
+    except ValueError:
+        return _DEFAULT_RETRY_DAYS
+
+
+def _on_cooldown(decision: dict) -> bool:
+    """True when the LLM already judged this table with low confidence
+    recently — re-asking would repeat the cost for the same uncertain answer.
+    A forgotten/absent or unparseable marker means no cooldown."""
+    from datetime import datetime, timedelta, timezone  # noqa: PLC0415
+
+    marker = str(decision.get("llm_skipped_at", "") or "")
+    if not marker:
+        return False
+    try:
+        skipped_at = datetime.fromisoformat(marker)
+    except ValueError:
+        return False
+    return datetime.now(timezone.utc) - skipped_at < timedelta(days=_retry_days())
+
+
 def _confidence_of(item: dict) -> float:
     """Self-reported confidence, clamped to [0, 1]. A missing/broken value
     counts as fully confident so providers that ignore the field keep the
@@ -188,24 +213,38 @@ def advise(
     context_docs: list[str],
     store,
     submit_merge,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Run one advisory pass.
 
     ``store`` is the CurationStore; ``submit_merge(table, entity_name) -> str``
     submits a merge to the approval queue and returns a status string.
-    Returns a summary for the API response.
+    ``force`` ignores the low-confidence cooldown and re-asks every uncertain
+    table. Returns a summary for the API response.
     """
     decisions = store.all_decisions()
-    uncertain_tables = [
-        t
+    candidates = [
+        (t, d)
         for t, d in decisions.items()
         if d.get("status") == "uncertain" and t in schema
     ]
+    on_cooldown = [] if force else [t for t, d in candidates if _on_cooldown(d)]
+    cooldown_set = set(on_cooldown)
+    uncertain_tables = [t for t, _ in candidates if t not in cooldown_set]
     if not uncertain_tables:
+        note = (
+            "No uncertain tables to advise on"
+            if not on_cooldown
+            else (
+                f"All {len(on_cooldown)} uncertain tables are on low-confidence "
+                "cooldown — re-run with force to re-ask"
+            )
+        )
         return {
             "applied": [],
             "merge_proposals": [],
-            "note": "No uncertain tables to advise on",
+            "on_cooldown": on_cooldown,
+            "note": note,
         }
 
     uncertain_payload = [
@@ -250,7 +289,9 @@ def advise(
             continue
         confidence = _confidence_of(d)
         if confidence < threshold:
-            # Below threshold → the table stays "uncertain" for a human.
+            # Below threshold → the table stays "uncertain" for a human, and
+            # goes on cooldown so the next run doesn't pay to re-ask it.
+            store.mark_llm_skipped(table)
             skipped.append(
                 {
                     "table": table,
@@ -312,4 +353,6 @@ def advise(
     result: dict[str, Any] = {"applied": applied, "merge_proposals": proposals}
     if skipped:
         result["skipped_low_confidence"] = skipped
+    if on_cooldown:
+        result["on_cooldown"] = on_cooldown
     return result

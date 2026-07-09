@@ -781,3 +781,29 @@ def test_custom_agents_require_auth(auth_client):
     assert client.post("/api/agents/custom", json={}).status_code == 401
     assert client.put("/api/agents/custom/x", json={}).status_code == 401
     assert client.delete("/api/agents/custom/x").status_code == 401
+
+
+# ── LLM provider selection ────────────────────────────────────────────────────
+
+
+def test_llm_provider_anthropic_default_groq_fallback(monkeypatch):
+    """Anthropic wins when both keys are set; FRA_LLM_PROVIDER forces a
+    provider only if its key exists; no keys → None."""
+    import app.semantic.layer as layer_mod
+
+    monkeypatch.delenv("FRA_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a-key")
+    monkeypatch.setenv("GROQ_API_KEY", "g-key")
+    assert layer_mod._llm_intent_provider() == "anthropic"
+
+    monkeypatch.setenv("FRA_LLM_PROVIDER", "groq")
+    assert layer_mod._llm_intent_provider() == "groq"
+
+    # Forced provider without its key falls back to whatever is configured.
+    monkeypatch.setenv("FRA_LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert layer_mod._llm_intent_provider() == "groq"
+
+    monkeypatch.delenv("FRA_LLM_PROVIDER")
+    monkeypatch.delenv("GROQ_API_KEY")
+    assert layer_mod._llm_intent_provider() is None

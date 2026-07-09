@@ -280,6 +280,41 @@ class TestLlmAdvisor:
         advisor.advise(schema, entities, [], store, submit_merge=lambda t, e: "x")
         assert store.all_decisions()["floating_a"]["status"] == "excluded"
 
+    def test_low_confidence_puts_table_on_cooldown(self, tmp_path, monkeypatch):
+        llm_json = (
+            '{"decisions": [{"table": "floating_a", "decision": "exclude",'
+            ' "confidence": 0.4, "reason": "maybe"}], "merges": []}'
+        )
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        advisor.advise(schema, entities, [], store, submit_merge=lambda t, e: "x")
+        assert "llm_skipped_at" in store.all_decisions()["floating_a"]
+
+        # Second pass: floating_a is on cooldown and not re-asked; floating_b
+        # is still fair game.
+        asked: list[str] = []
+
+        def _spy(s, u, schema=None):
+            asked.append(u)
+            return '{"decisions": [], "merges": []}'
+
+        monkeypatch.setattr(advisor, "_complete_json", _spy)
+        result = advisor.advise(
+            schema, entities, [], store, submit_merge=lambda t, e: "x"
+        )
+        assert result["on_cooldown"] == ["floating_a"]
+        assert "floating_a" not in asked[0] and "floating_b" in asked[0]
+
+        # force=True re-asks everything.
+        result = advisor.advise(
+            schema, entities, [], store, submit_merge=lambda t, e: "x", force=True
+        )
+        assert "on_cooldown" not in result
+        assert "floating_a" in asked[1]
+
+        # The cooldown marker survives an engine re-run (uncertain rewrite).
+        run_curation(_schema(floating_a=(0, 5)), store=store)
+        assert "llm_skipped_at" in store.all_decisions()["floating_a"]
+
     def test_denied_merge_is_never_reproposed(self, tmp_path, monkeypatch):
         llm_json = (
             '{"decisions": [], "merges": ['

@@ -706,12 +706,14 @@ Analisi post-implementazione del layer di curation (engine + skill pack + adviso
 6. **Store decisioni su SQLite** *(DIFFERITA su decisione utente)* — `curation_decisions.json` con lock in-process va bene a 1 worker; con più worker uvicorn può raceare. Migrare al pattern SQLite degli altri store quando si scala.
 7. **Golden set di curation** *(implementata)* — `backend/tests/golden_curation.yaml` con tabelle e decisione attesa; test data-driven che fa da regression guard su pack e dizionario.
 
-### Piano cambio provider LLM (DIFFERITO — approvato in analisi, non implementato)
+### Piano cambio provider LLM (PARZIALE — selezione implementata, integrazioni differite)
 
 L'agente è già provider-agnostico by design: guardrail (anti-allucinazione, HITL, gerarchia pin, reversibilità, tier deterministici) vivono fuori dal modello; l'unico punto di contatto è `_complete_json(system, user) -> str`.
 
+Aggiornamento 2026-07-09 (richiesta utente): **Anthropic è ora il provider di default** quando `ANTHROPIC_API_KEY` è presente, Groq è il fallback, e `FRA_LLM_PROVIDER=anthropic|groq` forza la scelta (la chiave relativa deve esistere, altrimenti si degrada con warning). Implementato in `layer._llm_intent_provider`. Restano differite l'estrazione di `provider.py` e le integrazioni Foundry/Bedrock/Vertex/Azure OpenAI qui sotto.
+
 Piano quando servirà:
-- Estrarre `backend/app/llm/provider.py` con interfaccia unica `complete_json(system, user, schema=None)` e selezione esplicita `FRA_LLM_PROVIDER` (oggi: presenza chiave, Groq > Anthropic).
+- Estrarre `backend/app/llm/provider.py` con interfaccia unica `complete_json(system, user, schema=None)`.
 - **Claude diretto**: già supportato (`ANTHROPIC_API_KEY`); modello raccomandato per il giudizio di curation `claude-opus-4-8` ($5/$25 per MTok) o `claude-haiku-4-5` ($1/$5) se domina il costo; override via `ANTHROPIC_MODEL` senza deploy.
 - **Microsoft, due strade**: (a) Foundry serve i modelli Claude — client dedicato `AnthropicFoundry` dell'SDK Anthropic, stesso `messages.create`, auth/billing Azure (structured outputs/caching lì in beta); (b) Azure OpenAI (GPT) — endpoint OpenAI-compatibile, adapter ~20 righe riusando il trasporto Groq (endpoint deployment + api-key header + api-version).
 - **AWS Bedrock / Google Vertex**: client dedicati nello stesso SDK Anthropic (`AnthropicBedrockMantle`, `AnthropicVertex`) per Claude su quelle piattaforme.

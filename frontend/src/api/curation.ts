@@ -39,15 +39,36 @@ export interface CurationReport {
 }
 
 export interface CurationAdviseResult {
-  applied: CurationDecision[]
+  applied: (CurationDecision & { confidence?: number })[]
   merge_proposals: {
     table: string
     with_entity: string
     concept?: string
+    confidence?: number
     reason: string
     queued: string
   }[]
+  /** Verdicts the AI was not confident enough about — left for a human. */
+  skipped_low_confidence?: {
+    table: string
+    decision?: string
+    merge_with?: string
+    confidence: number
+    reason: string
+  }[]
+  /** Tables not re-asked because a recent run already judged them low-confidence. */
+  on_cooldown?: string[]
   note?: string
+}
+
+export interface CurationAdvisorJob {
+  status: 'idle' | 'running' | 'done' | 'error'
+  result?: CurationAdviseResult
+  error?: string
+  started_at?: string
+  finished_at?: string
+  started_by?: string
+  force?: boolean
 }
 
 export const getCurationReport = (): Promise<CurationReport> =>
@@ -65,5 +86,28 @@ export const setCurationDecision = (
 export const runCuration = (): Promise<CurationReport> =>
   http.post<CurationReport>('/api/curation/run').then(r => r.data)
 
-export const runCurationAdvisor = (): Promise<CurationAdviseResult> =>
-  http.post<CurationAdviseResult>('/api/curation/advise').then(r => r.data)
+export const startCurationAdvisor = (force = false): Promise<{ status: string }> =>
+  http.post<{ status: string }>('/api/curation/advise', { force }).then(r => r.data)
+
+export const getCurationAdvisorStatus = (): Promise<CurationAdvisorJob> =>
+  http.get<CurationAdvisorJob>('/api/curation/advise/status').then(r => r.data)
+
+/**
+ * Start an AI review and poll until it finishes. The backend runs the review
+ * as a background job (the model call can take ~30s), so the POST returns
+ * immediately and we poll the status endpoint.
+ */
+export const runCurationAdvisor = async (
+  force = false,
+): Promise<CurationAdviseResult> => {
+  await startCurationAdvisor(force)
+  const deadline = Date.now() + 180_000
+  while (Date.now() < deadline) {
+    await new Promise(res => setTimeout(res, 1500))
+    const job = await getCurationAdvisorStatus()
+    if (job.status === 'done' && job.result) return job.result
+    if (job.status === 'error') throw new Error(job.error ?? 'AI review failed')
+    if (job.status === 'idle') throw new Error('AI review did not start')
+  }
+  throw new Error('AI review timed out — check back with a re-run later')
+}

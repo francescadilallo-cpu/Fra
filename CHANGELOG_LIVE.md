@@ -10,6 +10,45 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-09 bis (Anthropic default, advise asincrono, cooldown, router, UI advisor)
+
+Seconda tranche di migliorie richieste dall'utente:
+
+1. **Anthropic (Claude) è il provider LLM di default**, Groq il fallback
+   (prima era l'inverso); nuovo override esplicito `FRA_LLM_PROVIDER=
+   anthropic|groq` (con degradazione se la chiave manca). Modello via
+   `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
+2. **`/api/curation/advise` è asincrono**: POST avvia un job in background
+   (202; 409 se già in corso; 503 senza chiave) e `GET /advise/status` fa
+   polling — la chiamata LLM (~30s) non occupa più un thread del pool API.
+   Body opzionale `{force: true}` per ignorare il cooldown.
+3. **Cooldown low-confidence**: una tabella già giudicata con confidence
+   sotto soglia viene marcata (`llm_skipped_at`, sopravvive ai re-run del
+   motore) e non ri-chiesta all'LLM per `FRA_CURATION_LLM_RETRY_DAYS`
+   (default 7) — niente costi ripetuti per la stessa risposta incerta.
+4. **Router estratto**: gli endpoint curation vivono in
+   `app/curation/router.py` (router-factory, stesso pattern del layer
+   agentico) — main.py scende di ~200 righe e i prossimi endpoint curation
+   nascono fuori dal monolite-file. Percorsi, auth e shape invariati
+   (tranne /advise, ora asincrono come sopra).
+5. **UI advisor trasparente**: il pannello Schema curation ora mostra
+   l'esito completo dell'AI review — proposte merge con stato (in attesa di
+   approvazione / bloccata perché già rifiutata), verdetti scartati per
+   confidence bassa (con percentuale e motivo), tabelle in cooldown. Il
+   flusso usa start+polling, con indicatore "review in progress".
+6. **Verifica E2E**: `backend/scripts/verify_advisor_llm.py` esercita il
+   path LLM reale (structured outputs + caching + fallback) con una chiave
+   configurata; SDK anthropic 0.40.0 verificato compatibile (extra_body,
+   system a blocchi, BadRequestError).
+
+**Files:** `backend/app/semantic/layer.py`, `backend/app/curation/{router,llm_advisor,store}.py`,
+`backend/app/main.py`, `backend/scripts/verify_advisor_llm.py`, `backend/Dockerfile`,
+`backend/tests/{test_curation_api.py,test_curation.py,test_resilience.py}`,
+`frontend/src/api/curation.ts`, `frontend/src/components/CurationPanel.tsx`.
+Test: 1341 passed; tsc e build frontend puliti.
+
+---
+
 ## 2026-07-09 (Curation hardening: 6 migliorie alla logica — #6 SQLite differita)
 
 Implementate le migliorie identificate nell'analisi del 2026-07-06

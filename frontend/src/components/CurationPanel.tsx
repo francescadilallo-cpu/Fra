@@ -8,10 +8,10 @@
  * the approval queue, they never auto-execute).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Filter, RefreshCw, Sparkles, Eye, EyeOff, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Filter, RefreshCw, Sparkles, Eye, EyeOff, Loader2, ChevronDown, ChevronRight, X } from 'lucide-react'
 import {
   getCurationReport, setCurationDecision, runCuration, runCurationAdvisor,
-  type CurationDecision, type CurationReport,
+  type CurationAdviseResult, type CurationDecision, type CurationReport,
 } from '../api/curation'
 import { getAuthToken } from '../api/client'
 import { backendErrorMessage } from '../api/semantic'
@@ -89,10 +89,73 @@ function Section({ title, items, tone, onFlip, busy, defaultOpen }: {
   )
 }
 
+function pct(confidence?: number): string {
+  return confidence == null ? '' : ` · ${Math.round(confidence * 100)}%`
+}
+
+function AdviseOutcome({ res, onClose }: { res: CurationAdviseResult; onClose: () => void }) {
+  const skipped = res.skipped_low_confidence ?? []
+  const cooldown = res.on_cooldown ?? []
+  return (
+    <div className="border border-indigo-100 bg-indigo-50/50 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+        <span className="text-xs font-semibold text-slate-700">AI review outcome</span>
+        <span className="text-[11px] text-slate-400">
+          {res.applied.length} applied · {res.merge_proposals.length} merge proposal{res.merge_proposals.length === 1 ? '' : 's'}
+        </span>
+        <button onClick={onClose} className="ml-auto text-slate-300 hover:text-slate-500" title="Dismiss">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {res.merge_proposals.length > 0 && (
+        <div className="space-y-1">
+          {res.merge_proposals.map((m, i) => (
+            <div key={i} className="text-[11px] text-slate-500 flex items-baseline gap-1.5 flex-wrap">
+              <span className="font-mono text-slate-700">{m.table}</span>
+              <span>→</span>
+              <span className="font-mono text-slate-700">{m.with_entity}</span>
+              {m.queued.startsWith('pending_approval') ? (
+                <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">awaiting your approval</span>
+              ) : m.queued.startsWith('denied') ? (
+                <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full" title={m.queued}>blocked — previously rejected</span>
+              ) : (
+                <span className="text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full" title={m.queued}>not queued</span>
+              )}
+              <span className="text-slate-400" title={m.reason}>{m.reason.length > 60 ? m.reason.slice(0, 60) + '…' : m.reason}{pct(m.confidence)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <div className="text-[11px] text-slate-500">
+          <span className="font-medium text-slate-600">Left for you to review (AI not confident enough):</span>
+          <div className="mt-0.5 space-y-0.5">
+            {skipped.map((s, i) => (
+              <div key={i} className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="font-mono text-slate-700">{s.table}</span>
+                <span className="text-slate-400">
+                  {s.merge_with ? `merge with ${s.merge_with}` : s.decision}{pct(s.confidence)} — {s.reason.length > 60 ? s.reason.slice(0, 60) + '…' : s.reason}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {cooldown.length > 0 && (
+        <p className="text-[11px] text-slate-400">
+          {cooldown.length} table{cooldown.length === 1 ? '' : 's'} skipped — already reviewed recently with low confidence. They stay under “Needs review”.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function CurationPanel() {
   const [report, setReport] = useState<CurationReport | null>(null)
   const [busy, setBusy] = useState(false)
   const [advising, setAdvising] = useState(false)
+  const [adviseResult, setAdviseResult] = useState<CurationAdviseResult | null>(null)
 
   const refresh = useCallback(() => {
     getCurationReport().then(setReport).catch(() => {})
@@ -128,6 +191,7 @@ export default function CurationPanel() {
 
   const advise = useCallback(async () => {
     setAdvising(true)
+    setAdviseResult(null)
     try {
       const res = await runCurationAdvisor()
       const n = res.applied.length
@@ -136,9 +200,13 @@ export default function CurationPanel() {
         res.note ?? `AI review: ${n} decision${n === 1 ? '' : 's'} applied, ${m} merge proposal${m === 1 ? '' : 's'} queued for approval`,
         'success',
       )
+      setAdviseResult(res)
       refresh()
     } catch (err) {
-      toast(backendErrorMessage(err) || 'AI review unavailable', 'error')
+      toast(
+        backendErrorMessage(err) || (err instanceof Error ? err.message : 'AI review unavailable'),
+        'error',
+      )
     } finally { setAdvising(false) }
   }, [refresh])
 
@@ -180,6 +248,13 @@ export default function CurationPanel() {
       <p className="text-xs text-slate-400">
         Every table gets a decision with its reason. Exclusions only hide a table from the model — the data stays in place and one click restores it.
       </p>
+      {advising && (
+        <p className="text-[11px] text-indigo-500 flex items-center gap-1.5">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          AI review in progress — this can take up to a minute, you can keep working.
+        </p>
+      )}
+      {adviseResult && <AdviseOutcome res={adviseResult} onClose={() => setAdviseResult(null)} />}
       <div className="space-y-2">
         <Section title="Needs review" items={report.uncertain} tone="bg-amber-100 text-amber-700" onFlip={flip} busy={busy} defaultOpen />
         <Section title="Excluded from the model" items={report.excluded} tone="bg-slate-200 text-slate-600" onFlip={flip} busy={busy} />
