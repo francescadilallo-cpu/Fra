@@ -23,7 +23,11 @@ from ..paths import data_dir
 logger = logging.getLogger(__name__)
 
 DecisionStatus = Literal["kept", "excluded", "uncertain"]
-DecidedBy = Literal["rule", "signal", "user"]
+DecidedBy = Literal["rule", "signal", "llm", "user"]
+
+# Pin strength: engine tiers (rule/signal) freely overwrite each other on every
+# run; an LLM verdict survives engine re-runs; a human decision beats all.
+_PIN_RANK: dict[str, int] = {"rule": 0, "signal": 0, "llm": 1, "user": 2}
 
 _LOCK = threading.RLock()
 
@@ -71,16 +75,14 @@ class CurationStore:
         reason: str,
         decided_by: DecidedBy,
     ) -> dict:
-        """Record a decision. Engine (`rule`/`signal`) decisions never override
-        a pinned `user` decision; a `user` decision always wins and pins."""
+        """Record a decision, honouring pin strength (user > llm > engine):
+        a weaker source never overwrites a stronger one's decision."""
         with _LOCK:
             decisions = self._load()
             existing = decisions.get(table)
-            if (
-                existing is not None
-                and existing.get("decided_by") == "user"
-                and decided_by != "user"
-            ):
+            if existing is not None and _PIN_RANK.get(
+                str(existing.get("decided_by")), 0
+            ) > _PIN_RANK.get(decided_by, 0):
                 return existing
             record = {
                 "status": status,

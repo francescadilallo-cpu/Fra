@@ -148,3 +148,119 @@ class TestReport:
         # A table that disappeared from the schema drops out of the report.
         scoped = curation_report(store=s, schema_tables={"crm_accounts"})
         assert scoped["counts"]["excluded"] == 0
+
+
+# ── LLM advisor (fake LLM — no network) ───────────────────────────────────────
+
+
+class TestLlmAdvisor:
+    def _setup(self, tmp_path, monkeypatch, llm_json: str):
+        from app.curation import llm_advisor
+
+        monkeypatch.setattr(llm_advisor, "_complete_json", lambda s, u: llm_json)
+        store = _store(tmp_path)
+        store.set_decision("floating_a", "uncertain", "signal:x", decided_by="signal")
+        store.set_decision("floating_b", "uncertain", "signal:x", decided_by="signal")
+        schema = _schema(floating_a=(0, 5), floating_b=(0, 5), crm_accounts=(10, 5))
+        entities = [
+            {
+                "name": "crm_accounts",
+                "table": "crm_accounts",
+                "canonical": "Customer",
+                "columns": [],
+            }
+        ]
+        return llm_advisor, store, schema, entities
+
+    def test_applies_verdicts_and_queues_merges(self, tmp_path, monkeypatch):
+        llm_json = (
+            '{"decisions": ['
+            '{"table": "floating_a", "decision": "exclude", "reason": "ETL scratch"},'
+            '{"table": "floating_b", "decision": "keep", "reason": "looks business"},'
+            '{"table": "hallucinated", "decision": "exclude", "reason": "x"}],'
+            '"merges": ['
+            '{"table": "floating_b", "with_entity": "crm_accounts", "concept": "Customer", "reason": "same figure"},'
+            '{"table": "floating_a", "with_entity": "ghost_entity", "concept": "X", "reason": "bad"}]}'
+        )
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        queued: list[tuple] = []
+        result = advisor.advise(
+            schema,
+            entities,
+            [],
+            store,
+            submit_merge=lambda t, e: queued.append((t, e)) or "pending_approval:x",
+        )
+        decisions = store.all_decisions()
+        assert decisions["floating_a"]["status"] == "excluded"
+        assert decisions["floating_a"]["decided_by"] == "llm"
+        assert decisions["floating_b"]["status"] == "kept"
+        assert "hallucinated" not in decisions  # hallucination guard
+        # Merge to a real entity queued; merge to a hallucinated one dropped.
+        assert queued == [("floating_b", "crm_accounts")]
+        assert len(result["merge_proposals"]) == 1
+
+    def test_llm_verdict_survives_engine_rerun_but_not_user(
+        self, tmp_path, monkeypatch
+    ):
+        llm_json = '{"decisions": [{"table": "floating_a", "decision": "exclude", "reason": "noise"}], "merges": []}'
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        advisor.advise(schema, entities, [], store, submit_merge=lambda t, e: "x")
+        # Engine re-run: floating_a has no signal → would be "uncertain", but
+        # the llm pin survives.
+        run_curation(_schema(floating_a=(0, 5)), store=store)
+        assert store.all_decisions()["floating_a"]["status"] == "excluded"
+        # A user decision overrides the llm one.
+        store.set_decision("floating_a", "kept", "user wants it", decided_by="user")
+        assert store.all_decisions()["floating_a"]["status"] == "kept"
+
+    def test_no_uncertain_is_a_noop(self, tmp_path, monkeypatch):
+        from app.curation import llm_advisor
+
+        monkeypatch.setattr(
+            llm_advisor,
+            "_complete_json",
+            lambda s, u: (_ for _ in ()).throw(AssertionError("must not be called")),
+        )
+        store = _store(tmp_path)
+        result = llm_advisor.advise({}, [], [], store, submit_merge=lambda t, e: "x")
+        assert result["applied"] == [] and "note" in result
+
+
+# ── Learning loop ─────────────────────────────────────────────────────────────
+
+
+class TestLearningLoop:
+    def test_approved_merge_teaches_alias(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path))
+        from app.curation.learning import record_merge
+        from app.semantic.canonical import canonical_concept
+
+        added = record_merge(
+            {"table": "crm_accounts"},  # resolves to Customer
+            {"table": "raw_patients"},  # unknown side → learned
+        )
+        assert added == 1
+        assert canonical_concept("raw_patients") == "Customer"
+        # Persisted in the workspace pack for future processes.
+        import yaml as _y
+
+        pack = _y.safe_load((tmp_path / "curation_workspace.yaml").read_text())
+        assert "patients" in pack["aliases"]["Customer"]
+
+    def test_concept_assignment_teaches_alias(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path))
+        from app.curation.learning import record_concept
+        from app.semantic.canonical import canonical_concept
+
+        added = record_concept({"table": "erp_soci"}, "Customer")
+        assert added == 1
+        assert canonical_concept("erp_soci") == "Customer"
+
+    def test_both_sides_known_learns_nothing(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path))
+        from app.curation.learning import record_merge
+
+        assert (
+            record_merge({"table": "crm_accounts"}, {"table": "legacy_customers"}) == 0
+        )

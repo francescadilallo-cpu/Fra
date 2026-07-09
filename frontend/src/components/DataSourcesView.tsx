@@ -20,6 +20,7 @@ import {
 } from '../api/sources'
 import { Mail } from 'lucide-react'
 import { buildSemanticLayer, semanticSources, backendErrorMessage, getSourceProfiles, analyzeSources, createMetric, addRelation } from '../api/semantic'
+import CurationPanel from './CurationPanel'
 import type { TableProfile, AnalyzeResult } from '../api/semantic'
 import { IS_DEMO_MODE, workspaceLabel } from '../lib/demoMode'
 import {
@@ -2560,6 +2561,9 @@ export default function DataSourcesView({ onNavigate }: { onNavigate?: (tab: Nav
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />{sourcesError}
               </div>
             )}
+
+            {/* Schema curation — which tables make it into the model, and why */}
+            <CurationPanel />
 
             {/* Step content — only the active step is rendered */}
             <div className="min-h-80">

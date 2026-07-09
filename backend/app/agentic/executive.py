@@ -722,6 +722,14 @@ class ExecutiveAgenticLayer:
                 via_column="",
                 edge_type="SAME_AS",
             )
+            # Learning loop: the approved association becomes a workspace
+            # alias so future sources match deterministically. Best-effort.
+            try:
+                from app.curation.learning import record_merge  # noqa: PLC0415
+
+                record_merge(entity, entity_b)
+            except Exception:  # noqa: BLE001 — never fail the approved action
+                logger.debug("curation learning hook failed", exc_info=True)
         elif action.action_type == "RENAME_ENTITY":
             if not catalog.set_entity_display(
                 entity["name"], display_name=(action.new_name or "").strip()
@@ -737,6 +745,12 @@ class ExecutiveAgenticLayer:
                 raise AgentExecutionError(
                     f"Could not set concept on entity '{entity['name']}'"
                 )
+            try:
+                from app.curation.learning import record_concept  # noqa: PLC0415
+
+                record_concept(entity, resolved)
+            except Exception:  # noqa: BLE001 — never fail the approved action
+                logger.debug("curation learning hook failed", exc_info=True)
         else:  # pragma: no cover — guarded by the caller's dispatch
             raise AgentExecutionError(f"Unsupported action_type: {action.action_type}")
 

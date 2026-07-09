@@ -57,7 +57,11 @@ from .models import (
     RecentOrder,
     SegmentCreate,
 )
-from .agentic.executive import ActionEffect, ExecutiveAgenticLayer
+from .agentic.executive import (
+    ActionEffect,
+    AgentSemanticValidationError,
+    ExecutiveAgenticLayer,
+)
 from .agentic.router import build_agent_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
@@ -2953,6 +2957,83 @@ def run_curation_now(
     _curation_refresh()
     _audit(request, current_user, "Curation run", "manual re-run", category="config")
     return curation_report()
+
+
+@app.post("/api/curation/advise", tags=["curation"])
+def run_curation_advisor(
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """LLM advisory pass over the *uncertain* tables.
+
+    keep/exclude verdicts are applied as reversible curation decisions
+    (provenance ``llm`` — a user pin always beats them); merge proposals are
+    queued as MERGE_ENTITIES actions in the human-approval queue, never
+    executed directly. Requires an LLM provider key; 503 otherwise.
+    """
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .connectors.source_registry import get_source_registry
+    from .curation.llm_advisor import advise, llm_available
+    from .curation.store import get_curation_store
+
+    if not llm_available():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "No LLM provider configured (set GROQ_API_KEY or "
+                "ANTHROPIC_API_KEY) — the deterministic curation tiers "
+                "remain active"
+            ),
+        )
+
+    _ensure_semantic_loaded()
+    mgr = get_source_manager(_SCENARIO_PATH)
+    internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+    schema = {t: i for t, i in mgr.get_schema_info().items() if t not in internal}
+
+    catalog = _semantic_state.get("catalog")
+    entities = _enrich_entity_display(
+        [
+            e
+            for e in (catalog.get_draft_entities() if catalog else [])
+            if not _SF_META_TABLE_RE.match(e["table"])
+        ]
+    )
+    context_docs = [
+        str(c.params.get("content", ""))
+        for c in get_source_registry().list()
+        if c.connector_type == "context_doc" and c.params.get("content")
+    ]
+
+    def _submit_merge(table: str, entity_name: str) -> str:
+        try:
+            action = _agentic_layer.submit_command(
+                f"merge entities {table} and {entity_name}",
+                actor=f"curation-advisor({current_user.username})",
+                actor_role="user",
+            )
+            return f"pending_approval:{action.action_id}"
+        except AgentSemanticValidationError as exc:
+            return f"not_queued:{exc}"
+
+    try:
+        result = advise(
+            schema, entities, context_docs, get_curation_store(), _submit_merge
+        )
+    except Exception as exc:  # noqa: BLE001 — surface as a clean API error
+        raise HTTPException(status_code=502, detail=f"LLM advisory failed: {exc}")
+
+    if result.get("applied"):
+        _curation_refresh()
+    _audit(
+        request,
+        current_user,
+        "Curation LLM advisory",
+        f"{len(result.get('applied', []))} decisions, "
+        f"{len(result.get('merge_proposals', []))} merge proposals",
+        category="config",
+    )
+    return result
 
 
 @app.get("/api/curation/skills", tags=["curation"])

@@ -10,6 +10,39 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-06 (Curation fase 2: advisor LLM, loop di apprendimento, pannello UI)
+
+Completata la fase 2 del layer di curation:
+
+**Advisor LLM** (`curation/llm_advisor.py`, `POST /api/curation/advise`, admin):
+giudica SOLO le tabelle "uncertain" (mai l'intero schema, mai dati di riga —
+solo nomi colonna e conteggi) usando le entità esistenti e i context documents.
+I verdetti keep/exclude diventano decisioni reversibili con provenienza `llm`
+(pin: user > llm > engine — un re-run del motore non li cancella, l'utente sì);
+le proposte di merge NON eseguono nulla: entrano come MERGE_ENTITIES nella coda
+di approvazione umana. Guardia anti-allucinazione (solo tabelle/entità reali);
+senza API key → 503 e i tier deterministici restano attivi.
+
+**Loop di apprendimento** (`curation/learning.py`): un merge o un concetto
+APPROVATO insegna al sistema — il nome base dell'entità sconosciuta diventa
+alias del concetto nel workspace pack (persistito + dizionario vivo). La
+prossima sorgente con una tabella "pazienti" risolve a Customer subito, senza
+LLM e senza seconda approvazione. Hook best-effort in
+`executive._execute_data_model`.
+
+**Pannello UI** (`CurationPanel.tsx` in Data Sources, solo live): report
+kept/excluded/da-rivedere con motivo e provenienza (rule/auto/AI/you), flip
+reversibile Exclude/Restore per tabella, Re-run, e "AI review" (admin) per
+l'advisor. Si aggiorna su `pipeline-run-updated`.
+
+**Files:** `backend/app/curation/{llm_advisor,learning,store}.py`,
+`backend/app/agentic/executive.py`, `backend/app/main.py`,
+`backend/app/semantic/canonical.py`, `frontend/src/api/curation.ts`,
+`frontend/src/components/{CurationPanel,DataSourcesView}.tsx`,
+`backend/tests/test_curation.py`
+
+---
+
 ## 2026-07-06 (Curation layer: scrematura intelligente e reversibile dello schema)
 
 Nuovo layer di curation (`backend/app/curation/`) — l'"agente" deterministico

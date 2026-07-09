@@ -145,6 +145,9 @@ Scrematura source-agnostica DOPO i filtri hard dei connettori e PRIMA di KG/data
 - **skills/*.yaml**: pacchetti regole per tipo sorgente (`generic.yaml`, `salesforce.yaml`) — pattern regex keep/exclude con id. **Workspace pack** (`data_dir()/curation_workspace.yaml`, editabile via API senza deploy): regole + `aliases` che estendono il dizionario canonico (es. `Customer: [paziente, pazienti]` via `canonical.extend_aliases`).
 - **store.py**: decisioni durevoli in `curation_decisions.json` (gitignored), reversibili — l'esclusione è solo presentazione (tabella resta in DuckDB); decisioni `user` pinnate, mai sovrascritte dal motore.
 - **Integrazione**: `main._run_curation(mgr)` gira in `_ensure_semantic_loaded` (pre-build KG) e `_refresh_catalog_and_kg_after_rebuild` (post-sync); esclusioni unite in `_hidden_demo_tables` (tutte le modalità) e in `kg.build_from_schema` via `mgr.curation_excluded_tables`.
+- **llm_advisor.py** (fase 2): `POST /api/curation/advise` (admin) — LLM solo sulle tabelle uncertain (nomi colonna+conteggi, mai righe); verdetti keep/exclude come decisioni `llm` (pin user > llm > engine), proposte merge → coda approvazione via MERGE_ENTITIES; guardia anti-allucinazione; 503 senza provider key
+- **learning.py** (fase 2): merge/concetti approvati → alias nel workspace pack (`table_base_name` → concetto) + dizionario vivo; hook best-effort in `executive._execute_data_model`
+- **UI**: `CurationPanel.tsx` in Data Sources (live) — report con motivi/provenienza, flip Exclude/Restore, Re-run, AI review (admin)
 - **API** (`/api/curation/*`): `GET report` (kept/excluded/uncertain con motivi), `POST decision` (pin utente reversibile + refresh KG), `POST run` (ri-esecuzione), `GET/PUT skills` (workspace pack, admin, validazione YAML).
 
 ### 3.4 Knowledge Graph

@@ -77,6 +77,14 @@ def _singular(word: str) -> str:
     return word
 
 
+def table_base_name(table: str) -> str:
+    """Normalised business base name of a table (source prefixes stripped),
+    e.g. ``sf_x_pazienti`` → ``pazienti``. Used as the alias key when the
+    learning loop folds an approved decision into the workspace pack."""
+    toks = _tokens(table)
+    return "_".join(toks) if toks else table.lower()
+
+
 def display_name(table: str, label: str | None = None) -> str:
     """Human-friendly entity name for *table*. A connector label wins outright."""
     if label and label.strip():
