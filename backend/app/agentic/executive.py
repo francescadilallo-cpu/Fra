@@ -288,6 +288,21 @@ class ExecutiveAgenticLayer:
                     actor_role=actor_role,
                     details={"manager_note": manager_note or ""},
                 )
+                # Learning loop: a rejected merge goes on the advisor's
+                # deny-list so it is never re-proposed. Best-effort.
+                if action.proposed_action.action_type == "MERGE_ENTITIES":
+                    try:
+                        from app.curation.learning import (  # noqa: PLC0415
+                            record_rejected_merge,
+                        )
+
+                        record_rejected_merge(
+                            action.proposed_action,
+                            self._get_catalog() if self._get_catalog else None,
+                            note=manager_note or "",
+                        )
+                    except Exception:  # noqa: BLE001 — never fail the reject
+                        logger.debug("rejection learning hook failed", exc_info=True)
                 return action
 
             self._audit(
@@ -669,6 +684,27 @@ class ExecutiveAgenticLayer:
                         ),
                     )
             checks.append("business_rule_not_already_merged")
+            # Same pair already awaiting approval → don't queue a duplicate.
+            # (At approval time this action is claimed as PROCESSING, so the
+            # re-validation never collides with itself.)
+            for pending in self._store.list_actions(
+                status_filter="PENDING_HUMAN_APPROVAL", limit=200
+            ):
+                pa = pending.proposed_action
+                if pa.action_type != "MERGE_ENTITIES":
+                    continue
+                pe = self._resolve_entity(catalog, pa.entity or "")
+                pb = self._resolve_entity(catalog, pa.entity_b or "")
+                if pe and pb and {pe["table"], pb["table"]} == pair:
+                    return ValidationOutcome(
+                        passed=False,
+                        checks=checks,
+                        reason=(
+                            f"A merge of '{entity['name']}' and "
+                            f"'{entity_b['name']}' is already pending approval"
+                        ),
+                    )
+            checks.append("business_rule_no_duplicate_pending")
 
         elif action.action_type == "RENAME_ENTITY":
             new_name = (action.new_name or "").strip()

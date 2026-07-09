@@ -50,6 +50,19 @@ class TestStore:
         assert s.forget("t1") and s.all_decisions() == {}
         assert not s.forget("t1")
 
+    def test_denied_merges_are_symmetric_and_persistent(self, tmp_path):
+        s = _store(tmp_path)
+        assert not s.is_merge_denied("a", "b")
+        s.add_denied_merge("Customers", "sf_account", reason="rejected:dup")
+        # Order- and case-insensitive.
+        assert s.is_merge_denied("sf_account", "customers")
+        assert s.is_merge_denied("CUSTOMERS", "SF_ACCOUNT")
+        assert not s.is_merge_denied("customers", "orders")
+        # Survives a fresh store instance (persisted on disk).
+        s2 = _store(tmp_path)
+        assert s2.is_merge_denied("sf_account", "Customers")
+        assert len(s2.denied_merges()) == 1
+
 
 class TestEngineSignals:
     def test_rows_concept_connectivity_and_junk(self, tmp_path):
@@ -157,7 +170,9 @@ class TestLlmAdvisor:
     def _setup(self, tmp_path, monkeypatch, llm_json: str):
         from app.curation import llm_advisor
 
-        monkeypatch.setattr(llm_advisor, "_complete_json", lambda s, u: llm_json)
+        monkeypatch.setattr(
+            llm_advisor, "_complete_json", lambda s, u, schema=None: llm_json
+        )
         store = _store(tmp_path)
         store.set_decision("floating_a", "uncertain", "signal:x", decided_by="signal")
         store.set_decision("floating_b", "uncertain", "signal:x", decided_by="signal")
@@ -220,11 +235,69 @@ class TestLlmAdvisor:
         monkeypatch.setattr(
             llm_advisor,
             "_complete_json",
-            lambda s, u: (_ for _ in ()).throw(AssertionError("must not be called")),
+            lambda s, u, schema=None: (_ for _ in ()).throw(
+                AssertionError("must not be called")
+            ),
         )
         store = _store(tmp_path)
         result = llm_advisor.advise({}, [], [], store, submit_merge=lambda t, e: "x")
         assert result["applied"] == [] and "note" in result
+
+    def test_low_confidence_verdicts_are_skipped(self, tmp_path, monkeypatch):
+        llm_json = (
+            '{"decisions": ['
+            '{"table": "floating_a", "decision": "exclude", "confidence": 0.4, "reason": "maybe noise"},'
+            '{"table": "floating_b", "decision": "keep", "confidence": 0.95, "reason": "clearly business"}],'
+            '"merges": ['
+            '{"table": "floating_b", "with_entity": "crm_accounts", "concept": "Customer",'
+            ' "confidence": 0.3, "reason": "weak hunch"}]}'
+        )
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        queued: list[tuple] = []
+        result = advisor.advise(
+            schema,
+            entities,
+            [],
+            store,
+            submit_merge=lambda t, e: queued.append((t, e)) or "x",
+        )
+        decisions = store.all_decisions()
+        # Low-confidence exclude discarded → stays uncertain for a human.
+        assert decisions["floating_a"]["status"] == "uncertain"
+        assert decisions["floating_b"]["status"] == "kept"
+        # Low-confidence merge never reaches the approval queue.
+        assert queued == []
+        skipped = result["skipped_low_confidence"]
+        assert {s["table"] for s in skipped} == {"floating_a", "floating_b"}
+
+    def test_confidence_threshold_env_override(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("FRA_CURATION_LLM_MIN_CONFIDENCE", "0.2")
+        llm_json = (
+            '{"decisions": [{"table": "floating_a", "decision": "exclude",'
+            ' "confidence": 0.4, "reason": "noise"}], "merges": []}'
+        )
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        advisor.advise(schema, entities, [], store, submit_merge=lambda t, e: "x")
+        assert store.all_decisions()["floating_a"]["status"] == "excluded"
+
+    def test_denied_merge_is_never_reproposed(self, tmp_path, monkeypatch):
+        llm_json = (
+            '{"decisions": [], "merges": ['
+            '{"table": "floating_b", "with_entity": "crm_accounts", "concept": "Customer",'
+            ' "confidence": 0.9, "reason": "same figure"}]}'
+        )
+        advisor, store, schema, entities = self._setup(tmp_path, monkeypatch, llm_json)
+        store.add_denied_merge("floating_b", "crm_accounts", reason="rejected:test")
+        queued: list[tuple] = []
+        result = advisor.advise(
+            schema,
+            entities,
+            [],
+            store,
+            submit_merge=lambda t, e: queued.append((t, e)) or "x",
+        )
+        assert queued == []
+        assert result["merge_proposals"][0]["queued"].startswith("denied:")
 
 
 # ── Learning loop ─────────────────────────────────────────────────────────────
@@ -264,3 +337,26 @@ class TestLearningLoop:
         assert (
             record_merge({"table": "crm_accounts"}, {"table": "legacy_customers"}) == 0
         )
+
+    def test_rejected_merge_lands_on_deny_list(self, tmp_path, monkeypatch):
+        from app.curation import store as store_mod
+        from app.curation.learning import record_rejected_merge
+
+        s = _store(tmp_path)
+        monkeypatch.setattr(store_mod, "get_curation_store", lambda: s)
+
+        class _Action:
+            entity = "Pazienti"
+            entity_b = "crm_accounts"
+
+        class _Catalog:
+            def get_draft_entities(self):
+                return [
+                    {"name": "Pazienti", "table": "raw_patients"},
+                    {"name": "crm_accounts", "table": "crm_accounts"},
+                ]
+
+        record_rejected_merge(_Action(), _Catalog(), note="not the same thing")
+        # Refs resolved to physical tables and stored symmetrically.
+        assert s.is_merge_denied("raw_patients", "crm_accounts")
+        assert not s.is_merge_denied("raw_patients", "orders")

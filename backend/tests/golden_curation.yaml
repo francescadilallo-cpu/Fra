@@ -1,0 +1,98 @@
+# Golden curation set — the regression contract for the deterministic engine.
+#
+# Each case is a realistic mixed schema run through run_curation(); every
+# table states the status it MUST end up with (and optionally the exact
+# reason). If an edit to the engine or a skill pack changes any of these
+# outcomes, the corresponding test fails and the change has to be either
+# fixed or consciously reflected here.
+#
+# Table spec: {rows: <row_count>, cols: <n columns>, expect: kept|excluded|uncertain,
+#              reason: <optional exact reason string>}
+
+cases:
+  - name: salesforce_metadata_only
+    description: >
+      Salesforce source in metadata-only mode (every table has 0 rows): core
+      CRM objects must survive on rules alone, pricebook/knowledge plumbing
+      must go, custom objects survive via FK connectivity, and leftovers with
+      no signal stay visible as "uncertain" for the advisor or a human.
+    source_types: [salesforce]
+    relations:
+      - {from: sf_6650fdb1_opportunity, to: sf_6650fdb1_account}
+      - {from: sf_6650fdb1_progetto__c, to: sf_6650fdb1_account}
+    tables:
+      sf_6650fdb1_account:
+        {rows: 0, cols: 40, expect: kept, reason: "rule:salesforce/core-crm"}
+      sf_6650fdb1_contact:
+        {rows: 0, cols: 35, expect: kept, reason: "rule:salesforce/core-crm"}
+      sf_6650fdb1_opportunity:
+        {rows: 0, cols: 30, expect: kept, reason: "rule:salesforce/core-crm"}
+      sf_6650fdb1_case:
+        {rows: 0, cols: 25, expect: kept, reason: "rule:salesforce/core-crm"}
+      sf_6650fdb1_product2:
+        {rows: 0, cols: 20, expect: kept, reason: "rule:salesforce/core-crm"}
+      sf_6650fdb1_pricebook2:
+        {rows: 0, cols: 10, expect: excluded, reason: "rule:salesforce/pricebook-config"}
+      sf_6650fdb1_pricebookentry:
+        {rows: 0, cols: 12, expect: excluded, reason: "rule:salesforce/pricebook-config"}
+      sf_6650fdb1_solutionstatus:
+        {rows: 0, cols: 5, expect: excluded, reason: "rule:salesforce/knowledge-plumbing"}
+      # Custom object with a declared FK to Account → connectivity keeps it.
+      sf_6650fdb1_progetto__c:
+        {rows: 0, cols: 15, expect: kept, reason: "signal:fk-connected"}
+      # No rule, no concept, no rows, no FK → a human (or the advisor) decides.
+      sf_6650fdb1_activityhistory:
+        {rows: 0, cols: 8, expect: uncertain, reason: "signal:no-business-signal"}
+
+  - name: erp_generic_source
+    description: >
+      Generic ERP/warehouse source with data: business tables kept by concept
+      or rows, junk excluded by the generic pack, protected tables immune to
+      exclusion rules.
+    source_types: []
+    relations:
+      - {from: linked_dim, to: erp_customers}
+    protected: [legacy_prices_old]
+    tables:
+      erp_customers:
+        {rows: 500, cols: 12, expect: kept, reason: "signal:canonical-concept:Customer"}
+      sales_order_header:
+        {rows: 1200, cols: 18, expect: kept, reason: "signal:canonical-concept:Order"}
+      warehouse_zones:
+        {rows: 50, cols: 6, expect: kept, reason: "signal:has-rows:50"}
+      nightly_backup:
+        {rows: 999, cols: 9, expect: excluded, reason: "rule:generic/backup-copies"}
+      stg_import_run:
+        {rows: 10, cols: 7, expect: excluded, reason: "rule:generic/temp-staging"}
+      api_request_log:
+        {rows: 100000, cols: 6, expect: excluded, reason: "rule:generic/audit-logs"}
+      test_fixture_orders:
+        {rows: 20, cols: 8, expect: excluded, reason: "rule:generic/test-fixtures"}
+      linked_dim:
+        {rows: 0, cols: 5, expect: kept, reason: "signal:fk-connected"}
+      tiny_flag:
+        {rows: 0, cols: 1, expect: excluded}
+      floating_dataset:
+        {rows: 0, cols: 6, expect: uncertain, reason: "signal:no-business-signal"}
+      # Would match the backup-copies exclude rule, but it carries user work
+      # (manual relations / naming overrides) → protection wins.
+      legacy_prices_old:
+        {rows: 3, cols: 4, expect: kept, reason: "protected:user-curated"}
+
+  - name: multilingual_labels
+    description: >
+      Cross-source unification signals: an opaque table with an Italian
+      connector label lands on the right concept; an unknown Italian table
+      without data stays uncertain instead of being wrongly grouped.
+    source_types: []
+    labels:
+      tbl_xyz: "Opportunità"
+    tables:
+      tbl_xyz:
+        {rows: 0, cols: 9, expect: kept, reason: "signal:canonical-concept:Opportunity"}
+      clienti:
+        {rows: 0, cols: 7, expect: kept, reason: "signal:canonical-concept:Customer"}
+      fatture:
+        {rows: 0, cols: 11, expect: kept, reason: "signal:canonical-concept:Invoice"}
+      pazienti:
+        {rows: 0, cols: 10, expect: uncertain, reason: "signal:no-business-signal"}

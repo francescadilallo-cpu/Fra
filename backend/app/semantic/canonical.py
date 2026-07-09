@@ -18,13 +18,22 @@ Two deterministic layers, no LLM involved:
 
 The alias map is deliberately conservative: only unambiguous business nouns.
 Anything not listed simply gets no concept (→ no automatic grouping) rather
-than a wrong one.
+than a wrong one. The dictionary itself lives in ``concepts.yaml`` next to
+this module (path overridable via ``FRA_CONCEPTS_PATH``), so it can be
+extended without touching code.
 """
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 import unicodedata
+from pathlib import Path
+
+import yaml
+
+logger = logging.getLogger(__name__)
 
 # Leading tokens that identify the *source*, not the entity. Also any token
 # containing a digit (source ids like ``salesforce`` + ``6650fdb1``) is
@@ -98,80 +107,47 @@ def display_name(table: str, label: str | None = None) -> str:
 
 
 # ── Canonical concepts ────────────────────────────────────────────────────────
-# concept → aliases (lowercase). Aliases are matched against the normalised
-# table base name, its singular, AND the connector label. EN + IT.
+# concept → aliases, loaded from concepts.yaml (see module docstring). Aliases
+# are matched against the normalised table base name, its singular, AND the
+# connector label. EN + IT out of the box.
 
-_CONCEPT_ALIASES: dict[str, frozenset[str]] = {
-    "Customer": frozenset(
-        {
-            "account",
-            "accounts",
-            "customer",
-            "customers",
-            "client",
-            "clients",
-            "cliente",
-            "clienti",
-            "buyer",
-            "buyers",
-        }
-    ),
-    "Contact": frozenset({"contact", "contacts", "contatto", "contatti"}),
-    "Lead": frozenset({"lead", "leads", "prospect", "prospects"}),
-    "Opportunity": frozenset(
-        {
-            "opportunity",
-            "opportunities",
-            "deal",
-            "deals",
-            "opportunita",
-            "trattativa",
-            "trattative",
-        }
-    ),
-    "Product": frozenset(
-        {
-            "product",
-            "products",
-            "product2",
-            "prodotto",
-            "prodotti",
-            "item",
-            "items",
-            "article",
-            "articles",
-            "articolo",
-            "articoli",
-        }
-    ),
-    "Order": frozenset(
-        {
-            "order",
-            "orders",
-            "ordine",
-            "ordini",
-            "sales_order",
-            "salesorder",
-            "sales_order_header",
-        }
-    ),
-    "Invoice": frozenset({"invoice", "invoices", "fattura", "fatture"}),
-    "Employee": frozenset(
-        {"employee", "employees", "dipendente", "dipendenti", "staff"}
-    ),
-    "Case": frozenset(
-        {"case", "cases", "ticket", "tickets", "segnalazione", "segnalazioni"}
-    ),
-    "Campaign": frozenset({"campaign", "campaigns", "campagna", "campagne"}),
-    "Quote": frozenset({"quote", "quotes", "preventivo", "preventivi"}),
-    "Contract": frozenset({"contract", "contracts", "contratto", "contratti"}),
-    "Asset": frozenset({"asset", "assets"}),
-    "Supplier": frozenset(
-        {"supplier", "suppliers", "vendor", "vendors", "fornitore", "fornitori"}
-    ),
-    "Territory": frozenset({"territory", "territories", "territorio", "territori"}),
-    "Payment": frozenset({"payment", "payments", "pagamento", "pagamenti"}),
-}
+
+def _concepts_path() -> Path:
+    override = os.getenv("FRA_CONCEPTS_PATH", "").strip()
+    return Path(override) if override else Path(__file__).with_name("concepts.yaml")
+
+
+def _load_concept_aliases() -> dict[str, frozenset[str]]:
+    """Read the concept dictionary from YAML. A missing or broken file logs an
+    error and yields an empty dictionary — entities then simply get no concept
+    (no cross-source grouping) instead of the process failing to import."""
+    path = _concepts_path()
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        section = raw.get("concepts") if isinstance(raw, dict) else None
+        if not isinstance(section, dict):
+            raise ValueError("missing top-level 'concepts' mapping")
+        out: dict[str, frozenset[str]] = {}
+        for concept, aliases in section.items():
+            name = str(concept).strip()
+            if not name or not isinstance(aliases, list):
+                continue
+            folded = {_fold(str(a).strip()) for a in aliases if str(a).strip()}
+            if folded:
+                out[name] = frozenset(folded)
+        if not out:
+            raise ValueError("no concepts defined")
+        return out
+    except Exception as exc:  # noqa: BLE001 — a bad dictionary must not brick boot
+        logger.error(
+            "concept dictionary %s unreadable (%s) — cross-source grouping disabled",
+            path,
+            exc,
+        )
+        return {}
+
+
+_CONCEPT_ALIASES: dict[str, frozenset[str]] = _load_concept_aliases()
 
 # Reverse index alias → concept, built once. extend_aliases() adds
 # workspace-specific entries on top (e.g. a clinic mapping "paziente" →

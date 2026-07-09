@@ -737,6 +737,16 @@ class TestParseDataModelCommands:
 
 
 class TestDataModelLifecycle:
+    @pytest.fixture(autouse=True)
+    def _isolated_curation_store(self, tmp_path, monkeypatch):
+        # The rejection-learning hook writes the denied-merges file via the
+        # curation store singleton — point it at tmp so tests never touch
+        # the real backend/data.
+        from app.curation import store as store_mod
+
+        monkeypatch.setenv("FRA_DATA_DIR", str(tmp_path))
+        monkeypatch.setattr(store_mod, "_default_store", None)
+
     def setup_method(self):
         self.catalog = _FakeCatalog()
         self.layer = _make_dm_layer(self.catalog)
@@ -823,6 +833,28 @@ class TestDataModelLifecycle:
         assert done.status == "REJECTED"
         assert self.catalog.manual_relations == []
         assert self.catalog.display_calls == []
+
+    def test_rejected_merge_lands_on_advisor_deny_list(self):
+        from app.curation.store import get_curation_store
+
+        action = self.layer.submit_command(
+            "merge entities Account and crm_accounts", "alice", "admin"
+        )
+        self.layer.approve_action(
+            action.action_id, "boss", "admin", approve=False, manager_note="wrong pair"
+        )
+        # Refs resolved to physical tables ("Account" display → sf_x_account).
+        assert get_curation_store().is_merge_denied("sf_x_account", "crm_accounts")
+
+    def test_duplicate_pending_merge_rejected_at_submit(self):
+        self.layer.submit_command(
+            "merge entities sf_x_account and crm_accounts", "alice", "admin"
+        )
+        # Same pair, different spelling/order — must not queue twice.
+        with pytest.raises(AgentSemanticValidationError, match="already pending"):
+            self.layer.submit_command(
+                "merge entities crm_accounts and Account", "bob", "admin"
+            )
 
     def test_no_catalog_fails_closed(self):
         layer = _make_dm_layer()

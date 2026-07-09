@@ -313,27 +313,56 @@ def _complete_json_via_groq(
 
 
 def _complete_json_via_anthropic(
-    system_prompt: str, user_content: str, max_tokens: int = 500
+    system_prompt: "str | list[dict]",
+    user_content: str,
+    max_tokens: int = 500,
+    schema: dict | None = None,
 ) -> str:
-    """Call Anthropic's Messages API and return the raw text."""
+    """Call Anthropic's Messages API and return the raw text.
+
+    *system_prompt* may be a plain string or a list of system text blocks
+    (letting callers set ``cache_control`` on stable blocks for prompt
+    caching). When *schema* is given, the response is constrained to that
+    JSON Schema via structured outputs (``output_config.format``, sent
+    through ``extra_body`` for SDK-version tolerance); if the configured
+    model rejects it, the call falls back to plain prompt-driven JSON.
+    """
     import anthropic
 
     client = anthropic.Anthropic(
         api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
-        timeout=15.0,
+        timeout=30.0,
     )
-    msg = client.messages.create(
-        model=_anthropic_model(),
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    if not msg.content:
-        raise ValueError("Anthropic returned empty content array")
-    block = msg.content[0]
-    if not hasattr(block, "text"):
-        raise ValueError(f"Unexpected content block type: {type(block)}")
-    return block.text
+
+    def _call(extra: dict | None) -> str:
+        msg = client.messages.create(
+            model=_anthropic_model(),
+            max_tokens=max_tokens,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+            **({"extra_body": extra} if extra else {}),
+        )
+        if not msg.content:
+            raise ValueError("Anthropic returned empty content array")
+        # Skip non-text blocks (e.g. thinking) — take the first text block.
+        for block in msg.content:
+            if hasattr(block, "text") and getattr(block, "type", "") == "text":
+                return block.text
+        raise ValueError("Anthropic response contained no text block")
+
+    if schema is not None:
+        try:
+            return _call(
+                {"output_config": {"format": {"type": "json_schema", "schema": schema}}}
+            )
+        except anthropic.BadRequestError as exc:
+            # Model/SDK without structured-outputs support — degrade to the
+            # prompt-driven JSON contract instead of failing the feature.
+            logger.warning(
+                "structured outputs unavailable (%s) — falling back to plain JSON",
+                exc,
+            )
+    return _call(None)
 
 
 def _extract_json_payload(text: str) -> dict[str, Any]:

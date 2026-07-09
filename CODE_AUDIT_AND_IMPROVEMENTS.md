@@ -693,3 +693,27 @@ Follow-up residui:
 - `PipelineRunStore` è in-process: lo stato del run non sopravvive a restart (il risultato KG/SL sì, persistito dal build).
 - match proposta→entità per descrizione fatto via `table`: verificare allineamento nomi su build multi-fonte.
 
+
+## 13) Curation layer — analisi migliorie e piano provider LLM (2026-07-06)
+
+Analisi post-implementazione del layer di curation (engine + skill pack + advisor LLM + learning loop). Sette migliorie identificate, in ordine di valore:
+
+1. **Imparare dai rifiuti** *(implementata)* — un merge rifiutato dal manager registra la coppia in una deny-list; l'advisor la consulta e non ripropone. In più, la validazione MERGE_ENTITIES fallisce se una proposta identica è già in coda `PENDING_HUMAN_APPROVAL` (dedup).
+2. **Confidenza sui verdetti LLM** *(implementata)* — l'advisor chiede una confidence 0–1 per verdetto/merge; sotto soglia (`FRA_CURATION_LLM_MIN_CONFIDENCE`, default 0.7) il verdetto non viene applicato e la tabella resta "uncertain" (riportato come `skipped`).
+3. **Structured outputs** *(implementata)* — sul path Anthropic la risposta è vincolata a JSON Schema via `output_config.format` (passato con `extra_body` per tolleranza di versione SDK, fallback al prompt JSON se il modello non supporta); Groq resta su `response_format: json_object`.
+4. **Prompt caching advisor** *(implementata)* — istruzioni + entità esistenti + context docs (stabili tra chiamate) in blocchi system con `cache_control: ephemeral`; solo le tabelle incerte nel turno user. Chiamate ripetute pagano ~10% dell'input.
+5. **Dizionario canonico come dati** *(implementata)* — `_CONCEPT_ALIASES` estratto in `backend/app/semantic/concepts.yaml`, caricato all'import; stessa API pubblica.
+6. **Store decisioni su SQLite** *(DIFFERITA su decisione utente)* — `curation_decisions.json` con lock in-process va bene a 1 worker; con più worker uvicorn può raceare. Migrare al pattern SQLite degli altri store quando si scala.
+7. **Golden set di curation** *(implementata)* — `backend/tests/golden_curation.yaml` con tabelle e decisione attesa; test data-driven che fa da regression guard su pack e dizionario.
+
+### Piano cambio provider LLM (DIFFERITO — approvato in analisi, non implementato)
+
+L'agente è già provider-agnostico by design: guardrail (anti-allucinazione, HITL, gerarchia pin, reversibilità, tier deterministici) vivono fuori dal modello; l'unico punto di contatto è `_complete_json(system, user) -> str`.
+
+Piano quando servirà:
+- Estrarre `backend/app/llm/provider.py` con interfaccia unica `complete_json(system, user, schema=None)` e selezione esplicita `FRA_LLM_PROVIDER` (oggi: presenza chiave, Groq > Anthropic).
+- **Claude diretto**: già supportato (`ANTHROPIC_API_KEY`); modello raccomandato per il giudizio di curation `claude-opus-4-8` ($5/$25 per MTok) o `claude-haiku-4-5` ($1/$5) se domina il costo; override via `ANTHROPIC_MODEL` senza deploy.
+- **Microsoft, due strade**: (a) Foundry serve i modelli Claude — client dedicato `AnthropicFoundry` dell'SDK Anthropic, stesso `messages.create`, auth/billing Azure (structured outputs/caching lì in beta); (b) Azure OpenAI (GPT) — endpoint OpenAI-compatibile, adapter ~20 righe riusando il trasporto Groq (endpoint deployment + api-key header + api-version).
+- **AWS Bedrock / Google Vertex**: client dedicati nello stesso SDK Anthropic (`AnthropicBedrockMantle`, `AnthropicVertex`) per Claude su quelle piattaforme.
+- **Locale/on-prem** (Ollama, vLLM): API OpenAI-compatibili → stesso adapter di Groq con `base_url` diverso.
+- Gerarchia raccomandata: Claude diretto dove possibile → Foundry se il vincolo è infrastruttura Microsoft → adapter OpenAI-compatibile come jolly. Il fallback deterministico resta tier zero.

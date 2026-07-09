@@ -1,0 +1,116 @@
+# Canonical business concepts — the cross-source entity-unification dictionary.
+#
+# concept → aliases (any case; accents ok, they are folded at load time).
+# Aliases are matched against the normalised table base name, its singular
+# form, and the connector label — so the Salesforce "Account" object, a
+# "crm_accounts" table and a "legacy_customers" CSV all resolve to Customer.
+#
+# Editable without a redeploy: the file is read at process start (override the
+# path with FRA_CONCEPTS_PATH). Keep it conservative — only unambiguous
+# business nouns. A table that matches nothing simply gets no concept (no
+# automatic grouping) rather than a wrong one. Workspace-learned aliases live
+# in the curation workspace pack, not here.
+
+concepts:
+  Customer:
+    - account
+    - accounts
+    - customer
+    - customers
+    - client
+    - clients
+    - cliente
+    - clienti
+    - buyer
+    - buyers
+  Contact:
+    - contact
+    - contacts
+    - contatto
+    - contatti
+  Lead:
+    - lead
+    - leads
+    - prospect
+    - prospects
+  Opportunity:
+    - opportunity
+    - opportunities
+    - deal
+    - deals
+    - opportunita
+    - trattativa
+    - trattative
+  Product:
+    - product
+    - products
+    - product2
+    - prodotto
+    - prodotti
+    - item
+    - items
+    - article
+    - articles
+    - articolo
+    - articoli
+  Order:
+    - order
+    - orders
+    - ordine
+    - ordini
+    - sales_order
+    - salesorder
+    - sales_order_header
+  Invoice:
+    - invoice
+    - invoices
+    - fattura
+    - fatture
+  Employee:
+    - employee
+    - employees
+    - dipendente
+    - dipendenti
+    - staff
+  Case:
+    - case
+    - cases
+    - ticket
+    - tickets
+    - segnalazione
+    - segnalazioni
+  Campaign:
+    - campaign
+    - campaigns
+    - campagna
+    - campagne
+  Quote:
+    - quote
+    - quotes
+    - preventivo
+    - preventivi
+  Contract:
+    - contract
+    - contracts
+    - contratto
+    - contratti
+  Asset:
+    - asset
+    - assets
+  Supplier:
+    - supplier
+    - suppliers
+    - vendor
+    - vendors
+    - fornitore
+    - fornitori
+  Territory:
+    - territory
+    - territories
+    - territorio
+    - territori
+  Payment:
+    - payment
+    - payments
+    - pagamento
+    - pagamenti

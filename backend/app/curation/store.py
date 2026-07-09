@@ -37,6 +37,9 @@ class CurationStore:
 
     def __init__(self, path: Path | None = None) -> None:
         self._path = path or (data_dir() / "curation_decisions.json")
+        # Denied merges live next to the decisions file: pairs the manager
+        # explicitly rejected, which the LLM advisor must never re-propose.
+        self._denied_path = self._path.with_name(self._path.stem + "_denied.json")
 
     # ── persistence ───────────────────────────────────────────────────────────
 
@@ -93,6 +96,48 @@ class CurationStore:
             decisions[table] = record
             self._save(decisions)
             return record
+
+    # ── Denied merges (learning from rejections) ─────────────────────────────
+
+    @staticmethod
+    def _pair_key(a: str, b: str) -> str:
+        return "::".join(sorted((a.strip().lower(), b.strip().lower())))
+
+    def _load_denied(self) -> dict[str, dict]:
+        try:
+            return json.loads(self._denied_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        except Exception as exc:  # noqa: BLE001 — advisory data, never brick
+            logger.warning("denied-merges store unreadable (%s) — empty", exc)
+            return {}
+
+    def add_denied_merge(self, a: str, b: str, reason: str = "") -> None:
+        """Record that merging *a* and *b* was rejected by a human. The
+        advisor consults this before proposing; an explicit user command can
+        still merge the pair (humans may change their mind)."""
+        if not a.strip() or not b.strip():
+            return
+        with _LOCK:
+            denied = self._load_denied()
+            denied[self._pair_key(a, b)] = {
+                "pair": sorted((a.strip(), b.strip())),
+                "reason": reason,
+                "denied_at": datetime.now(timezone.utc).isoformat(),
+            }
+            tmp = self._denied_path.with_suffix(".json.tmp")
+            tmp.write_text(
+                json.dumps(denied, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            tmp.replace(self._denied_path)
+
+    def is_merge_denied(self, a: str, b: str) -> bool:
+        with _LOCK:
+            return self._pair_key(a, b) in self._load_denied()
+
+    def denied_merges(self) -> dict[str, dict]:
+        with _LOCK:
+            return self._load_denied()
 
     def forget(self, table: str) -> bool:
         """Drop a decision entirely (the next run re-evaluates the table)."""

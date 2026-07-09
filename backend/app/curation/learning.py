@@ -78,6 +78,46 @@ def record_merge(entity_a: dict, entity_b: dict) -> int:
         return 0
 
 
+def record_rejected_merge(proposed_action, catalog, note: str = "") -> None:
+    """Learn from a REJECTED merge: the pair goes on the deny-list so the LLM
+    advisor never re-proposes it. An explicit user command can still merge
+    the pair later — humans may change their mind; only the advisor is bound.
+
+    Resolves the action's raw entity references to physical tables via the
+    catalog when possible, falling back to the raw references."""
+    try:
+        from .store import get_curation_store
+
+        ref_a = str(getattr(proposed_action, "entity", "") or "")
+        ref_b = str(getattr(proposed_action, "entity_b", "") or "")
+        if not ref_a or not ref_b:
+            return
+
+        def _resolve(ref: str) -> str:
+            if catalog is None:
+                return ref
+            wanted = ref.strip().lower()
+            try:
+                for e in catalog.get_draft_entities():
+                    candidates = {
+                        str(e.get("name", "")).lower(),
+                        str(e.get("table", "")).lower(),
+                        str(e.get("display_name", "")).lower(),
+                    }
+                    if wanted in candidates:
+                        return str(e.get("table") or ref)
+            except Exception:  # noqa: BLE001 — resolution is best-effort
+                pass
+            return ref
+
+        get_curation_store().add_denied_merge(
+            _resolve(ref_a), _resolve(ref_b), reason=f"rejected:{note}"[:200]
+        )
+        logger.info("curation learning: merge %s + %s denied", ref_a, ref_b)
+    except Exception as exc:  # noqa: BLE001 — learning is best-effort
+        logger.warning("curation learning (rejection) skipped: %s", exc)
+
+
 def record_concept(entity: dict, concept: str) -> int:
     """Learn from an approved concept assignment: the entity's base name
     becomes an alias of the assigned concept."""

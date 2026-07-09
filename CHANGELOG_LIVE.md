@@ -10,6 +10,42 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-09 (Curation hardening: 6 migliorie alla logica — #6 SQLite differita)
+
+Implementate le migliorie identificate nell'analisi del 2026-07-06
+(`CODE_AUDIT_AND_IMPROVEMENTS.md` §13), esclusa per decisione utente la
+migrazione dello store a SQLite:
+
+1. **Imparare dai rifiuti**: un MERGE_ENTITIES respinto dal manager finisce in
+   una deny-list persistente (`curation_decisions_denied.json`, chiave
+   simmetrica case-insensitive); l'advisor la consulta e non ripropone mai la
+   coppia (un comando utente esplicito può comunque fonderla). In più la
+   validazione respinge un merge identico già in coda PENDING_HUMAN_APPROVAL.
+2. **Confidenza sui verdetti**: l'advisor chiede una confidence 0–1 per ogni
+   verdetto/merge; sotto `FRA_CURATION_LLM_MIN_CONFIDENCE` (default 0.7) il
+   verdetto viene scartato e la tabella resta "uncertain" per un umano
+   (riportato in `skipped_low_confidence`).
+3. **Structured outputs**: sul path Anthropic la risposta è vincolata a JSON
+   Schema (`output_config.format` via `extra_body`, fallback plain-JSON se il
+   modello non supporta); Groq resta su `response_format: json_object`.
+4. **Prompt caching**: istruzioni + entità esistenti + context docs (stabili)
+   in blocchi system con `cache_control: ephemeral`; solo le tabelle uncertain
+   nel turno user. Per Groq i blocchi vengono appiattiti in una stringa.
+5. **Dizionario canonico come dati**: `_CONCEPT_ALIASES` estratto in
+   `backend/app/semantic/concepts.yaml` (override `FRA_CONCEPTS_PATH`),
+   caricato all'import con degradazione sicura su file corrotto.
+7. **Golden set**: `backend/tests/golden_curation.yaml` +
+   `test_golden_curation.py` — 3 scenari (Salesforce metadata-only, ERP
+   generico, label multilingue) con esito e motivo attesi per ogni tabella;
+   regression guard su engine, pack e dizionario.
+
+**Files:** `backend/app/curation/{store,learning,llm_advisor}.py`,
+`backend/app/agentic/executive.py`, `backend/app/semantic/{layer.py,canonical.py,concepts.yaml}`,
+`backend/tests/{test_curation.py,test_canonical.py,golden_curation.yaml,test_golden_curation.py}`.
+Test: 1331 passed. Nessun cambio frontend.
+
+---
+
 ## 2026-07-06 (Curation fase 2: advisor LLM, loop di apprendimento, pannello UI)
 
 Completata la fase 2 del layer di curation:

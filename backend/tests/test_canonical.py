@@ -52,3 +52,30 @@ class TestCanonicalConcept:
         aliases = concept_aliases("Customer")
         assert "clienti" in aliases and "accounts" in aliases
         assert concept_aliases("Nonexistent") == frozenset()
+
+
+class TestConceptsYaml:
+    def test_shipped_dictionary_loads(self):
+        from app.semantic.canonical import _load_concept_aliases
+
+        concepts = _load_concept_aliases()
+        assert len(concepts) >= 16
+        assert "cliente" in concepts["Customer"]
+
+    def test_path_override_and_broken_file_degrade_gracefully(
+        self, tmp_path, monkeypatch
+    ):
+        from app.semantic.canonical import _load_concept_aliases
+
+        custom = tmp_path / "concepts.yaml"
+        custom.write_text(
+            "concepts:\n  Patient:\n    - paziente\n    - Pazienti\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("FRA_CONCEPTS_PATH", str(custom))
+        concepts = _load_concept_aliases()
+        # Aliases are accent-folded and lowercased at load time.
+        assert concepts == {"Patient": frozenset({"paziente", "pazienti"})}
+
+        custom.write_text("not: a\nvalid: dictionary\n", encoding="utf-8")
+        assert _load_concept_aliases() == {}  # error logged, boot survives
