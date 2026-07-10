@@ -116,6 +116,31 @@ export const updateAgent = (id: string, agent: CustomAgentDef): Promise<CustomAg
 export const deleteAgentRemote = (id: string): Promise<void> =>
   http.delete(`/api/agents/custom/${encodeURIComponent(id)}`).then(() => undefined)
 
+// ── Server-side agent runs ────────────────────────────────────────────────────
+// Scheduled live agents execute in the backend (real read-only checks on the
+// unified data), even with the browser closed. These call/read those runs.
+
+export interface AgentServerRun {
+  id: string
+  agent_id: string
+  sector_id: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'completed' | 'failed'
+  triggered_by: string
+  findings: CustomFinding[]
+  stats: { row_counts?: Record<string, number> }
+}
+
+export const runAgentServer = (id: string): Promise<AgentServerRun> =>
+  http.post<AgentServerRun>(`/api/agents/custom/${encodeURIComponent(id)}/run`)
+    .then(r => r.data)
+
+export const listAgentServerRuns = (id: string, limit = 20): Promise<AgentServerRun[]> =>
+  http.get<AgentServerRun[]>(`/api/agents/custom/${encodeURIComponent(id)}/runs`, {
+    params: { limit },
+  }).then(r => r.data)
+
 // ── External agent integration ─────────────────────────────────────────────────
 
 export interface WebhookLogEntry {

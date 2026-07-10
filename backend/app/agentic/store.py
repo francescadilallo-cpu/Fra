@@ -22,7 +22,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from .executive import AgentAuditRecord, PendingAgentAction
+from .executive import AgentAuditRecord, AgentStatus, PendingAgentAction
 
 # Retain at most this many audit records (ring-buffer semantics). The full
 # trail lives in the application logs; this bounds both memory and disk.
@@ -130,7 +130,7 @@ class AgentStateStore:
                 self._close(conn)
 
     def claim_pending_action(
-        self, action_id: str, claimed_status: str, updated_at: str
+        self, action_id: str, claimed_status: AgentStatus, updated_at: str
     ) -> "PendingAgentAction | None":
         """Atomically claim a PENDING_HUMAN_APPROVAL action for processing.
 

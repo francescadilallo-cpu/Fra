@@ -10,6 +10,49 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-10 bis (Fase pain-point: agent runtime server-side + P2-P5)
+
+Prima tranche di correzioni dal re-audit §14, in ordine di priorità:
+
+**P1 — Agent runtime server-side** (il pain point più grave: gli agenti
+schedulati erano una simulazione browser). Nuovo `agentic/runtime.py`:
+thread scheduler nel backend (lifespan, opt-out `FRA_AGENT_RUNTIME=false`)
+che esegue gli agenti custom LIVE a intervalli reali con check deterministici
+read-only sui dati veri (row count + delta, tabelle vuote, entità non
+risolte, null-rate per i validator). Esiti persistiti in `agent_runs`,
+mirrorati sulla definizione (la UI mostra findings reali), warning/critical
+nell'audit log. Nuovi endpoint `POST/GET /api/agents/custom/{id}/run[s]`.
+Frontend: in live il setInterval è spento, il run manuale chiama il server,
+il sync backend-wins porta i findings server-side in ogni browser.
+11 test nuovi (`test_agent_runtime.py`).
+
+**P2 — Rimosso il path LLM morto**: `query/aw_engine.py` (client Anthropic
+hardcoded fuori dalla selezione provider, NL→SQL duplicato) eliminato; l'unica
+funzione viva (`build_system_prompt`) è ora `semantic/system_prompt.py` con
+test propri (`test_system_prompt.py`).
+
+**P3 — Dipendenze pinnate**: networkx 3.6.1, sqlalchemy 2.0.51, pyyaml 6.0.3,
+pandas 3.0.3, pytest 9.1.1, pytest-asyncio 1.4.0.
+
+**P4 — Primi test frontend**: vitest + jsdom configurati (`npm run test`,
+gate in CI); 15 test su `demoMode.ts` (decodifica JWT, workspaceLabel,
+modeScopedSector) e `customAgents.ts` (CRUD localStorage + semantica di sync
+col backend, incluso "server wins sui findings").
+
+**P5 — mypy esteso**: baseline CI ora copre anche `app/curation` e
+`app/agentic` (7 errori reali corretti in store/runtime/layer lungo la via).
+
+**Files:** `backend/app/agentic/runtime.py` (nuovo), `backend/app/main.py`,
+`backend/app/semantic/{system_prompt.py,layer.py}`, `backend/app/agentic/store.py`,
+`backend/requirements.txt`, `.github/workflows/ci.yml`,
+`backend/tests/{test_agent_runtime.py,test_system_prompt.py}` (nuovi, -test_aw_engine_helpers),
+`frontend/{package.json,vitest.config.ts}`, `frontend/src/lib/demoMode.test.ts`,
+`frontend/src/data/{customAgents.test.ts,testUtils.ts,customAgents.ts}`,
+`frontend/src/api/agents.ts`, `frontend/src/components/AgentsView.tsx`.
+Gates: 1335 test backend, 15 frontend, mypy, ruff, tsc, build — tutti verdi.
+
+---
+
 ## 2026-07-10 (Re-audit completo code-first + sincronizzazione documentazione)
 
 Analisi da zero dell'intero progetto partendo dal codice, poi verifica dei

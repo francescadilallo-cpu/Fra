@@ -12,11 +12,11 @@ import type { SectorId } from '../data/sectors'
 import { saveAgentRun } from '../data/agentStore'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getAuthToken } from '../api/client'
-import { executeAgentCommand, approveAgentAction, listAgentActions, getWebhookLog, startWorkflowRun, getWorkflowRun, listWorkflowRuns } from '../api/agents'
+import { executeAgentCommand, approveAgentAction, listAgentActions, getWebhookLog, startWorkflowRun, getWorkflowRun, listWorkflowRuns, runAgentServer } from '../api/agents'
 import type { AgentAction, WebhookLogEntry, WorkflowRun, WorkflowRunSummary, WorkflowStepInput } from '../api/agents'
 import { getLiveConfig, backendErrorMessage, type LiveConfig } from '../api/semantic'
 import { loadExtension } from '../data/ontologyExtensions'
-import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
+import { useCustomAgents, addCustomAgentPersisted, removeCustomAgentPersisted, updateCustomAgentPersisted, updateCustomAgent, getTrigger, type CustomAgentDef, type AgentTemplate, type AgentTrigger, type ScheduleInterval, type EventTriggerKind } from '../data/customAgents'
 import { WORKFLOWS, WorkflowCard, type WorkflowDef, type StepStatus } from './AgentWorkflows'
 import AgentBuilder from './AgentBuilder'
 import { showConfirm } from './ConfirmDialog'
@@ -1632,8 +1632,12 @@ export default function AgentsView() {
     }, stepInterval)
   }, [appendLog, sectorId])
 
-  // Background scheduler: auto-run schedule-triggered custom agents (demo-accelerated intervals)
+  // Background scheduler: auto-run schedule-triggered custom agents.
+  // DEMO ONLY (accelerated intervals, simulated results). In live mode the
+  // backend runtime executes scheduled agents for real — even with the
+  // browser closed — and the results arrive via the agent-definition sync.
   useEffect(() => {
+    if (!IS_DEMO_MODE) return
     const DEMO_MS: Record<ScheduleInterval, number> = {
       '5min': 20_000, 'hourly': 45_000, 'daily': 90_000, 'weekly': 180_000,
     }
@@ -1681,6 +1685,39 @@ export default function AgentsView() {
   const runAgent = useCallback((def: AgentDef) => {
     simulateAgent(def)
   }, [simulateAgent])
+
+  // Live mode: custom agents run SERVER-SIDE (real read-only checks on the
+  // unified data). The run outcome is mirrored into the agent definition so
+  // every browser sees the same findings.
+  const runServerAgent = useCallback(async (cd: CustomAgentDef, def: AgentDef) => {
+    setStates(prev => ({ ...prev, [def.id]: { status: 'running', progress: 30, logLines: [] } }))
+    appendLog(def.id, def.name, 'Agent started — running checks on your data', 'start')
+    try {
+      const run = await runAgentServer(cd.id)
+      const findings = run.findings ?? []
+      updateCustomAgent(sectorId, cd.id, { findings, lastRunAt: run.started_at })
+      setStates(prev => ({
+        ...prev,
+        [def.id]: { status: 'completed', progress: 100, logLines: findings.map(f => f.text) },
+      }))
+      findings.forEach(f => appendLog(def.id, def.name, f.text, f.severity === 'info' ? 'process' : 'write'))
+      appendLog(def.id, def.name, `✓ Completed — ${findings.length} finding${findings.length !== 1 ? 's' : ''}`, 'done')
+      const crit = findings.filter(f => f.severity === 'critical').length
+      const warn = findings.filter(f => f.severity === 'warning').length
+      toast(
+        crit > 0
+          ? `${def.name} — ${crit} critical finding${crit > 1 ? 's' : ''}`
+          : warn > 0
+            ? `${def.name} — ${warn} warning${warn > 1 ? 's' : ''}`
+            : `${def.name} completed`,
+        crit > 0 ? 'error' : 'success',
+      )
+      setExpanded(prev => ({ ...prev, [def.id]: true }))
+    } catch (err) {
+      setStates(prev => ({ ...prev, [def.id]: { status: 'idle', progress: 0, logLines: [] } }))
+      toast(backendErrorMessage(err) || 'Agent run failed', 'error')
+    }
+  }, [sectorId, appendLog])
 
   const [runningWorkflows, setRunningWorkflows] = useState<Set<string>>(new Set())
   // Workflows chain built-in demo agents — demo only
@@ -1944,7 +1981,7 @@ export default function AgentsView() {
                       key={def.id}
                       def={def}
                       state={states[def.id] ?? { status: 'idle', progress: 0, logLines: [] }}
-                      onRun={() => runAgent(def)}
+                      onRun={() => (IS_DEMO_MODE || !cd ? runAgent(def) : runServerAgent(cd, def))}
                       expanded={!!expanded[def.id]}
                       onToggle={() => setExpanded(prev => ({ ...prev, [def.id]: !prev[def.id] }))}
                       onAction={handleAction}

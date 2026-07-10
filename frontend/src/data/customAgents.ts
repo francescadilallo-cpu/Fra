@@ -76,13 +76,22 @@ export function useCustomAgents(sectorId: SectorId): CustomAgentDef[] {
     const onStorage = (e: StorageEvent) => { if (e.key === KEY(sectorId)) refresh() }
     window.addEventListener('storage', onStorage)
 
-    // Sync from backend: merge remote agents into localStorage (backend wins on conflict).
-    // Use mode-scoped sector so live and demo agents don't share the same backend bucket.
+    // Sync from backend. Unknown remote agents are added; for agents we
+    // already have, the backend wins on run outcome (findings/lastRunAt):
+    // scheduled live agents execute server-side, so the server holds the
+    // real results — the browser copy is just a cache of the definition.
     listAgents(modeScopedSector(sectorId))
       .then(remote => {
         const local = loadCustomAgents(sectorId)
+        const remoteById = new Map(remote.map(a => [a.id, a]))
         const localIds = new Set(local.map(a => a.id))
-        const merged = [...local]
+        const merged = local.map(a => {
+          const r = remoteById.get(a.id)
+          if (!r) return a
+          const serverIsNewer =
+            (r.lastRunAt ?? '') > (a.lastRunAt ?? '') && r.findings.length > 0
+          return serverIsNewer ? { ...a, findings: r.findings, lastRunAt: r.lastRunAt } : a
+        })
         for (const r of remote) {
           if (!localIds.has(r.id)) merged.push(r)
         }

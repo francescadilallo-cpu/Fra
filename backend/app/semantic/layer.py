@@ -349,7 +349,8 @@ def _complete_json_via_anthropic(
     )
 
     def _call(extra: dict | None) -> str:
-        msg = client.messages.create(
+        # type-ignore: SDK overloads predate list-of-blocks system prompts
+        msg = client.messages.create(  # type: ignore[call-overload]
             model=_anthropic_model(),
             max_tokens=max_tokens,
             system=system_prompt,
@@ -963,7 +964,9 @@ class SemanticLayer:
 
         # For live-mode requests, exclude demo-scenario tables so the intent
         # classifier is not confused by AW entity/metric names it can't query.
-        _hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+        _hidden: frozenset[str] = getattr(
+            SemanticLayer._thread_local, "hidden_tables", frozenset()
+        )
 
         _raw_entities = (
             self._ontology.entity_names()
@@ -1497,7 +1500,9 @@ class SemanticLayer:
         provider = _llm_intent_provider()
         if provider is None:
             # Build the hint from catalog entities visible to this request.
-            _hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+            _hidden: frozenset[str] = getattr(
+                SemanticLayer._thread_local, "hidden_tables", frozenset()
+            )
             if self._catalog:
                 _all = self._catalog.list_entities()
                 _hint_tables = sorted(e for e in _all if e not in _hidden)[:6]
@@ -1523,9 +1528,7 @@ class SemanticLayer:
         # Build schema context from catalog (populated from DuckDB snapshot).
         # Hidden tables (demo data for live-mode users) are excluded so the
         # model can neither reference them nor reveal their existence.
-        _hidden: frozenset[str] = getattr(
-            SemanticLayer._thread_local, "hidden_tables", frozenset()
-        )
+        _hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
         # GraphRAG: retrieve the relevant sub-graph (relations, concepts,
         # metrics) for this question first. Its tables seed the schema prompt as
         # *priority tables* (always included, never dropped by the table cap), so
@@ -1715,7 +1718,9 @@ class SemanticLayer:
         if _live:
             # For live users, list only their own entities (not the demo ones
             # that share the same catalog/ontology instance).
-            hidden = getattr(SemanticLayer._thread_local, "hidden_tables", frozenset())
+            hidden: frozenset[str] = getattr(
+                SemanticLayer._thread_local, "hidden_tables", frozenset()
+            )
             available: str | None = None
             if self._catalog:
                 all_draft = self._catalog.get_draft_entities()

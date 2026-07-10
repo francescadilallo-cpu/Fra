@@ -242,6 +242,7 @@ File:
 
 - backend/app/agentic/executive.py
 - backend/app/agentic/router.py
+- backend/app/agentic/runtime.py
 
 Responsabilita:
 
@@ -249,6 +250,23 @@ Responsabilita:
 - separazione netta decisione agentica vs esecuzione write-back reale
 - enforcement vincoli business tramite ontologia (SalesOrder) e controllo dati runtime
 - audit semantico strutturato per compliance (EU AI Act-ready)
+
+**Agent runtime server-side (runtime.py)**: gli agenti custom LIVE con trigger
+`schedule` girano DAVVERO nel backend — thread daemon (avviato nel lifespan,
+disattivabile con `FRA_AGENT_RUNTIME=false`) che ogni 60s cerca gli agenti
+scaduti (`sector_id like 'live-%'`, intervalli reali 5min/hourly/daily/weekly)
+ed esegue check deterministici read-only su DuckDB: row count + delta vs run
+precedente (calo → warning), tabella vuota, entità non risolta, null-rate per
+colonna (template `validator`). Esiti in `agent_runs` (stessa SQLite delle
+definizioni), findings mirrorati sulla definizione (ogni browser li vede al
+sync), warning/critical nell'audit log (categoria `agent`). Contesto pesante
+(manager + entità) risolto lazy solo quando un agente è davvero due. API:
+`POST /api/agents/custom/{id}/run` (run manuale server-side, qualunque
+trigger), `GET /api/agents/custom/{id}/runs` (storico). La DELETE dell'agente
+elimina anche il suo storico. Gli agenti demo restano simulati nel browser
+(by design); in live il vecchio setInterval di AgentsView è disattivato e il
+run manuale chiama il server. Il runtime non scrive MAI dati cliente — le
+azioni di scrittura passano sempre dalla coda HITL.
 
 Pattern HITL:
 

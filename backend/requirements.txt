@@ -8,16 +8,16 @@ pydantic==2.9.2
 aiosqlite==0.20.0
 databases[sqlite]==0.9.0
 httpx==0.27.2
-networkx
-sqlalchemy
-pyyaml
-pandas
+networkx==3.6.1
+sqlalchemy==2.0.51
+pyyaml==6.0.3
+pandas==3.0.3
 # Pinned: the committed fra_unified.duckdb snapshot uses DuckDB's v1.5.3
 # on-disk storage format. A different DuckDB version on the server cannot
 # read it and would fall back to rebuilding from source.
 duckdb==1.5.3
-pytest
-pytest-asyncio
+pytest==9.1.1
+pytest-asyncio==1.4.0
 python-multipart
 slowapi==0.1.9
 redis==5.0.8

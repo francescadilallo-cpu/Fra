@@ -746,7 +746,7 @@ gate performance e faithfulness, pip-audit, build frontend).
 
 ### 14.2 Pain point e debito tecnico (in ordine di severità)
 
-1. **Gli agenti custom non girano davvero** (gap prodotto, non solo debito).
+1. **[RISOLTO 2026-07-10]** **Gli agenti custom non girano davvero** (gap prodotto, non solo debito).
    Lo "scheduler" è un `setInterval` nel browser (`AgentsView.tsx`) con
    intervalli demo-accelerati e `simulateAgent`: con il tab chiuso non gira
    nulla, e i run non toccano il backend. Il pilastro "run AI agents" del
@@ -754,12 +754,12 @@ gate performance e faithfulness, pip-audit, build frontend).
    (thread/loop + SQLite, pattern già usato per l'agent state) che esegua le
    definizioni degli agenti contro i dati reali e scriva esiti nel
    notifications store esistente.
-2. **Doppio path LLM non coordinato**: `query/aw_engine.py` (353 righe) ha un
+2. **[RISOLTO 2026-07-10]** **Doppio path LLM non coordinato**: `query/aw_engine.py` (353 righe) ha un
    client Anthropic hardcoded (`claude-sonnet-4-6`, `anthropic.Anthropic()`
    senza provider selection) ma è quasi morto — main importa solo
    `build_system_prompt`. Da rimuovere o ridurre alla singola funzione usata;
    ogni chiamata LLM dovrebbe passare da `_llm_intent_provider`.
-3. **Zero test frontend**: nessun runner configurato (né vitest né jest) su
+3. **[AVVIATO 2026-07-10 — vitest+jsdom in CI, 15 test sui moduli puri]** **Zero test frontend**: nessun runner configurato (né vitest né jest) su
    33k righe di TS. Il primo passo economico: vitest + testing-library sui
    moduli puri (`queryEngine.ts`, `demoMode.ts`, `ontologyExtensions.ts`),
    non sui componenti.
@@ -777,11 +777,11 @@ gate performance e faithfulness, pip-audit, build frontend).
    limit per-worker. Tutto documentato e corretto a 1 worker Render; da
    migrare (SQLite/Redis) PRIMA di alzare i worker. (Include la #6 del §13,
    differita su decisione utente.)
-7. **Dipendenze parzialmente unpinned**: `networkx`, `sqlalchemy`, `pyyaml`,
+7. **[RISOLTO 2026-07-10 — tutte pinnate]** **Dipendenze parzialmente unpinned**: `networkx`, `sqlalchemy`, `pyyaml`,
    `pandas`, `pytest` senza versione in requirements.txt (duckdb pinnato
    deliberatamente, bene). `anthropic==0.40.0` è vecchio: funziona via
    `extra_body`, ma all'upgrade si può usare l'API structured outputs nativa.
-8. **mypy copre un solo file** (`ontology/ontology.py` come baseline).
+8. **[ESTESO 2026-07-10 — ora anche curation/ e agentic/]** **mypy copre un solo file** (`ontology/ontology.py` come baseline).
    Estendere modulo per modulo quando si tocca (curation/ e agentic/ sono i
    candidati migliori: codice nuovo, tipato bene).
 9. **Pipeline stage 4-5 parziali**: l'orchestrator dichiara STUB

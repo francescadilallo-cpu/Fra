@@ -63,6 +63,7 @@ from .agentic.executive import (
     ExecutiveAgenticLayer,
 )
 from .agentic.router import build_agent_router
+from .agentic.runtime import AgentRuntime
 from .curation.router import build_curation_router
 from .ontology.manufacturing import get_ontology
 from .ontology.mapper import get_flat_mappings, get_mappings, update_mapping
@@ -1583,7 +1584,20 @@ async def lifespan(app: FastAPI):
             "FRA_SKIP_WARMUP is set — demo KG warmup skipped (lazy load on first query)"
         )
 
+    # Server-side custom-agent runtime: scheduled LIVE agents run for real
+    # (read-only checks) even with every browser closed. FRA_AGENT_RUNTIME=false
+    # disables the scheduler thread (manual runs via API keep working).
+    if os.getenv("FRA_AGENT_RUNTIME", "").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    ):
+        _agent_runtime.start()
+    else:
+        logger.info("FRA_AGENT_RUNTIME is disabled — no scheduled agent runs")
+
     yield
+    _agent_runtime.stop()
 
 
 # ── App factory ────────────────────────────────────────────────────────────────
@@ -5222,7 +5236,7 @@ def get_system_prompt(request: Request) -> dict:
     Used by the frontend's direct-LLM mode (user-provided API key) so it always
     reflects the loaded dataset rather than a hardcoded schema.
     """
-    from .query.aw_engine import build_system_prompt as _bsp  # noqa: PLC0415
+    from .semantic.system_prompt import build_system_prompt as _bsp  # noqa: PLC0415
 
     _ensure_semantic_loaded()
     catalog = _semantic_state.get("catalog")
@@ -5956,6 +5970,24 @@ def _agents_db() -> _sqlite3.Connection:
         )
         """
     )
+    # Server-side run history lives next to the definitions (same DDL as
+    # agentic/runtime.py, which owns the writes) — created here too so a
+    # fresh DB path always has both tables.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            id           TEXT PRIMARY KEY,
+            agent_id     TEXT NOT NULL,
+            sector_id    TEXT NOT NULL,
+            started_at   TEXT NOT NULL,
+            finished_at  TEXT,
+            status       TEXT NOT NULL DEFAULT 'running',
+            triggered_by TEXT NOT NULL DEFAULT 'schedule',
+            findings     TEXT NOT NULL DEFAULT '[]',
+            stats        TEXT NOT NULL DEFAULT '{}'
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -6125,6 +6157,8 @@ def delete_custom_agent(
     conn = _agents_db()
     try:
         conn.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
+        # Server-side run history goes with the agent (see agentic/runtime.py).
+        conn.execute("DELETE FROM agent_runs WHERE agent_id=?", (agent_id,))
         conn.commit()
     except _sqlite3.OperationalError as exc:
         raise HTTPException(
@@ -6132,6 +6166,93 @@ def delete_custom_agent(
         ) from exc
     finally:
         conn.close()
+
+
+# ── Server-side agent runtime ─────────────────────────────────────────────────
+# Scheduled LIVE agents execute here (read-only checks on real data), not in
+# the browser. Demo agents keep their browser simulation. See agentic/runtime.py.
+
+
+def _agent_runtime_context() -> tuple[Any, list[dict]]:
+    """(source manager, enriched draft entities) for agent checks — heavy,
+    called only when an agent is actually due or manually run."""
+    from .connectors.duckdb_source_manager import get_source_manager
+
+    _ensure_semantic_loaded()
+    mgr = get_source_manager(_SCENARIO_PATH)
+    catalog = _semantic_state.get("catalog")
+    entities = _enrich_entity_display(
+        list(catalog.get_draft_entities()) if catalog else []
+    )
+    return mgr, entities
+
+
+def _agent_runtime_audit(action: str, resource: str) -> None:
+    try:
+        get_audit_store().log(
+            username="agent-runtime",
+            action=action,
+            resource=resource,
+            ip="",
+            category="agent",
+        )
+    except Exception:  # noqa: BLE001 — audit is best-effort from the runtime
+        logger.debug("agent runtime audit failed", exc_info=True)
+
+
+_agent_runtime = AgentRuntime(
+    db_path=_AGENTS_DB_PATH,
+    get_context=_agent_runtime_context,
+    audit=_agent_runtime_audit,
+)
+
+
+@app.post("/api/agents/custom/{agent_id}/run", tags=["agents"])
+def run_custom_agent_now(
+    agent_id: Annotated[str, _ApiPath(max_length=128)],
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    """Run one custom agent server-side right now (real read-only checks).
+    Works for any agent regardless of trigger kind."""
+    conn = _agents_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM custom_agents WHERE id=?", (agent_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    agent = _row_to_agent(row)
+    run = _agent_runtime.run_agent(
+        {
+            "id": agent["id"],
+            "sector_id": agent["sector_id"],
+            "name": agent["name"],
+            "template": agent["template"],
+            "entities": agent["entities"],
+        },
+        triggered_by=f"manual:{current_user.username}",
+    )
+    _audit(
+        request,
+        current_user,
+        "Agent run",
+        f"{agent['name']} ({run.get('status')})",
+        category="agent",
+    )
+    return run
+
+
+@app.get("/api/agents/custom/{agent_id}/runs", tags=["agents"])
+def list_custom_agent_runs(
+    agent_id: Annotated[str, _ApiPath(max_length=128)],
+    limit: int = Query(default=20, ge=1, le=100),
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    """Server-side run history for one custom agent (newest first)."""
+    return _agent_runtime.list_runs(agent_id, limit=limit)
 
 
 # ── Saved queries ─────────────────────────────────────────────────────────────

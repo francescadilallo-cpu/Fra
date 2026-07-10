@@ -37,7 +37,7 @@ jobs:
         run: ruff check backend --fix
 
       - name: Static typing baseline (mypy)
-        run: mypy --config-file backend/mypy.ini backend/app/ontology/ontology.py
+        run: mypy --config-file backend/mypy.ini backend/app/ontology/ontology.py backend/app/curation backend/app/agentic
 
       - name: Fail if formatting/lint fixes were needed
         run: git diff --exit-code
@@ -146,6 +146,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Run frontend unit tests (vitest)
+        working-directory: frontend
+        run: npm run test
 
       - name: Build frontend
         working-directory: frontend
