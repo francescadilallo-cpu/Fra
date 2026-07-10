@@ -19,6 +19,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# The app reads keys from a .env via load_dotenv() in main.py — load the same
+# files here so the script sees exactly what uvicorn sees.
+try:
+    from dotenv import load_dotenv
+
+    _here = Path(__file__).resolve()
+    for candidate in (_here.parents[1] / ".env", _here.parents[2] / ".env"):
+        if candidate.exists():
+            load_dotenv(candidate)
+    load_dotenv()  # CWD lookup too, same as the app
+except ImportError:
+    pass
+
 from app.curation.llm_advisor import (  # noqa: E402
     _RESPONSE_SCHEMA,
     _build_system_blocks,
@@ -31,6 +44,12 @@ def main() -> int:
     provider = _llm_intent_provider()
     if provider is None:
         print("FAIL: no provider key set (ANTHROPIC_API_KEY / GROQ_API_KEY)")
+        print(
+            "  Looked for a .env in backend/ and the repo root, plus the "
+            "shell environment.\n"
+            "  Fix: add ANTHROPIC_API_KEY=sk-ant-... to backend/.env, or "
+            "export it in this shell."
+        )
         return 1
     print(f"provider: {provider}")
     print(
