@@ -719,3 +719,124 @@ Piano quando servirà:
 - **AWS Bedrock / Google Vertex**: client dedicati nello stesso SDK Anthropic (`AnthropicBedrockMantle`, `AnthropicVertex`) per Claude su quelle piattaforme.
 - **Locale/on-prem** (Ollama, vLLM): API OpenAI-compatibili → stesso adapter di Groq con `base_url` diverso.
 - Gerarchia raccomandata: Claude diretto dove possibile → Foundry se il vincolo è infrastruttura Microsoft → adapter OpenAI-compatibile come jolly. Il fallback deterministico resta tier zero.
+
+## 14) Re-audit completo del progetto (2026-07-10, code-first)
+
+Analisi rifatta da zero partendo dal codice (non dai documenti), poi confrontata
+con la documentazione. Numeri alla data: backend ~27.200 righe Python (main.py
+6.328 con 80 endpoint inline + 9 router estratti), frontend ~33.200 righe
+TS/TSX, 1.341 test backend verdi, CI a 4 job (ruff+mypy baseline, pytest con
+gate performance e faithfulness, pip-audit, build frontend).
+
+### 14.1 Stato di salute — cosa funziona bene
+
+- **Backend testato e gated**: 63 file di test, gate CI su regressioni di
+  performance e faithfulness ≥0.90, pip-audit sulle dipendenze. Livello di
+  protezione raro per un progetto di questa età.
+- **Governance agentica solida**: Executive Layer con HITL obbligatorio, stato
+  su SQLite condivisibile tra worker, audit trail, test di concorrenza
+  (doppia approvazione, worker concorrenti), deny-list dai rifiuti.
+- **Curation layer completo e spiegabile**: 3 tier (regole → segnali → LLM con
+  confidence/cooldown), tutto reversibile, golden set di regressione.
+- **Degradazione graceful sistematica**: ogni feature LLM ha un fallback
+  deterministico; file corrotti non brickano il boot; snapshot DuckDB per il
+  free tier. È una cultura di codice, non un caso.
+- **Demo/Live separation** disciplinata (JWT mode claim, workspaceLabel,
+  modeScopedSector) e presidiata dalle skill di progetto.
+
+### 14.2 Pain point e debito tecnico (in ordine di severità)
+
+1. **Gli agenti custom non girano davvero** (gap prodotto, non solo debito).
+   Lo "scheduler" è un `setInterval` nel browser (`AgentsView.tsx`) con
+   intervalli demo-accelerati e `simulateAgent`: con il tab chiuso non gira
+   nulla, e i run non toccano il backend. Il pilastro "run AI agents" del
+   prodotto oggi è una simulazione UI. Serve uno scheduler server-side
+   (thread/loop + SQLite, pattern già usato per l'agent state) che esegua le
+   definizioni degli agenti contro i dati reali e scriva esiti nel
+   notifications store esistente.
+2. **Doppio path LLM non coordinato**: `query/aw_engine.py` (353 righe) ha un
+   client Anthropic hardcoded (`claude-sonnet-4-6`, `anthropic.Anthropic()`
+   senza provider selection) ma è quasi morto — main importa solo
+   `build_system_prompt`. Da rimuovere o ridurre alla singola funzione usata;
+   ogni chiamata LLM dovrebbe passare da `_llm_intent_provider`.
+3. **Zero test frontend**: nessun runner configurato (né vitest né jest) su
+   33k righe di TS. Il primo passo economico: vitest + testing-library sui
+   moduli puri (`queryEngine.ts`, `demoMode.ts`, `ontologyExtensions.ts`),
+   non sui componenti.
+4. **Componenti monstre**: `SemanticLayerView.tsx` 3.502 righe,
+   `DataSourcesView.tsx` 2.936, `OntologyBuilder.tsx` 2.353, `AgentsView.tsx`
+   2.236. Ogni feature nuova li ingrassa; splittare per sezione (il pattern
+   `SLSection` esiste già) alla prossima occasione di lavoro su ciascuno.
+5. **localStorage come source of truth in live**: i Bridges cross-source
+   (`ontologyExtensions.ts`) hanno sync backend ma localStorage resta la
+   verità sincrona; company name e altri dati vivono solo nel browser. Per
+   un team di più persone sullo stesso workspace il modello diverge tra
+   browser. Migrare la verità nel MetadataCatalog, localStorage come cache.
+6. **Vincoli single-worker impliciti**: `_semantic_state` module-level, store
+   curation su JSON con lock in-process, job advise in dict di modulo, rate
+   limit per-worker. Tutto documentato e corretto a 1 worker Render; da
+   migrare (SQLite/Redis) PRIMA di alzare i worker. (Include la #6 del §13,
+   differita su decisione utente.)
+7. **Dipendenze parzialmente unpinned**: `networkx`, `sqlalchemy`, `pyyaml`,
+   `pandas`, `pytest` senza versione in requirements.txt (duckdb pinnato
+   deliberatamente, bene). `anthropic==0.40.0` è vecchio: funziona via
+   `extra_body`, ma all'upgrade si può usare l'API structured outputs nativa.
+8. **mypy copre un solo file** (`ontology/ontology.py` come baseline).
+   Estendere modulo per modulo quando si tocca (curation/ e agentic/ sono i
+   candidati migliori: codice nuovo, tipato bene).
+9. **Pipeline stage 4-5 parziali**: l'orchestrator dichiara STUB
+   l'integrazione conversazionale e la verification (il `verifier.py` fa i
+   check deterministici + critique LLM, ma golden-replay e faithfulness
+   restano TODO dichiarati nel docstring).
+
+### 14.3 Documentazione — verifica contro la realtà
+
+- `PROJECT_KNOWLEDGE_MAP.md`, `CHANGELOG_LIVE.md`, questo file: **aggiornati**
+  (manutenuti a ogni change; spot-check superato).
+- `CLAUDE.md`: **corretto in questa sessione** — push convention puntava a un
+  branch vecchio, dimensione main.py e albero moduli non aggiornati, mancava
+  la regola provider (Anthropic default).
+- `ORIENTAMENTO.md`: **integrato** — era fermo al 2026-06-24, pre-curation.
+- `DISCOVERY.md`, `RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md`:
+  **marcati come storici** con banner e puntatore alle fonti vive — layout e
+  claim non riflettevano più il codice (es. `backend/fra/`, 3 sorgenti fisse).
+
+### 14.4 Scopo del prodotto e idee di evoluzione
+
+Lo scopo finale, letto dal codice: *"collega le tue sorgenti, ottieni un
+modello di business unificato e spiegabile, interrogalo in linguaggio
+naturale, e lascia che agenti governati (HITL) lavorino sui tuoi dati"* — un
+semantic layer + agentic layer per PMI/mid-market, con governance come
+differenziatore (ogni azione è approvabile, spiegabile, reversibile).
+
+Idee coerenti con questo scopo, in ordine di leva:
+
+1. **Agent runtime server-side** (chiude il pain point #1): scheduler nel
+   backend che esegue gli agenti custom su dati reali, con esiti nel
+   notifications store e nella coda HITL quando propongono azioni. Trasforma
+   il pilastro "agents" da demo a prodotto. Prerequisito per tutto il resto.
+2. **Digest periodico** (settimanale/giornaliero): un agente pre-costruito che
+   riassume anomalie, KPI e proposte pendenti e lo manda via mail (il
+   notifications store c'è già). Primo valore "passivo" per il cliente che
+   non apre l'app tutti i giorni.
+3. **Verified answers / few-shot learning sul NL→SQL**: le coppie
+   domanda→SQL approvate diventano esempi few-shot per le domande successive
+   (stessa filosofia del learning loop di curation: le approvazioni umane
+   migliorano il sistema). Riduce gli errori dell'LLM sulle domande ricorrenti
+   del cliente.
+4. **Dashboard da risposte pinnate**: "pin" su una risposta della Query tab →
+   tile del Dashboard che ri-esegue la stessa domanda a ogni apertura. Il
+   Dashboard oggi è demo-driven; questo lo rende live con poco.
+5. **PII masking / column-level security nel semantic layer**: regole di
+   mascheramento per colonna (codice fiscale, email) applicate prima che i
+   risultati raggiungano LLM e UI. Il caso "pazienti" (healthcare) lo rende
+   quasi obbligatorio per vendere in quel verticale.
+6. **Write-back Salesforce via coda HITL**: l'Executive Layer ha già la coda
+   e l'audit; aggiungere l'esecuzione post-approvazione verso l'API Salesforce
+   (update campo, merge account) chiude il cerchio "read → understand → act".
+7. **Matching entità via embedding** come segnale aggiuntivo dell'advisor
+   (oltre al dizionario alias): economico, offline, migliora le proposte di
+   merge su nomi non coperti dal dizionario.
+8. **Pannello costi/osservabilità LLM**: token e cache-hit per feature
+   (advisor, ask, verifier) nel logging stack — necessario appena l'LLM
+   diventa una voce di costo del cliente.

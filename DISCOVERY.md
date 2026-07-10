@@ -1,5 +1,12 @@
 # DISCOVERY — Fra Semantic Layer Platform
 
+> **[NOTA STORICA — 2026-07-10]** Questo documento descrive la discovery
+> iniziale del progetto e NON riflette più il codice attuale (il layout
+> `backend/fra/`, le "3 sorgenti fisse" e vari moduli sono cambiati).
+> Le fonti aggiornate sono `PROJECT_KNOWLEDGE_MAP.md` (mappa del codice),
+> `ORIENTAMENTO.md` (overview prodotto) e `CHANGELOG_LIVE.md` (cronologia).
+
+
 ## Architecture Overview
 
 Fra is a distributed Semantic Layer platform that unifies three heterogeneous data sources (ERP, CRM, HR/PIM) into a single queryable ontology. The backend is a FastAPI application (Python 3.11, Pydantic v2) that exposes both REST endpoints and a CLI (`fra`).

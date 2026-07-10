@@ -27,8 +27,10 @@ cd backend && pytest tests/test_kg_graph.py -x      # single file, stop on first
 ## Push convention (active branch)
 
 ```bash
-git push -u origin main:claude/semantic-data-layer-yz7Ac && git push origin main
+git push -u origin claude/branch-diff-main-pxfn76
 ```
+
+Never push to a different branch without explicit permission. `backend/data/salesforce_config.json` holds live Salesforce tokens: gitignored, must stay on disk locally, never re-track it.
 
 ## Architecture
 
@@ -44,13 +46,21 @@ Fra/
 │   ├── lib/demoMode.ts  # IS_DEMO_MODE, workspaceLabel(), modeScopedSector()
 │   └── contexts/        # SectorContext (active sector)
 └── backend/app/
-    ├── main.py          # FastAPI monolith (~5000 lines), all endpoints
+    ├── main.py          # FastAPI monolith (~6300 lines, 80 inline endpoints)
     ├── kg/graph.py      # networkx Knowledge Graph
-    ├── semantic/        # Semantic layer logic (metrics, hierarchies, glossary)
-    ├── connectors/      # DuckDB, Postgres, SQLite, file adapters
-    ├── query/           # NL→SQL engine
-    └── agentic/         # AI agent workflows
+    ├── semantic/        # Semantic layer (metrics, hierarchies, glossary, canonical concepts, LLM providers)
+    ├── connectors/      # DuckDB, Postgres, SQLite, file, Salesforce (metadata-only by default)
+    ├── curation/        # Schema curation: engine + skill packs + LLM advisor + router
+    ├── agentic/         # Executive Agentic Layer (HITL approval queue) + router
+    ├── pipeline/        # 5-stage auto-build orchestrator
+    └── query/           # Legacy NL→SQL engine (mostly superseded by semantic/)
 ```
+
+Endpoint groups already extracted into routers: agentic, curation, context, audit, users, notifications, tokens, workspace, MCP. New endpoint groups should be routers too (factory pattern, see `curation/router.py`).
+
+## LLM providers
+
+`semantic/layer.py:_llm_intent_provider()` selects the provider: **Anthropic (Claude) is the default** when `ANTHROPIC_API_KEY` is set (model via `ANTHROPIC_MODEL`, default `claude-sonnet-4-6`); Groq is the fallback; `FRA_LLM_PROVIDER=anthropic|groq` forces one. Keys are loaded from `.env` via `load_dotenv()`. Every new LLM call must go through this selection — never instantiate a provider client directly.
 
 ## The most important concept: Demo vs Live
 

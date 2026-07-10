@@ -1,5 +1,10 @@
 # RECAP FUNZIONALITA E MODIFICHE DA INIZIO LAVORI
 
+> **[NOTA STORICA — 2026-07-10]** Recap fermo a una fase precedente del
+> progetto. Per lo stato attuale e la cronologia completa vedere
+> `CHANGELOG_LIVE.md`; per la mappa del codice `PROJECT_KNOWLEDGE_MAP.md`.
+
+
 ## 1) Obiettivo della recap
 
 Questo file sintetizza in modo operativo le funzionalita implementate e le modifiche introdotte durante il percorso di hardening e evoluzione del progetto SemanticIntelligence.

@@ -10,6 +10,28 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-10 (Re-audit completo code-first + sincronizzazione documentazione)
+
+Analisi da zero dell'intero progetto partendo dal codice, poi verifica dei
+documenti contro la realtà. Nessuna modifica di codice prodotto.
+
+- `CODE_AUDIT_AND_IMPROVEMENTS.md` — nuovo §14: stato di salute, 9 pain
+  point/debiti ordinati per severità (il più grave: gli agenti custom girano
+  solo come simulazione browser-side, manca un runtime server-side), verifica
+  doc-vs-realtà, scopo del prodotto e 8 idee di evoluzione prioritizzate.
+- `CLAUDE.md` — push convention corretta (puntava a un branch vecchio),
+  albero moduli aggiornato (curation/, pipeline/, dimensioni reali di
+  main.py), nuova sezione "LLM providers" (Anthropic default, regola "mai
+  istanziare un client direttamente"), nota credenziali Salesforce.
+- `ORIENTAMENTO.md` — aggiornato al 2026-07-10: moduli backend reali,
+  endpoint con prefisso /api, evoluzioni di luglio (metadata-only, curation,
+  HITL data model, Anthropic default).
+- `DISCOVERY.md`, `RECAP_FUNZIONALITA_E_MODIFICHE_DA_INIZIO_LAVORI.md` —
+  marcati con banner storico e puntatori alle fonti vive.
+- `PROJECT_KNOWLEDGE_MAP.md` — banner di verifica con rimando al §14.
+
+---
+
 ## 2026-07-09 bis (Anthropic default, advise asincrono, cooldown, router, UI advisor)
 
 Seconda tranche di migliorie richieste dall'utente:

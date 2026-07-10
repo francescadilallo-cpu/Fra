@@ -1,6 +1,6 @@
 # Orientamento al progetto — Fra / DataIntelligence
 
-> Documento di riferimento rapido. Aggiornato al 2026-06-24.
+> Documento di riferimento rapido. Aggiornato al 2026-07-10.
 
 ---
 
@@ -116,19 +116,28 @@ La sidebar è divisa in sezioni logiche:
 ## 5. Backend — i moduli principali
 
 ```
-backend/app/main.py     ← tutti gli endpoint in un file (~2000 righe)
+backend/app/main.py     ← core endpoint (~6.300 righe, 80 endpoint inline)
+backend/app/semantic/   ← semantic layer: intent, metriche, concetti canonici, provider LLM
+backend/app/curation/   ← scrematura schema: motore a regole + skill pack + advisor LLM
+backend/app/agentic/    ← Executive Agentic Layer: azioni con approvazione umana (HITL)
+backend/app/kg/         ← Knowledge Graph networkx
+backend/app/connectors/ ← DuckDB, Postgres, SQLite, file, Salesforce (solo metadati di default)
+backend/app/pipeline/   ← orchestratore auto-build a 5 stadi
 ```
 
-**Endpoint principali:**
-- `POST /login` — JWT con `mode: live | demo`
-- `GET /semantic/status` — stato del data model (entity count, KG nodes, ecc.)
-- `GET /semantic/live-config` — configurazione workspace live (entità, connettori, ecc.)
-- `POST /semantic/run` — avvia la pipeline (estrazione → arricchimento → indicizzazione)
-- `GET /sources` / `POST /sources` — gestione sorgenti dati
-- `POST /query` — query in linguaggio naturale
-- `GET /audit` — log di audit per l'admin
-- `GET /workspace` — info workspace (nome azienda, ecc.)
-- `POST /metrics`, `POST /hierarchies`, `POST /segments` — CRUD data model
+I gruppi di endpoint più recenti sono router estratti (agentic, curation, context, audit, users, notifications, tokens, workspace, MCP); i nuovi gruppi nascono come router, non dentro main.py.
+
+**Endpoint principali (prefisso `/api`):**
+- `POST /api/auth/token` — JWT con `mode: live | demo`
+- `GET /api/semantic/status` — stato del data model (entity count, KG nodes, ecc.)
+- `GET /api/semantic/live-config` — configurazione workspace live
+- `POST /api/pipeline/run` — pipeline auto-build (context→sources→build→verify)
+- `POST /api/semantic/ask` (alias `/api/ask`) — query in linguaggio naturale
+- `GET /api/curation/report`, `POST /api/curation/advise` (job asincrono) — scrematura schema
+- `POST /api/agent/execute`, `POST /api/agent/actions/{id}/approve` — azioni HITL
+- `POST /api/mcp` — server MCP read-only per agenti esterni
+
+**Provider LLM:** Anthropic (Claude) è il default quando `ANTHROPIC_API_KEY` è presente (`ANTHROPIC_MODEL`, default `claude-sonnet-4-6`); Groq è il fallback; `FRA_LLM_PROVIDER` forza la scelta. Senza chiavi tutto degrada ai percorsi deterministici.
 
 **Funzioni interne importanti:**
 ```python
@@ -182,6 +191,10 @@ Quando un cliente live usa l'app, costruisce progressivamente:
 - **Wizard 8 step DataSourcesView** (giugno 2026): in live mode, DataSourcesView è un wizard a step singolo con Rail di navigazione; demo mode usa il layout flat invariato
 - **SemanticLayerView sezioni** (giugno 2026): navigazione a sezioni via `setSection(SLSection)` — bridges con fromField/toField, relations con "+ New" sempre visibile, form con fallback free-text
 - **Memory fix Render** (giugno 2026): FRA_KG_NODE_LIMIT=5000, FRA_KG_EDGE_LIMIT=5000, FRA_SKIP_WARMUP=true nel Dockerfile per evitare OOM su free tier 512MB
+- **Salesforce metadata-only + naming canonico** (luglio 2026): il connettore Salesforce importa solo metadati (schema/relazioni, zero record di default); entità con nomi leggibili (`display_name`) e unificazione cross-source sotto concetti canonici (Account/Customer/Cliente → **Customer**, via `concepts.yaml` + SAME_AS nel KG)
+- **Curation layer** (luglio 2026): scrematura spiegabile e reversibile dello schema (regole → segnali → advisor LLM con confidence e cooldown); pannello "Schema curation" in Data Sources; le decisioni umane insegnano alias al sistema (learning loop), i rifiuti finiscono in deny-list
+- **Azioni HITL sul data model** (luglio 2026): merge/rinomina/assegna-concetto via comando naturale → coda di approvazione manager → esecuzione con audit; niente viene mai scritto senza approvazione umana
+- **Anthropic default** (luglio 2026): Claude è il provider LLM primario, Groq il fallback; advise di curation asincrono (job + polling)
 
 ---
 

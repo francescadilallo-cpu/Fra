@@ -1,5 +1,8 @@
 # PROJECT KNOWLEDGE MAP
 
+> Verificato contro il codice il 2026-07-10 (re-audit completo: vedi
+> `CODE_AUDIT_AND_IMPROVEMENTS.md` §14 per pain point e debito tecnico).
+
 ## 1) Obiettivo del documento
 
 Questo documento mappa le funzionalita del progetto SemanticIntelligence/Fra in modo operativo, con riferimenti ai file principali per orientarsi rapidamente su:
