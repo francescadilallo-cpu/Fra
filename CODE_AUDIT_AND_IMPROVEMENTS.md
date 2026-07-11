@@ -767,7 +767,7 @@ gate performance e faithfulness, pip-audit, build frontend).
    `DataSourcesView.tsx` 2.936, `OntologyBuilder.tsx` 2.353, `AgentsView.tsx`
    2.236. Ogni feature nuova li ingrassa; splittare per sezione (il pattern
    `SLSection` esiste già) alla prossima occasione di lavoro su ciascuno.
-5. **localStorage come source of truth in live**: i Bridges cross-source
+5. **[RISOLTO 2026-07-11 per bridges/ontologia; company name era già hydrata dal backend]** **localStorage come source of truth in live**: i Bridges cross-source
    (`ontologyExtensions.ts`) hanno sync backend ma localStorage resta la
    verità sincrona; company name e altri dati vivono solo nel browser. Per
    un team di più persone sullo stesso workspace il modello diverge tra
@@ -815,7 +815,7 @@ Idee coerenti con questo scopo, in ordine di leva:
    backend che esegue gli agenti custom su dati reali, con esiti nel
    notifications store e nella coda HITL quando propongono azioni. Trasforma
    il pilastro "agents" da demo a prodotto. Prerequisito per tutto il resto.
-2. **Digest periodico** (settimanale/giornaliero): un agente pre-costruito che
+2. **[IMPLEMENTATA 2026-07-11 — digest.py, consegna webhook; email quando ci sarà un transport]** **Digest periodico** (settimanale/giornaliero): un agente pre-costruito che
    riassume anomalie, KPI e proposte pendenti e lo manda via mail (il
    notifications store c'è già). Primo valore "passivo" per il cliente che
    non apre l'app tutti i giorni.

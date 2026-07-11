@@ -243,6 +243,7 @@ File:
 - backend/app/agentic/executive.py
 - backend/app/agentic/router.py
 - backend/app/agentic/runtime.py
+- backend/app/agentic/digest.py
 
 Responsabilita:
 
@@ -266,7 +267,12 @@ trigger), `GET /api/agents/custom/{id}/runs` (storico). La DELETE dell'agente
 elimina anche il suo storico. Gli agenti demo restano simulati nel browser
 (by design); in live il vecchio setInterval di AgentsView è disattivato e il
 run manuale chiama il server. Il runtime non scrive MAI dati cliente — le
-azioni di scrittura passano sempre dalla coda HITL.
+azioni di scrittura passano sempre dalla coda HITL. **Digest periodico (digest.py)**: aggrega
+dall'ultimo digest run/findings degli agenti (severità + highlights), azioni
+HITL pendenti e tabelle uncertain; persistito in `digests`, consegna
+best-effort ai canali webhook; `FRA_DIGEST_INTERVAL=daily|weekly|off`;
+agganciato al loop del runtime via `extra_tick`; API `GET /api/agents/digest`,
+`POST /api/agents/digest/run` (admin).
 
 Pattern HITL:
 
@@ -457,7 +463,7 @@ Cartella: frontend/src/data
 Elementi chiave:
 
 - queryEngine.ts: parser NL lato frontend (demo) + tipi EngineResult condivisi con semantic.ts
-- ontologyExtensions.ts: bridge cross-source in localStorage (SavedExtension con fromField/toField); storage key mode-scoped
+- ontologyExtensions.ts: bridge cross-source — localStorage come cache sincrona, backend come verità del workspace: hydrate al boot (App.tsx), browser vuoto adotta la copia server; in live un `updated_at` server oltre il marker `…-synced-at` (scritto a ogni push) fa adottare la copia del collega; demo resta local-wins
 - sectors.ts, connectors.ts, agentStore.ts, reportGenerator.ts, complianceData.ts
 
 Regola storage split:
