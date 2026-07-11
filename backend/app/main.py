@@ -62,6 +62,7 @@ from .agentic.executive import (
     AgentSemanticValidationError,
     ExecutiveAgenticLayer,
 )
+from .agentic.digest import DigestService
 from .agentic.router import build_agent_router
 from .agentic.runtime import AgentRuntime
 from .curation.router import build_curation_router
@@ -6200,11 +6201,81 @@ def _agent_runtime_audit(action: str, resource: str) -> None:
         logger.debug("agent runtime audit failed", exc_info=True)
 
 
+def _digest_extras() -> dict[str, Any]:
+    """The non-runtime half of the digest: HITL queue + curation state."""
+    from .curation.store import get_curation_store
+
+    pending = _agentic_layer.list_actions(status_filter="PENDING_HUMAN_APPROVAL")
+    uncertain = sum(
+        1
+        for d in get_curation_store().all_decisions().values()
+        if d.get("status") == "uncertain"
+    )
+    return {
+        "pending_approvals": len(pending),
+        "pending_commands": [a.command[:120] for a in pending[:5]],
+        "curation_uncertain_tables": uncertain,
+    }
+
+
+def _digest_deliver(digest: dict) -> None:
+    """Best-effort push to every enabled webhook channel. Other channel
+    types (slack/email/teams) have no transport on this deployment — the
+    digest stays readable via GET /api/agents/digest regardless."""
+    import httpx
+
+    from .notifications.store import get_notifications_store
+
+    channels = [
+        c
+        for c in get_notifications_store().list_channels()
+        if c.enabled and c.channel_type == "webhook"
+    ]
+    payload = {
+        "source": "SemanticIntelligence",
+        "event": "workspace_digest",
+        "digest": digest,
+    }
+    for ch in channels:
+        try:
+            httpx.post(ch.destination, json=payload, timeout=10.0)
+        except httpx.HTTPError as exc:
+            logger.warning("digest webhook %s failed: %s", ch.name, exc)
+
+
+_digest_service = DigestService(
+    db_path=_AGENTS_DB_PATH,
+    get_extras=_digest_extras,
+    deliver=_digest_deliver,
+)
+
 _agent_runtime = AgentRuntime(
     db_path=_AGENTS_DB_PATH,
     get_context=_agent_runtime_context,
     audit=_agent_runtime_audit,
+    extra_tick=_digest_service.tick,
 )
+
+
+@app.get("/api/agents/digest", tags=["agents"])
+def list_workspace_digests(
+    limit: int = Query(default=10, ge=1, le=50),
+    _: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    """Recent workspace digests (newest first): agent activity, findings by
+    severity, pending approvals, tables still to review."""
+    return _digest_service.list(limit=limit)
+
+
+@app.post("/api/agents/digest/run", tags=["agents"])
+def run_workspace_digest_now(
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict:
+    """Generate (and deliver) a digest immediately, outside the schedule."""
+    digest = _digest_service.run()
+    _audit(request, current_user, "Digest run", "manual", category="agent")
+    return digest
 
 
 @app.post("/api/agents/custom/{agent_id}/run", tags=["agents"])

@@ -16,6 +16,14 @@ export async function fetchRemoteExtension(workspaceId: string): Promise<RemoteE
   return res.data
 }
 
-export async function pushRemoteExtension(workspaceId: string, payload: unknown): Promise<void> {
-  await api.put('/api/ontology/extension', { payload }, { params: { workspace_id: workspaceId } })
+export async function pushRemoteExtension(
+  workspaceId: string,
+  payload: unknown,
+): Promise<{ ok: boolean; updated_at: string }> {
+  const res = await api.put<{ ok: boolean; updated_at: string }>(
+    '/api/ontology/extension',
+    { payload },
+    { params: { workspace_id: workspaceId } },
+  )
+  return res.data
 }

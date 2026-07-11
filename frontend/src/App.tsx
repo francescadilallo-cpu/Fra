@@ -7,7 +7,7 @@ import OnboardingWizard from './components/OnboardingWizard'
 import type { NavTab } from './types'
 import { useSector } from './contexts/SectorContext'
 import type { SectorId } from './data/sectors'
-import { loadExtension, saveExtension } from './data/ontologyExtensions'
+import { loadExtension, saveExtension, hydrateExtensionFromBackend } from './data/ontologyExtensions'
 import { createCompany, migrateExistingCompany, logoutCurrent } from './data/companies'
 import { clearAuthToken, getAuthToken } from './api/client'
 import { Toaster } from './components/Toast'
@@ -106,6 +106,13 @@ export default function App() {
   // Migrate any pre-existing company so it appears in the dropdown after upgrade
   useEffect(() => {
     if (granted) migrateExistingCompany(sectorId)
+  }, [granted, sectorId])
+
+  // Pull the workspace's ontology document from the backend: a fresh browser
+  // gets the team's bridges/entities, and in live mode a copy that a teammate
+  // updated elsewhere replaces our stale one (backend is the source of truth).
+  useEffect(() => {
+    if (granted) hydrateExtensionFromBackend(sectorId).catch(() => {})
   }, [granted, sectorId])
 
   // After live-mode onboarding completes and the page reloads, navigate the

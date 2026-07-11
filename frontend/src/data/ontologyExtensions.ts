@@ -73,17 +73,27 @@ export function loadExtension(sectorId: string): SavedExtension {
   }
 }
 
-// Debounced write-through to the backend so the hand-built ontology survives
-// a new browser/device. localStorage stays the synchronous source of truth.
+// Debounced write-through to the backend. localStorage is the synchronous
+// cache for rendering; in live mode the BACKEND is the source of truth for
+// the team (see hydrateExtensionFromBackend), so several people on the same
+// workspace converge instead of diverging per-browser.
 const _pushTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+
+// Last server updated_at we are in sync with, per sector. Lets hydration
+// tell "someone else wrote after us" apart from "this is our own copy".
+const SYNC_KEY = (sectorId: string) => `${STORAGE_KEY(sectorId)}-synced-at`
 
 function schedulePush(sectorId: string, ext: SavedExtension) {
   clearTimeout(_pushTimers[sectorId])
   _pushTimers[sectorId] = setTimeout(() => {
-    pushRemoteExtension(WORKSPACE_ID(sectorId), ext).catch(() => {
-      // Offline / backend unreachable — localStorage still has the data and
-      // the next save will retry.
-    })
+    pushRemoteExtension(WORKSPACE_ID(sectorId), ext)
+      .then(res => {
+        try { localStorage.setItem(SYNC_KEY(sectorId), res.updated_at) } catch { /* quota */ }
+      })
+      .catch(() => {
+        // Offline / backend unreachable — localStorage still has the data and
+        // the next save will retry.
+      })
   }, 800)
 }
 
@@ -98,9 +108,17 @@ export function saveExtension(sectorId: string, ext: SavedExtension) {
   schedulePush(sectorId, ext)
 }
 
-// One-shot boot hydration: pull the server copy into localStorage when the
-// local copy is missing or empty (fresh browser / cleared storage). Local
-// edits always win — we never overwrite a non-empty local document.
+// One-shot boot hydration. Two rules:
+//
+// 1. Empty local copy (fresh browser / cleared storage) → adopt the server
+//    copy. Applies in both modes.
+// 2. LIVE only: if the server copy changed since our last successful push
+//    (updated_at beyond our sync marker), a teammate wrote from another
+//    browser — adopt it. The backend is the workspace's source of truth;
+//    without this, two browsers silently diverge and the older one
+//    clobbers the newer on its next save.
+//
+// Demo keeps "local wins unless empty": demo docs are personal sandboxes.
 const _hydrated = new Set<string>()
 
 export async function hydrateExtensionFromBackend(sectorId: string): Promise<void> {
@@ -114,15 +132,25 @@ export async function hydrateExtensionFromBackend(sectorId: string): Promise<voi
     Object.keys(local.baseOverrides ?? {}).length === 0 &&
     (local.removedBaseNodes?.length ?? 0) === 0 &&
     (local.removedBaseEdges?.length ?? 0) === 0
-  if (!localEmpty) return
   try {
     const remote = await fetchRemoteExtension(WORKSPACE_ID(sectorId))
-    if (remote.payload && typeof remote.payload === 'object') {
+    if (!remote.payload || typeof remote.payload !== 'object' || !remote.updated_at) {
+      return
+    }
+    let adopt = localEmpty
+    if (!adopt && !IS_DEMO_MODE) {
+      const syncedAt = localStorage.getItem(SYNC_KEY(sectorId))
+      // Never synced from this browser (pre-marker data): don't clobber the
+      // local document; the next save will publish it and set the marker.
+      adopt = syncedAt !== null && remote.updated_at > syncedAt
+    }
+    if (adopt) {
       localStorage.setItem(STORAGE_KEY(sectorId), JSON.stringify(remote.payload))
+      localStorage.setItem(SYNC_KEY(sectorId), remote.updated_at)
       window.dispatchEvent(new CustomEvent(STORAGE_EVENT, { detail: { sectorId } }))
     }
   } catch {
-    // Backend unreachable — keep the empty local state.
+    // Backend unreachable — keep the local state.
   }
 }
 

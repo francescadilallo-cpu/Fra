@@ -72,11 +72,15 @@ class AgentRuntime:
         get_context: Callable[[], tuple[Any, list[dict]]],
         audit: Callable[[str, str], None] | None = None,
         tick_seconds: int = 60,
+        extra_tick: Callable[[], None] | None = None,
     ) -> None:
         self._db_path = str(db_path)
         self._get_context = get_context
         self._audit = audit or (lambda action, resource: None)
         self._tick_seconds = tick_seconds
+        # Piggyback hook for other periodic work (the workspace digest) so
+        # one thread serves every scheduled concern.
+        self._extra_tick = extra_tick
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._run_lock = threading.Lock()
@@ -161,6 +165,11 @@ class AgentRuntime:
                 self.tick()
             except Exception:  # noqa: BLE001 — the loop must survive anything
                 logger.warning("agent runtime tick failed", exc_info=True)
+            if self._extra_tick is not None:
+                try:
+                    self._extra_tick()
+                except Exception:  # noqa: BLE001 — same survival guarantee
+                    logger.warning("agent runtime extra tick failed", exc_info=True)
 
     def _due_agents(self) -> list[dict]:
         """LIVE agents with a schedule trigger whose interval has elapsed

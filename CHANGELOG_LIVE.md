@@ -10,6 +10,40 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-11 (Fase 2: bridges convergenti cross-browser + digest periodico)
+
+**P6 — Il backend è la verità per il documento ontologia (bridges/entità).**
+Scoperto durante il fix: `hydrateExtensionFromBackend` non era chiamato da
+nessuno — un browser nuovo non riceveva MAI i bridge del team. Ora:
+- l'hydrate gira al boot (App.tsx) per ogni sector;
+- browser vuoto → adotta la copia server (demo e live);
+- SOLO live: se il server ha una copia più nuova del nostro ultimo push
+  (marker `…-synced-at` scritto a ogni push riuscito), un collega ha
+  modificato da un altro browser → la adottiamo. Senza marker (dati
+  pre-feature) non si sovrascrive mai il locale;
+- demo resta "local wins": i documenti demo sono sandbox personali.
+`pushRemoteExtension` ora restituisce `updated_at` per alimentare il marker.
+6 test vitest nuovi (`ontologyExtensions.test.ts`).
+
+**P7 — Digest periodico del workspace** (idea di evoluzione #2, costruita sul
+runtime): `agentic/digest.py` aggrega dall'ultimo digest — run degli agenti
+server-side con findings per severità e highlights (critical prima), azioni
+in attesa di approvazione HITL, tabelle ancora "uncertain" in curation.
+Persistito in tabella `digests` (leggibile via API anche se la consegna
+fallisce) e consegnato best-effort a ogni canale notifica *webhook* abilitato.
+Schedulazione: `FRA_DIGEST_INTERVAL` = `daily` (default) | `weekly` | `off`,
+agganciata al loop del runtime (`extra_tick` — nessun secondo thread).
+API: `GET /api/agents/digest` (storico), `POST /api/agents/digest/run`
+(admin, forzatura). 5 test nuovi (`test_digest.py`).
+
+**Files:** `backend/app/agentic/{digest.py(nuovo),runtime.py}`,
+`backend/app/main.py`, `backend/tests/test_digest.py` (nuovo),
+`frontend/src/data/{ontologyExtensions.ts,ontologyExtensions.test.ts(nuovo)}`,
+`frontend/src/api/ontologyExtension.ts`, `frontend/src/App.tsx`.
+Gates: 1340 test backend, 21 frontend, mypy, ruff, tsc, build — verdi.
+
+---
+
 ## 2026-07-10 bis (Fase pain-point: agent runtime server-side + P2-P5)
 
 Prima tranche di correzioni dal re-audit §14, in ordine di priorità:
