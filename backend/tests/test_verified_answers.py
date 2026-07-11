@@ -43,7 +43,10 @@ class TestStore:
     def test_same_question_different_mode_coexists(self, store):
         store.add("Top customers", "SELECT 1", "a", "live")
         store.add("Top customers", "SELECT 2", "a", "demo")
-        assert len(store.list_answers("live")) == 1 and len(store.list_answers("demo")) == 1
+        assert (
+            len(store.list_answers("live")) == 1
+            and len(store.list_answers("demo")) == 1
+        )
 
 
 class TestRetrieval:

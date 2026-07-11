@@ -10,6 +10,30 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-11 ter (Dashboard pins: risposte pinnate che restano fresche)
+
+**P9 — idea di evoluzione #4.** Da Query AI si può ora "pinnare" una risposta
+sul Dashboard: ogni tile ri-esegue la sua domanda sui dati live a ogni
+visita — numeri correnti, non snapshot. Chiude il cerchio con le verified
+answers: verifichi la risposta, la pinni, resta aggiornata da sola.
+
+- **Backend**: store SQLite `dashboard_pins.db` (stesso pattern di saved
+  queries, con provenienza `pinned_by` e audit); endpoint
+  `GET/POST /api/dashboard/pins`, `DELETE /api/dashboard/pins/{id}`
+  (user/admin, sector-scoped, upsert su stesso id). 3 test nuovi.
+- **Frontend**: bottone "Pin to dashboard" sotto ogni risposta di Query AI
+  (solo live, accanto a "Verify answer"); nuova sezione "Pinned answers"
+  nel Dashboard (`PinnedAnswers.tsx`, componente separato — niente crescita
+  del monstre): tile con valore grande per risultati singoli, mini-tabella
+  per i piccoli, refresh manuale, unpin, click sul titolo → apre la domanda
+  in Query AI (evento `navigate-to-query`).
+
+**Files:** `backend/app/main.py`, `backend/tests/test_dashboard_pins.py` (nuovo),
+`frontend/src/api/pins.ts` (nuovo), `frontend/src/components/{PinnedAnswers.tsx(nuovo),Dashboard.tsx,QueryInterface.tsx}`.
+Gates: 1354 test backend, 21 frontend, ruff, tsc, build — verdi.
+
+---
+
 ## 2026-07-11 bis (Verified answers: few-shot learning sul NL→SQL)
 
 **P8 — idea di evoluzione #3.** Le coppie domanda→SQL confermate dall'utente

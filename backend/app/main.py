@@ -6430,6 +6430,113 @@ class SavedQueryPayload(BaseModel):
     created_at: str = Field(max_length=64)
 
 
+# ── Dashboard pins ────────────────────────────────────────────────────────────
+# A pinned answer is a question the user wants on the Dashboard: each tile
+# re-runs the question against live data on load, so the Dashboard shows
+# current numbers, not a snapshot. Server-persisted → shared by the team.
+
+_PINS_DB_PATH = _user_db_path("dashboard_pins.db")
+
+
+def _pins_db() -> _sqlite3.Connection:
+    conn = _sqlite3.connect(str(_PINS_DB_PATH))
+    conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS dashboard_pins (
+            id TEXT PRIMARY KEY,
+            sector_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            title TEXT DEFAULT '',
+            pinned_by TEXT DEFAULT '',
+            created_at TEXT NOT NULL
+        )"""
+    )
+    conn.commit()
+    return conn
+
+
+class DashboardPinPayload(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    sector_id: str = Field(min_length=1, max_length=128)
+    question: str = Field(min_length=3, max_length=2000)
+    title: str = Field(default="", max_length=200)
+
+
+@app.get("/api/dashboard/pins", tags=["dashboard"])
+def list_dashboard_pins(
+    sector_id: str = Query(min_length=1, max_length=128),
+    limit: int = Query(default=50, ge=1, le=100),
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict]:
+    conn = _pins_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM dashboard_pins WHERE sector_id = ?"
+            " ORDER BY created_at DESC LIMIT ?",
+            (sector_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+@app.post("/api/dashboard/pins", status_code=201, tags=["dashboard"])
+def create_dashboard_pin(
+    request: Request,
+    body: DashboardPinPayload,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict:
+    conn = _pins_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO dashboard_pins"
+            " (id, sector_id, question, title, pinned_by, created_at)"
+            " VALUES (?,?,?,?,?,?)",
+            (
+                body.id,
+                body.sector_id,
+                body.question,
+                body.title,
+                current_user.username,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM dashboard_pins WHERE id=?", (body.id,)
+        ).fetchone()
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
+    finally:
+        conn.close()
+    _audit(
+        request, current_user, "Answer pinned", body.question[:120], category="config"
+    )
+    return dict(row)
+
+
+@app.delete("/api/dashboard/pins/{pin_id}", status_code=204, tags=["dashboard"])
+def delete_dashboard_pin(
+    pin_id: Annotated[str, _ApiPath(max_length=128)],
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> None:
+    conn = _pins_db()
+    try:
+        conn.execute("DELETE FROM dashboard_pins WHERE id=?", (pin_id,))
+        conn.commit()
+    except _sqlite3.OperationalError as exc:
+        raise HTTPException(
+            status_code=503, detail="Database temporarily unavailable"
+        ) from exc
+    finally:
+        conn.close()
+
+
 @app.get("/api/queries/saved", tags=["queries"])
 def list_saved_queries(
     sector_id: str = Query(min_length=1, max_length=128),

@@ -9,6 +9,7 @@ import { useAgentStore, countFindings } from '../data/agentStore'
 import { IS_DEMO_MODE, workspaceLabel, modeScopedSector } from '../lib/demoMode'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { generateHtmlReport, downloadReport } from '../data/reportGenerator'
+import PinnedAnswers from './PinnedAnswers'
 import { semanticStatus, getLiveConfig, getDraft, getDataStoreStatus, type SemanticStatus, type LiveConfig, type SemanticDraft, type DataStoreStatus } from '../api/semantic'
 import { useJourneyProgress } from '../data/journeyProgress'
 import type { NavTab } from '../types'
@@ -708,6 +709,15 @@ export default function Dashboard({ onNavigate }: { onNavigate?: (tab: NavTab) =
 
       {/* Trend chart — synthetic series, demo only */}
       {showSynthetic && <TrendChart values={trendSeries} label={tc.label} unit={tc.unit} />}
+
+      {/* Answers pinned from Query AI — re-run on live data at every visit */}
+      {!IS_DEMO_MODE && (
+        <PinnedAnswers
+          onNavigateToQuery={(question) => {
+            window.dispatchEvent(new CustomEvent('navigate-to-query', { detail: { question } }))
+          }}
+        />
+      )}
 
       {/* Agent + Semantic Layer */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">

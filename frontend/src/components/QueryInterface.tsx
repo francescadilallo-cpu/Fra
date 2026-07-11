@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw, Database } from 'lucide-react'
+import { Send, Loader2, ChevronDown, ChevronRight, Bot, User, Lightbulb, GitBranch, BarChart2, Clock, X, AlertTriangle, Sparkles, ListChecks, Key, CheckCircle2, Zap, ExternalLink, Copy, Trash2, TrendingUp, PieChart, ArrowUpDown, ArrowUp, ArrowDown, Download, Star, Wifi, WifiOff, RefreshCw, Database, Pin } from 'lucide-react'
 import { executeQuery, type EngineResult, type ChartData } from '../data/queryEngine'
 import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
@@ -7,6 +7,7 @@ import {
 } from '../data/llmQueryEngine'
 import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQuestions, verifyAnswer, type ExampleQuestion } from '../api/semantic'
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
+import { createPin } from '../api/pins'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
 import { markQuestionAsked } from '../data/journeyProgress'
@@ -644,6 +645,52 @@ function VerifyAnswerButton({ question, sql }: { question: string; sql: string }
   )
 }
 
+/**
+ * "Pin to dashboard" — saves the question server-side; the Dashboard re-runs
+ * it on live data at every visit. Live mode only.
+ */
+function PinAnswerButton({ question }: { question: string }) {
+  const { sectorId } = useSector()
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle')
+
+  if (IS_DEMO_MODE) return null
+
+  const handlePin = () => {
+    setState('saving')
+    createPin({
+      id: crypto.randomUUID(),
+      sector_id: modeScopedSector(sectorId),
+      question,
+      title: question.length > 60 ? question.slice(0, 57) + '…' : question,
+    })
+      .then(() => setState('done'))
+      .catch(() => {
+        setState('error')
+        setTimeout(() => setState('idle'), 2500)
+      })
+  }
+
+  if (state === 'done') {
+    return (
+      <span className="flex items-center gap-1 text-xs text-teal-600">
+        <Pin className="w-3 h-3" />
+        Pinned — the dashboard will keep this answer fresh
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={handlePin}
+      disabled={state === 'saving'}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-teal-600 transition-colors disabled:opacity-50"
+      title="Keep this question on the dashboard, re-run on live data at every visit"
+    >
+      {state === 'saving' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pin className="w-3 h-3" />}
+      {state === 'error' ? 'Could not pin — retry' : 'Pin to dashboard'}
+    </button>
+  )
+}
+
 function SqlBlock({ sql }: { sql: string }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -848,7 +895,10 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           <GraphCitations provenance={r.provenance} />
           <SqlBlock sql={r.sql} />
           {message.sourceQuestion && (
-            <VerifyAnswerButton question={message.sourceQuestion} sql={r.sql} />
+            <div className="flex items-center gap-4 flex-wrap">
+              <VerifyAnswerButton question={message.sourceQuestion} sql={r.sql} />
+              <PinAnswerButton question={message.sourceQuestion} />
+            </div>
           )}
         </div>
 

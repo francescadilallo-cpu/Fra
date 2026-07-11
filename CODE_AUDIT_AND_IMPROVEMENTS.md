@@ -824,7 +824,7 @@ Idee coerenti con questo scopo, in ordine di leva:
    (stessa filosofia del learning loop di curation: le approvazioni umane
    migliorano il sistema). Riduce gli errori dell'LLM sulle domande ricorrenti
    del cliente.
-4. **Dashboard da risposte pinnate**: "pin" su una risposta della Query tab →
+4. **[IMPLEMENTATA 2026-07-11 — dashboard_pins + PinnedAnswers.tsx]** **Dashboard da risposte pinnate**: "pin" su una risposta della Query tab →
    tile del Dashboard che ri-esegue la stessa domanda a ogni apertura. Il
    Dashboard oggi è demo-driven; questo lo rende live con poco.
 5. **PII masking / column-level security nel semantic layer**: regole di
