@@ -2729,6 +2729,7 @@ def semantic_ask(
             context=merged_context,
             docs_override=merged_docs,
             hidden_tables=hidden,
+            mode=_current_user.mode,
         )
         response_model = SemanticAskResponse(
             answer=result.answer,
@@ -5108,6 +5109,79 @@ def _optional_user_mode(request: Request) -> Literal["demo", "live"]:
     except Exception:
         return "demo"
     return "live" if payload.get("mode") == "live" else "demo"
+
+
+# ── Verified answers — few-shot learning loop for NL→SQL ─────────────────────
+
+
+class VerifyAnswerRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=2000)
+    sql: str = Field(min_length=5, max_length=8000)
+
+
+@app.post("/api/semantic/answers/verify", tags=["semantic"])
+def verify_answer(
+    request: Request,
+    body: VerifyAnswerRequest,
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> dict[str, Any]:
+    """Mark a question→SQL pair as correct. Verified pairs steer future SQL
+    generation as few-shot examples (mode-scoped: demo pairs never reach
+    live prompts). The SQL passes the same SELECT-only guardrails as any
+    generated query before being stored."""
+    from .semantic.layer import SemanticSecurityViolationError
+    from .semantic.verified_answers import get_verified_answers_store
+
+    _ensure_semantic_loaded()
+    layer = _semantic_state.get("layer")
+    if layer is None:
+        raise HTTPException(status_code=503, detail="Semantic stack not ready")
+    try:
+        layer._validate_generated_sql(body.sql)  # noqa: SLF001 — same rail as generation
+    except SemanticSecurityViolationError:
+        raise HTTPException(
+            status_code=422,
+            detail="This SQL cannot be stored as a verified example",
+        )
+    record = get_verified_answers_store().add(
+        body.question,
+        body.sql,
+        verified_by=current_user.username,
+        mode=current_user.mode,
+    )
+    _audit(
+        request,
+        current_user,
+        "Answer verified",
+        body.question[:120],
+        category="config",
+    )
+    return record
+
+
+@app.get("/api/semantic/answers", tags=["semantic"])
+def list_verified_answers(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
+    """Verified question→SQL pairs for this workspace mode, newest first."""
+    from .semantic.verified_answers import get_verified_answers_store
+
+    return get_verified_answers_store().list_answers(current_user.mode, limit=limit)
+
+
+@app.delete("/api/semantic/answers/{answer_id}", status_code=204, tags=["semantic"])
+def delete_verified_answer(
+    answer_id: Annotated[str, _ApiPath(max_length=64)],
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> None:
+    """Forget a verified pair (e.g. the schema changed and the SQL is stale)."""
+    from .semantic.verified_answers import get_verified_answers_store
+
+    if not get_verified_answers_store().delete(answer_id):
+        raise HTTPException(status_code=404, detail="Verified answer not found")
+    _audit(request, current_user, "Answer unverified", answer_id, category="config")
 
 
 @app.get("/api/semantic/example-questions", tags=["semantic"])

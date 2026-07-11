@@ -10,6 +10,36 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-11 bis (Verified answers: few-shot learning sul NL→SQL)
+
+**P8 — idea di evoluzione #3.** Le coppie domanda→SQL confermate dall'utente
+diventano esempi che guidano la generazione SQL delle domande simili — la
+stessa filosofia del learning loop di curation, applicata al query engine.
+
+- **Store** (`semantic/verified_answers.py`, SQLite `verified_answers.db`):
+  coppie con provenienza (chi ha verificato, quando, quante volte riusate);
+  domanda identica ri-verificata → sostituisce la precedente.
+- **Retrieval deterministico**: matching lessicale token-overlap (stopword
+  EN+IT, accenti normalizzati: "quantità"→"quantita"), top-3 sopra soglia.
+- **Iniezione nel prompt** (`_execute_llm_sql`): blocco "Verified examples"
+  aggiunto al prompt LLM-SQL. Guardrail: scoping per mode (coppie demo mai
+  nei prompt live — il mode ora viaggia esplicitamente in `layer.ask()`),
+  e ogni esempio il cui SQL cita una tabella nascosta al chiamante viene
+  scartato (nessun leak di termini demo).
+- **API**: `POST /api/semantic/answers/verify` (valida l'SQL con gli stessi
+  guardrail SELECT-only della generazione — un DROP viene rifiutato 422),
+  `GET /api/semantic/answers`, `DELETE /api/semantic/answers/{id}` (admin).
+- **UI**: bottone "Verify answer" sotto il Generated SQL di ogni risposta
+  (solo live, solo SQL reale) → "Verified — similar questions will reuse
+  this answer".
+
+**Files:** `backend/app/semantic/{verified_answers.py(nuovo),layer.py}`,
+`backend/app/main.py`, `backend/tests/test_verified_answers.py` (nuovo, 11 test),
+`frontend/src/api/semantic.ts`, `frontend/src/components/QueryInterface.tsx`.
+Gates: 1351 test backend, 21 frontend, mypy, ruff, tsc, build — verdi.
+
+---
+
 ## 2026-07-11 (Fase 2: bridges convergenti cross-browser + digest periodico)
 
 **P6 — Il backend è la verità per il documento ontologia (bridges/entità).**

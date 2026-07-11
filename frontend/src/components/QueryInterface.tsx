@@ -5,7 +5,7 @@ import {
   executeLLMQuery, getStoredCredentials, saveCredentials, clearCredentials,
   PROVIDERS, type LLMProvider,
 } from '../data/llmQueryEngine'
-import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQuestions, type ExampleQuestion } from '../api/semantic'
+import { ask, adaptAskResult, checkBackend, backendErrorMessage, listExampleQuestions, verifyAnswer, type ExampleQuestion } from '../api/semantic'
 import { listSavedQueries, saveQueryRemote, deleteSavedQueryRemote } from '../api/queries'
 import { useSector } from '../contexts/SectorContext'
 import { useExtendedOntology } from '../data/ontologyExtensions'
@@ -23,6 +23,8 @@ interface Message {
   timestamp: Date
   retryQuery?: string
   httpStatus?: number
+  /** The question that produced this answer — needed to verify the pair. */
+  sourceQuestion?: string
 }
 
 // ── Query history helpers ──────────────────────────────────────────────────────
@@ -599,6 +601,49 @@ function GraphCitations({ provenance }: { provenance?: Record<string, unknown> }
 
 // ── SQL collapsible ────────────────────────────────────────────────────────────
 
+/**
+ * "Verify answer" — stores the question→SQL pair server-side; future similar
+ * questions reuse it as a worked example, so the engine learns this
+ * workspace's phrasing from human confirmations. Live mode, real SQL only.
+ */
+function VerifyAnswerButton({ question, sql }: { question: string; sql: string }) {
+  const [state, setState] = useState<'idle' | 'saving' | 'done' | 'error'>('idle')
+
+  if (IS_DEMO_MODE || !sql || sql.startsWith('--')) return null
+
+  const handleVerify = () => {
+    setState('saving')
+    verifyAnswer(question, sql)
+      .then(() => setState('done'))
+      .catch(() => {
+        setState('error')
+        setTimeout(() => setState('idle'), 2500)
+      })
+  }
+
+  if (state === 'done') {
+    return (
+      <span className="flex items-center gap-1 text-xs text-teal-600">
+        <CheckCircle2 className="w-3 h-3" />
+        Verified — similar questions will reuse this answer
+      </span>
+    )
+  }
+  return (
+    <button
+      onClick={handleVerify}
+      disabled={state === 'saving'}
+      className="flex items-center gap-1 text-xs text-slate-400 hover:text-teal-600 transition-colors disabled:opacity-50"
+      title="Confirm this answer is correct — the engine will reuse it for similar questions"
+    >
+      {state === 'saving'
+        ? <Loader2 className="w-3 h-3 animate-spin" />
+        : <CheckCircle2 className="w-3 h-3" />}
+      {state === 'error' ? 'Could not verify — retry' : 'Verify answer'}
+    </button>
+  )
+}
+
 function SqlBlock({ sql }: { sql: string }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -802,6 +847,9 @@ function MessageBubble({ message, onFollowUp, onRetry, isFavorite, onToggleFavor
           {r.steps && <StepsTrace steps={r.steps} />}
           <GraphCitations provenance={r.provenance} />
           <SqlBlock sql={r.sql} />
+          {message.sourceQuestion && (
+            <VerifyAnswerButton question={message.sourceQuestion} sql={r.sql} />
+          )}
         </div>
 
         {/* Ontology entities used */}
@@ -1080,6 +1128,7 @@ export default function QueryInterface() {
         engineResult: result,
         entities,
         timestamp: new Date(),
+        sourceQuestion: question,
       }
       setMessages((prev) => [...prev, assistantMsg])
     }

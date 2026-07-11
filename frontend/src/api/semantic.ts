@@ -262,6 +262,28 @@ export const deleteSegment = (id: string): Promise<void> =>
 export const ask = (question: string, sectorId = 'manufacturing', sessionId?: string): Promise<AskResult> =>
   http.post<AskResult>('/api/ask', { question, sector_id: sectorId, ...(sessionId ? { session_id: sessionId } : {}) }).then(r => r.data)
 
+// ── Verified answers (few-shot learning loop) ─────────────────────────────────
+// A pair the user confirms as correct steers future SQL generation for
+// similar questions in this workspace.
+
+export interface VerifiedAnswer {
+  id: string
+  question: string
+  sql: string
+  verified_by: string
+  created_at: string
+  use_count: number
+}
+
+export const verifyAnswer = (question: string, sql: string): Promise<VerifiedAnswer> =>
+  http.post<VerifiedAnswer>('/api/semantic/answers/verify', { question, sql }).then(r => r.data)
+
+export const listVerifiedAnswers = (): Promise<VerifiedAnswer[]> =>
+  http.get<VerifiedAnswer[]>('/api/semantic/answers').then(r => r.data)
+
+export const deleteVerifiedAnswer = (id: string): Promise<void> =>
+  http.delete(`/api/semantic/answers/${encodeURIComponent(id)}`).then(() => undefined)
+
 // ── LLM config status ─────────────────────────────────────────────────────────
 
 export interface LlmStatus {

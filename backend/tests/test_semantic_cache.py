@@ -519,6 +519,7 @@ def test_semantic_ask_redis_cache_short_circuits_repeated_layer_execution(
             context: dict[str, str],
             docs_override=None,
             hidden_tables=frozenset(),
+            mode=None,
         ) -> SimpleNamespace:
             calls["count"] += 1
             return SimpleNamespace(

@@ -819,7 +819,7 @@ Idee coerenti con questo scopo, in ordine di leva:
    riassume anomalie, KPI e proposte pendenti e lo manda via mail (il
    notifications store c'è già). Primo valore "passivo" per il cliente che
    non apre l'app tutti i giorni.
-3. **Verified answers / few-shot learning sul NL→SQL**: le coppie
+3. **[IMPLEMENTATA 2026-07-11 — semantic/verified_answers.py]** **Verified answers / few-shot learning sul NL→SQL**: le coppie
    domanda→SQL approvate diventano esempi few-shot per le domande successive
    (stessa filosofia del learning loop di curation: le approvazioni umane
    migliorano il sistema). Riduce gli errori dell'LLM sulle domande ricorrenti

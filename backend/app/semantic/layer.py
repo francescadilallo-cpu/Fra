@@ -837,14 +837,19 @@ class SemanticLayer:
         context=None,
         docs_override: SemanticDocs | None = None,
         hidden_tables: frozenset[str] = frozenset(),
+        mode: str | None = None,
     ) -> Result:
         """Resolve *question* and return a Result.
 
         *hidden_tables* lists tables that must be invisible to this request
         (live-mode users must never see demo tables in generated SQL).
+        *mode* is the caller's workspace mode ('demo' | 'live') — used to
+        scope the verified-answers few-shot examples; when omitted it is
+        inferred from hidden_tables (non-empty ⇒ live).
         """
         SemanticLayer._thread_local.docs = docs_override
         SemanticLayer._thread_local.hidden_tables = hidden_tables
+        SemanticLayer._thread_local.mode = mode or ("live" if hidden_tables else "demo")
         t0 = time.perf_counter()
         try:
             result = self._resolve(question, context)
@@ -870,6 +875,7 @@ class SemanticLayer:
             # into the next request that runs on this thread.
             SemanticLayer._thread_local.docs = None
             SemanticLayer._thread_local.hidden_tables = frozenset()
+            SemanticLayer._thread_local.mode = None
         result.latency_ms = round((time.perf_counter() - t0) * 1000, 2)
         return result
 
@@ -1577,6 +1583,25 @@ class SemanticLayer:
             if _ctx_parts:
                 _ctx_block = "\n\n### Business Context\n" + "\n\n".join(_ctx_parts)
 
+        # Few-shot learning loop: question→SQL pairs previously verified by a
+        # human steer the model toward this workspace's phrasing and schema
+        # idioms. Mode-scoped and hidden-table-filtered inside the store.
+        _examples_block = ""
+        try:
+            from .verified_answers import (  # noqa: PLC0415
+                few_shot_block,
+                get_verified_answers_store,
+            )
+
+            _mode = getattr(SemanticLayer._thread_local, "mode", None) or (
+                "live" if _hidden else "demo"
+            )
+            _examples_block = few_shot_block(
+                get_verified_answers_store(), intent.raw_question, _mode, _hidden
+            )
+        except Exception as _va_exc:  # noqa: BLE001 — never break the query
+            logger.debug("verified answers block skipped: %s", _va_exc)
+
         system_prompt = (
             "You are a SQL generator for a DuckDB analytical database. "
             "Generate a single SELECT query (or CTE + SELECT) that answers the "
@@ -1587,7 +1612,7 @@ class SemanticLayer:
             "Use double-quoted identifiers when column or table names contain spaces. "
             "If the question cannot be answered from the available schema, return "
             '{"sql": "", "reason": "<explanation>"}.\n\n'
-            f"{schema_ctx}{_ctx_block}{_graph_block}"
+            f"{schema_ctx}{_ctx_block}{_graph_block}{_examples_block}"
         )
         user_content = json.dumps(
             {
