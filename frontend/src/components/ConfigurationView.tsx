@@ -3,6 +3,7 @@ import { Bot, Workflow, Wrench, Shield, Check, X, Database, Plug, Sparkles, Load
 import { useSector } from '../contexts/SectorContext'
 import { SECTORS, type SectorId } from '../data/sectors'
 import { UsersSection, ApiTokensSection, NotificationsSection, AuditLogSection, WorkspaceSection } from './AdminSections'
+import { PiiSection } from './PiiPanel'
 import { IS_DEMO_MODE } from '../lib/demoMode'
 import { getLlmStatus, type LlmStatus } from '../api/semantic'
 
@@ -647,6 +648,9 @@ export default function ConfigurationView() {
 
       {/* Section 8: Notification Channels */}
       <NotificationsSection />
+
+      {/* Section 8b: Data protection (PII masking) */}
+      <PiiSection />
 
       {/* Section 9: Audit Log */}
       <AuditLogSection />

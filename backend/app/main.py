@@ -1424,6 +1424,35 @@ class SemanticAskRequest(BaseModel):
         return (self.query or "").strip()
 
 
+def _mask_ask_response(resp: "SemanticAskResponse") -> "SemanticAskResponse":
+    """Apply PII masking rules to a query answer at the API boundary.
+
+    Runs on every exit path (cache hits included) so newly added rules take
+    effect immediately, regardless of what was cached. Only tabular answers
+    (list of dicts) can carry column values worth masking."""
+    try:
+        from .semantic.pii import get_pii_store, mask_rows
+
+        answer = resp.answer
+        if not (isinstance(answer, list) and answer and isinstance(answer[0], dict)):
+            return resp
+        rules = get_pii_store().list_rules()
+        if not rules:
+            return resp
+        masked, cols = mask_rows(answer, rules, tables=resp.sources_touched)
+        if not cols:
+            return resp
+        return resp.model_copy(
+            update={
+                "answer": masked,
+                "provenance": {**resp.provenance, "masked_columns": cols},
+            }
+        )
+    except Exception:  # noqa: BLE001 — masking must never break an answer
+        logger.warning("PII masking pass failed", exc_info=True)
+        return resp
+
+
 class SemanticAskResponse(BaseModel):
     answer: Any
     sql_used: str | None = None
@@ -2199,6 +2228,21 @@ def validate_ontology_configuration(
         )
 
 
+def _mask_table_dump(table: str, data: list[dict]) -> list[dict]:
+    """PII masking for the raw table browser — rules applied at the boundary."""
+    try:
+        from .semantic.pii import get_pii_store, mask_rows
+
+        rules = get_pii_store().list_rules()
+        if not rules:
+            return data
+        masked, _cols = mask_rows(data, rules, tables=[table])
+        return masked
+    except Exception:  # noqa: BLE001 — masking must never break the browser
+        logger.warning("PII masking pass failed for table %s", table, exc_info=True)
+        return data
+
+
 @app.get("/api/data/{table}", response_model=PaginatedData)
 def get_table_data(
     table: Annotated[str, _ApiPath(max_length=256)],
@@ -2263,6 +2307,7 @@ def get_table_data(
             )
             cols = [d[0] for d in cursor.description]
             data = [dict(zip(cols, row)) for row in cursor.fetchall()]
+            data = _mask_table_dump(table, data)
         except Exception as exc:
             # The table can disappear between the SHOW TABLES whitelist check
             # and this query if a concurrent source removal rebuilds the
@@ -2281,7 +2326,7 @@ def get_table_data(
         rows = conn.execute(
             f"SELECT * FROM {table_id} LIMIT ? OFFSET ?", (page_size, offset)
         ).fetchall()
-        data = [dict(row) for row in rows]
+        data = _mask_table_dump(table, [dict(row) for row in rows])
         return PaginatedData(
             table=table,
             total=total,
@@ -2660,7 +2705,9 @@ def semantic_ask(
             try:
                 cached_payload = redis_client.get(cache_key)
                 if isinstance(cached_payload, str) and cached_payload.strip():
-                    return SemanticAskResponse.model_validate_json(cached_payload)
+                    return _mask_ask_response(
+                        SemanticAskResponse.model_validate_json(cached_payload)
+                    )
             except Exception:
                 pass
         else:
@@ -2669,7 +2716,7 @@ def semantic_ask(
                 if hit is not None:
                     _in_process_cache.move_to_end(cache_key)
             if hit:
-                return SemanticAskResponse.model_validate_json(hit)
+                return _mask_ask_response(SemanticAskResponse.model_validate_json(hit))
 
     _ensure_semantic_loaded()
     layer = _semantic_state.get("layer")
@@ -2763,7 +2810,7 @@ def semantic_ask(
             _conv_append(
                 req.session_id, question, str(response_model.answer or "")[:400]
             )
-        return response_model
+        return _mask_ask_response(response_model)
     except AmbiguityError as e:
         return SemanticAskResponse(
             answer=None,
@@ -5182,6 +5229,87 @@ def delete_verified_answer(
     if not get_verified_answers_store().delete(answer_id):
         raise HTTPException(status_code=404, detail="Verified answer not found")
     _audit(request, current_user, "Answer unverified", answer_id, category="config")
+
+
+# ── PII masking rules ─────────────────────────────────────────────────────────
+
+
+class PiiRuleRequest(BaseModel):
+    column: str = Field(min_length=1, max_length=200)
+    strategy: Literal["full", "partial", "email"]
+    table: str = Field(default="", max_length=256)
+
+
+@app.get("/api/semantic/pii/rules", tags=["semantic"])
+def list_pii_rules(
+    _user: UserPrincipal = Depends(require_roles("user", "admin")),
+) -> list[dict[str, Any]]:
+    """Active masking rules. Values in protected columns are masked
+    server-side before any API response is returned."""
+    from .semantic.pii import get_pii_store
+
+    return get_pii_store().list_rules()
+
+
+@app.post("/api/semantic/pii/rules", status_code=201, tags=["semantic"])
+def create_pii_rule(
+    request: Request,
+    body: PiiRuleRequest,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> dict[str, Any]:
+    """Add (or replace) a masking rule. Empty table = the column name is
+    masked wherever it appears in any result."""
+    from .semantic.pii import get_pii_store
+
+    record = get_pii_store().add(
+        body.column,
+        body.strategy,
+        table=body.table,
+        created_by=current_user.username,
+    )
+    _audit(
+        request,
+        current_user,
+        "PII rule added",
+        f"{body.table or '*'}.{body.column} ({body.strategy})",
+        category="config",
+    )
+    return record
+
+
+@app.delete("/api/semantic/pii/rules/{rule_id}", status_code=204, tags=["semantic"])
+def delete_pii_rule(
+    rule_id: Annotated[str, _ApiPath(max_length=64)],
+    request: Request,
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> None:
+    from .semantic.pii import get_pii_store
+
+    if not get_pii_store().delete(rule_id):
+        raise HTTPException(status_code=404, detail="Rule not found")
+    _audit(request, current_user, "PII rule removed", rule_id, category="config")
+
+
+@app.post("/api/semantic/pii/scan", tags=["semantic"])
+def scan_pii_candidates(
+    current_user: UserPrincipal = Depends(require_roles("admin")),
+) -> list[dict[str, Any]]:
+    """Suggest masking rules from column NAMES (no row data is read).
+    Columns already covered by a rule are skipped; each suggestion must be
+    explicitly approved by an admin to become a rule."""
+    from .connectors.duckdb_source_manager import get_source_manager
+    from .semantic.pii import get_pii_store, suggest_rules
+
+    _ensure_semantic_loaded()
+    mgr = get_source_manager(_SCENARIO_PATH)
+    internal = frozenset(getattr(mgr, "internal_metadata_tables", ()) or ())
+    hidden = _hidden_demo_tables(current_user)
+    schema = {
+        table: info
+        for table, info in mgr.get_schema_info().items()
+        if table not in internal and table not in hidden
+    }
+    return suggest_rules(schema, get_pii_store().list_rules())
 
 
 @app.get("/api/semantic/example-questions", tags=["semantic"])

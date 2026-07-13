@@ -64,6 +64,7 @@ Endpoint principali:
 - POST /api/agent/approve/{action_id}, GET /api/agent/audit
 - GET /api/agents/custom, POST, PUT, DELETE — agenti custom live
 - GET /api/queries/saved, POST, DELETE — query salvate
+- GET/POST/DELETE /api/semantic/pii/rules, POST /api/semantic/pii/scan — mascheramento PII per colonna applicato a ogni uscita API (ask incluso cache, /api/data); scan deterministico sui nomi colonna; UI `PiiPanel.tsx` in Configuration
 - GET/POST /api/dashboard/pins, DELETE /api/dashboard/pins/{id} — domande pinnate dal Query AI, ri-eseguite live dal Dashboard (`PinnedAnswers.tsx`) a ogni visita; store `dashboard_pins.db`
 - GET /api/ontology/extension, PUT /api/ontology/extension — bridge cross-source (localStorage sync)
 

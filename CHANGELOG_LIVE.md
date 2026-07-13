@@ -10,6 +10,36 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-11 quater (PII masking: protezione colonne lato server)
+
+**P10 — idea di evoluzione #5.** Mascheramento per colonna applicato PRIMA
+che i dati lascino il server: risposte del Query AI (`/api/semantic/ask`,
+inclusi i cache hit — le regole si applicano a ogni uscita, quindi una
+regola nuova vale subito anche sul cache) e Data Explorer
+(`/api/data/{table}`) non mostrano mai il contenuto delle colonne protette.
+
+- **Regole** (`semantic/pii.py`, SQLite `pii_rules.db`): per colonna, globali
+  (nome colonna mascherato ovunque appaia — conservativo, gli alias SQL non
+  possono eludere) o scoped per tabella; strategie `full` (•••••),
+  `partial` (ultime 4), `email` (prima lettera + dominio); NULL resta NULL.
+- **Scan HITL**: `POST /api/semantic/pii/scan` suggerisce colonne dai SOLI
+  nomi (codice_fiscale, email, telefono, iban, partita_iva, password,
+  nascita, indirizzo… EN+IT) — nessun dato letto; ogni suggerimento diventa
+  regola solo con approvazione admin esplicita.
+- **API**: `GET /api/semantic/pii/rules` (tutti — trasparenza su cosa è
+  protetto), `POST`/`DELETE` (admin, con audit).
+- **UI**: sezione "Data protection" in Configuration (`PiiPanel.tsx`):
+  elenco regole, scan con suggerimenti "Protect", aggiunta manuale.
+- `provenance.masked_columns` nelle risposte query segnala cosa è stato
+  mascherato.
+
+**Files:** `backend/app/semantic/pii.py` (nuovo), `backend/app/main.py`,
+`backend/tests/test_pii.py` (nuovo, 14 test incluso E2E sul dump),
+`frontend/src/components/{PiiPanel.tsx(nuovo),ConfigurationView.tsx}`.
+Gates: 1368 test backend, 21 frontend, ruff, tsc, build — verdi.
+
+---
+
 ## 2026-07-11 ter (Dashboard pins: risposte pinnate che restano fresche)
 
 **P9 — idea di evoluzione #4.** Da Query AI si può ora "pinnare" una risposta
