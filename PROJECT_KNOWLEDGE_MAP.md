@@ -253,6 +253,7 @@ Responsabilita:
 - ciclo agentico command -> parse -> semantic validation -> pending queue -> human approval -> execution
 - separazione netta decisione agentica vs esecuzione write-back reale
 - enforcement vincoli business tramite ontologia (SalesOrder) e controllo dati runtime
+- **Write-back Salesforce** (`UPDATE_SALESFORCE_FIELD`): comando NL (EN/IT) → validazione fail-closed (id 15/18, campi sistema sempre bloccati, describe live conferma updateable+record) alla submission E all'approvazione → PATCH single-field via `SalesforceConnector.update_record` (refresh su 401, unica scrittura del connector); gateway `sf_check`/`sf_update` iniettato da main; v1 solo update single-field, no create/delete
 - audit semantico strutturato per compliance (EU AI Act-ready)
 
 **Agent runtime server-side (runtime.py)**: gli agenti custom LIVE con trigger

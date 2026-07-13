@@ -1786,6 +1786,49 @@ def _agentic_cache_invalidator() -> int:
     return 1
 
 
+def _sf_writeback_connector():
+    """Connector for the first connected Salesforce source with valid
+    credentials, or None. Built per call — write-backs are rare, and a fresh
+    connector always reads the current token file."""
+    from .connectors.salesforce_connector import (
+        SalesforceConnector,
+        load_salesforce_config,
+    )
+    from .connectors.source_registry import get_source_registry
+
+    for src in get_source_registry().list():
+        if src.connector_type != "salesforce":
+            continue
+        cfg = load_salesforce_config(src.id)
+        if cfg and cfg.get("access_token"):
+            return SalesforceConnector(
+                instance_url=cfg["instance_url"],
+                access_token=cfg["access_token"],
+                refresh_token=cfg.get("refresh_token"),
+                client_id=cfg.get("client_id"),
+                client_secret=cfg.get("client_secret"),
+            )
+    return None
+
+
+def _sf_writeback_check(obj: str, sf_field: str, record_id: str) -> str | None:
+    """Live validation for a proposed Salesforce write (None = OK)."""
+    connector = _sf_writeback_connector()
+    if connector is None:
+        return "No Salesforce source with valid credentials is connected"
+    with connector as sf:
+        return sf.check_field_updateable(obj, sf_field, record_id)
+
+
+def _sf_writeback_update(obj: str, record_id: str, sf_field: str, value: str) -> None:
+    """The approved write itself — single-field PATCH, HITL-gated upstream."""
+    connector = _sf_writeback_connector()
+    if connector is None:
+        raise RuntimeError("No Salesforce source connected")
+    with connector as sf:
+        sf.update_record(obj, record_id, sf_field, value)
+
+
 _agentic_layer = ExecutiveAgenticLayer(
     get_ontology=_get_agentic_ontology,
     get_db_connection=get_connection,
@@ -1795,6 +1838,8 @@ _agentic_layer = ExecutiveAgenticLayer(
     # File-backed state so the pending-approval queue and audit trail survive
     # restarts and are shared across worker processes.
     state_db_path=data_dir() / "agent_state.db",
+    sf_check=_sf_writeback_check,
+    sf_update=_sf_writeback_update,
 )
 app.include_router(build_agent_router(_agentic_layer, require_roles("admin")))
 app.include_router(

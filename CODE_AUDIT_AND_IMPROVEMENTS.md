@@ -831,7 +831,7 @@ Idee coerenti con questo scopo, in ordine di leva:
    mascheramento per colonna (codice fiscale, email) applicate prima che i
    risultati raggiungano LLM e UI. Il caso "pazienti" (healthcare) lo rende
    quasi obbligatorio per vendere in quel verticale.
-6. **Write-back Salesforce via coda HITL**: l'Executive Layer ha già la coda
+6. **[IMPLEMENTATA 2026-07-11 — UPDATE_SALESFORCE_FIELD]** **Write-back Salesforce via coda HITL**: l'Executive Layer ha già la coda
    e l'audit; aggiungere l'esecuzione post-approvazione verso l'API Salesforce
    (update campo, merge account) chiude il cerchio "read → understand → act".
 7. **Matching entità via embedding** come segnale aggiuntivo dell'advisor

@@ -10,6 +10,39 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-07-11 quinquies (Salesforce write-back via coda HITL)
+
+**P11 — idea di evoluzione #6.** Il cerchio "read → understand → act" si
+chiude: un comando naturale può ora proporre la modifica di un campo su un
+record Salesforce, e la modifica avviene SOLO dopo approvazione umana.
+
+- **Comando** (EN/IT): `update salesforce Account 001A000001BcDeF set Phone
+  to 02 1234567` / `aggiorna su salesforce Account <id> campo Rating a Hot`.
+- **Nuovo action type** `UPDATE_SALESFORCE_FIELD` nell'Executive Agentic
+  Layer, stessa coda PENDING_HUMAN_APPROVAL e stesso audit di tutte le altre
+  azioni. Gateway iniettato da main (`sf_check`/`sf_update`) — senza sorgente
+  Salesforce configurata la validazione fallisce chiusa ("not configured").
+- **Validazione multilivello**: formato record id (15/18 alfanumerico); campi
+  di sistema sempre bloccati (Id, CreatedDate, SystemModstamp…, qualunque
+  cosa dica il describe); describe LIVE che conferma che il campo esiste ed è
+  `updateable` e che il record esiste. La validazione gira alla submission E
+  di nuovo all'approvazione: un permesso revocato su Salesforce tra i due
+  momenti blocca la scrittura.
+- **Esecuzione**: `SalesforceConnector.update_record` — singolo PATCH con
+  refresh token su 401, HTTP 204 = successo; è l'UNICA scrittura che il
+  connector sa fare, invocata esclusivamente dal ramo post-approvazione.
+  Errori Salesforce loggati in dettaglio ma esposti all'utente con messaggio
+  pulito (niente URL/response interne).
+- Solo aggiornamenti single-field in v1 — niente create, niente delete.
+
+**Files:** `backend/app/agentic/executive.py`,
+`backend/app/connectors/salesforce_connector.py`, `backend/app/main.py`,
+`backend/tests/test_sf_writeback.py` (nuovo, 11 test).
+Gates: 1379 test backend, mypy, ruff — verdi. Nessun cambio frontend (il
+comando passa dalla stessa UI Executive Actions già esistente).
+
+---
+
 ## 2026-07-11 quater (PII masking: protezione colonne lato server)
 
 **P10 — idea di evoluzione #5.** Mascheramento per colonna applicato PRIMA

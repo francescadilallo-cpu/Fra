@@ -90,6 +90,20 @@ _VALID_STATUS_TRANSITIONS: dict[str, set[str]] = {
 _ORDER_ACTIONS = {"UPDATE_ORDER_DELIVERY_DATE", "UPDATE_ORDER_STATUS"}
 # Actions that curate the data model itself — no source-system writes.
 _DATA_MODEL_ACTIONS = {"MERGE_ENTITIES", "RENAME_ENTITY", "SET_ENTITY_CONCEPT"}
+# Actions that write back to an EXTERNAL source system (Salesforce).
+_SALESFORCE_ACTIONS = {"UPDATE_SALESFORCE_FIELD"}
+# System/audit fields that must never be writable, whatever describe says.
+_SF_BLOCKED_FIELDS = frozenset(
+    {
+        "id",
+        "createddate",
+        "createdbyid",
+        "lastmodifieddate",
+        "lastmodifiedbyid",
+        "systemmodstamp",
+        "isdeleted",
+    }
+)
 
 
 class ProposedWriteAction(BaseModel):
@@ -99,6 +113,7 @@ class ProposedWriteAction(BaseModel):
         "MERGE_ENTITIES",
         "RENAME_ENTITY",
         "SET_ENTITY_CONCEPT",
+        "UPDATE_SALESFORCE_FIELD",
     ]
     # Order write-back fields
     order_id: int | None = None
@@ -109,6 +124,11 @@ class ProposedWriteAction(BaseModel):
     entity_b: str | None = None
     new_name: str | None = None
     concept: str | None = None
+    # Salesforce write-back fields (single-field record update)
+    sf_object: str | None = None
+    sf_record_id: str | None = None
+    sf_field: str | None = None
+    sf_value: str | None = None
     rationale: str
 
 
@@ -162,6 +182,8 @@ class ExecutiveAgenticLayer:
         cache_invalidator: Callable[[], int] | None = None,
         state_db_path: "Path | None" = None,
         get_catalog: Callable[[], Any] | None = None,
+        sf_check: Callable[[str, str, str], str | None] | None = None,
+        sf_update: Callable[[str, str, str, str], None] | None = None,
     ) -> None:
         # Local import avoids a module-level circular import (store imports the
         # action/audit models from this module).
@@ -172,6 +194,12 @@ class ExecutiveAgenticLayer:
         self._kg_patcher = kg_patcher
         self._cache_invalidator = cache_invalidator
         self._get_catalog = get_catalog
+        # Salesforce write-back gateway, injected by main. ``sf_check(object,
+        # field, record_id)`` returns an error string or None; ``sf_update``
+        # performs the single-field PATCH. Absent → the action type is
+        # rejected at validation ("not configured"), never at execution.
+        self._sf_check = sf_check
+        self._sf_update = sf_update
         # Guards the approve/reject critical section within a single process.
         # Cross-process atomicity is best-effort via a status re-check against
         # the shared store.
@@ -371,11 +399,15 @@ class ExecutiveAgenticLayer:
                     actor_role=actor_role,
                     details={"error": str(exc)},
                 )
-                # Only pass through messages from controlled validation exceptions;
-                # raw system errors (DB, IO) must not leak internal details.
+                # Only pass through messages from controlled exceptions (we
+                # author those texts); raw system errors (DB, IO, HTTP) must
+                # not leak internal details.
                 _safe_msg = (
                     str(exc)
-                    if isinstance(exc, (ValueError, AgentSemanticValidationError))
+                    if isinstance(
+                        exc,
+                        (ValueError, AgentSemanticValidationError, AgentExecutionError),
+                    )
                     else "Action execution failed — see audit log for details"
                 )
                 raise AgentExecutionError(_safe_msg) from exc
@@ -442,6 +474,31 @@ class ExecutiveAgenticLayer:
             r"|(?:assign|set)\s+entity\s+([\w.]+)\s+(?:to\s+concept|concept\s+to)\s+([\w]+))",
             re.IGNORECASE,
         )
+
+        # ── Salesforce write-back: single-field record update ────────────────
+        # EN: update salesforce <Object> <RecordId> set <field> to <value>
+        # IT: aggiorna su salesforce <Object> <RecordId> campo <field> a <value>
+        sf_update_re = re.compile(
+            r"(?:update\s+salesforce|aggiorna\s+(?:su\s+)?salesforce)\s+"
+            r"(\w+)\s+([a-zA-Z0-9]{15,18})\s+"
+            r"(?:set\s+|campo\s+)?([\w]+)\s+(?:to|a)\s+(.+?)\s*$",
+            re.IGNORECASE,
+        )
+        m = sf_update_re.search(command)
+        if m:
+            value = m.group(4).strip().strip("\"'")
+            if not value or len(value) > 500:
+                raise AgentSemanticValidationError(
+                    "The new value must be between 1 and 500 characters"
+                )
+            return ProposedWriteAction(
+                action_type="UPDATE_SALESFORCE_FIELD",
+                sf_object=m.group(1),
+                sf_record_id=m.group(2),
+                sf_field=m.group(3),
+                sf_value=value,
+                rationale="Salesforce write-back via Executive Agentic Layer",
+            )
 
         m = merge_re.search(command)
         if m:
@@ -522,6 +579,8 @@ class ExecutiveAgenticLayer:
     def _validate_semantics(self, action: ProposedWriteAction) -> ValidationOutcome:
         if action.action_type in _DATA_MODEL_ACTIONS:
             return self._validate_data_model(action)
+        if action.action_type in _SALESFORCE_ACTIONS:
+            return self._validate_salesforce(action)
 
         checks: list[str] = []
 
@@ -619,6 +678,62 @@ class ExecutiveAgenticLayer:
             if wanted in candidates:
                 return e
         return None
+
+    def _validate_salesforce(self, action: ProposedWriteAction) -> ValidationOutcome:
+        """Salesforce single-field update: gateway configured, sane
+        identifiers, field not a system field, and a LIVE describe confirming
+        the field is updateable and the record exists. Runs at submission AND
+        again at approval time (re-validation), so a permission revoked in
+        Salesforce between the two blocks the write."""
+        checks: list[str] = []
+        if self._sf_check is None or self._sf_update is None:
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason=(
+                    "Salesforce write-back is not configured — connect a "
+                    "Salesforce source first"
+                ),
+            )
+        checks.append("gateway_configured")
+
+        obj = (action.sf_object or "").strip()
+        record_id = (action.sf_record_id or "").strip()
+        field = (action.sf_field or "").strip()
+        value = (action.sf_value or "").strip()
+        if not (obj and record_id and field and value):
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason="Object, record id, field and value are all required",
+            )
+        if len(record_id) not in (15, 18) or not record_id.isalnum():
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason=f"'{record_id}' is not a valid Salesforce record id",
+            )
+        checks.append("record_id_format")
+        if field.lower() in _SF_BLOCKED_FIELDS:
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason=f"Field '{field}' is a system field and can never be updated",
+            )
+        checks.append("not_a_system_field")
+
+        try:
+            error = self._sf_check(obj, field, record_id)
+        except Exception as exc:  # noqa: BLE001 — gateway/network issues fail closed
+            return ValidationOutcome(
+                passed=False,
+                checks=checks,
+                reason=f"Could not verify the field against Salesforce: {exc}",
+            )
+        if error:
+            return ValidationOutcome(passed=False, checks=checks, reason=error)
+        checks.append("field_updateable_and_record_exists")
+        return ValidationOutcome(passed=True, checks=checks)
 
     def _validate_data_model(self, action: ProposedWriteAction) -> ValidationOutcome:
         """Validate data-model curation actions against the metadata catalog.
@@ -791,6 +906,16 @@ class ExecutiveAgenticLayer:
             raise AgentExecutionError(f"Unsupported action_type: {action.action_type}")
 
     def _compute_action_effect(self, action: ProposedWriteAction) -> "ActionEffect":
+        if action.action_type in _SALESFORCE_ACTIONS:
+            # The write happened in Salesforce, not in the local store: with
+            # metadata-only ingestion there is nothing local to resync.
+            return ActionEffect(
+                action_type=action.action_type,
+                changed_fields={
+                    f"{action.sf_object}.{action.sf_field}": action.sf_value
+                },
+            )
+
         if action.action_type == "UPDATE_ORDER_DELIVERY_DATE":
             return ActionEffect(
                 action_type=action.action_type,
@@ -876,6 +1001,27 @@ class ExecutiveAgenticLayer:
     def _execute_writeback(self, action: ProposedWriteAction) -> None:
         if action.action_type in _DATA_MODEL_ACTIONS:
             self._execute_data_model(action)
+            return
+        if action.action_type in _SALESFORCE_ACTIONS:
+            if self._sf_update is None:  # pragma: no cover — validation blocks this
+                raise AgentExecutionError("Salesforce write-back is not configured")
+            assert action.sf_object and action.sf_record_id
+            assert action.sf_field and action.sf_value is not None
+            try:
+                self._sf_update(
+                    action.sf_object,
+                    action.sf_record_id,
+                    action.sf_field,
+                    action.sf_value,
+                )
+            except Exception as exc:
+                # The gateway error can carry instance URLs/response bodies —
+                # keep the user-facing message clean, log the detail.
+                logger.warning("salesforce write-back failed: %s", exc)
+                raise AgentExecutionError(
+                    f"Salesforce rejected the update of "
+                    f"{action.sf_object}/{action.sf_record_id}.{action.sf_field}"
+                ) from exc
             return
 
         conn = self._get_db_connection()

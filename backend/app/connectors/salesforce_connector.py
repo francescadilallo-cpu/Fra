@@ -468,6 +468,64 @@ class SalesforceConnector:
             )
         return resp.json()
 
+    def update_record(
+        self, object_name: str, record_id: str, field: str, value: str
+    ) -> None:
+        """Single-field record update (PATCH). The ONLY write this connector
+        performs — called exclusively by the Executive Agentic Layer after a
+        human approved the action; never invoked by ingestion or agents on
+        their own. Refreshes the token on 401. Success is HTTP 204."""
+        path = f"/sobjects/{object_name}/{record_id}"
+        url = f"{self.instance_url}/services/data/{_SF_API_VERSION}{path}"
+        payload = {field: value}
+        resp = self._http.patch(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {self._access_token}"},
+        )
+        if resp.status_code == 401:
+            self._refresh_access_token()
+            resp = self._http.patch(
+                url,
+                json=payload,
+                headers={"Authorization": f"Bearer {self._access_token}"},
+            )
+        if resp.status_code != 204:
+            raise SalesforceAPIError(
+                f"Salesforce update {object_name}/{record_id}.{field} "
+                f"returned {resp.status_code}: {resp.text[:400]}"
+            )
+
+    def check_field_updateable(
+        self, object_name: str, field: str, record_id: str | None = None
+    ) -> str | None:
+        """Validation for a proposed write: None when the field exists, is
+        updateable, and (when *record_id* is given) the record exists.
+        Otherwise a human-readable reason. Uses a LIVE describe so the answer
+        reflects current org permissions, not a stale cache."""
+        try:
+            desc = self.describe_object(object_name)
+        except SalesforceAPIError:
+            return f"Salesforce object '{object_name}' not found or not accessible"
+        field_meta = next(
+            (
+                f
+                for f in desc.get("fields", [])
+                if str(f.get("name", "")).lower() == field.lower()
+            ),
+            None,
+        )
+        if field_meta is None:
+            return f"Field '{field}' does not exist on {object_name}"
+        if not field_meta.get("updateable", False):
+            return f"Field '{object_name}.{field}' is not updateable"
+        if record_id:
+            try:
+                self._get(f"/sobjects/{object_name}/{record_id}?fields=Id")
+            except SalesforceAPIError:
+                return f"Record {object_name}/{record_id} not found"
+        return None
+
     def get_schema_bulk(self, max_objects: int = 0) -> "SalesforceSchema":
         """Describe all queryable SObjects via Composite batch API.
 
