@@ -2,3 +2,13 @@ context.db
 # Runtime registry: re-seeded with environment-correct source paths on each
 # deploy. Committing it would bake in absolute paths from the build machine.
 source_registry.db
+
+# OAuth credentials written by save_salesforce_config(): instance_url,
+# access_token, refresh_token, client_id, client_secret — all in clear text.
+# These were committed once (aed3645) into a public repository; never again.
+salesforce_config.json
+
+# Full object/field dump of the connected Salesforce org. Not a credential,
+# but customer schema that does not belong in version control (the one commit
+# that carried it was 376k lines).
+salesforce_schema_*.json

@@ -10,6 +10,22 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-08-24 (Security: credenziali Salesforce non protette dal .gitignore)
+
+`backend/data/salesforce_config.json` — scritto a runtime da
+`save_salesforce_config()` con access_token, refresh_token, client_id e
+client_secret in chiaro — non era coperto da alcuna regola .gitignore: la root
+ignora `backend/data/*.db` e `*.duckdb`, non i `.json`. Il file è stato
+committato (aed3645) con credenziali reali di un sandbox Salesforce.
+
+- `backend/data/.gitignore` — aggiunte `salesforce_config.json` e
+  `salesforce_schema_*.json`.
+- `CODE_AUDIT_AND_IMPROVEMENTS.md` — il finding L3 dava il file per "gitignored
+  per policy": valutazione errata, sostituita da C4 con la procedura di revoca.
+
+Il .gitignore previene la ricorrenza ma non sana l'esposizione: le credenziali
+già pubblicate vanno revocate lato Salesforce.
+
 ## 2026-08-24 (Local dev su macOS: bootstrap riproducibile + suite pytest isolata)
 
 Far girare lo stack in locale richiedeva ricostruire a mano venv, `.env`, hash

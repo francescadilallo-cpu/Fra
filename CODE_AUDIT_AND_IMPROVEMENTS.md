@@ -272,25 +272,50 @@ Azioni residue:
 
 ## BASSO
 
-### L3 - Salesforce credentials stored plaintext (noto, atteso)
+### C4 - Credenziali OAuth Salesforce committate in repository pubblico
 
-Stato: APERTO (noto, accettato per ora)
+Stato: APERTO — RICHIEDE REVOCA IMMEDIATA
+
+Sostituisce la precedente valutazione L3, che dava il file per "gitignored per
+policy". La verifica dimostra il contrario.
 
 Evidenza:
 
-- backend/data/salesforce_config.json contiene password e security_token in chiaro
-- il file risiede su Render persistent disk; non è in git (gitignored per policy)
+- backend/data/salesforce_config.json NON è coperto da alcuna regola .gitignore:
+  la root ignora backend/data/*.db e *.duckdb, non i .json.
+- commit aed3645 ("SF fix", 2026-06-26) aggiunge il file con credenziali reali
+  del sandbox `amplifon2020--devpint01`: access_token, refresh_token, client_id
+  e client_secret tutti valorizzati.
+- Lo stesso commit aggiunge salesforce_schema_salesforce-6650fdb1.json, 376.713
+  righe di dump schema dell'org.
+- Commit presente su origin/claude/sweet-hopper-3540g8 (file ancora nel tree del
+  branch, quindi navigabile da UI) e su origin/claude/branch-diff-main-pxfn76.
+- Il repository francescadilallo-cpu/Fra è **public** (GitHub API: visibility
+  "public"). Non è su main, ma la visibilità non dipende dal branch.
 
 Impatto:
 
-- accesso al filesystem del container espone le credenziali in chiaro
-- non critico su Render free tier (container isolato, singolo tenant)
+- access_token scade in ~2h ed è verosimilmente già inerte, ma **refresh_token e
+  client_secret non scadono**: restano validi finché non revocati esplicitamente,
+  e insieme consentono di riemettere access token a piacere.
+- Va trattato come compromesso: repo pubblico, esposizione da giugno 2026.
 
-Azioni consigliate:
+Azioni, in quest'ordine:
 
-1. cifrare i campi sensibili con Fernet (cryptography) usando FRA_SECRET_KEY come chiave
-2. o delegare la gestione credenziali a un vault (es. Render Secret Files, Doppler)
-3. aggiungere backend/data/salesforce_config.json al .gitignore se non già presente
+1. Revocare in Salesforce (Setup → Connected Apps OAuth Usage → Revoke) e
+   rigenerare il Consumer Secret della Connected App. È l'unico passo che
+   chiude davvero l'esposizione.
+2. Solo dopo, rimuovere il commit dalla storia (branch delete o filter-repo).
+   Da solo non basta: i commit orfani restano raggiungibili via SHA.
+3. Valutare la visibilità del repository: pubblica è coerente col progetto?
+4. Cifrare comunque i campi a riposo (Fernet con chiave da env) o delegare a un
+   vault, per il caso di accesso al filesystem del container.
+
+Fix parziale applicato:
+
+- backend/data/.gitignore: aggiunte le regole `salesforce_config.json` e
+  `salesforce_schema_*.json`. Previene la ricorrenza; non sana l'esposizione già
+  avvenuta, che richiede il punto 1.
 
 
 ### L4 - Salesforce schema non aggiornato automaticamente
