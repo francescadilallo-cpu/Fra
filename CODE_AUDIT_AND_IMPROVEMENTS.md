@@ -327,6 +327,51 @@ Evidenza aggiornata:
 - /api/query eliminato; unico endpoint query: /api/semantic/ask
 
 
+### L5 - Suite pytest non isolata dal .env di sviluppo
+
+Stato: RISOLTO
+
+Evidenza:
+
+- `load_dotenv()` (backend/app/main.py:74) risale dalla cwd e carica il .env
+  nella root del repo anche durante pytest. Con FRA_SEED_DEMO_SOURCES=true il
+  seeding demo pre-popolava context store e source registry: 22 test verdi in CI
+  fallivano sulla macchina dello sviluppatore (test_context_store.py,
+  test_pipeline.py::TestDocAnalyzer).
+
+Fix applicato:
+
+- backend/tests/conftest.py: fixture autouse session-scoped che forza
+  FRA_SEED_DEMO_SOURCES=false. I test che vogliono il seeding lo impostano con
+  monkeypatch.setenv nel proprio scope. Suite completa: 1270 passed, 3 skipped.
+
+Residuo: altre variabili del .env locale (es. FRA_STORAGE_MODE, METADATA_DB_URL)
+restano visibili ai test. Non hanno prodotto failure, ma un `env` esplicito in
+pytest.ini renderebbe la suite pienamente ermetica.
+
+
+### L6 - Ruff non pinnato: gate di lint non riproducibile
+
+Stato: APERTO
+
+Evidenza:
+
+- .github/workflows/ci.yml installa `ruff` senza versione, poi esegue
+  `ruff format backend` + `ruff check backend --fix` e fallisce su
+  `git diff --exit-code`.
+- Con una release di ruff successiva all'ultimo run verde, `ruff check --fix` su
+  main produce modifiche in 62 file (174 autofix). Il gate diventa quindi rosso
+  senza che il codice sia cambiato, e il momento in cui accade dipende solo dalla
+  data del run.
+
+Impatto: build rotte non deterministiche e churn di formattazione non
+attribuibile all'autore della PR.
+
+Raccomandazione: pinnare la versione (`pip install ruff==<X.Y.Z>`) e aggiungerla
+a un requirements-dev.txt condiviso con scripts/local-setup.sh, così che locale e
+CI applichino le stesse regole.
+
+
 ## 4) Vulnerability checklist sintetica (aggiornata)
 
 - Auth server-side: SI (implementata)

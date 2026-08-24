@@ -298,6 +298,17 @@ File: backend/tests/check_perf_regression.py
 File: backend/tests/test_check_perf_regression.py
 File: backend/tests/test_ontology_validation_hard_fail.py
 File: backend/tests/test_ontology_validation_endpoint.py
+File: backend/tests/conftest.py
+
+Isolamento dall'ambiente locale (backend/tests/conftest.py):
+
+- `load_dotenv()` in backend/app/main.py risale dalla cwd e legge il .env di
+  sviluppo nella root del repo. Con FRA_SEED_DEMO_SOURCES=true (default di
+  scripts/local-setup.sh) il context store e il source registry risultavano
+  pre-popolati e 22 test su listing/ricerca fallivano solo in locale.
+- Fixture autouse session-scoped che forza FRA_SEED_DEMO_SOURCES=false; i test
+  che vogliono il seeding attivo continuano a impostarlo con monkeypatch.setenv
+  nel proprio scope.
 
 Copertura:
 
@@ -470,6 +481,31 @@ Render free tier (512MB RAM) — ENV vars in backend/Dockerfile:
 | JWT_ACCESS_TOKEN_EXPIRE_MINUTES | 10080 | 7 giorni sessione |
 
 Aumentare FRA_KG_NODE/EDGE_LIMIT a 0 (illimitato) su piani con ≥2GB RAM.
+
+### 6-bis) Esecuzione locale (macOS/Linux, senza Docker)
+
+Guida: LOCAL_SETUP_MAC.md. Script:
+
+- scripts/local-setup.sh — bootstrap idempotente: verifica Python 3.11 + Node,
+  crea .venv, installa backend/requirements.txt + ruff, esegue npm ci, genera un
+  .env con account admin (PBKDF2 via backend/scripts/generate_password_hash.py).
+  Non sovrascrive mai un .env esistente.
+- scripts/local-run.sh — avvia uvicorn (:8000) e vite (:5173) insieme, con
+  cleanup di entrambi su Ctrl-C. Compatibile con bash 3.2 (default macOS).
+
+Differenze rispetto al profilo Render:
+
+- FRA_KG_NODE_LIMIT / FRA_KG_EDGE_LIMIT non impostati (illimitato): in locale il
+  KG completo è ~174k nodi / ~131k archi, costruito in ~13 s a freddo.
+- FRA_SEED_DEMO_SOURCES=true registra le 4 sorgenti demo da test_scenario/ con i
+  path assoluti della macchina locale (~18 MB di fixture già nel repo).
+- Nessun VITE_API_URL: in dev il proxy /api → :8000 è in frontend/vite.config.ts;
+  serve solo nel build standalone senza nginx.
+
+Demo vs live si sceglie al login (campo form `mode` su POST /api/auth/token), non
+in build: lo stesso ambiente locale serve entrambe. Senza ANTHROPIC_API_KEY il
+backend parte, /api/config/llm-status torna configured=false e
+/api/semantic/ask risolve solo i template deterministici.
 
 
 ## 7) Indice rapido di navigazione codice

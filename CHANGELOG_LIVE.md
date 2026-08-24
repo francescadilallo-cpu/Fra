@@ -10,6 +10,33 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-08-24 (Local dev su macOS: bootstrap riproducibile + suite pytest isolata)
+
+Far girare lo stack in locale richiedeva ricostruire a mano venv, `.env`, hash
+PBKDF2 e capire quali ENV var di Render **non** vanno copiate. Aggiunto un
+percorso verificato end-to-end (login → seed 4 sorgenti demo → KG 174k nodi in
+~13 s → query), senza Docker.
+
+- `scripts/local-setup.sh` — bootstrap idempotente: check Python 3.11 + Node,
+  `.venv`, `backend/requirements.txt` + ruff, `npm ci`, generazione `.env` con
+  account admin via `backend/scripts/generate_password_hash.py`. Non sovrascrive
+  un `.env` esistente.
+- `scripts/local-run.sh` — uvicorn (:8000) + vite (:5173) insieme, cleanup di
+  entrambi su Ctrl-C. Scritto per bash 3.2 (default macOS): niente `wait -n`,
+  niente array.
+- `LOCAL_SETUP_MAC.md` — prerequisiti, demo vs live (si sceglie al **login**, non
+  in build), tabella ENV locali e avviso esplicito di non copiare
+  `FRA_KG_NODE_LIMIT`/`FRA_KG_EDGE_LIMIT=5000` dal profilo Render free-tier: in
+  locale troncherebbero il grafo.
+- `backend/tests/conftest.py` — fixture autouse che forza
+  `FRA_SEED_DEMO_SOURCES=false`. `load_dotenv()` legge il `.env` di sviluppo
+  anche sotto pytest, e il seeding demo faceva fallire 22 test (context store,
+  doc analyzer) solo in locale. Suite ora **1270 passed, 3 skipped**.
+
+Nessuna modifica al comportamento runtime per gli utenti live.
+
+---
+
 ## 2026-07-02 (Metriche su entità fuse: advisory numeri parziali)
 
 Ultimo anello "prova a romperlo": una metrica la cui formula aggrega una tabella
