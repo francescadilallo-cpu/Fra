@@ -272,25 +272,99 @@ Azioni residue:
 
 ## BASSO
 
-### L3 - Salesforce credentials stored plaintext (noto, atteso)
+### C4 - Credenziali OAuth Salesforce committate in repository pubblico
 
-Stato: APERTO (noto, accettato per ora)
+Stato: APERTO — RICHIEDE REVOCA IMMEDIATA
+
+Sostituisce la precedente valutazione L3, che dava il file per "gitignored per
+policy". La verifica dimostra il contrario.
 
 Evidenza:
 
-- backend/data/salesforce_config.json contiene password e security_token in chiaro
-- il file risiede su Render persistent disk; non è in git (gitignored per policy)
+- backend/data/salesforce_config.json NON è coperto da alcuna regola .gitignore:
+  la root ignora backend/data/*.db e *.duckdb, non i .json.
+- commit aed3645 ("SF fix", 2026-06-26), **presente nella storia di questo
+  branch**, aggiunge il file con credenziali reali di un sandbox Salesforce:
+  access_token, refresh_token, client_id e client_secret tutti valorizzati.
+- Lo stesso commit aggiunge salesforce_schema_salesforce-6650fdb1.json, 376.713
+  righe di dump schema dell'org.
+- Il file non è più nel tree di questo branch (rimosso successivamente), ma
+  resta nella storia. È ancora nel tree di origin/claude/sweet-hopper-3540g8,
+  dove è navigabile da UI.
+- Il repository francescadilallo-cpu/Fra è **public** (GitHub API: visibility
+  "public"). La visibilità non dipende dal branch.
 
 Impatto:
 
-- accesso al filesystem del container espone le credenziali in chiaro
-- non critico su Render free tier (container isolato, singolo tenant)
+- access_token scade in ~2h ed è verosimilmente già inerte, ma **refresh_token e
+  client_secret non scadono**: restano validi finché non revocati esplicitamente,
+  e insieme consentono di riemettere access token a piacere.
+- Va trattato come compromesso: repo pubblico, esposizione da giugno 2026.
 
-Azioni consigliate:
+Azioni, in quest'ordine:
 
-1. cifrare i campi sensibili con Fernet (cryptography) usando FRA_SECRET_KEY come chiave
-2. o delegare la gestione credenziali a un vault (es. Render Secret Files, Doppler)
-3. aggiungere backend/data/salesforce_config.json al .gitignore se non già presente
+1. Revocare in Salesforce (Setup → Connected Apps OAuth Usage → Revoke) e
+   rigenerare il Consumer Secret della Connected App. È l'unico passo che
+   chiude davvero l'esposizione.
+2. Solo dopo, rimuovere il commit dalla storia (branch delete o filter-repo).
+   Da solo non basta: i commit orfani restano raggiungibili via SHA.
+3. Valutare la visibilità del repository.
+4. Cifrare comunque i campi a riposo (Fernet con chiave da env) o delegare a un
+   vault, per il caso di accesso al filesystem del container.
+
+Fix parziale applicato:
+
+- backend/data/.gitignore: aggiunte le regole `salesforce_config.json` e
+  `salesforce_schema_*.json`. Previene la ricorrenza; non sana l'esposizione già
+  avvenuta, che richiede il punto 1.
+
+
+### L5 - Suite pytest non isolata dal .env di sviluppo
+
+Stato: RISOLTO
+
+Evidenza:
+
+- `load_dotenv()` (backend/app/main.py) risale dalla cwd e carica il .env nella
+  root del repo anche durante pytest. Con FRA_SEED_DEMO_SOURCES=true il seeding
+  demo pre-popola context store e source registry: **23 test** verdi in CI
+  falliscono sulla macchina dello sviluppatore (test_context_store.py,
+  test_pipeline.py::TestDocAnalyzer).
+- La contaminazione dipende dall'ordine di esecuzione: eseguendo i singoli file
+  in isolamento i test passano, il che rende il problema facile da diagnosticare
+  male. Va verificato sulla suite intera.
+
+Fix applicato:
+
+- backend/tests/conftest.py: fixture autouse session-scoped che forza
+  FRA_SEED_DEMO_SOURCES=false. Suite completa: 1382 passed, 3 skipped.
+
+Residuo: altre variabili del .env locale (es. FRA_STORAGE_MODE, METADATA_DB_URL)
+restano visibili ai test. Non hanno prodotto failure, ma un `env` esplicito in
+pytest.ini renderebbe la suite pienamente ermetica.
+
+
+### L6 - Ruff non pinnato: gate di lint non riproducibile
+
+Stato: APERTO
+
+Evidenza:
+
+- .github/workflows/ci.yml installa `ruff mypy` senza versione, poi esegue
+  `ruff format backend` + `ruff check backend --fix` e fallisce su
+  `git diff --exit-code`.
+- Con una release di ruff successiva all'ultimo run verde, `ruff check --fix`
+  produce modifiche in decine di file. Il gate diventa rosso senza che il codice
+  sia cambiato, e il momento in cui accade dipende solo dalla data del run.
+- Incoerente con il resto: backend/requirements.txt è ora completamente pinnato
+  (pandas==3.0.3, networkx==3.6.1, pytest==9.1.1, …), ma il tooling di lint no.
+
+Impatto: build rotte non deterministiche e churn di formattazione non
+attribuibile all'autore della PR.
+
+Raccomandazione: pinnare `ruff==<X.Y.Z>` e `mypy==<X.Y.Z>` in un
+requirements-dev.txt condiviso con scripts/local-setup.sh, così locale e CI
+applicano le stesse regole.
 
 
 ### L4 - Salesforce schema non aggiornato automaticamente

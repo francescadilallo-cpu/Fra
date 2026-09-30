@@ -10,6 +10,40 @@ work is traceable across sessions and the git history is easy to reconcile.
 
 ---
 
+## 2026-09-30 (Setup locale su macOS con profilo risorse + isolamento suite test)
+
+Percorso verificato end-to-end per far girare lo stack su un Mac senza Docker,
+su questo branch (41 commit avanti a `main`, che non ha commit esclusivi).
+
+- `scripts/local-setup.sh` — bootstrap idempotente: check Python 3.11 + Node,
+  `.venv`, dipendenze backend + ruff, `npm ci`, `.env` con account admin generato
+  via `backend/scripts/generate_password_hash.py`. Non sovrascrive un `.env`
+  esistente. Rileva RAM e spazio libero e sceglie il profilo risorse
+  (`FRA_LOCAL_PROFILE` per forzarlo).
+- `scripts/local-run.sh` — uvicorn (:8000) + vite (:5173) insieme, cleanup su
+  Ctrl-C. Scritto per bash 3.2, ancora default su macOS.
+- `LOCAL_SETUP_MAC.md` — prerequisiti, demo vs live (si sceglie al **login**),
+  tabella dei due profili con misure reali, e il caso Salesforce in locale
+  (il `redirect_uri` dipende dall'host: va fissato con
+  `FRA_SALESFORCE_CALLBACK_URL`).
+- `backend/tests/conftest.py` — forza `FRA_SEED_DEMO_SOURCES=false`.
+  `load_dotenv()` legge il `.env` di sviluppo anche sotto pytest, e il seeding
+  demo faceva fallire **23 test** solo in locale. Suite: **1382 passed, 3 skipped**.
+- `backend/data/.gitignore` — ignora `salesforce_config.json` e
+  `salesforce_schema_*.json` (vedi C4 in CODE_AUDIT_AND_IMPROVEMENTS.md).
+
+Profilo risorse, misurato sul dataset demo:
+
+| Profilo | Soglia | Storage | Grafo | Tempo | Picco RAM | Scrive su disco |
+|---|---|---|---|---|---|---|
+| full | >8GB RAM e >15GB liberi | snapshot | 173.786 nodi | ~12s | ~593MB | sì |
+| constrained | ≤8GB RAM o ≤15GB liberi | nostore | 60.803 nodi | ~5s | ~375MB | no |
+
+Il vincolo dominante è il disco: su APFS quasi pieno la scrittura dello snapshot
+DuckDB stalla e il backend smette di rispondere pur restando vivo.
+
+Nessuna modifica al comportamento runtime per gli utenti live.
+
 ## 2026-07-11 quinquies (Salesforce write-back via coda HITL)
 
 **P11 — idea di evoluzione #6.** Il cerchio "read → understand → act" si

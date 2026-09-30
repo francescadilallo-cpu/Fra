@@ -350,6 +350,21 @@ Comandi:
 
 ### 3.11 Testing
 
+File: backend/tests/conftest.py
+
+Isolamento dall'ambiente locale (backend/tests/conftest.py):
+
+- `load_dotenv()` in backend/app/main.py risale dalla cwd e legge il .env di
+  sviluppo nella root del repo anche sotto pytest. Con FRA_SEED_DEMO_SOURCES=true
+  (scritto da scripts/local-setup.sh) context store e source registry risultano
+  pre-popolati e **23 test** su listing/ricerca falliscono solo in locale, restando
+  verdi in CI dove il .env non esiste.
+- Fixture autouse session-scoped che forza FRA_SEED_DEMO_SOURCES=false; i test che
+  vogliono il seeding attivo lo impostano con monkeypatch.setenv nel proprio scope.
+- Il sintomo non si vede eseguendo i file singolarmente: la contaminazione dipende
+  dall'ordine, quindi va verificata sulla suite intera.
+- Suite completa con la fixture: 1382 passed, 3 skipped.
+
 File: backend/tests/test_golden_questions.py
 File: backend/tests/test_neurosymbolic_pipeline.py
 File: backend/tests/test_agentic_endpoints.py
@@ -532,6 +547,47 @@ Render free tier (512MB RAM) — ENV vars in backend/Dockerfile:
 | JWT_ACCESS_TOKEN_EXPIRE_MINUTES | 10080 | 7 giorni sessione |
 
 Aumentare FRA_KG_NODE/EDGE_LIMIT a 0 (illimitato) su piani con ≥2GB RAM.
+
+### 6-bis) Esecuzione locale (macOS/Linux, senza Docker)
+
+Guida: LOCAL_SETUP_MAC.md. Script:
+
+- scripts/local-setup.sh — bootstrap idempotente: verifica Python 3.11 + Node,
+  crea .venv, installa backend/requirements.txt + ruff, esegue npm ci, rileva il
+  profilo risorse e genera un .env con account admin (PBKDF2 via
+  backend/scripts/generate_password_hash.py). Non sovrascrive un .env esistente.
+- scripts/local-run.sh — avvia uvicorn (:8000) e vite (:5173) insieme, con
+  cleanup di entrambi su Ctrl-C. Compatibile con bash 3.2 (default macOS).
+
+Profilo risorse (da RAM e spazio libero sul volume del repo; override con
+FRA_LOCAL_PROFILE=full|constrained). Misure sul dataset demo:
+
+| Profilo | Soglia | STORAGE_MODE | Tetto KG | Grafo | Tempo | Picco RSS | Scrive su disco |
+|---|---|---|---|---|---|---|---|
+| full | >8GB RAM e >15GB liberi | snapshot | nessuno | 173.786 / 131.472 | ~12s | ~593MB | sì |
+| constrained | ≤8GB RAM o ≤15GB liberi | nostore | 20.000 | 60.803 / 39.040 | ~5s | ~375MB | no |
+
+Il vincolo dominante è il **disco**, non la RAM: su volume APFS quasi pieno la
+scrittura dello snapshot DuckDB stalla, il processo resta vivo e non risponde
+più, e ogni richiesta va in timeout. Sintomo tipico: uvicorn presente in `ps`,
+`curl` che chiude con exit 28. Il profilo constrained elimina del tutto le
+scritture.
+
+Altre differenze rispetto al profilo Render:
+
+- FRA_SEED_DEMO_SOURCES=true registra le 4 sorgenti demo da test_scenario/ con i
+  path assoluti della macchina locale (~18 MB di fixture già nel repo).
+- Nessun VITE_API_URL: in dev il proxy /api → :8000 è in frontend/vite.config.ts;
+  serve solo nel build standalone senza nginx.
+
+Demo vs live si sceglie al login (campo form `mode` su POST /api/auth/token), non
+in build: lo stesso ambiente locale serve entrambe. Senza ANTHROPIC_API_KEY il
+backend parte, /api/config/llm-status torna configured=false e
+/api/semantic/ask risolve solo i template deterministici.
+
+Salesforce in locale: il redirect_uri è derivato dall'host della richiesta, per
+cui cambia tra `localhost:5173` e `127.0.0.1:5173`. Fissarlo con
+FRA_SALESFORCE_CALLBACK_URL e registrare la stessa stringa nella Connected App.
 
 
 ## 7) Indice rapido di navigazione codice
